@@ -1,0 +1,265 @@
+{
+  "format": "package4-studio-reserve-actual-http-regression-v1",
+  "status": "PASS",
+  "recordedAtUtc": "2026-10-20T18:16:23.437311+00:00",
+  "baseCommit": "cdb7cf2396980f66352c105451b3b60f32c3b69f",
+  "historicalWorkflow": {
+    "runId": 39467226196,
+    "attempt": 1,
+    "jobId": 118785326792,
+    "conclusion": "failure",
+    "failedStep": 26,
+    "errorCode": "QA_STUDIO_RESERVE_HTTP_FAILED",
+    "actualHttpStatus": null,
+    "apiErrorCode": null,
+    "jsonValidity": "UNKNOWN_NOT_LOGGED",
+    "nativeConnectionsAndRoles": "PASS",
+    "seeding": "PASS",
+    "crmApiAndRoles": "PASS",
+    "studioReserve": "FAIL",
+    "studioFollowingPhases": "NOT_EXECUTED",
+    "tenantDiagnostics": "SKIPPED",
+    "finalCleanup": "PASS",
+    "growthPreservation": "PASS",
+    "retiredLookupIdentity": "PASS"
+  },
+  "rootCause": {
+    "classification": "APPLICATION_FRAMEWORK_REQUEST_URL_INTEGRATION",
+    "description": "NextRequest canonicalizes the configured loopback IP to localhost. The candidate guard compared only the unnormalized 127.0.0.1 origin, rejecting the valid signed request before database access.",
+    "configurationMismatchProven": false,
+    "requestContractChanged": false,
+    "runtimePrivilegeDefectProven": false
+  },
+  "negativeControl": {
+    "actualNextDevHttp": true,
+    "expectedStatus": 200,
+    "actualStatus": 403,
+    "apiErrorCode": "candidate_request_not_allowed",
+    "jsonValid": true,
+    "databaseWebSocketConnections": 0,
+    "actualNextRequestUnitFailedBeforeFix": true
+  },
+  "fix": {
+    "normalizedOrigin": "http://localhost:3000",
+    "requiredOriginalHost": "127.0.0.1:3000",
+    "existingExactOriginStillAllowed": true,
+    "methodPortPathQueryAndCredentialGuardsPreserved": true,
+    "candidateEnvironmentSignatureRecipientAndNativeDatabaseGuardsPreserved": true,
+    "roleAclRlsChanges": 0,
+    "productionChanges": 0
+  },
+  "diagnostic": {
+    "allowedFields": [
+      "phase",
+      "expectedHttpStatus",
+      "actualHttpStatus",
+      "responseJsonState",
+      "apiErrorCode"
+    ],
+    "apiErrorMatching": "EXACT_EXPLICIT_ALLOWLIST",
+    "unknownApiError": "UNRECOGNIZED",
+    "nonJsonResponse": "INVALID_JSON",
+    "responseBodiesSignaturesCredentialsLogged": false,
+    "successStatusExpectationsUnchanged": true
+  },
+  "validation": {
+    "nextRequestCandidateUnit": {
+      "passed": 7,
+      "failed": 0
+    },
+    "diagnosticSecurityUnit": {
+      "passed": 10,
+      "failed": 0,
+      "scope": "UNIT_ONLY_NOT_HTTP_OR_DATABASE_PROOF"
+    },
+    "targetedLint": "PASS",
+    "typecheck": "PASS",
+    "optimizedBuild": "PASS",
+    "independentCodeReviewOpenFindings": 0
+  },
+  "optimizedHttp": {
+    "status": "PASS",
+    "actualNextServer": true,
+    "nodeEnv": "production",
+    "database": "Original full60 synthetic PostgreSQL17.11/vector0.8 clone over loopback-only SDK WebSocket/PostgreSQL wire transport",
+    "syntheticNeonGucsAreNotLiveProviderProof": true,
+    "providerAccess": 0,
+    "productionAccess": 0,
+    "oneFocusedPositiveExecution": true,
+    "phases": [
+      {
+        "phase": "reserve",
+        "actualStatus": 200
+      },
+      {
+        "phase": "finalize",
+        "actualStatus": 202
+      },
+      {
+        "phase": "replay_finalize",
+        "actualStatus": 202
+      },
+      {
+        "phase": "status",
+        "actualStatus": 202
+      },
+      {
+        "phase": "tampered_signature",
+        "actualStatus": 401
+      }
+    ],
+    "assertions": {
+      "contract": "studio-enquiry-v1",
+      "schema": "100",
+      "textOnly": true,
+      "reserve": "PASS",
+      "finalize": "PASS",
+      "durableIdentity": "PASS",
+      "replay": "PASS",
+      "status": "PASS",
+      "syntheticKpi": "PASS",
+      "signature": "PASS"
+    },
+    "nativeRuntimeIdentity": {
+      "role": "novalure_app",
+      "session_role": "novalure_app",
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "ledger_read": false
+    },
+    "configurationChecks": {
+      "singleSharedEnvironment": true,
+      "sameSigningKey": true,
+      "sameRecipient": true,
+      "noProviderCredentialsInherited": true,
+      "noVercelKeys": true,
+      "sameRuntimeDatabaseTarget": true,
+      "migrationCredentialInApplication": false
+    },
+    "catalogAclForceRlsAndLedgerUnchanged": true,
+    "crmLocalTestDatabaseFlagUsed": false
+  },
+  "additionalNegatives": {
+    "status": "PASS",
+    "checks": [
+      {
+        "name": "cloned-original-pg17-full60-vector0.8",
+        "status": "PASS"
+      },
+      {
+        "name": "actual-http-recipient-host-query-tenant-contract-negatives-no-writes",
+        "status": "PASS"
+      },
+      {
+        "name": "actual-runtime-force-rls-foreign-tenant-and-actor-42501",
+        "status": "PASS"
+      },
+      {
+        "name": "actual-http-project-and-branch-identity-mismatch-readonly-rejection",
+        "status": "PASS"
+      },
+      {
+        "name": "catalog-acl-force-rls-and-60-ledger-unchanged",
+        "status": "PASS"
+      }
+    ]
+  },
+  "cleanup": {
+    "status": "PASS",
+    "applicationSessionsActiveAndPreparedTransactionsZero": true,
+    "ownedServerGatewayAndDatabaseStopped": true,
+    "originalFixtureUnchanged": true,
+    "originalFixtureStillStopped": true,
+    "cloneAndEvidencePreserved": true
+  },
+  "remoteQaState": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-frosty-unit-baqk9eyp",
+    "databaseName": "neondb",
+    "readOnly": true,
+    "candidateWorkspaces": 2,
+    "formSubmissions": 3,
+    "studioTransfers": 0,
+    "matrixSingleUseGuardWouldReject": true,
+    "computeState": "idle",
+    "branchSlotsUsed": 10,
+    "branchSlotLimit": 10,
+    "quota": {
+      "compute_time_seconds": 4200,
+      "active_time_seconds": 16200
+    },
+    "reportedUsage": {
+      "compute_time_seconds": 3566,
+      "active_time_seconds": 14108
+    },
+    "usageMayLag": true,
+    "newBranches": 0,
+    "secretRewrites": 0,
+    "quotaChanges": 0,
+    "newManualRunsOrReruns": 0,
+    "additionalRemoteQaDataWrites": 0
+  },
+  "nextRequiredWorkflow": {
+    "path": ".github/workflows/livegang-e2e.yml",
+    "branch": "codex/evelyn-crm-package4-integration",
+    "qa_profile": "isolated-candidate",
+    "environment": "novalure-qa-candidate",
+    "requiresFreshUnconsumedTarget": true,
+    "existingRecoveryBranchesPreserved": true,
+    "requiresAvailableBranchSlotAndVerifiedCapacityWithinExistingLimits": true,
+    "additionalManualRunAuthorized": false,
+    "productionStillRequiresRealQaAndRecoveryRollbackGates": true,
+    "capacityPlanning": {
+      "reportedRemainingComputeSeconds": 634,
+      "reportedRemainingActiveSeconds": 2092,
+      "reportedRemainingIsNotGuaranteed": true,
+      "lastFailedRunEndpointActiveWindowUtc": [
+        "2026-10-20T17:46:40Z",
+        "2026-10-20T17:56:30Z"
+      ],
+      "lastFailedRunEndpointActiveSeconds": 590,
+      "computeSizeCu": 0.25,
+      "lastFailedRunEstimatedComputeSeconds": 147.5,
+      "failedRunIsNotACompleteSuccessfulWorkflowBenchmark": true,
+      "freshPreparationAdditionalSuccessfulPhasesAndCleanupReserveStillRequired": true,
+      "safeCapacityForAnotherFullRunNotProven": true,
+      "automaticQuotaIncreaseAuthorized": false
+    }
+  },
+  "sourceHashes": [
+    {
+      "path": "src/lib/studio-enquiry-candidate.ts",
+      "sha256": "9bcd80d968f54bd42baaaad6ae1e43679ab519a37b0bd1e83e9c022744dc8714"
+    },
+    {
+      "path": "src/lib/studio-enquiry.ts",
+      "sha256": "33b6b7f71c713ff54e552078d1050b0cbfa91daeed1d243d08b952cdec1dbc23"
+    },
+    {
+      "path": "src/app/api/public/website-sales/enquiry/route.ts",
+      "sha256": "16c8b948eddbc845224c696cd387bebd4c5523c5271fe52acaea18b708ce9c12"
+    },
+    {
+      "path": "scripts/lib/qa-studio-enquiry-candidate.mjs",
+      "sha256": "2406594d85a3b0cd67219f86731f11299a066918128e6f42e72d6ef0f71695fe"
+    },
+    {
+      "path": "scripts/qa-public-form-candidate.mjs",
+      "sha256": "6adc332b54e7d6bd86633ae24d0c0dfdf832f6f6780998a1bf79f11554437eb5"
+    },
+    {
+      "path": "scripts/studio-enquiry-candidate-tests.ts",
+      "sha256": "d7e5ca748e5fba511a141aa79dccc9733ccd954d3e29b80534f197906ed6951f"
+    },
+    {
+      "path": "scripts/qa-studio-enquiry-diagnostics-tests.mjs",
+      "sha256": "12f845d89162940897f61e21f0a45c0268f55bb09b0b5d166354032bf436da8b"
+    },
+    {
+      "path": "package.json",
+      "sha256": "5f2646ac8062c63030dd061bfbb659399261f658bb1e757a35c0bac2a7301ef5"
+    }
+  ]
+}

@@ -432,6 +432,19 @@ test("legacy-breaking release contracts are isolated from automatic expand migra
   assert.match(providerCutover, /leads_qualifying_requires_assignee_check[\s\S]*not valid/i);
 });
 
+test("Studio Production selects only explicit 100 on 096; default plans cannot activate Preview or calendar migrations", () => {
+  const actualManual=new Set([...runner.match(/const manualCutoverVersions = new Set\(\[([\s\S]*?)\]\)/)[1].matchAll(/"([^"]+)"/g)].map(match=>match[1]));
+  const versions=["097_studio_sales_calendar_bridge","098_studio_enquiry_handoff","099_studio_enquiry_public_launch","100_studio_enquiry_production"];
+  const predecessors=["094_website_sales_ingestion","095_form_tenant_isolation","096_public_integration_gateway"];
+  const migrations=[...predecessors.map(version=>migration(version,"sha-"+version,{manualCutover:actualManual.has(version)})),
+    ...versions.map(version=>migration(version,"sha-"+version,{manualCutover:actualManual.has(version)}))];
+  const ledgerRows=[ledgerRow("041_schema_ledger_baseline","baseline"),...predecessors.map(version=>ledgerRow(version,"sha-"+version))];
+  assert.deepEqual(createMigrationPlan({ledgerRows,migrations,only:""}),[]);
+  assert.throws(()=>createMigrationPlan({ledgerRows,migrations,only:versions[3]}),/Refusing manual cutover/);
+  assert.deepEqual(createMigrationPlan({allowManualCutover:true,ledgerRows,migrations,only:versions[3]}),[migrations.at(-1)]);
+  assert.throws(()=>createMigrationPlan({allowManualCutover:true,ledgerRows:ledgerRows.slice(0,-1),migrations,only:versions[3]}),/required predecessor 096_public_integration_gateway/);
+});
+
 test("explicit automatic migrations require their checksummed predecessors", () => {
   const migrations = [
     migration("049_property_inventory_tenant_guards", "sha-049"),

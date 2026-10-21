@@ -4,8 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import path from "node:path";
-import pg from "pg";
-import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { applySalesSchema, LocalSalesPool, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 async function nativePgTool(name, args) {
   const executable = process.env.CRM_QA_PG_BIN
@@ -23,6 +22,24 @@ async function nativePgTool(name, args) {
     child.once("exit", code => { clearTimeout(timer); if (code === 0) resolve(output); else reject(new Error(name + " failed (" + code + "): " + output.slice(-2000))); });
   });
 }
+
+test("local QA pool closes its PostgreSQL sockets before shutdown", { timeout: 30_000 }, async () => {
+  const db = await startLocalSalesDb();
+  const pool = new LocalSalesPool({ host: "127.0.0.1", port: db.port, user: db.role, database: "postgres", max: 1 });
+  let closing;
+  try {
+    const client = await pool.connect();
+    let ended = false;
+    client.once("end", () => { ended = true; });
+    client.release();
+    closing = pool.end();
+    await closing;
+    assert.equal(ended, true, "pool end must await the actual client end event");
+  } finally {
+    try { await (closing ?? pool.end()); }
+    finally { await db.stop(); }
+  }
+});
 
 test("095 enforces form tenant isolation and preserves narrow published lookup", { timeout: 300_000 }, async () => {
   const db = await startLocalSalesDb();
@@ -105,7 +122,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       throw error;
     } finally { adminClient.release(); }
 
-    const lookupPool = new pg.Pool({ host: "127.0.0.1", port: db.port, user: "novalure_public_form_lookup", database: "postgres", max: 2 });
+    const lookupPool = new LocalSalesPool({ host: "127.0.0.1", port: db.port, user: "novalure_public_form_lookup", database: "postgres", max: 2 });
     try {
 
     const flags = await db.admin.query(
@@ -224,9 +241,9 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     const restoredName = "form_restore_" + randomUUID().replaceAll("-", "");
     await db.admin.query(`create database ${restoredName} template template0`);
     await nativePgTool("pg_restore", [...connection, "--dbname=" + restoredName, "--exit-on-error", "--single-transaction", archive]);
-    const restoredAdmin = new pg.Pool({ host: "127.0.0.1", port: db.port, user: "qa_admin", database: restoredName, max: 2 });
-    const restoredRuntime = new pg.Pool({ host: "127.0.0.1", port: db.port, user: db.role, database: restoredName, max: 2 });
-    const restoredLookup = new pg.Pool({ host: "127.0.0.1", port: db.port, user: "novalure_public_form_lookup", database: restoredName, max: 2 });
+    const restoredAdmin = new LocalSalesPool({ host: "127.0.0.1", port: db.port, user: "qa_admin", database: restoredName, max: 2 });
+    const restoredRuntime = new LocalSalesPool({ host: "127.0.0.1", port: db.port, user: db.role, database: restoredName, max: 2 });
+    const restoredLookup = new LocalSalesPool({ host: "127.0.0.1", port: db.port, user: "novalure_public_form_lookup", database: restoredName, max: 2 });
     try {
       const restoredFlags = await restoredAdmin.query(
         `select relname, relrowsecurity, relforcerowsecurity from pg_class

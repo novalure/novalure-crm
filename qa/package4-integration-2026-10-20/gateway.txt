@@ -1,0 +1,60 @@
+
+> novalure-crm@0.1.0 test:external-integration-gateway
+> node --conditions=react-server --import tsx --test scripts/external-integration-gateway-tests.ts
+
+✔ 096 forces RLS, disables the lookup login, and exposes only scoped runtime functions (1771.030305ms)
+✔ QA cleanup preserves pre-cutover login state and exposes post-cutover drift (9.82529ms)
+✔ forms published after 096 receive a registry entry without restoring a database login (14.150296ms)
+✔ tenant and project context cannot be selected by the public caller (8.848976ms)
+✔ a resolved integration is locked against concurrent revocation until the request ends (104.633851ms)
+✔ authenticated onboarding creates a test integration and enforces tenant project scope (43.110491ms)
+{"correlationId":"80a16f9b-acfc-4bd1-a331-87fe885535f8","durationMs":31,"event":"external_integration_request","operation":"form.read","outcome":"accepted","status":200}
+{"code":"form_not_found","correlationId":"214f5cf9-b6d3-42ea-adf8-be3978f56090","durationMs":2,"event":"external_integration_request","operation":"form.read","outcome":"denied","status":404}
+{"correlationId":"6e853b1e-59fd-48a8-baae-0e662e953d7b","durationMs":61,"event":"external_integration_request","operation":"form.submit","outcome":"accepted","status":202}
+{"correlationId":"d75a5863-90dc-41fd-a5e9-2cd8607c5f63","durationMs":11,"event":"external_integration_request","operation":"form.submit","outcome":"duplicate","status":202}
+✔ public form lookup and submission use site mapping, origin, rate and idempotency controls (121.005174ms)
+{"code":"form_not_found","correlationId":"d12180de-0972-45f4-8912-3a1bd8c292c8","durationMs":1,"event":"external_integration_request","operation":"form.read","outcome":"denied","status":404}
+{"code":"form_not_found","correlationId":"cfe2ed34-edb9-4615-a2d9-dac56df0c5a2","durationMs":1,"event":"external_integration_request","operation":"form.read","outcome":"denied","status":404}
+{"code":"invalid_json","correlationId":"61b7b88b-e592-4771-9607-4926e8e80805","durationMs":1,"event":"external_integration_request","operation":"form.submit","outcome":"denied","status":400}
+{"code":"request_too_large","correlationId":"93fd8a92-eac1-4fa0-8bfc-7f85351a168d","durationMs":0,"event":"external_integration_request","operation":"form.submit","outcome":"denied","status":413}
+{"code":"trusted_client_ip_unavailable","correlationId":"f49539ff-47fa-429e-aaf8-4c37ca6df839","durationMs":18,"event":"external_integration_request","operation":"form.submit","outcome":"failed","status":503}
+{"code":"form_not_found","correlationId":"af9770a0-bb9b-4a14-8993-184442cd60c1","durationMs":1,"event":"external_integration_request","operation":"form.read","outcome":"denied","status":404}
+{"code":"form_not_found","correlationId":"b0120899-ec9c-4021-92a4-f9bd2a67335c","durationMs":1,"event":"external_integration_request","operation":"form.read","outcome":"denied","status":404}
+✔ public gateway fails closed for malformed, oversized, revoked, and capability-disabled requests (26.935549ms)
+{"correlationId":"c774905c-483b-42fd-be39-45e8439a979b","durationMs":8,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"830ff3ad-530d-41b9-8209-da81eab165e6","durationMs":12,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"6f30c334-6249-4b4c-bec6-cd319f75850f","durationMs":12,"event":"external_integration_request","operation":"chat.message","outcome":"accepted","status":202}
+{"correlationId":"6013e57e-485f-4487-a712-a698297585af","durationMs":7,"event":"external_integration_request","operation":"chat.message","outcome":"accepted","status":202}
+{"code":"session_denied","correlationId":"aa8e6024-6908-4d72-bf8f-26bf8b04d3d0","durationMs":6,"event":"external_integration_request","operation":"chat.context","outcome":"denied","status":403}
+{"correlationId":"3462abb2-4039-4932-a319-0b5439eb043a","durationMs":5,"event":"external_integration_request","operation":"chat.context","outcome":"accepted","status":200}
+✔ training chat foundation is scoped, replay-safe, and has no CRM or outbound effect (56.923089ms)
+{"correlationId":"75bd6d77-8419-4cef-9def-1bb185481b1a","durationMs":6,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"a56da1f6-2d08-4091-b665-95c804de9003","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"1d9a96e6-177d-4e23-8107-561f19b70bcd","durationMs":6,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"d8cdad17-3bd8-4a63-99d4-e5d9d02d0a11","durationMs":6,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"d22f04da-746f-4792-b720-5a9a01add19d","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"f0bfc2ab-e8a3-4403-8a37-d6031dbb214f","durationMs":6,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"4bed9c71-4cf4-4c5c-ab1d-820b41e4912d","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"5e788bd4-99ea-43e3-83a5-285c97b08505","durationMs":11,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"6f043005-d939-40ba-9c9d-5d8c0325aa8d","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"319f3639-5beb-47b3-b20e-ccc1c17f7d62","durationMs":9,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"081ab64c-e578-4337-8fc6-17cf1873b42f","durationMs":7,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"d0f40af7-d4b6-4548-9c23-520a6a80f690","durationMs":6,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"8a554e5f-23d0-4782-88ef-1a9aa3ed63a4","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"ee36f6bd-cf05-4243-84e5-521b53a20f92","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"18e7a82b-4618-44f2-8e8c-157578d017d6","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"9553aa95-d1e5-46d5-9aeb-f4975d0976b6","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"be0810a7-04c5-483d-b58f-5c7b900d6009","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"e8a6c935-6b8e-46d4-8f9c-e34a42ed4a97","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"bb5c7db4-37de-4511-a17e-f526ceb7f37c","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"correlationId":"e27ecb4c-2a27-4471-9201-a6c13b1c0106","durationMs":5,"event":"external_integration_request","operation":"chat.start","outcome":"accepted","status":201}
+{"code":"rate_limited","correlationId":"f93d96d2-f699-46b0-b607-17b553be9a5c","durationMs":4,"event":"external_integration_request","operation":"chat.start","outcome":"denied","status":429}
+✔ chat session creation is durably rate limited (130.901444ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3153.454841

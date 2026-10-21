@@ -1,0 +1,48 @@
+{
+  "format": "package4-private-upload-deadline-fix-verification-v1",
+  "recordedAt": "2026-10-20T06:31:58.972Z",
+  "candidateRevision": "ROOT_TO_BIND_AFTER_COMMIT",
+  "sourceHashes": {
+    "src/lib/knowledge-center/document-upload-client.ts": "01a0fc6c7263ff2ddf5458cd0f38cbc8b1acfc679ccba710eb95cf58b36e47cc",
+    "src/lib/knowledge-center/document-upload-transport.ts": "8c9897c3b76b95cb8783085234ec97715b10d7a0d50ece300a0aae9f5c615d2d",
+    "scripts/knowledge-document-upload-client-tests.ts": "47432d3df51a7791e1b65faead2c67cc3bdea5c7e9af334c413d63307d3db382",
+    "package.json": "f48a72e7a3c8917d08fb60290fe56fc80f76ed425a46d8eb120fd6adeed7025a"
+  },
+  "logHashes": {
+    "upload-client-deadline-tests.log": "19675b2aff3a720e1d79ed67478580cea0d5a8160d693e95dc682d14d866d6d6",
+    "upload-client-deadline-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "upload-client-deadline-typecheck.log": "ca4007e6ca8e9132c68fb196ac6e7f8be61d94e2987e9b464c8c895d1aea2603"
+  },
+  "observedProblem": "Actual Preview upload stayed busy for90seconds while strict browser policy blocked SDK BlobAPI preflight; SDK2.8 retries TimeoutError, while AbortError bails immediately.",
+  "primaryTransportGuardFixOwnedBy": "browser_acceptance",
+  "scope": "Client private Blob import+PUT deadline only; backend authorization and finalize semantics unchanged.",
+  "implementation": {
+    "timeoutMs": 60000,
+    "outerDeadline": true,
+    "abortReason": "AbortError",
+    "timerFinallyCleared": true,
+    "noFinalizeAfterTimeout": true,
+    "lateImportCannotStartPut": true,
+    "maximumDocumentBytesUnchanged": 10485760
+  },
+  "verification": {
+    "targetedPromiseRegressionTests": {
+      "status": "PASS",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "remoteRequests": 0
+    },
+    "typecheck": "PASS",
+    "scopedEslint": "PASS",
+    "diffCheck": "PASS",
+    "independentReview": {
+      "reviewer": "/root/masterplan_context",
+      "openFindings": 0,
+      "readOnly": true
+    }
+  },
+  "hostedAfterFix": "NOT TESTED",
+  "productionMutations": 0,
+  "secretValuesEmitted": false
+}

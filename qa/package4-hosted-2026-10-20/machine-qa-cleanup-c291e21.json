@@ -1,0 +1,467 @@
+{
+  "format": "package4-machine-qa-cleanup-v1",
+  "status": "PASS",
+  "recordedAt": "2026-10-20T07:56:36.831882+00:00",
+  "nativeFinalState": {
+    "principal": {
+      "id": "36574422-8ce7-4fa9-a1f3-225f170377ad",
+      "workspace_id": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+      "actor_user_id": "97191de1-6de5-42e9-8aa1-0dd3f1b1b40e",
+      "identity_id": "EVELYN_CRM_KNOWLEDGE_QA_IDENTITY",
+      "service_subject": "owner:novalure:project:evelyn:environment:preview",
+      "auth_type": "VERCEL_OIDC_QA",
+      "environment": "preview",
+      "service_role": "Evelyn.QA",
+      "consumer": "EVELYN",
+      "issuer": "https://oidc.vercel.com/novalure",
+      "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+      "oidc_project_id": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+      "oidc_owner_id": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "agent_id": "evelyn",
+      "synthetic": true,
+      "no_static_token": true,
+      "scopes": [
+        "crm.projects.read"
+      ],
+      "data_context": "CUSTOMER_TENANT",
+      "data_classification": "CONFIDENTIAL",
+      "purpose": "OPERATIONS",
+      "state": "REVOKED",
+      "not_before": "2026-10-20T07:41:05.225Z",
+      "expires_at": "2026-10-20T08:41:05.225Z",
+      "revoked_at": "2026-10-20T07:47:26.374Z",
+      "kill_switch_active": false
+    },
+    "bindings": [
+      {
+        "principal_id": "36574422-8ce7-4fa9-a1f3-225f170377ad",
+        "workspace_id": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+        "bot_id": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+        "channel": "voice",
+        "enabled": false,
+        "revoked_at": "2026-10-20T07:47:26.262Z"
+      },
+      {
+        "principal_id": "36574422-8ce7-4fa9-a1f3-225f170377ad",
+        "workspace_id": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+        "bot_id": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+        "channel": "webchat",
+        "enabled": false,
+        "revoked_at": "2026-10-20T07:47:26.262Z"
+      }
+    ]
+  },
+  "trustApply": {
+    "schema": "package4-machine-qa-trust-receipt-v1",
+    "status": "PASS_VERIFIED",
+    "action": "apply",
+    "verifiedAtUtc": "2026-10-20T07:50:01.718Z",
+    "receiverProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "senderProjectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "exactPair": {
+      "from": {
+        "slugs": [
+          "preview"
+        ]
+      },
+      "to": {
+        "slugs": [
+          "preview"
+        ]
+      }
+    },
+    "before": {
+      "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "trustedSources": {
+        "projects": {
+          "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "production"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "production"
+                  ]
+                }
+              }
+            ]
+          },
+          "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "preview"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "preview"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ssoProtectionSha256": "cef42fb8d4536a4c4fdcafbba6da011139a4e35d785563248912efd384dbc591",
+      "productionTargetSha256": "d954b3a2399718f7175973f81d1fe7bcb37890e435867aaa771fc3e870f28e45",
+      "protectionSha256": "92f8e9ccd47be188935910bb1b1770d34ee84edfb00b1f28e79de631dbf1369d"
+    },
+    "after": {
+      "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "trustedSources": {
+        "projects": {
+          "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "production"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "production"
+                  ]
+                }
+              },
+              {
+                "from": {
+                  "slugs": [
+                    "preview"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "preview"
+                  ]
+                }
+              }
+            ]
+          },
+          "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "preview"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "preview"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ssoProtectionSha256": "cef42fb8d4536a4c4fdcafbba6da011139a4e35d785563248912efd384dbc591",
+      "productionTargetSha256": "d954b3a2399718f7175973f81d1fe7bcb37890e435867aaa771fc3e870f28e45",
+      "protectionSha256": "92f8e9ccd47be188935910bb1b1770d34ee84edfb00b1f28e79de631dbf1369d"
+    },
+    "onlyExactPreviewPairChanged": true,
+    "productionPairsUnchanged": true,
+    "allOtherPairsUnchanged": true,
+    "ssoAndOtherProtectionUnchanged": true,
+    "productionTargetUnchanged": true,
+    "requestBodyKeys": [
+      "trustedSources"
+    ],
+    "requestBodySha256": "75b1ee3e8d6a7ffd5c45fcc4d7dedbf128762e51184fab3a7632e7f900478b4f",
+    "applicationRetries": 0,
+    "providerAtomicConditionalWrite": false,
+    "reconciledAfterPartialPatchResponse": true,
+    "readOnlyGETRequests": 2,
+    "mutationRequestsPerformedByReconciler": 0,
+    "acknowledgedSinglePriorPatch": true,
+    "originalIntentSha256": "b40b4aedc6a4a16f9197f2415ff1aad7d248f3b143ef5f9a98421b50cb827391",
+    "originalBeforeSha256": "75207248cbb454c2205d869f6fbd1ae8a2c07e669517c675d6ce92108da65eab",
+    "originalFailureSha256": "545af6e3807d72b3f979b57b48834d8d4e5748408e8aefef2aaa2c35ff562e86",
+    "tokenValuesEmittedByThisRunner": false,
+    "credentialHandling": "Existing native OAuth private channel only; all protection subobjects compared by complete canonical hashes.",
+    "cleanup": "After genuine final QA denials and exact native QA final revocation, remove only this added Preview pair; never repeat the already accepted apply PATCH."
+  },
+  "trustRemoval": {
+    "schema": "package4-machine-qa-trust-receipt-v1",
+    "status": "PASS_VERIFIED",
+    "action": "remove",
+    "verifiedAtUtc": "2026-10-20T07:51:20.102Z",
+    "receiverProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "senderProjectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "exactPair": {
+      "from": {
+        "slugs": [
+          "preview"
+        ]
+      },
+      "to": {
+        "slugs": [
+          "preview"
+        ]
+      }
+    },
+    "before": {
+      "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "trustedSources": {
+        "projects": {
+          "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "production"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "production"
+                  ]
+                }
+              },
+              {
+                "from": {
+                  "slugs": [
+                    "preview"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "preview"
+                  ]
+                }
+              }
+            ]
+          },
+          "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "preview"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "preview"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ssoProtectionSha256": "cef42fb8d4536a4c4fdcafbba6da011139a4e35d785563248912efd384dbc591",
+      "productionTargetSha256": "d954b3a2399718f7175973f81d1fe7bcb37890e435867aaa771fc3e870f28e45",
+      "protectionSha256": "92f8e9ccd47be188935910bb1b1770d34ee84edfb00b1f28e79de631dbf1369d"
+    },
+    "after": {
+      "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "trustedSources": {
+        "projects": {
+          "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "production"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "production"
+                  ]
+                }
+              }
+            ]
+          },
+          "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp": {
+            "customAllow": [
+              {
+                "from": {
+                  "slugs": [
+                    "preview"
+                  ]
+                },
+                "to": {
+                  "slugs": [
+                    "preview"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ssoProtectionSha256": "cef42fb8d4536a4c4fdcafbba6da011139a4e35d785563248912efd384dbc591",
+      "productionTargetSha256": "d954b3a2399718f7175973f81d1fe7bcb37890e435867aaa771fc3e870f28e45",
+      "protectionSha256": "92f8e9ccd47be188935910bb1b1770d34ee84edfb00b1f28e79de631dbf1369d"
+    },
+    "onlyExactPreviewPairChanged": true,
+    "productionPairsUnchanged": true,
+    "allOtherPairsUnchanged": true,
+    "ssoAndOtherProtectionUnchanged": true,
+    "productionTargetUnchanged": true,
+    "requestBodyKeys": [
+      "trustedSources"
+    ],
+    "requestBodySha256": "92bf3ddace97c0f263b6cea207378509a31bf2922c7c6c3af6b76692c106f2b1",
+    "applicationRetries": 0,
+    "providerAtomicConditionalWrite": false,
+    "concurrencyControl": "Root serial execution plus two matching preflight reads; exact post-PATCH and independent GET readback",
+    "finalQaProof": {
+      "status": "PASS_FINAL_QA_REVOKED_AND_GENUINE_APP_DENIALS",
+      "nativeFinalReceiptSha256": "1febf3ff7e26b4eae0a9551005ea9ec8b3fa33705ddcded7f5b8287372ed7943",
+      "callerFinalReceiptSha256": "81072f0a66003e4b55fd1b67a212f028aa7506fdf1e27c100fb92d253a846095",
+      "callerObservedAtUtc": "2026-10-20T07:47:42.555Z",
+      "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+      "finalNativePrincipalState": "REVOKED",
+      "bothBindingsDisabledAndRevoked": true,
+      "genuineApplicationDenials": 8,
+      "platformProtectionDenialsAccepted": false
+    },
+    "tokenValuesEmittedByThisRunner": false,
+    "credentialHandling": "Existing native OAuth private channel only; no auth/protection/env values emitted or saved by this runner.",
+    "cleanup": "Only the exact pair added by the apply receipt has been removed."
+  },
+  "branchEnvironmentRemoval": {
+    "schema": "package4-machine-qa-env-cleanup-v1",
+    "status": "PASS_VERIFIED",
+    "verifiedAtUtc": "2026-10-20T07:51:49.776Z",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "gitBranch": "codex/evelyn-crm-package4-integration",
+    "deleted": [
+      {
+        "id": "c9Fg7bTQylfAvrPl",
+        "key": "CRM_KNOWLEDGE_QA_MACHINE_ENABLED",
+        "type": "plain",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/evelyn-crm-package4-integration",
+        "customEnvironmentIds": null,
+        "configurationId": null
+      },
+      {
+        "id": "GRHcwlFqjhIp45f1",
+        "key": "CRM_KNOWLEDGE_QA_WORKSPACE_ID",
+        "type": "plain",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/evelyn-crm-package4-integration",
+        "customEnvironmentIds": null,
+        "configurationId": null
+      }
+    ],
+    "finalQaProof": {
+      "status": "PASS_FINAL_QA_REVOKED_AND_GENUINE_APP_DENIALS",
+      "nativeFinalReceiptSha256": "1febf3ff7e26b4eae0a9551005ea9ec8b3fa33705ddcded7f5b8287372ed7943",
+      "callerFinalReceiptSha256": "81072f0a66003e4b55fd1b67a212f028aa7506fdf1e27c100fb92d253a846095",
+      "callerObservedAtUtc": "2026-10-20T07:47:42.555Z",
+      "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+      "finalNativePrincipalState": "REVOKED",
+      "bothBindingsDisabledAndRevoked": true,
+      "genuineApplicationDenials": 8,
+      "platformProtectionDenialsAccepted": false
+    },
+    "branchEntriesBefore": 173,
+    "branchEntriesAfter": 171,
+    "totalBefore": 407,
+    "totalAfter": 405,
+    "allOldIdMetadataPreserved": true,
+    "oldMetadataBeforeSha256": "1d713c30b82472c1c24c4cf0ff8f40a5138fb66e815bf55a7e5aead4cf1e60ab",
+    "oldMetadataAfterSha256": "1d713c30b82472c1c24c4cf0ff8f40a5138fb66e815bf55a7e5aead4cf1e60ab",
+    "productionEntries": 74,
+    "globalPreviewEntries": 65,
+    "applicationRetries": 0,
+    "getRequests": 5,
+    "deleteRequests": 2,
+    "deleteAcknowledged": [
+      "c9Fg7bTQylfAvrPl",
+      "GRHcwlFqjhIp45f1"
+    ],
+    "providerDeployOrBuildRequests": 0,
+    "databaseRequests": 0,
+    "existingReadyDeploymentEnvironment": "Immutable existing deployment retained; deletion affects future deployments only. No rebuild or deployment invoked.",
+    "oldEnvironmentValuesInspected": false,
+    "tokenValuesEmittedByThisRunner": false
+  },
+  "callerScopedAccessRetirement": {
+    "format": "package4-caller-scoped-access-retirement-v1",
+    "status": "PASS",
+    "recordedAt": "2026-10-20T07:49:16.584Z",
+    "deploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+    "scope": "shareable-link",
+    "requestedTtlSeconds": 900,
+    "credentialRevoked": true,
+    "replacementCreated": false,
+    "remainingDeploymentShareLinks": 0,
+    "anonymousStatus": 302,
+    "projectPolicyChanges": 0,
+    "productionChanges": 0,
+    "secretValuesEmitted": false
+  },
+  "evelynProviderStateAfterProof": {
+    "format": "package4-caller-provider-state-v1",
+    "status": "PASS",
+    "observedAt": "2026-10-20T07:49:36.298Z",
+    "phase": "after-proof",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "productionDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "productionUnchanged": true,
+    "oidc": {
+      "enabled": true,
+      "issuerMode": "team"
+    },
+    "sso": {
+      "deploymentType": "all"
+    },
+    "autoExposeSystemEnvs": true,
+    "environmentMetadataRows": 37,
+    "previewRows": 21,
+    "uniquePreviewKeys": 15,
+    "metadataUnchanged": true,
+    "metadataSha256": "38fc534502bee5d4f3370c0c8e258c63011fcffc365c25a7f43efc0f0cda73b4",
+    "noSecretDecryption": true,
+    "secretValuesEmitted": false
+  },
+  "existingCredentialIncidentRemediated": false,
+  "incidentReceipt": "credential-output-incident.json",
+  "callerFullDeploymentRetirement": {
+    "format": "package4-caller-full-deployment-retirement-v1",
+    "status": "PASS",
+    "retiredAt": "2026-10-20T08:04:16.040Z",
+    "deploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "nativeState": "DELETED",
+    "nativeReadbackStatus": 404,
+    "anonymousUrlStatus": 404,
+    "anonymousLimit": "Hosting protection may run before deleted-deployment routing; deletion is proved by the native DELETE acknowledgement and independent authenticated deployment lookup.",
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "targetBeforeDeletion": "preview",
+    "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+    "productionDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "productionUnchanged": true,
+    "projectNotDeleted": true,
+    "platformCredentialIsolationScope": "15 named project Preview application keys were runtime-verified empty. Provider-managed system environment names included an automation access credential; its runtime value was not inspected and fixture source does not read or forward it. Completed Preview deployment now deleted.",
+    "deletionLimit": "Provider DELETED removes deployment access; no immediate permanent byte erasure is claimed.",
+    "initialCheckPreserved": "DELETE succeeded once. A later overly narrow public404/410 assertion failed; this read-only reconciliation did not repeat DELETE.",
+    "secretValuesEmitted": false
+  },
+  "runtimeBlankEnvironmentScope": "15 named project Preview application keys only. Provider-managed system environment was separately outside that blank-key proof; fixture source does not read or forward the automation credential and the completed caller deployment is now DELETED."
+}

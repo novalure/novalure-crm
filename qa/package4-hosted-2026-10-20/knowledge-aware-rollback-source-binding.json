@@ -1,0 +1,579 @@
+{
+  "format": "package4-knowledge-aware-rollback-source-binding-v1",
+  "status": "SOURCE_COMPATIBILITY_CONFIRMED_BUILD_NOT_PERFORMED",
+  "checkedAt": "2026-10-20T10:37:27.637Z",
+  "productionAccess": 0,
+  "remoteCalls": 0,
+  "testsRepeated": 0,
+  "migrationsRepeated": 0,
+  "refs": {
+    "rollback": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+    "app": "c291e21288903e2807b108bba852a597f77b777a",
+    "release": "6774478b29ab9e5f813618b6483b9a0ea190a78f"
+  },
+  "trees": {
+    "rollback": "d48fd84ea044be5954d05f0305fe0099cb0a1ff9",
+    "app": "0ec3cb6317dcf7e076c3937f58dca3554e427ffc",
+    "release": "c4969a75ac5f0530716a46cd4ebc829fa2ba5c19"
+  },
+  "wholeSourceComparison": {
+    "releaseVsAppChangedSourceFiles": [],
+    "rollbackVsReleaseChangedSourceFiles": [
+      "src/lib/auth/session.ts",
+      "src/lib/knowledge-center/assistant-http.ts",
+      "src/lib/knowledge-center/qa-machine-auth.ts"
+    ],
+    "otherSourceFilesIdentical": true,
+    "allMigrationFilesIdentical": true,
+    "dependencyObjectsIdentical": true,
+    "lockfileIdentical": true,
+    "tsconfigAndNextConfigIdentical": true,
+    "packageJsonDelta": "Only additional QA test-script entries; dependency declarations and lockfile unchanged"
+  },
+  "critical": {
+    "migrations/101_knowledge_center.sql": {
+      "gitBlob": "e21c0ef9b4d3f7e238203b85df2909026dc62839",
+      "sha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "migrations/102_knowledge_document_processing.sql": {
+      "gitBlob": "50b01169d086e3cc4ecc2c45be19895a6fa3175c",
+      "sha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "migrations/103_knowledge_assistant_service.sql": {
+      "gitBlob": "c93a0bb0d946c68502bbf48440877f44ef927bb8",
+      "sha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "migrations/104_knowledge_publication_workflow.sql": {
+      "gitBlob": "6868189846a96508d28999e3e0930093facd0127",
+      "sha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "migrations/105_knowledge_website_monitoring.sql": {
+      "gitBlob": "3a117de3308ac93754ffbabd5ca87aa1bc6c78cd",
+      "sha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "migrations/106_crm_operational_readers.sql": {
+      "gitBlob": "b6fedeeae3468dc9fe61338a6b43079b767e0325",
+      "sha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "src/lib/crm-machine-auth.ts": {
+      "gitBlob": "4b78552aa05c850bcc67b82326c397c182fe9bb7",
+      "sha256": "aa2cda131a4e384bbc20e50ddabc1ea553870c611c0ca06764eeca90181fc8f9",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "src/lib/media-lifecycle.ts": {
+      "gitBlob": "40238c80bc778856c2026d595f19720367fd4d4c",
+      "sha256": "d3fa7b6cdb98267494d683aedf437921f63bdcd5b52533674c5a5f301b736b8e",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "src/lib/db/crm-operational-readers.ts": {
+      "gitBlob": "6b3276ec424fd19f1c93ee9ae5a522d64fce5a4d",
+      "sha256": "c065dd0623b6bcc2bd5474c4d612da5b5ec0fca7f35c3f195a489fe62d35b1dc",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "src/lib/knowledge-center/repository.ts": {
+      "gitBlob": "c1934eef7929dee414b0927cef42d5bc48e799d7",
+      "sha256": "114d3e32fecd86d5ce833d5ced049031e088ebdecfe10b17983405eeaa894f67",
+      "byteEqualAcrossAllThreeRevisions": true
+    },
+    "src/lib/knowledge-center/workflow.ts": {
+      "gitBlob": "ad7ac9a447b454b709673826b913a04e2edecc8c",
+      "sha256": "efff2a3cf474bc9037a6dc802171f7b72c29ddfdc640d319fc356bd632a67251",
+      "byteEqualAcrossAllThreeRevisions": true
+    }
+  },
+  "transitiveImportAnalysis": {
+    "entrypoints": [
+      "src/lib/knowledge-center/repository.ts",
+      "src/lib/knowledge-center/workflow.ts",
+      "src/lib/knowledge-center/integrations.ts",
+      "src/lib/media-store.ts",
+      "src/lib/media-lifecycle.ts",
+      "src/lib/db/crm-operational-readers.ts",
+      "src/app/api/knowledge-center/sources/[sourceId]/document/route.ts",
+      "src/app/api/integrations/knowledge/webchat/route.ts",
+      "src/app/api/integrations/knowledge/voice/route.ts"
+    ],
+    "internalFiles": 51,
+    "byteIdenticalFiles": 48,
+    "exceptions": [
+      {
+        "path": "src/lib/auth/session.ts",
+        "rollbackSha256": "e6c478ca8a887f73d092d0397023e02e7b4efc40d24a86a06ff52f644bcfce74",
+        "releaseSha256": "af40e1e8c3f3f8136fdbc5f244fc40bb792c0d631e993ece0016ae78951827dd"
+      },
+      {
+        "path": "src/lib/knowledge-center/assistant-http.ts",
+        "rollbackSha256": "4b40d2cca87b8dd9da2f0019415acbb6900a9460ef3309da47d11e5a7ea53cd5",
+        "releaseSha256": "232485177bd094283da1ec16e459c28fd3425dbd8237568232120d45a2cc0048"
+      },
+      {
+        "path": "src/lib/knowledge-center/qa-machine-auth.ts",
+        "rollbackSha256": null,
+        "releaseSha256": "98c076805a89c7b692c41ce84a2fedfbe2f03bae0bfc73276e2cfd206a65d4e5"
+      }
+    ],
+    "unresolvedInternalImports": [],
+    "externalSpecifiers": [
+      "@neondatabase/serverless",
+      "@vercel/blob",
+      "@vercel/blob/client",
+      "@vercel/oidc",
+      "node:async_hooks",
+      "node:crypto",
+      "node:fs/promises",
+      "node:net",
+      "node:path",
+      "node:util",
+      "node:worker_threads",
+      "pg",
+      "server-only"
+    ],
+    "method": "TypeScript preProcessFile traverses static import/export and dynamic import declarations, including type imports; all src tree blobs separately compared so no transitive source change is excluded",
+    "rows": [
+      {
+        "path": "src/app/api/integrations/knowledge/voice/route.ts",
+        "rollbackBlob": "9900bd39dc194a1a2c2809c31f0394147ebbdd0b",
+        "releaseBlob": "9900bd39dc194a1a2c2809c31f0394147ebbdd0b",
+        "byteEqual": true,
+        "rollbackSha256": "797b1aae2deb587c9ac87c92f4d2ad03666ced9bfa97930b3cc9f3ba18ac6eb6",
+        "releaseSha256": "797b1aae2deb587c9ac87c92f4d2ad03666ced9bfa97930b3cc9f3ba18ac6eb6"
+      },
+      {
+        "path": "src/app/api/integrations/knowledge/webchat/route.ts",
+        "rollbackBlob": "88322867601059e7aab899a4aa218ff276529f21",
+        "releaseBlob": "88322867601059e7aab899a4aa218ff276529f21",
+        "byteEqual": true,
+        "rollbackSha256": "b3af64ce547de94044abcf6e966bdd589bbab6daaadf5592f12eb1b0480b8faa",
+        "releaseSha256": "b3af64ce547de94044abcf6e966bdd589bbab6daaadf5592f12eb1b0480b8faa"
+      },
+      {
+        "path": "src/app/api/knowledge-center/sources/[sourceId]/document/route.ts",
+        "rollbackBlob": "66853248ffa4feae7367abf0d531130b2fe31653",
+        "releaseBlob": "66853248ffa4feae7367abf0d531130b2fe31653",
+        "byteEqual": true,
+        "rollbackSha256": "c7442dcb522330695e232a046c07897cfdf6449b7f17f621ef84f0ed92c039da",
+        "releaseSha256": "c7442dcb522330695e232a046c07897cfdf6449b7f17f621ef84f0ed92c039da"
+      },
+      {
+        "path": "src/lib/auth/app-origin.ts",
+        "rollbackBlob": "6f57577bd94ebc84ffe4576bf8f1df795462d840",
+        "releaseBlob": "6f57577bd94ebc84ffe4576bf8f1df795462d840",
+        "byteEqual": true,
+        "rollbackSha256": "976c68cb96f21686927047a7c74b1e21b52dff6f5b115898f565ddfb1ac8f166",
+        "releaseSha256": "976c68cb96f21686927047a7c74b1e21b52dff6f5b115898f565ddfb1ac8f166"
+      },
+      {
+        "path": "src/lib/auth/auth-audit.ts",
+        "rollbackBlob": "56a5500968a0c151ae18aa18db7a0737eb605700",
+        "releaseBlob": "56a5500968a0c151ae18aa18db7a0737eb605700",
+        "byteEqual": true,
+        "rollbackSha256": "40b1f7dcd32fc5ed53150ffd5db0c47ba35b92f52ac45a38b51bb4fba92ffc6c",
+        "releaseSha256": "40b1f7dcd32fc5ed53150ffd5db0c47ba35b92f52ac45a38b51bb4fba92ffc6c"
+      },
+      {
+        "path": "src/lib/auth/auth-flow.ts",
+        "rollbackBlob": "d9384dd4e51aeae72ea580c6b2ac340defa02f92",
+        "releaseBlob": "d9384dd4e51aeae72ea580c6b2ac340defa02f92",
+        "byteEqual": true,
+        "rollbackSha256": "c13d8b9a7d6d390f6ab2d1b17a7ff0ea7b411f3803d76b6c51bc3a57d23f96f8",
+        "releaseSha256": "c13d8b9a7d6d390f6ab2d1b17a7ff0ea7b411f3803d76b6c51bc3a57d23f96f8"
+      },
+      {
+        "path": "src/lib/auth/auth-security.ts",
+        "rollbackBlob": "3e33de08ac66a54cf25044e689301335be677e5a",
+        "releaseBlob": "3e33de08ac66a54cf25044e689301335be677e5a",
+        "byteEqual": true,
+        "rollbackSha256": "8a2068188872ab9778d2afe08a3baa4dff4871a17bce6d969f1c81a5f9b9f493",
+        "releaseSha256": "8a2068188872ab9778d2afe08a3baa4dff4871a17bce6d969f1c81a5f9b9f493"
+      },
+      {
+        "path": "src/lib/auth/cookie-security.ts",
+        "rollbackBlob": "9d8944bf07edf22d04abb5471e746323972df9c5",
+        "releaseBlob": "9d8944bf07edf22d04abb5471e746323972df9c5",
+        "byteEqual": true,
+        "rollbackSha256": "d4fc253b016752c16df180cebbf1aaf1821090ca8e1bff1376a79b93fae6e607",
+        "releaseSha256": "d4fc253b016752c16df180cebbf1aaf1821090ca8e1bff1376a79b93fae6e607"
+      },
+      {
+        "path": "src/lib/auth/mfa-core.ts",
+        "rollbackBlob": "4a78e1d8e520a8da56669a0a5a9e17254840300f",
+        "releaseBlob": "4a78e1d8e520a8da56669a0a5a9e17254840300f",
+        "byteEqual": true,
+        "rollbackSha256": "65c69039dbfd87a3107dff787183799d5395fc33b5f493ebd85a6b7b3e467440",
+        "releaseSha256": "65c69039dbfd87a3107dff787183799d5395fc33b5f493ebd85a6b7b3e467440"
+      },
+      {
+        "path": "src/lib/auth/mfa.ts",
+        "rollbackBlob": "862437b90fd716f98e29225f2a1d844276ef0d19",
+        "releaseBlob": "862437b90fd716f98e29225f2a1d844276ef0d19",
+        "byteEqual": true,
+        "rollbackSha256": "5ce9dddd649a9c779b600521e7fe1743130d586e6eaf818aa6f3dbac24aa6c51",
+        "releaseSha256": "5ce9dddd649a9c779b600521e7fe1743130d586e6eaf818aa6f3dbac24aa6c51"
+      },
+      {
+        "path": "src/lib/auth/passwords.ts",
+        "rollbackBlob": "2dcd8e5c2000b3b5dbe18f5fe4bcabb137ff3f3d",
+        "releaseBlob": "2dcd8e5c2000b3b5dbe18f5fe4bcabb137ff3f3d",
+        "byteEqual": true,
+        "rollbackSha256": "79a5b81766f6ced80104e7a760772176cd3ef26e8dba102da25602fd37468753",
+        "releaseSha256": "79a5b81766f6ced80104e7a760772176cd3ef26e8dba102da25602fd37468753"
+      },
+      {
+        "path": "src/lib/auth/permissions.ts",
+        "rollbackBlob": "6b5aa25a6b76a91e1b3c9f734e86c9ac5104d5e2",
+        "releaseBlob": "6b5aa25a6b76a91e1b3c9f734e86c9ac5104d5e2",
+        "byteEqual": true,
+        "rollbackSha256": "fb0dce15f7425f6da78b35821b94bfe2418730c9e7fad295d3632d390af6fc79",
+        "releaseSha256": "fb0dce15f7425f6da78b35821b94bfe2418730c9e7fad295d3632d390af6fc79"
+      },
+      {
+        "path": "src/lib/auth/rate-limit-core.ts",
+        "rollbackBlob": "d2a334b4432620f6c8a6a1a14018947d3dba2f20",
+        "releaseBlob": "d2a334b4432620f6c8a6a1a14018947d3dba2f20",
+        "byteEqual": true,
+        "rollbackSha256": "e5bf438fca63805caa9623c938c1e930d7c0bce99a6f551a597e8cd2a79fd5f7",
+        "releaseSha256": "e5bf438fca63805caa9623c938c1e930d7c0bce99a6f551a597e8cd2a79fd5f7"
+      },
+      {
+        "path": "src/lib/auth/rate-limit.ts",
+        "rollbackBlob": "3325fb024d5bb8775b46e5496c79042fd3e0fa24",
+        "releaseBlob": "3325fb024d5bb8775b46e5496c79042fd3e0fa24",
+        "byteEqual": true,
+        "rollbackSha256": "b89fd171768e320a23fcf169320df14694407ae3729d4a9ef8b27ad0051476dc",
+        "releaseSha256": "b89fd171768e320a23fcf169320df14694407ae3729d4a9ef8b27ad0051476dc"
+      },
+      {
+        "path": "src/lib/auth/session-store.ts",
+        "rollbackBlob": "46845e454091f17d9cf8db0726206b98ff15ef2f",
+        "releaseBlob": "46845e454091f17d9cf8db0726206b98ff15ef2f",
+        "byteEqual": true,
+        "rollbackSha256": "73ca8097f1a43ce68ad696e08a4de61b4384cb1d0af8539765db8bb4e5cdf8cf",
+        "releaseSha256": "73ca8097f1a43ce68ad696e08a4de61b4384cb1d0af8539765db8bb4e5cdf8cf"
+      },
+      {
+        "path": "src/lib/auth/session.ts",
+        "rollbackBlob": "3744d8285d99e86330f968dbafa5e6e51af89f89",
+        "releaseBlob": "706d695364a7f30cfc1d184927023f44f2c512a1",
+        "byteEqual": false,
+        "rollbackSha256": "e6c478ca8a887f73d092d0397023e02e7b4efc40d24a86a06ff52f644bcfce74",
+        "releaseSha256": "af40e1e8c3f3f8136fdbc5f244fc40bb792c0d631e993ece0016ae78951827dd"
+      },
+      {
+        "path": "src/lib/bots/agent-tools.ts",
+        "rollbackBlob": "539fb80b53ccc9d8018b10afe506a64f5ba889a3",
+        "releaseBlob": "539fb80b53ccc9d8018b10afe506a64f5ba889a3",
+        "byteEqual": true,
+        "rollbackSha256": "d72919fff03095619493955f8a11995928368b7464745086a55e5b672d0fc2d2",
+        "releaseSha256": "d72919fff03095619493955f8a11995928368b7464745086a55e5b672d0fc2d2"
+      },
+      {
+        "path": "src/lib/bots/omnichannel.ts",
+        "rollbackBlob": "8c34f3d944933c1783cd083e10bc8a0cd183eb94",
+        "releaseBlob": "8c34f3d944933c1783cd083e10bc8a0cd183eb94",
+        "byteEqual": true,
+        "rollbackSha256": "6339ae85e6206159ce8709b396ad8a6652239afaf8a4e22948b2534d490f8ce7",
+        "releaseSha256": "6339ae85e6206159ce8709b396ad8a6652239afaf8a4e22948b2534d490f8ce7"
+      },
+      {
+        "path": "src/lib/crm-command.ts",
+        "rollbackBlob": "9b4c7a06a543164d67070e1f5504ff608364ea64",
+        "releaseBlob": "9b4c7a06a543164d67070e1f5504ff608364ea64",
+        "byteEqual": true,
+        "rollbackSha256": "6cbce3ce5ae0e1c7fdc8cd19015443287d3b89d9fbf2509796b6fdebe73e42a9",
+        "releaseSha256": "6cbce3ce5ae0e1c7fdc8cd19015443287d3b89d9fbf2509796b6fdebe73e42a9"
+      },
+      {
+        "path": "src/lib/crm-data.ts",
+        "rollbackBlob": "b10cff3e886f61e4f84a541b228a10d7779ba25a",
+        "releaseBlob": "b10cff3e886f61e4f84a541b228a10d7779ba25a",
+        "byteEqual": true,
+        "rollbackSha256": "9323d6dcd6ae7722698c73eba0d6e37cdff7a6aec7aa68f0a20666882e06d260",
+        "releaseSha256": "9323d6dcd6ae7722698c73eba0d6e37cdff7a6aec7aa68f0a20666882e06d260"
+      },
+      {
+        "path": "src/lib/crm-division.ts",
+        "rollbackBlob": "946cd7eb3ad5d04b64be03f2c1aa23bf37e9834b",
+        "releaseBlob": "946cd7eb3ad5d04b64be03f2c1aa23bf37e9834b",
+        "byteEqual": true,
+        "rollbackSha256": "a8f3e6a4dbb9b2aa6691925417595bf8a0fa6c91d9567fe6fac10cae72c54f02",
+        "releaseSha256": "a8f3e6a4dbb9b2aa6691925417595bf8a0fa6c91d9567fe6fac10cae72c54f02"
+      },
+      {
+        "path": "src/lib/crm-machine-auth.ts",
+        "rollbackBlob": "4b78552aa05c850bcc67b82326c397c182fe9bb7",
+        "releaseBlob": "4b78552aa05c850bcc67b82326c397c182fe9bb7",
+        "byteEqual": true,
+        "rollbackSha256": "aa2cda131a4e384bbc20e50ddabc1ea553870c611c0ca06764eeca90181fc8f9",
+        "releaseSha256": "aa2cda131a4e384bbc20e50ddabc1ea553870c611c0ca06764eeca90181fc8f9"
+      },
+      {
+        "path": "src/lib/crm-source.ts",
+        "rollbackBlob": "03d141a4b385324aeb83aaafd725b39d11a0f1fc",
+        "releaseBlob": "03d141a4b385324aeb83aaafd725b39d11a0f1fc",
+        "byteEqual": true,
+        "rollbackSha256": "d0176d0d71555ee8344cc1cdcb1c86dcef69257743ab7748c80a1715cc0042c2",
+        "releaseSha256": "d0176d0d71555ee8344cc1cdcb1c86dcef69257743ab7748c80a1715cc0042c2"
+      },
+      {
+        "path": "src/lib/crm-types.ts",
+        "rollbackBlob": "6e43f46206efaad5adb0717418e3a803d9dea10a",
+        "releaseBlob": "6e43f46206efaad5adb0717418e3a803d9dea10a",
+        "byteEqual": true,
+        "rollbackSha256": "bc17a5c528387fa7377f8883fe787f62501521e40d328acccd8884d4741298f3",
+        "releaseSha256": "bc17a5c528387fa7377f8883fe787f62501521e40d328acccd8884d4741298f3"
+      },
+      {
+        "path": "src/lib/db/client.ts",
+        "rollbackBlob": "0221e7ce1aa738aa1c6bdfcda5d6113e8a1f6704",
+        "releaseBlob": "0221e7ce1aa738aa1c6bdfcda5d6113e8a1f6704",
+        "byteEqual": true,
+        "rollbackSha256": "8d582c716ad71c51a412e58c66a116d212de30446b9a00286cb62e4f2fb16a33",
+        "releaseSha256": "8d582c716ad71c51a412e58c66a116d212de30446b9a00286cb62e4f2fb16a33"
+      },
+      {
+        "path": "src/lib/db/connection-retry.ts",
+        "rollbackBlob": "fb36a965d8541135a805eef7b49daf1ad869c503",
+        "releaseBlob": "fb36a965d8541135a805eef7b49daf1ad869c503",
+        "byteEqual": true,
+        "rollbackSha256": "2bc9465b4ffe93f618f1f789e1c71047eef7f2346f66254b30c750c74d7ab817",
+        "releaseSha256": "2bc9465b4ffe93f618f1f789e1c71047eef7f2346f66254b30c750c74d7ab817"
+      },
+      {
+        "path": "src/lib/db/crm-operational-readers.ts",
+        "rollbackBlob": "6b3276ec424fd19f1c93ee9ae5a522d64fce5a4d",
+        "releaseBlob": "6b3276ec424fd19f1c93ee9ae5a522d64fce5a4d",
+        "byteEqual": true,
+        "rollbackSha256": "c065dd0623b6bcc2bd5474c4d612da5b5ec0fca7f35c3f195a489fe62d35b1dc",
+        "releaseSha256": "c065dd0623b6bcc2bd5474c4d612da5b5ec0fca7f35c3f195a489fe62d35b1dc"
+      },
+      {
+        "path": "src/lib/db/local-test-transport.ts",
+        "rollbackBlob": "46932dc90e37e5bc57dcd983b2ec96a197286ac7",
+        "releaseBlob": "46932dc90e37e5bc57dcd983b2ec96a197286ac7",
+        "byteEqual": true,
+        "rollbackSha256": "bb9553727247842bc01c0195929955d325da095b053d93ef1adc9662b6f40319",
+        "releaseSha256": "bb9553727247842bc01c0195929955d325da095b053d93ef1adc9662b6f40319"
+      },
+      {
+        "path": "src/lib/db/schema.ts",
+        "rollbackBlob": "98a7de18166bafb96f330d2f15e738b016154e75",
+        "releaseBlob": "98a7de18166bafb96f330d2f15e738b016154e75",
+        "byteEqual": true,
+        "rollbackSha256": "36b29d53790dec12c10e6bf6b002804a75e7bf0ef29eb17d12e3a669f38564d5",
+        "releaseSha256": "36b29d53790dec12c10e6bf6b002804a75e7bf0ef29eb17d12e3a669f38564d5"
+      },
+      {
+        "path": "src/lib/db/tenant-client.ts",
+        "rollbackBlob": "cc1e661c27d76fa81587f50a35266d683142ca18",
+        "releaseBlob": "cc1e661c27d76fa81587f50a35266d683142ca18",
+        "byteEqual": true,
+        "rollbackSha256": "393512aa05f200511c1f3e8ac5016adf6a19ff33b284241a29d57133760855c1",
+        "releaseSha256": "393512aa05f200511c1f3e8ac5016adf6a19ff33b284241a29d57133760855c1"
+      },
+      {
+        "path": "src/lib/db/transaction-context.ts",
+        "rollbackBlob": "3a1f8dc69957ff80b01c5a4204a20099b534e9c0",
+        "releaseBlob": "3a1f8dc69957ff80b01c5a4204a20099b534e9c0",
+        "byteEqual": true,
+        "rollbackSha256": "f206485623e8f702beeddd1098653364f6234da61a4b60df9a92a5a6ff188f6e",
+        "releaseSha256": "f206485623e8f702beeddd1098653364f6234da61a4b60df9a92a5a6ff188f6e"
+      },
+      {
+        "path": "src/lib/i18n.ts",
+        "rollbackBlob": "3162f395e90545fb0ac291a80ac0d546ec934d0d",
+        "releaseBlob": "3162f395e90545fb0ac291a80ac0d546ec934d0d",
+        "byteEqual": true,
+        "rollbackSha256": "60fa1a635a733509f1e22dd79a6db0c782dc034c67907fbb8b68416c5d6c650b",
+        "releaseSha256": "60fa1a635a733509f1e22dd79a6db0c782dc034c67907fbb8b68416c5d6c650b"
+      },
+      {
+        "path": "src/lib/knowledge-center/assistant-http.ts",
+        "rollbackBlob": "971abca2a5f0711caf964ca12573eb1d77d5317e",
+        "releaseBlob": "fd54cf7df291cb1820804d72974052d79c77ac6a",
+        "byteEqual": false,
+        "rollbackSha256": "4b40d2cca87b8dd9da2f0019415acbb6900a9460ef3309da47d11e5a7ea53cd5",
+        "releaseSha256": "232485177bd094283da1ec16e459c28fd3425dbd8237568232120d45a2cc0048"
+      },
+      {
+        "path": "src/lib/knowledge-center/document-extraction.ts",
+        "rollbackBlob": "f4894c386ecf78037b579dbda2ab39ffb4552023",
+        "releaseBlob": "f4894c386ecf78037b579dbda2ab39ffb4552023",
+        "byteEqual": true,
+        "rollbackSha256": "7ae8c0e07d0e7578f5da2a58fce6f7986a005900bc2df0d67ea5ee8798799d3d",
+        "releaseSha256": "7ae8c0e07d0e7578f5da2a58fce6f7986a005900bc2df0d67ea5ee8798799d3d"
+      },
+      {
+        "path": "src/lib/knowledge-center/document-upload.ts",
+        "rollbackBlob": "7ef9b77cdb3065dd1416432b6c0991e00ccff33d",
+        "releaseBlob": "7ef9b77cdb3065dd1416432b6c0991e00ccff33d",
+        "byteEqual": true,
+        "rollbackSha256": "d32cfae080e04fee15b7cbccb66289e9feca945d305f8fd48022172f1187250b",
+        "releaseSha256": "d32cfae080e04fee15b7cbccb66289e9feca945d305f8fd48022172f1187250b"
+      },
+      {
+        "path": "src/lib/knowledge-center/http.ts",
+        "rollbackBlob": "9e1f158a384a6a2df62c0172e58091dd092993be",
+        "releaseBlob": "9e1f158a384a6a2df62c0172e58091dd092993be",
+        "byteEqual": true,
+        "rollbackSha256": "11fc64872802132903837c2b0104715a003351cede7dec6010dc25c79f2a259a",
+        "releaseSha256": "11fc64872802132903837c2b0104715a003351cede7dec6010dc25c79f2a259a"
+      },
+      {
+        "path": "src/lib/knowledge-center/integrations.ts",
+        "rollbackBlob": "11b8f56a0b1ccb2bd87f2ef9a77faf1e3c17f2a8",
+        "releaseBlob": "11b8f56a0b1ccb2bd87f2ef9a77faf1e3c17f2a8",
+        "byteEqual": true,
+        "rollbackSha256": "68060a58eaef79511b4812d67f3cbf76ead3086c366f8cf281791841a3ccb7d2",
+        "releaseSha256": "68060a58eaef79511b4812d67f3cbf76ead3086c366f8cf281791841a3ccb7d2"
+      },
+      {
+        "path": "src/lib/knowledge-center/maintenance.ts",
+        "rollbackBlob": "d56731fd6376c67ac2aeb5923636a289d91dae73",
+        "releaseBlob": "d56731fd6376c67ac2aeb5923636a289d91dae73",
+        "byteEqual": true,
+        "rollbackSha256": "6a4653bc099cc55b7cad3b6b1b3dc3be17449a1caa1b8750712215ec17383a78",
+        "releaseSha256": "6a4653bc099cc55b7cad3b6b1b3dc3be17449a1caa1b8750712215ec17383a78"
+      },
+      {
+        "path": "src/lib/knowledge-center/policy.ts",
+        "rollbackBlob": "b5b565bd7972329402c21db2b55fc73502438131",
+        "releaseBlob": "b5b565bd7972329402c21db2b55fc73502438131",
+        "byteEqual": true,
+        "rollbackSha256": "573d34c68e5d3b0857c6188f7cdc55e11672767c4efbcb3f3fe949ac2d8ffe91",
+        "releaseSha256": "573d34c68e5d3b0857c6188f7cdc55e11672767c4efbcb3f3fe949ac2d8ffe91"
+      },
+      {
+        "path": "src/lib/knowledge-center/qa-machine-auth.ts",
+        "rollbackBlob": null,
+        "releaseBlob": "6a87355ed4c0b379685f88261a3ce1755bb08e51",
+        "byteEqual": false,
+        "rollbackSha256": null,
+        "releaseSha256": "98c076805a89c7b692c41ce84a2fedfbe2f03bae0bfc73276e2cfd206a65d4e5"
+      },
+      {
+        "path": "src/lib/knowledge-center/repository.ts",
+        "rollbackBlob": "c1934eef7929dee414b0927cef42d5bc48e799d7",
+        "releaseBlob": "c1934eef7929dee414b0927cef42d5bc48e799d7",
+        "byteEqual": true,
+        "rollbackSha256": "114d3e32fecd86d5ce833d5ced049031e088ebdecfe10b17983405eeaa894f67",
+        "releaseSha256": "114d3e32fecd86d5ce833d5ced049031e088ebdecfe10b17983405eeaa894f67"
+      },
+      {
+        "path": "src/lib/knowledge-center/types.ts",
+        "rollbackBlob": "e957dd40e83fe2064307f2214e407b0c08578c20",
+        "releaseBlob": "e957dd40e83fe2064307f2214e407b0c08578c20",
+        "byteEqual": true,
+        "rollbackSha256": "c5cfdcc98eccf3669c4824c2abe4ded9c97d75b8ccd705da9244bd5974289404",
+        "releaseSha256": "c5cfdcc98eccf3669c4824c2abe4ded9c97d75b8ccd705da9244bd5974289404"
+      },
+      {
+        "path": "src/lib/knowledge-center/workflow.ts",
+        "rollbackBlob": "ad7ac9a447b454b709673826b913a04e2edecc8c",
+        "releaseBlob": "ad7ac9a447b454b709673826b913a04e2edecc8c",
+        "byteEqual": true,
+        "rollbackSha256": "efff2a3cf474bc9037a6dc802171f7b72c29ddfdc640d319fc356bd632a67251",
+        "releaseSha256": "efff2a3cf474bc9037a6dc802171f7b72c29ddfdc640d319fc356bd632a67251"
+      },
+      {
+        "path": "src/lib/language-runtime.ts",
+        "rollbackBlob": "c2c297e75a0bc9c989014a87981c53f1f8f853cc",
+        "releaseBlob": "c2c297e75a0bc9c989014a87981c53f1f8f853cc",
+        "byteEqual": true,
+        "rollbackSha256": "9f1ecb152febbf47eda0fd08fbae500f20d8348688b8ebbcc9b454a0d86efca3",
+        "releaseSha256": "9f1ecb152febbf47eda0fd08fbae500f20d8348688b8ebbcc9b454a0d86efca3"
+      },
+      {
+        "path": "src/lib/legal.ts",
+        "rollbackBlob": "3402e48c2c4244b2dadf86d767355d37a543d541",
+        "releaseBlob": "3402e48c2c4244b2dadf86d767355d37a543d541",
+        "byteEqual": true,
+        "rollbackSha256": "90fa65c850720cf46eac2ba1ca915e584497258ff0596d6596bf61df1516978d",
+        "releaseSha256": "90fa65c850720cf46eac2ba1ca915e584497258ff0596d6596bf61df1516978d"
+      },
+      {
+        "path": "src/lib/media-lifecycle.ts",
+        "rollbackBlob": "40238c80bc778856c2026d595f19720367fd4d4c",
+        "releaseBlob": "40238c80bc778856c2026d595f19720367fd4d4c",
+        "byteEqual": true,
+        "rollbackSha256": "d3fa7b6cdb98267494d683aedf437921f63bdcd5b52533674c5a5f301b736b8e",
+        "releaseSha256": "d3fa7b6cdb98267494d683aedf437921f63bdcd5b52533674c5a5f301b736b8e"
+      },
+      {
+        "path": "src/lib/media-security.ts",
+        "rollbackBlob": "c9063c6bbdd73b9dc40fd1a2310ab47c38a0836d",
+        "releaseBlob": "c9063c6bbdd73b9dc40fd1a2310ab47c38a0836d",
+        "byteEqual": true,
+        "rollbackSha256": "836283f8ceef65fb3597ba22f92d84509c02ae4d90f13d39ea1259915a8087a1",
+        "releaseSha256": "836283f8ceef65fb3597ba22f92d84509c02ae4d90f13d39ea1259915a8087a1"
+      },
+      {
+        "path": "src/lib/media-store.ts",
+        "rollbackBlob": "15229b2ba2bdfe2ec622ee79ee856fc2cdf2fea8",
+        "releaseBlob": "15229b2ba2bdfe2ec622ee79ee856fc2cdf2fea8",
+        "byteEqual": true,
+        "rollbackSha256": "004ec1fdd96a13517b2273e8cc799029daab26744327aee51d0887a2a824a3e1",
+        "releaseSha256": "004ec1fdd96a13517b2273e8cc799029daab26744327aee51d0887a2a824a3e1"
+      },
+      {
+        "path": "src/lib/product-model.ts",
+        "rollbackBlob": "817312170f6454553f6c1b9f13cc88742cef574e",
+        "releaseBlob": "817312170f6454553f6c1b9f13cc88742cef574e",
+        "byteEqual": true,
+        "rollbackSha256": "81e75e57552701087516f9e54dd835ceddb6992f552a24974643b6fc7c7e27be",
+        "releaseSha256": "81e75e57552701087516f9e54dd835ceddb6992f552a24974643b6fc7c7e27be"
+      },
+      {
+        "path": "src/lib/security/csrf-core.ts",
+        "rollbackBlob": "c873a516fede2b0ff3129bf437213afa9b7f2ed4",
+        "releaseBlob": "c873a516fede2b0ff3129bf437213afa9b7f2ed4",
+        "byteEqual": true,
+        "rollbackSha256": "4e1262f25a34d146026da0f7ab2f3a110ad3c46b40d3408a68683256e0ea3981",
+        "releaseSha256": "4e1262f25a34d146026da0f7ab2f3a110ad3c46b40d3408a68683256e0ea3981"
+      },
+      {
+        "path": "src/lib/security/csrf.ts",
+        "rollbackBlob": "2d121468ada8cdd34e46d8630652d2e4ff146729",
+        "releaseBlob": "2d121468ada8cdd34e46d8630652d2e4ff146729",
+        "byteEqual": true,
+        "rollbackSha256": "3740c50c7b7eaee4b8b3d45a24199bc3cda39649cbeea5b1a227683c7dfb52b9",
+        "releaseSha256": "3740c50c7b7eaee4b8b3d45a24199bc3cda39649cbeea5b1a227683c7dfb52b9"
+      }
+    ],
+    "graphSha256": "433c7b85456ca2fe4bae74bbf6cf13e0c2eed1edc4125f7b5f9916ae0006c29b"
+  },
+  "authDelta": {
+    "productionVerifierByteEqual": true,
+    "sessionDelta": "AppSession serviceIdentity type union only",
+    "sessionEmittedJavascriptIdentical": true,
+    "sessionEmittedJavascriptSha256": "fd59e78fb42bad3bd39c360dedf724b9924c5895e302222a87c3cd023df2d20c",
+    "assistantHttpDelta": "New distinct opt-in QA branch. With CRM_KNOWLEDGE_QA_MACHINE_ENABLED absent or !=1, profile returns null and selects unchanged Production verifier + original crm_authenticate_machine SQL. Principal binding lock, re-read and retrieval call retained.",
+    "qaProfileProductionBehavior": "If mistakenly enabled on Production, profile throws403 because actual VERCEL_ENV must be preview; it does not grant QA access or fall back.",
+    "rollback196f": "Contains no QA auth module, QA SQL reader selection or QA session type union",
+    "requiredProductionBindings": [
+      "VERCEL_ENV=production and correct native CRM project/deployment",
+      "CRM_KNOWLEDGE_QA_MACHINE_ENABLED absent/off and no QA workspace binding",
+      "Only canonical original101–106 SQL; no QA principals/functions/constraints",
+      "Verified Production migration/runtime role, private store, auth/OAuth secrets and credential bindings"
+    ]
+  },
+  "reuse": {
+    "hosted18AcceptedSource": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+    "sourceBindingToCurrentDocumentPublicationMedia106Code": true,
+    "currentPG17CompatibilityReceipt": "/workspace/package4-production-version-compatibility.json",
+    "currentPG17ReuseLimit": "Same critical SQL/runtime bytes and dependencies; no new full 196f build or second DB rehearsal performed",
+    "genuineProductionMachinePositiveProofReused": false
+  },
+  "verdict": "196f0da is a Knowledge-aware source-compatible rollback build base; it contains original106 and identical current document/publication/media/OperationalReader code. A separate correct Production build and artifact/env/smoke verification are still required.",
+  "oldEa668e6": "Not an unconditional rollback after new Knowledge writes; previously demonstrated media-delete degradation and missing saved-channel retrieval gate remain.",
+  "limitations": [
+    "Source and transitive dependency identity is not a deployment or Production environment-binding proof.",
+    "No new Production build, database mutation, browser test or native caller request was performed by this analysis.",
+    "Actual rollback artifact must preserve extended schema and post-release data."
+  ]
+}

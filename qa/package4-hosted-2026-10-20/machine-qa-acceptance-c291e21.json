@@ -1,0 +1,629 @@
+{
+  "format": "package4-genuine-qa-machine-acceptance-v1",
+  "status": "PASS",
+  "recordedAt": "2026-10-20T07:48:42.657159+00:00",
+  "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+  "actualApplicationRequests": 40,
+  "phaseCount": 5,
+  "signedCustomTokenJtiSha256Count": 20,
+  "freshJtisAllDistinct": true,
+  "baselineCasesPassed": 8,
+  "restoredBindingCasesPassed": 8,
+  "phases": [
+    {
+      "phase": "baseline",
+      "expectedOutcomeStatus": "PASS",
+      "rawCallerSuiteStatus": "PASS",
+      "rawSuiteFailureExpected": false,
+      "receiptSha256": "f0a15284a499bdab105329f26ad9173b8154cb3a784d78f473c9db38e092fc83",
+      "proof": {
+        "format": "package4-genuine-qa-caller-phase-v1",
+        "phase": "baseline",
+        "observedAt": "2026-10-20T07:45:30.052Z",
+        "httpStatus": 200,
+        "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+        "callerOrigin": "https://evelyn-g8lve1qmp-novalure.vercel.app",
+        "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+        "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+        "responseSha256": "ace3eb129dfce009a3acc457313a2839646cf90babe7be8e734590664f907668",
+        "result": {
+          "format": "package4-evelyn-preview-knowledge-caller-v1",
+          "status": "PASS",
+          "workload": {
+            "issuer": "https://oidc.vercel.com/novalure",
+            "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+            "subject": "owner:novalure:project:evelyn:environment:preview",
+            "environment": "preview",
+            "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+            "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+          },
+          "environmentIsolation": {
+            "expectedBlankKeyCount": 15,
+            "observedBlankKeyCount": 15,
+            "allBlank": true
+          },
+          "results": [
+            {
+              "channel": "webchat",
+              "scenario": "published-knowledge",
+              "httpStatus": 200,
+              "applicationCode": null,
+              "jtiSha256": "0ddf23f66da5cbb434dfb7d652fd52e2132d32e5c9a7fae9a528bdf598115044",
+              "matched": true,
+              "schemaValid": true,
+              "answerStatus": "grounded",
+              "excerptCount": 1,
+              "expectedSourceVersionMatched": true,
+              "uniqueMarkerMatched": true,
+              "publishedTimeMatched": true,
+              "draftTimeExcluded": true,
+              "expectedEvidenceMatched": true,
+              "sourceVersionSha256": "a50ce39131f9da8071d50924d3d5dc7818d032e8b1bc33135646763df1476ce0"
+            },
+            {
+              "channel": "webchat",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "07cb9e336b79724f2c992c738ace9d9d9e98edf7b761a0710fe451f694e29fa4",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "published-knowledge",
+              "httpStatus": 200,
+              "applicationCode": null,
+              "jtiSha256": "ad8fe7b3bfee726b61bc95fa6bd38a81e9d629b3a094107f7215e14bb825db15",
+              "matched": true,
+              "schemaValid": true,
+              "answerStatus": "grounded",
+              "excerptCount": 1,
+              "expectedSourceVersionMatched": true,
+              "uniqueMarkerMatched": true,
+              "publishedTimeMatched": true,
+              "draftTimeExcluded": true,
+              "expectedEvidenceMatched": true,
+              "sourceVersionSha256": "a50ce39131f9da8071d50924d3d5dc7818d032e8b1bc33135646763df1476ce0"
+            },
+            {
+              "channel": "voice",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "2c1dea502c77aee6bcc845e63f745130a294b4127a25c52866e1c3cdacf738a0",
+              "matched": true,
+              "expectedDenialMatched": true
+            }
+          ]
+        },
+        "secretValuesEmitted": false
+      }
+    },
+    {
+      "phase": "voice-off",
+      "expectedOutcomeStatus": "PASS",
+      "rawCallerSuiteStatus": "FAIL",
+      "rawSuiteFailureExpected": true,
+      "receiptSha256": "cd1819cba2a758a875d2996379b39ff4580ddd5d03afadfc3f36247d72ecc792",
+      "proof": {
+        "format": "package4-genuine-qa-caller-phase-v1",
+        "phase": "voice-off",
+        "observedAt": "2026-10-20T07:46:00.427Z",
+        "httpStatus": 200,
+        "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+        "callerOrigin": "https://evelyn-g8lve1qmp-novalure.vercel.app",
+        "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+        "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+        "responseSha256": "cb2252d3721f2b07cfb91ffc47eee179a5095e7b65d8615497e367dbffab4e6a",
+        "result": {
+          "format": "package4-evelyn-preview-knowledge-caller-v1",
+          "status": "FAIL",
+          "workload": {
+            "issuer": "https://oidc.vercel.com/novalure",
+            "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+            "subject": "owner:novalure:project:evelyn:environment:preview",
+            "environment": "preview",
+            "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+            "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+          },
+          "environmentIsolation": {
+            "expectedBlankKeyCount": 15,
+            "observedBlankKeyCount": 15,
+            "allBlank": true
+          },
+          "results": [
+            {
+              "channel": "webchat",
+              "scenario": "published-knowledge",
+              "httpStatus": 200,
+              "applicationCode": null,
+              "jtiSha256": "f108fdb8b15449f9229564ac5d5fb429b3d7bcdc07edde70390d75bbedcf82ba",
+              "matched": true,
+              "schemaValid": true,
+              "answerStatus": "grounded",
+              "excerptCount": 1,
+              "expectedSourceVersionMatched": true,
+              "uniqueMarkerMatched": true,
+              "publishedTimeMatched": true,
+              "draftTimeExcluded": true,
+              "expectedEvidenceMatched": true,
+              "sourceVersionSha256": "a50ce39131f9da8071d50924d3d5dc7818d032e8b1bc33135646763df1476ce0"
+            },
+            {
+              "channel": "webchat",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "486f0b36e2d1252499e70d8214d2d30e284a509c47d554cd23107a718e851bd2",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "published-knowledge",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "564f2ec75db3c07e817cb550a945a8ea1fd4bc2b43287aa7a52ecf5d224aeea2",
+              "matched": false,
+              "schemaValid": false,
+              "answerStatus": null,
+              "excerptCount": 0,
+              "expectedSourceVersionMatched": false,
+              "uniqueMarkerMatched": false,
+              "publishedTimeMatched": false,
+              "draftTimeExcluded": false,
+              "expectedEvidenceMatched": false,
+              "sourceVersionSha256": null
+            },
+            {
+              "channel": "voice",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "8f0e4963e5224cf67d8bbaff37acc75e90d0b443b1e593179397037fc214e7c6",
+              "matched": true,
+              "expectedDenialMatched": true
+            }
+          ]
+        },
+        "secretValuesEmitted": false
+      }
+    },
+    {
+      "phase": "bindings-on",
+      "expectedOutcomeStatus": "PASS",
+      "rawCallerSuiteStatus": "PASS",
+      "rawSuiteFailureExpected": false,
+      "receiptSha256": "5e6ae0f13e9d6ccf9e7b88104fcd9146df7ffcdb660e17de5d2fa9b1bdb09b0f",
+      "proof": {
+        "format": "package4-genuine-qa-caller-phase-v1",
+        "phase": "bindings-on",
+        "observedAt": "2026-10-20T07:46:36.473Z",
+        "httpStatus": 200,
+        "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+        "callerOrigin": "https://evelyn-g8lve1qmp-novalure.vercel.app",
+        "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+        "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+        "responseSha256": "42ed1d53e171053c61a8b414591ceb8e00a73c6e48f98a4bda79771760c3705e",
+        "result": {
+          "format": "package4-evelyn-preview-knowledge-caller-v1",
+          "status": "PASS",
+          "workload": {
+            "issuer": "https://oidc.vercel.com/novalure",
+            "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+            "subject": "owner:novalure:project:evelyn:environment:preview",
+            "environment": "preview",
+            "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+            "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+          },
+          "environmentIsolation": {
+            "expectedBlankKeyCount": 15,
+            "observedBlankKeyCount": 15,
+            "allBlank": true
+          },
+          "results": [
+            {
+              "channel": "webchat",
+              "scenario": "published-knowledge",
+              "httpStatus": 200,
+              "applicationCode": null,
+              "jtiSha256": "2371d1378a3f737a773de9108cba159b728941e7ad802f3157e8cec7ddba11ac",
+              "matched": true,
+              "schemaValid": true,
+              "answerStatus": "grounded",
+              "excerptCount": 1,
+              "expectedSourceVersionMatched": true,
+              "uniqueMarkerMatched": true,
+              "publishedTimeMatched": true,
+              "draftTimeExcluded": true,
+              "expectedEvidenceMatched": true,
+              "sourceVersionSha256": "a50ce39131f9da8071d50924d3d5dc7818d032e8b1bc33135646763df1476ce0"
+            },
+            {
+              "channel": "webchat",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "a77ad7df38965a97e73d58b1315f3400e2f911f4b325cd3a7a92a44c8b1dfe00",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "published-knowledge",
+              "httpStatus": 200,
+              "applicationCode": null,
+              "jtiSha256": "be04fd645c75ea372a3e4ea4d0a7a26a5417a0d4bac8419b994b40dcc088fa11",
+              "matched": true,
+              "schemaValid": true,
+              "answerStatus": "grounded",
+              "excerptCount": 1,
+              "expectedSourceVersionMatched": true,
+              "uniqueMarkerMatched": true,
+              "publishedTimeMatched": true,
+              "draftTimeExcluded": true,
+              "expectedEvidenceMatched": true,
+              "sourceVersionSha256": "a50ce39131f9da8071d50924d3d5dc7818d032e8b1bc33135646763df1476ce0"
+            },
+            {
+              "channel": "voice",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "30cf3486314648d004edce5c5ba08719ba7cb360520ff8d337786f21e334f9a2",
+              "matched": true,
+              "expectedDenialMatched": true
+            }
+          ]
+        },
+        "secretValuesEmitted": false
+      }
+    },
+    {
+      "phase": "principal-disabled",
+      "expectedOutcomeStatus": "PASS",
+      "rawCallerSuiteStatus": "FAIL",
+      "rawSuiteFailureExpected": true,
+      "receiptSha256": "f738a8a77ec8106358fcf6cdaf78c4100990b611da93c70a1d0b34ae42ce513e",
+      "proof": {
+        "format": "package4-genuine-qa-caller-phase-v1",
+        "phase": "principal-disabled",
+        "observedAt": "2026-10-20T07:47:12.578Z",
+        "httpStatus": 200,
+        "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+        "callerOrigin": "https://evelyn-g8lve1qmp-novalure.vercel.app",
+        "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+        "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+        "responseSha256": "7a1423f8a8a8a7f943ede5ec9a724456c38a2b2962e6caeaada96c3975ce4117",
+        "result": {
+          "format": "package4-evelyn-preview-knowledge-caller-v1",
+          "status": "FAIL",
+          "workload": {
+            "issuer": "https://oidc.vercel.com/novalure",
+            "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+            "subject": "owner:novalure:project:evelyn:environment:preview",
+            "environment": "preview",
+            "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+            "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+          },
+          "environmentIsolation": {
+            "expectedBlankKeyCount": 15,
+            "observedBlankKeyCount": 15,
+            "allBlank": true
+          },
+          "results": [
+            {
+              "channel": "webchat",
+              "scenario": "published-knowledge",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "f13e6476038f8b3e3812ac7b6c626187aefc02df2153b632c5efad589e2f7698",
+              "matched": false,
+              "schemaValid": false,
+              "answerStatus": null,
+              "excerptCount": 0,
+              "expectedSourceVersionMatched": false,
+              "uniqueMarkerMatched": false,
+              "publishedTimeMatched": false,
+              "draftTimeExcluded": false,
+              "expectedEvidenceMatched": false,
+              "sourceVersionSha256": null
+            },
+            {
+              "channel": "webchat",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "e03bb837a05cfcafe10e44e36ece8c3247bf6706c83c17143368898275d40e62",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "published-knowledge",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "9dcf23fe2ce774c77acd5363daa71074a0f07db1285e6f0ccc7f8a06f3a265ea",
+              "matched": false,
+              "schemaValid": false,
+              "answerStatus": null,
+              "excerptCount": 0,
+              "expectedSourceVersionMatched": false,
+              "uniqueMarkerMatched": false,
+              "publishedTimeMatched": false,
+              "draftTimeExcluded": false,
+              "expectedEvidenceMatched": false,
+              "sourceVersionSha256": null
+            },
+            {
+              "channel": "voice",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "904ff54a00a925340f249e7233c88c441b334b757a4f33261596827c2e18ab7a",
+              "matched": true,
+              "expectedDenialMatched": true
+            }
+          ]
+        },
+        "secretValuesEmitted": false
+      }
+    },
+    {
+      "phase": "final-revoked",
+      "expectedOutcomeStatus": "PASS",
+      "rawCallerSuiteStatus": "FAIL",
+      "rawSuiteFailureExpected": true,
+      "receiptSha256": "81072f0a66003e4b55fd1b67a212f028aa7506fdf1e27c100fb92d253a846095",
+      "proof": {
+        "format": "package4-genuine-qa-caller-phase-v1",
+        "phase": "final-revoked",
+        "observedAt": "2026-10-20T07:47:42.555Z",
+        "httpStatus": 200,
+        "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+        "callerOrigin": "https://evelyn-g8lve1qmp-novalure.vercel.app",
+        "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+        "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+        "responseSha256": "6cd57e28bf64a184bb9cd291fb8a2f07720bec8e38935805377781752269b4a4",
+        "result": {
+          "format": "package4-evelyn-preview-knowledge-caller-v1",
+          "status": "FAIL",
+          "workload": {
+            "issuer": "https://oidc.vercel.com/novalure",
+            "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+            "subject": "owner:novalure:project:evelyn:environment:preview",
+            "environment": "preview",
+            "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+            "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+          },
+          "environmentIsolation": {
+            "expectedBlankKeyCount": 15,
+            "observedBlankKeyCount": 15,
+            "allBlank": true
+          },
+          "results": [
+            {
+              "channel": "webchat",
+              "scenario": "published-knowledge",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "53999f015cc5379f135039c44b20559024a5e5d8a3b8def52550cc3232f7bebc",
+              "matched": false,
+              "schemaValid": false,
+              "answerStatus": null,
+              "excerptCount": 0,
+              "expectedSourceVersionMatched": false,
+              "uniqueMarkerMatched": false,
+              "publishedTimeMatched": false,
+              "draftTimeExcluded": false,
+              "expectedEvidenceMatched": false,
+              "sourceVersionSha256": null
+            },
+            {
+              "channel": "webchat",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "webchat",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "aed7696e7ff35294bdab3def982db755adf11b84f4dc21fdffda097f2c6b0a1e",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "published-knowledge",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "866603e5a987c58d331a2342b3bc795b1cb3d790d6a35512a7ed24d880f4d505",
+              "matched": false,
+              "schemaValid": false,
+              "answerStatus": null,
+              "excerptCount": 0,
+              "expectedSourceVersionMatched": false,
+              "uniqueMarkerMatched": false,
+              "publishedTimeMatched": false,
+              "draftTimeExcluded": false,
+              "expectedEvidenceMatched": false,
+              "sourceVersionSha256": null
+            },
+            {
+              "channel": "voice",
+              "scenario": "missing-bearer",
+              "httpStatus": 401,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "default-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "matched": true,
+              "expectedDenialMatched": true
+            },
+            {
+              "channel": "voice",
+              "scenario": "wrong-audience",
+              "httpStatus": 403,
+              "applicationCode": "ASSISTANT_ACCESS_DENIED",
+              "jtiSha256": "e110e89ca45377afd1d38bc163e9419464f312e8e7bc203b95a855999c5cf8e6",
+              "matched": true,
+              "expectedDenialMatched": true
+            }
+          ]
+        },
+        "secretValuesEmitted": false
+      }
+    }
+  ],
+  "productionOnlyAuthenticatorPositive": "NOT TESTED; distinct opt-in QA contract only",
+  "oidcLimit": "Signed claims identify actual Evelyn Preview project/environment/owner/subject/audience, not an individual deployment or branch. Separate native metadata and frozen artifacts bind this caller.",
+  "cleanupStatus": "Native principal REVOKED and both bindings revoked; temporary Hosting/branch configuration cleanup pending separately.",
+  "secretValuesEmittedByThisProof": false,
+  "productionChangesPerformed": false
+}

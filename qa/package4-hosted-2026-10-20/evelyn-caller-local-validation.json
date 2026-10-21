@@ -1,0 +1,129 @@
+{
+  "format": "package4-evelyn-preview-caller-local-validation-v1",
+  "observedAtUtc": "2026-10-20T07:26:33.635058+00:00",
+  "status": "LOCAL_CHECKS_PASS_AWAITING_EXACT_RECEIVER_ORIGIN_AND_ARTIFACT_REVIEW",
+  "repository": "novalure/novalure-crm",
+  "baseRevision": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+  "worktree": "/workspace/package4-machine-caller-worktree",
+  "applicationSourceChanges": 0,
+  "evelynRepositoryChanges": 0,
+  "remoteMutations": 0,
+  "deployed": false,
+  "receiverOriginPinned": false,
+  "buildRefusesIncompleteContract": true,
+  "callerProjectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "target": "preview",
+  "checks": {
+    "unitSecurityTests": {
+      "status": "PASS",
+      "passed": 12,
+      "failed": 0,
+      "scope": "Baseline12 local unit/security tests passed at6ae66dd; additive runtime guard then tested with two targeted changed-path cases (normal8case matrix and nonempty/missing/list-tamper denybeforeOIDC), bothPASS; unchanged prior tests not repeated."
+    },
+    "scopedEslint": {
+      "status": "PASS"
+    },
+    "secretScan": {
+      "status": "PASS",
+      "findings": 0,
+      "binaryVersion": "8.30.1",
+      "binarySha256": "88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509",
+      "scope": "Isolated copies of exact six fixture files, no ignored files, symlinks, private authentication state or ignore exceptions"
+    },
+    "independentSourceReview": {
+      "status": "PASS",
+      "reviewer": "/root/masterplan_context",
+      "openFindings": 0,
+      "reviewedFixes": [
+        "Separate native default audience https://vercel.com/novalure from issuer https://oidc.vercel.com/novalure",
+        "Reject actual streamed and parsed Node request bodies before delegation"
+      ],
+      "limit": "Final exact receiver-origin pin and built artifact require a separate narrow review."
+    },
+    "additiveGuardTargetedTests": {
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0,
+      "zeroOidcVerifierAndHttpCallsOnViolation": true
+    },
+    "additiveIndependentSourceReview": {
+      "status": "PASS",
+      "reviewer": "/root/masterplan_context",
+      "openFindings": 0
+    }
+  },
+  "transport": {
+    "fixedMaximumCrmRequests": 8,
+    "fixedRoutes": [
+      "/api/integrations/knowledge/webchat",
+      "/api/integrations/knowledge/voice"
+    ],
+    "methods": [
+      "POST"
+    ],
+    "arbitraryUrlOrBodyProxy": false,
+    "redirects": "error",
+    "deadlineMs": 30000,
+    "responseBytesCap": 16384,
+    "actualBusinessAuthentication": "Native Vercel-signed Evelyn Preview workload OIDC, custom QA audience and fresh UUID jti per custom-token request; not yet called remotely",
+    "protectionHeader": "x-vercel-trusted-oidc-idp-token",
+    "outputs": "Only fixed status enums, counts, safe match booleans and source/version/JTI SHA-256; no tokens, challenge, excerpts, titles, raw responses or raw errors",
+    "negativeCases": [
+      "missing-bearer",
+      "default-audience",
+      "wrong-audience"
+    ],
+    "controlledRevocationBehavior": "All safe per-case proof is preserved with overall FAIL; HTTP200 only means the fixed suite completed."
+  },
+  "sourceFiles": [
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.mjs",
+      "sha256": "e9b90d4fcdd6f5ca5b6fbbbb5835a9d28b525930fdf3a8dba1734a6c1f7f3bfd"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/handler.mjs",
+      "sha256": "9c26d8bdab7dfa6a99880beb6691200959452a52da8885a425f8d4a1dd4885d8"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/contract.json",
+      "sha256": "ccd7be4748655e00f7a218cb3c8d6a3642bc1b005dd190de1b212988a60cc9c7"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/build.mjs",
+      "sha256": "a893aa43631f44eee10bd0224faeb78cfbf1efb0dacbbed837d5e5f14175bb0c"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.test.mjs",
+      "sha256": "9bd4704a57eeb24f63140b7754ff123de068996921cf97b6d72c4e5a7e3c44c5"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/README.md",
+      "sha256": "15f4ccd6708b7840690597cbcbf09faac76f07f91cfc2a11d85ee5991df18ac2"
+    }
+  ],
+  "limits": [
+    "No deployable artifact exists while receiverOrigin is null.",
+    "Original PDF SHA-256 is a file-byte provenance pin, not a semantic excerpt hash or a new runtime rehash.",
+    "Signed workload claims do not assert caller branch or deployment ID; native deployment metadata must bind the final artifact separately.",
+    "Challenge is fresh and short-lived per deployment, not a globally durable single-use lock; parent must retire it after the proof.",
+    "Parent must blank-shadow all inherited Preview environment key names per deployment and preserve production/project settings."
+  ],
+  "sourceCommit": "41f638f3d54a116318d3fd972fbeeebb4c0044e6",
+  "committedFileCount": 6,
+  "worktreeCleanAfterCommit": true,
+  "pushed": false,
+  "frozenSourceManifest": "/workspace/package4-evelyn-caller-frozen-source.json",
+  "commits": [
+    "6ae66dd14ca952709d37f357535db1dc558e5fb2",
+    "41f638f3d54a116318d3fd972fbeeebb4c0044e6"
+  ],
+  "inheritedEnvironmentMetadata": {
+    "rows": 37,
+    "previewRows": 21,
+    "uniquePreviewKeyCount": 15,
+    "keyListMatchesContract": true,
+    "secretValuesInspected": false,
+    "rawFileSha256": "9b22f2394164e385ec8c94d2a3456952acb6ea7d993cf1b2dd37f7b901ec701e",
+    "scope": "Raw metadata-only JSON file bytes, including customEnvironmentIds; separate from canonical before/after comparison hashes."
+  }
+}

@@ -1,0 +1,13 @@
+PASS Combined unchanged predecessor migrations include Knowledge workflow, monitoring and CRM readers
+PASS A fresh Design C customer obtains its session with ordinary password and real TOTP
+PASS Customer creates a company knowledge area through the real portal
+PASS Real PDF parsing remains a draft until customer review, approval and publication
+PASS Voice assignment can be withdrawn independently while webchat retains the same document
+PASS An authenticated synthetic website draft is explicitly published through the same portal
+PASS Synthetic website scan detects changed bytes through the unchanged scanner and persists one proposal
+PASS Customer sees the website comparison and accepts its proposal as an unpublished draft
+PASS Customer publication of the accepted website version updates webchat and voice together
+PASS History preserves both website versions; restoration requires currentness and legal confirmation
+PASS Publication revocation is immediate for both channels while the restored draft stays private
+PASS Foreign tenant selectors, sources and assistant IDs remain inaccessible across the integrated workflow
+PASS Desktop and mobile Design C render the combined lifecycle without overflow or runtime errors

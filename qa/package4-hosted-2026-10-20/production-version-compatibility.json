@@ -1,0 +1,787 @@
+{
+  "format": "package4-production-version-compatibility-v1",
+  "status": "PASS",
+  "sourceRevision": "6774478b29ab9e5f813618b6483b9a0ea190a78f",
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "remoteDatabaseAccess": 0,
+  "mode": "Disposable local Docker with network=none; private Unixsocket; no Neon provider equivalence",
+  "image": {
+    "postgresDigest": "sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826",
+    "vectorImageDigest": "sha256:40b404964359299eefdd5f8518facf1886c562848cf4de13b6eaf91cb70c2b87",
+    "combinedLocalImage": "sha256:0260a9fab77c742e1372642342e92f3c7c35710ecbe404231c3a1f32746b3494",
+    "vectorSoSha256": "4be0fbd2d903eed2e2ff23927a897e7c31e23891187227937aaa93e1bee02388"
+  },
+  "actualVersions": {
+    "build": "PostgreSQL 17.11 (Debian 17.11-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+    "version": "17.11 (Debian 17.11-1.pgdg12+2)",
+    "number": 170011,
+    "tcp_listener": null,
+    "extensions": [
+      {
+        "extname": "pgcrypto",
+        "extversion": "1.3"
+      },
+      {
+        "extname": "plpgsql",
+        "extversion": "1.0"
+      },
+      {
+        "extname": "vector",
+        "extversion": "0.8.0"
+      }
+    ]
+  },
+  "predecessor": {
+    "ledgerRows": 54,
+    "ledgerSha256": "b0831090053bf53e83b8d97c07424bb677dbbbf272ec8fa3a19a040e09ab88d6",
+    "genuineOriginal001Vector": true,
+    "allOriginalHistoricalSql": true,
+    "original061Unmodified": true,
+    "original062ExecutedBefore060OnFreshSchema": true,
+    "staged087Executed": true
+  },
+  "migrations": [
+    {
+      "file": "101_knowledge_center.sql",
+      "byteSha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "normalizedSha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "originalSourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "transactionRollbackPassed": true
+    },
+    {
+      "file": "102_knowledge_document_processing.sql",
+      "byteSha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "normalizedSha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "originalSourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "transactionRollbackPassed": true
+    },
+    {
+      "file": "103_knowledge_assistant_service.sql",
+      "byteSha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "normalizedSha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "originalSourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "transactionRollbackPassed": true
+    },
+    {
+      "file": "104_knowledge_publication_workflow.sql",
+      "byteSha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "normalizedSha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "originalSourceCommit": "b019a16811bd1d0d7c180ff013b76cea34c6e5bf",
+      "transactionRollbackPassed": true
+    },
+    {
+      "file": "105_knowledge_website_monitoring.sql",
+      "byteSha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "normalizedSha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "originalSourceCommit": "b019a16811bd1d0d7c180ff013b76cea34c6e5bf",
+      "transactionRollbackPassed": true
+    },
+    {
+      "file": "106_crm_operational_readers.sql",
+      "byteSha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "normalizedSha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "originalSourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "transactionRollbackPassed": true
+    }
+  ],
+  "preservedPublicFunctions": {
+    "before": 201,
+    "after": 231,
+    "allPriorDefinitionsOwnersAclsUnchanged": true,
+    "beforeSha256": "b2dfeb86cdb1d0a5095d99708294e85a07841fda82999ea2c3832c5421c83d98",
+    "counters": {
+      "original": "TABLE(media_count integer, document_count integer, send_count integer, share_count integer)",
+      "studio": "TABLE(media_count integer, document_count integer, send_count integer, share_count integer, studio_count integer)",
+      "knowledge": "TABLE(media_count integer, document_count integer, send_count integer, share_count integer, studio_count integer, knowledge_count integer)"
+    }
+  },
+  "runtime": {
+    "role": "novalure_app",
+    "rolinherit": false,
+    "rolsuper": false,
+    "rolbypassrls": false,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolreplication": false,
+    "tenant_usage": true,
+    "public_create": false,
+    "ownsPublicObjects": 0
+  },
+  "forcedRls": [
+    {
+      "relname": "analytics_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "audit_logs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "bot_conversations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "bot_messages",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "bot_tool_calls",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "bots",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "broker_mandates",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "buyer_search_profiles",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "calendar_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "company_profile_versions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "company_profiles",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "consent_policy_decisions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "consent_records",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "contact_timeline_items",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "contacts",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_command_receipts",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_domain_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_evelyn_contract_actions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_evelyn_contract_approvals",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_evelyn_contract_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_evelyn_contract_executions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_evelyn_contract_revisions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_evelyn_preview_targets",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_offer_approvals",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_offer_deliveries",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_offer_revisions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_offers",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_outreach_deliveries",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_pipeline_stages",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_pipelines",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_project_sales_authorities",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_service_audit_bindings",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_service_principals",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_service_resource_bindings",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_synthetic_approval_effects",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_synthetic_approval_evidence",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "crm_synthetic_approval_requests",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "dashboard_views",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "deal_stage_history",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "deals",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "editor_preflight_runs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "external_chat_messages",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "external_chat_sessions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "external_integration_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "external_integration_widget_configs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "external_integrations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "form_submissions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "forms",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "funnel_steps",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "funnels",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_area_grants",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_areas",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_assistant_service_bindings",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_center_entitlements",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_change_proposals",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_chunks",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_maintenance_configurations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_publication_workflows",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_query_usage",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_source_versions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_sources",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_website_monitoring",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_website_scan_runs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "knowledge_workflow_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "lead_sales_handovers",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "leads",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "media_assets",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "newsletter_campaigns",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "newsletter_segments",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "newsletter_suppressions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "organizations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "projects",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_activity_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_building_idempotency",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_buildings",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_cost_items",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_documents",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_media",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_offer_milestones",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_reservations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_sales",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_text_blocks",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_unit_audit_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_unit_idempotency",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_units",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "property_viewing_slots",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "qa_batch_objects",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "qa_batches",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "qa_reset_audit_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "seller_listings",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "speed_to_lead_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "studio_enquiry_assets",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "studio_enquiry_transfers",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    },
+    {
+      "relname": "tasks",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true
+    }
+  ],
+  "document": {
+    "initialVersionSha256": "84bf6c02bbd98e0bbeb338e58cf69af1f5678cf12fb59d3baea487c574a9c39d",
+    "privateBytesVerified": true,
+    "foreignDenied": true,
+    "immutableVersionUpdateDenied": true,
+    "replacementDraftAndHistoricalBindings": true,
+    "revokedViewerAndRetrievalDenied": true
+  },
+  "operationalReaders": {
+    "channels": "database/nonempty",
+    "actions": "database",
+    "approvals": "database/nonempty",
+    "calendar": "database/connected",
+    "privateCanaryExcluded": true,
+    "missingContextDenied": true,
+    "foreignRowsExcluded": true
+  },
+  "finalLedger": {
+    "rows": 60,
+    "sha256": "c52cf059f7b33b67244d163fbab6cc1bbbfa640abc5126d89342b0b90bf4258f",
+    "migrations101Through106": [
+      {
+        "version": "101_knowledge_center",
+        "name": "101_knowledge_center.sql",
+        "checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e"
+      },
+      {
+        "version": "102_knowledge_document_processing",
+        "name": "102_knowledge_document_processing.sql",
+        "checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd"
+      },
+      {
+        "version": "103_knowledge_assistant_service",
+        "name": "103_knowledge_assistant_service.sql",
+        "checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98"
+      },
+      {
+        "version": "104_knowledge_publication_workflow",
+        "name": "104_knowledge_publication_workflow.sql",
+        "checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610"
+      },
+      {
+        "version": "105_knowledge_website_monitoring",
+        "name": "105_knowledge_website_monitoring.sql",
+        "checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30"
+      },
+      {
+        "version": "106_crm_operational_readers",
+        "name": "106_crm_operational_readers.sql",
+        "checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf"
+      }
+    ]
+  },
+  "applicationFileSha256": {
+    "src/lib/knowledge-center/repository.ts": "114d3e32fecd86d5ce833d5ced049031e088ebdecfe10b17983405eeaa894f67",
+    "src/lib/knowledge-center/workflow.ts": "efff2a3cf474bc9037a6dc802171f7b72c29ddfdc640d319fc356bd632a67251",
+    "src/lib/db/crm-operational-readers.ts": "c065dd0623b6bcc2bd5474c4d612da5b5ec0fca7f35c3f195a489fe62d35b1dc",
+    "src/lib/db/tenant-client.ts": "393512aa05f200511c1f3e8ac5016adf6a19ff33b284241a29d57133760855c1",
+    "src/lib/crm-command.ts": "6cbce3ce5ae0e1c7fdc8cd19015443287d3b89d9fbf2509796b6fdebe73e42a9",
+    "src/lib/media-store.ts": "004ec1fdd96a13517b2273e8cc799029daab26744327aee51d0887a2a824a3e1"
+  },
+  "checks": [
+    {
+      "name": "genuine_historical_prerequisite_through100_no_vector_substitution",
+      "status": "PASS",
+      "elapsedMs": 1356
+    },
+    {
+      "name": "actual_postgres17_11_vector0_8_0_pgcrypto1_3_and_real_ivfflat",
+      "status": "PASS",
+      "elapsedMs": 2
+    },
+    {
+      "name": "101_knowledge_center.sql_original_sql_failure_rollback_then_commit",
+      "status": "PASS",
+      "elapsedMs": 1164
+    },
+    {
+      "name": "102_knowledge_document_processing.sql_original_sql_failure_rollback_then_commit",
+      "status": "PASS",
+      "elapsedMs": 288
+    },
+    {
+      "name": "103_knowledge_assistant_service.sql_original_sql_failure_rollback_then_commit",
+      "status": "PASS",
+      "elapsedMs": 288
+    },
+    {
+      "name": "104_105_106_combined_failure_rolls_back_schema_and_ledger",
+      "status": "PASS",
+      "elapsedMs": 552
+    },
+    {
+      "name": "104_knowledge_publication_workflow.sql_original_sql_failure_rollback_then_commit",
+      "status": "PASS",
+      "elapsedMs": 213
+    },
+    {
+      "name": "105_knowledge_website_monitoring.sql_original_sql_failure_rollback_then_commit",
+      "status": "PASS",
+      "elapsedMs": 218
+    },
+    {
+      "name": "106_crm_operational_readers.sql_original_sql_failure_rollback_then_commit",
+      "status": "PASS",
+      "elapsedMs": 190
+    },
+    {
+      "name": "old_public_function_definitions_owners_acls_and_media_counter_contracts_unchanged",
+      "status": "PASS",
+      "elapsedMs": 5
+    },
+    {
+      "name": "runtime_noinherit_nobypass_nonowner_force_rls_and_private_permissions",
+      "status": "PASS",
+      "elapsedMs": 28
+    },
+    {
+      "name": "actual_runtime_document_import_sha_publication_and_version_immutability",
+      "status": "PASS",
+      "elapsedMs": 166
+    },
+    {
+      "name": "replacement_current_historical_viewer_denial_and_revoke_contracts",
+      "status": "PASS",
+      "elapsedMs": 96
+    },
+    {
+      "name": "actual106_operational_readers_nonempty_sanitized_and_cross_tenant_denied",
+      "status": "PASS"
+    },
+    {
+      "name": "101_106_installation_no_qa_auth_augmentation_and_canonical_ledger60",
+      "status": "PASS"
+    }
+  ],
+  "limitations": [
+    "Actual PostgreSQL17.11 and vector0.8.0, not a Neon fork/build or provider/network equivalence.",
+    "Historical schema installed from genuine original SQL; local superuser used only for historical bootstrap then ownership reassigned before091.",
+    "Runtime fixtures use persisted synthetic application-session shapes and actual ordinary runtime SQL; this is not another browser/MFA acceptance.",
+    "Private document bytes use isolated local filesystem for SQL/version/privacy contracts; actual Vercel Blob restore remains separately evidenced.",
+    "Local historical061 used unchanged original SQL and a local privileged bootstrap; Neon-specific creator membership/execution receipt is not emulated. Only release101\u2013106 version compatibility is asserted."
+  ],
+  "startedAt": "2026-10-20T10:30:48.823Z",
+  "completedAt": "2026-10-20T10:32:18.702Z",
+  "compositeTargetedRehearsal": true,
+  "originalFixtureFailure": {
+    "sha256": "8385d1f5fabbcfaf966fe8e7b3500c3dbe8b8ab02e0fe120d39acfbd0f5cb050",
+    "preserved": true,
+    "cause": "Harness created bot_conversation approval without an actual referenced conversation; reader correctly excluded it",
+    "productFailure": false
+  },
+  "privateResultSha256": "129eac4e9a7755893a86bee0454dbf7a4ce4d4d3a336f6ff7c28a1db72fc2ef5",
+  "productionVersionObservationSource": "Root native read-only metadata supplied in this task; this agent performed no Production query",
+  "productionReportedVersions": {
+    "postgres": "17.11 (Neon11592b3)",
+    "vector": "0.8.0",
+    "pgcrypto": "1.3",
+    "ledgerRows": 54,
+    "missingOnly": [
+      101,
+      102,
+      103,
+      104,
+      105,
+      106
+    ]
+  },
+  "versionMatch": {
+    "postgresMajorMinor": true,
+    "pgvectorExact": true,
+    "pgcryptoExact": true,
+    "sameVendorBuild": false,
+    "note": "Local genuine Debian PostgreSQL17.11 differs from Neon fork/build17.11(11592b3); no provider/build equality claimed."
+  },
+  "historicalSchemaNotes": {
+    "all101HistoricalForwardFilesThrough106RunUnmodified": true,
+    "preview097Through099Excluded": true,
+    "062DeliberatelyBefore060OnFreshSchema": true,
+    "061OriginalUnmodified": true,
+    "staged087BackfillAndContract": true,
+    "localBootstrapSuperuserNeverUsedForApplication": true,
+    "neonProviderCreatorAdminMembershipAndExecutionReceiptNotEmulated": true
+  },
+  "harnessSha256": {
+    "Dockerfile": "560def04c27a5c441372ebf4a772488fd7d9f54e7ca441b11acfb203d6d12551",
+    "run.mjs": "09969a8f1cb4fde9982c2c6e7a8efe094609886efa89d2dcf079659695cfe087",
+    "remaining-checks.mjs": "6a2df516b426a2d3dafabc0d8ffae5729e6458fd929dd21d8317a8f96223167d"
+  },
+  "poolCleanup": {
+    "initial": [
+      "fulfilled",
+      "fulfilled",
+      "fulfilled",
+      "fulfilled"
+    ],
+    "remaining": [
+      "fulfilled",
+      "fulfilled"
+    ]
+  },
+  "nativeDumpRestorePerformed": false,
+  "browserAcceptanceRepeated": false,
+  "primaryCheckoutEdited": false
+}

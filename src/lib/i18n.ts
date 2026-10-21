@@ -1213,6 +1213,8 @@ export const dashboardCopy = {
       usersRoles: "Users & roles",
       bots: "Bots",
       knowledge: "Knowledge",
+      studioWebsiteEnquiries: "Website enquiries",
+      studioKnowledgeAi: "Knowledge & AI",
       newsletter: "Newsletter",
       forms: "Forms",
       calendar: "Meetings",
@@ -1227,6 +1229,10 @@ export const dashboardCopy = {
         forTeams: "For teams",
       },
       profiles: {
+        novalureStudio: {
+          label: "Novalure Studio",
+          description: "Website enquiries, contacts, sales pipeline, tasks, appointments and marketing for Studio.",
+        },
         novalureInternal: {
           label: "Novalure internal",
           description: "Sales, demos, onboarding, managed service and customer success.",
@@ -1328,6 +1334,31 @@ export const dashboardCopy = {
         "English is the default and fallback language. German can be selected for Austria and DACH workspaces.",
       customerContext: "Locale settings",
     },
+    studioNavigation: {
+      navigation: {
+        dashboard: "Overview",
+        pipelines: "Sales pipeline",
+        studioWebsiteEnquiries: "Website enquiries",
+        studioKnowledgeAi: "Knowledge & AI",
+      },
+      overviewTitle: "Studio work at a glance",
+      overviewDescription: "Current CRM records for your selected project. Open a website enquiry to review its details and next action.",
+      enquiryViewLabel: "Enquiry view",
+      customerEnquiries: "Customer enquiries",
+      testEnquiries: "Test enquiries",
+      testEnquiriesNotice: "Synthetic test enquiries. This separate test view is excluded from the Studio overview's business metrics.",
+      openDeals: "Open sales opportunities",
+      marketingDescription: "Use the available funnels, forms and newsletter tools. Publishing and sending depend on server permissions, consent and configured providers.",
+      projectUnavailable: "The Studio project is not in your authorized project list. This profile adds no access; your current project selection is retained.",
+      knowledgeTitle: "Studio knowledge and AI setup",
+      knowledgeDescription: "The analysis assistant and bot administration are available in navigation when your permissions and workspace modules allow them. Their availability does not confirm that a Studio chatbot is configured or connected.",
+      followUpTitle: "Planned follow-up work",
+      followUpItems: [
+        "Connect approved Studio documents and customer knowledge to the chatbot with source and access checks.",
+        "Connect Franz's calendar, available slots, bookings and Teams invitations; the current appointments area manages CRM appointment records.",
+        "Enable telephone and other customer channels only after their providers, permissions and separate acceptance checks are ready.",
+      ],
+    },
     workspaceContextBar: {
       label: "Work context",
       workspace: "Workspace",
@@ -1363,6 +1394,11 @@ export const dashboardCopy = {
           title: "Today important",
           description: "Start with the cases that need attention now.",
           nextSteps: ["Review hot leads", "Clear today's tasks", "Check pipeline risks"],
+        },
+        novalureStudio: {
+          title: "Novalure Studio overview",
+          description: "Review website enquiries, keep contacts and sales opportunities current, and prepare tasks and appointments.",
+          nextSteps: ["Review website enquiries", "Update sales pipeline", "Complete open tasks", "Prepare appointments"],
         },
         sales: {
           title: "Broker / sales daily start",
@@ -1987,6 +2023,8 @@ export const dashboardCopy = {
       workspaces: "Arbeitsbereiche / Kunden",
       bots: "KI-Bots",
       knowledge: "Wissen",
+      studioWebsiteEnquiries: "Website-Anfragen",
+      studioKnowledgeAi: "Wissen & KI",
       newsletter: "Newsletter",
       forms: "Formulare",
       calendar: "Termine",
@@ -2002,6 +2040,10 @@ export const dashboardCopy = {
         forTeams: "Für Teams",
       },
       profiles: {
+        novalureStudio: {
+          label: "Novalure Studio",
+          description: "Website-Anfragen, Kontakte, Verkaufspipeline, Aufgaben, Termine und Marketing für Studio.",
+        },
         novalureInternal: {
           label: "Novalure intern",
           description: "Vertrieb, Demos, Onboarding, Servicebetrieb und Kundenbetreuung.",
@@ -2093,6 +2135,31 @@ export const dashboardCopy = {
         forms: "Formulare",
       },
     },
+    studioNavigation: {
+      navigation: {
+        dashboard: "Übersicht",
+        pipelines: "Verkaufspipeline",
+        studioWebsiteEnquiries: "Website-Anfragen",
+        studioKnowledgeAi: "Wissen & KI",
+      },
+      overviewTitle: "Studio-Arbeit im Überblick",
+      overviewDescription: "Aktuelle CRM-Datensätze im gewählten Projekt. Eine Website-Anfrage zeigt Details und den nächsten Schritt.",
+      enquiryViewLabel: "Anfragenansicht",
+      customerEnquiries: "Kundenanfragen",
+      testEnquiries: "Testanfragen",
+      testEnquiriesNotice: "Synthetische Testanfragen. Diese separate Testansicht zählt nicht in die Geschäftskennzahlen der Studio-Übersicht.",
+      openDeals: "Offene Verkaufschancen",
+      marketingDescription: "Die verfügbaren Funnels, Formulare und Newsletter-Werkzeuge nutzen. Veröffentlichen und Versand setzen Serverrechte, Einwilligungen und konfigurierte Anbieter voraus.",
+      projectUnavailable: "Das Studio-Projekt ist nicht in Ihrer autorisierten Projektliste. Dieses Profil erteilt keinen Zugriff; Ihre aktuelle Projektauswahl bleibt erhalten.",
+      knowledgeTitle: "Studio-Wissen und KI-Einrichtung",
+      knowledgeDescription: "Analyse-Assistent und Bot-Verwaltung stehen in der Navigation zur Verfügung, wenn Ihre Rechte und Workspace-Module dies erlauben. Ihre Verfügbarkeit bestätigt keine eingerichtete oder verbundene Studio-Chatbot-Anbindung.",
+      followUpTitle: "Geplante Folgearbeiten",
+      followUpItems: [
+        "Freigegebene Studio-Dokumente und Kundenwissen mit Quellen- und Zugriffsprüfung an den Chatbot anbinden.",
+        "Franz' Kalender, freie Zeiten, Buchungen und Teams-Einladungen anbinden; der bestehende Terminbereich verwaltet CRM-Termineinträge.",
+        "Telefonie und weitere Kundenkanäle nach Einrichtung der Anbieter, Berechtigungen und eigener Abnahme aktivieren.",
+      ],
+    },
     language: {
       systemLabel: "Systemsprache",
       botLabel: "Chatbot-Sprache",
@@ -2138,6 +2205,11 @@ export const dashboardCopy = {
           title: "Heute wichtig",
           description: "Starte mit den Fällen, die jetzt Aufmerksamkeit brauchen.",
           nextSteps: ["Heiße Leads prüfen", "Heutige Aufgaben klären", "Pipeline-Risiken ansehen"],
+        },
+        novalureStudio: {
+          title: "Novalure Studio Übersicht",
+          description: "Website-Anfragen prüfen, Kontakte und Verkaufschancen aktuell halten sowie Aufgaben und Termine vorbereiten.",
+          nextSteps: ["Website-Anfragen prüfen", "Verkaufspipeline aktualisieren", "Offene Aufgaben erledigen", "Termine vorbereiten"],
         },
         sales: {
           title: "Tagesstart für Makler / Sales",

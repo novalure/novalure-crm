@@ -1,0 +1,857 @@
+/*
+ * Actual, authenticated Knowledge and assistant views.
+ * These presentation hooks consume Design C tokens and existing controller data.
+ * No preview fixtures, status coercion or capability assumptions live here.
+ */
+.crm-app.design-c :is(.evelyn-knowledge-center, .evelyn-bot-center) {
+  min-width: 0;
+  color: var(--dc-text);
+}
+.crm-app.design-c :is(.evelyn-domain-hero, .evelyn-bot-hero) {
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+  box-shadow: var(--dc-shadow);
+}
+.crm-app.design-c :is(.evelyn-domain-eyebrow, .evelyn-bot-eyebrow) {
+  margin: 0 0 9px;
+  color: var(--dc-accent-text);
+  font-size: var(--dc-type-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+.crm-app.design-c :is(.evelyn-domain-title, .evelyn-bot-title) {
+  margin: 0;
+  font-size: var(--dc-type-display);
+  font-weight: 550;
+  letter-spacing: -0.04em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.crm-app.design-c .evelyn-bot-description,
+.crm-app.design-c .evelyn-knowledge-hero > div:first-child > div > p:last-child {
+  max-width: 760px;
+  color: var(--dc-muted);
+  font-size: var(--dc-type-body-sm);
+  line-height: 1.8;
+}
+.crm-app.design-c .evelyn-domain-field {
+  gap: 8px;
+  color: var(--dc-text);
+  font-size: var(--dc-type-sm);
+  font-weight: 550;
+}
+.crm-app.design-c .evelyn-domain-input {
+  min-width: 0;
+  min-height: var(--dc-control-height);
+  padding: 11px 13px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-text);
+  font-size: var(--dc-type-body-sm);
+  font-weight: 400;
+  line-height: 1.6;
+}
+.crm-app.design-c .evelyn-domain-input:disabled {
+  background: var(--dc-neutral-bg);
+  color: var(--dc-muted);
+  opacity: 1;
+}
+.crm-app.design-c textarea.evelyn-domain-input {
+  resize: vertical;
+}
+.crm-app.design-c .evelyn-domain-input::file-selector-button {
+  margin-right: 12px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--dc-accent-soft);
+  color: var(--dc-accent-text);
+  font-family: inherit;
+}
+.crm-app.design-c .evelyn-domain-button {
+  display: inline-flex;
+  min-height: var(--dc-control-height-compact);
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  padding: 10px 15px;
+  background: var(--dc-surface);
+  color: var(--dc-text);
+  font-size: var(--dc-type-sm);
+  font-weight: 550;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.crm-app.design-c .evelyn-domain-button.evelyn-domain-button-primary {
+  border-color: var(--dc-accent) !important;
+  background: var(--dc-accent) !important;
+  color: var(--dc-on-accent) !important;
+}
+.crm-app.design-c .evelyn-domain-button.evelyn-domain-button-primary:hover:not(:disabled) {
+  border-color: var(--dc-accent-hover) !important;
+  background: var(--dc-accent-hover) !important;
+  color: var(--dc-on-accent) !important;
+}
+.crm-app.design-c .evelyn-domain-empty {
+  padding: 36px 24px;
+  border-color: var(--dc-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-canvas);
+}
+.crm-app.design-c .evelyn-domain-empty > p:first-child {
+  font-size: var(--dc-type-body);
+  font-weight: 550;
+}
+.crm-app.design-c .evelyn-domain-empty > p:last-child {
+  color: var(--dc-muted);
+  line-height: 1.8;
+}
+.crm-app.design-c .evelyn-domain-actions {
+  gap: 9px;
+}
+.crm-app.design-c .evelyn-knowledge-context {
+  margin-top: 24px;
+  gap: 18px;
+}
+.crm-app.design-c .evelyn-knowledge-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 23px 0 0;
+  padding: 20px 0 0;
+  border-top: 1px solid var(--dc-line);
+}
+.crm-app.design-c .evelyn-knowledge-summary > div {
+  min-width: 0;
+  padding: 0 22px;
+  border-left: 1px solid var(--dc-line);
+}
+.crm-app.design-c .evelyn-knowledge-summary > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.crm-app.design-c .evelyn-knowledge-summary dt {
+  color: var(--dc-muted);
+  font-size: var(--dc-type-sm);
+  line-height: 1.6;
+}
+.crm-app.design-c .evelyn-knowledge-summary dd {
+  margin: 7px 0 0;
+  color: var(--dc-text);
+  font-size: 28px;
+  font-weight: 550;
+  letter-spacing: -0.04em;
+  line-height: 1.3;
+}
+.crm-app.design-c .evelyn-knowledge-workspace {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  min-width: 0;
+}
+.crm-app.design-c .evelyn-knowledge-nav {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+}
+.crm-app.design-c .evelyn-knowledge-nav .evelyn-knowledge-nav-item {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 13px 12px;
+  border-color: transparent !important;
+  background: var(--dc-surface) !important;
+  color: var(--dc-muted) !important;
+  box-shadow: none;
+  text-align: left;
+}
+.crm-app.design-c .evelyn-knowledge-nav .evelyn-knowledge-nav-item[aria-pressed="true"] {
+  border-color: var(--dc-info-border) !important;
+  background: var(--dc-accent-soft) !important;
+  color: var(--dc-accent-text) !important;
+}
+.crm-app.design-c .evelyn-knowledge-main {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+.crm-app.design-c .evelyn-knowledge-panel {
+  min-width: 0;
+  padding: 25px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+  box-shadow: var(--dc-shadow);
+}
+.crm-app.design-c .evelyn-knowledge-section {
+  min-width: 0;
+  gap: 23px;
+}
+.crm-app.design-c .evelyn-knowledge-section h4 {
+  font-size: var(--dc-type-heading);
+  font-weight: 550;
+  letter-spacing: -0.025em;
+}
+.crm-app.design-c .evelyn-knowledge-section-maintenance [role="tab"][aria-selected="true"] {
+  border-color: var(--dc-info-border);
+  background: var(--dc-accent-soft);
+  color: var(--dc-accent-text);
+}
+.crm-app.design-c .evelyn-knowledge-actions {
+  gap: 12px;
+}
+.crm-app.design-c .evelyn-knowledge-add-source {
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 15px;
+  border-color: var(--dc-info-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-accent-soft);
+  color: var(--dc-text);
+}
+.crm-app.design-c .evelyn-knowledge-add-source:hover:not(:disabled) {
+  border-color: var(--dc-accent);
+  background: var(--dc-accent-soft);
+}
+.crm-app.design-c .evelyn-knowledge-add-source > span:first-child,
+.crm-app.design-c .evelyn-knowledge-channel > span:first-child {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--dc-surface);
+  color: var(--dc-accent-text);
+}
+.crm-app.design-c .evelyn-knowledge-add-source > span:first-child > svg {
+  width: 20px;
+  height: 20px;
+}
+.crm-app.design-c .evelyn-knowledge-add-source > span:nth-child(2) > span:first-child {
+  font-size: var(--dc-type-sm);
+  font-weight: 600;
+  line-height: 1.6;
+}
+.crm-app.design-c .evelyn-knowledge-add-source > span:nth-child(2) > span:last-child {
+  font-size: var(--dc-type-xs);
+  line-height: 1.8;
+}
+.crm-app.design-c .evelyn-knowledge-filters {
+  gap: 17px;
+  padding: 19px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-canvas);
+}
+.crm-app.design-c :is(.evelyn-knowledge-editor, .evelyn-knowledge-review) {
+  padding: 22px;
+  border-color: var(--dc-info-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-accent-soft);
+}
+.crm-app.design-c .evelyn-knowledge-editor h4,
+.crm-app.design-c .evelyn-knowledge-editor h5,
+.crm-app.design-c .evelyn-knowledge-review h6 {
+  font-size: var(--dc-type-body);
+  font-weight: 600;
+}
+.crm-app.design-c .evelyn-knowledge-sources {
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.crm-app.design-c .evelyn-knowledge-source {
+  min-width: 0;
+  padding: 23px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+}
+.crm-app.design-c .evelyn-knowledge-source-header {
+  flex-wrap: nowrap;
+  gap: 14px;
+}
+.crm-app.design-c .evelyn-knowledge-source-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--dc-accent-soft);
+  color: var(--dc-accent-text);
+}
+.crm-app.design-c .evelyn-knowledge-source-icon > svg {
+  width: 21px;
+  height: 21px;
+}
+.crm-app.design-c .evelyn-knowledge-source-title {
+  flex: 1;
+}
+.crm-app.design-c .evelyn-knowledge-source-title > h5 {
+  margin-top: 13px;
+  font-size: var(--dc-type-body);
+  font-weight: 550;
+  line-height: 1.65;
+  letter-spacing: -0.015em;
+}
+.crm-app.design-c .evelyn-domain-source-status {
+  border-radius: 5px;
+  font-size: var(--dc-type-xs);
+  font-weight: 550;
+  line-height: 1.6;
+}
+.crm-app.design-c .evelyn-knowledge-source-version {
+  max-width: 180px;
+  text-align: right;
+  font-size: var(--dc-type-xs);
+  line-height: 1.8;
+}
+.crm-app.design-c .evelyn-knowledge-source-version > p {
+  margin: 0;
+}
+.crm-app.design-c .evelyn-knowledge-publication-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  font-size: var(--dc-type-sm);
+  line-height: 1.8;
+}
+.crm-app.design-c .evelyn-knowledge-publication-state::before {
+  content: "";
+  display: block;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.crm-app.design-c .evelyn-knowledge-history {
+  padding: 19px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-canvas);
+}
+.crm-app.design-c .evelyn-knowledge-version {
+  padding: 17px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+}
+.crm-app.design-c .evelyn-knowledge-area-list {
+  gap: 17px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.crm-app.design-c .evelyn-knowledge-area {
+  padding: 22px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+}
+.crm-app.design-c .evelyn-knowledge-area h5 {
+  font-size: var(--dc-type-body);
+  line-height: 1.7;
+}
+.crm-app.design-c .evelyn-knowledge-channels {
+  gap: 17px;
+}
+.crm-app.design-c .evelyn-knowledge-channel {
+  gap: 14px;
+  padding: 21px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+}
+.crm-app.design-c .evelyn-knowledge-channel[aria-pressed="true"] {
+  border-color: var(--dc-accent) !important;
+  background: var(--dc-accent-soft) !important;
+}
+.crm-app.design-c .evelyn-knowledge-channel > span:nth-child(2) > span:first-child {
+  font-size: var(--dc-type-body);
+  font-weight: 550;
+}
+.crm-app.design-c .evelyn-knowledge-grants {
+  gap: 12px;
+}
+.crm-app.design-c .evelyn-knowledge-grant {
+  padding: 17px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+}
+.crm-app.design-c .evelyn-knowledge-grant:has(input:checked) {
+  border-color: var(--dc-info-border);
+  background: var(--dc-accent-soft);
+}
+.crm-app.design-c .evelyn-knowledge-usage {
+  gap: 17px;
+}
+.crm-app.design-c .evelyn-knowledge-usage-card {
+  padding: 22px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+}
+.crm-app.design-c .evelyn-knowledge-usage-card > p:first-child {
+  font-size: var(--dc-type-sm);
+  line-height: 1.7;
+}
+.crm-app.design-c .evelyn-knowledge-usage-card > p:nth-child(2) {
+  font-size: 27px;
+  font-weight: 550;
+  letter-spacing: -0.03em;
+}
+/* Assistant channel state remains supplied by its existing channel controllers. */
+.crm-app.design-c .evelyn-bot-header {
+  gap: 22px;
+}
+.crm-app.design-c .evelyn-bot-scope {
+  flex-shrink: 0;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-canvas);
+  color: var(--dc-muted);
+  font-size: var(--dc-type-sm);
+  font-weight: 500;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.crm-app.design-c .evelyn-bot-tabs-scroll {
+  margin-top: 25px;
+  scrollbar-width: thin;
+}
+.crm-app.design-c .evelyn-bot-tabs {
+  gap: 18px;
+  padding: 0;
+  border-bottom: 1px solid var(--dc-line);
+  border-radius: 0;
+  background: transparent;
+}
+.crm-app.design-c .evelyn-bot-tabs .evelyn-bot-tab {
+  flex-shrink: 0;
+  min-height: var(--dc-navigation-tab-height);
+  padding: 11px 1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--dc-muted) !important;
+  font-size: var(--dc-type-sm);
+  font-weight: 500;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.crm-app.design-c .evelyn-bot-tabs .evelyn-bot-tab[aria-pressed="true"] {
+  border-bottom-color: var(--dc-accent) !important;
+  background: transparent !important;
+  color: var(--dc-accent-text) !important;
+  font-weight: 600;
+  box-shadow: none;
+}
+.crm-app.design-c .evelyn-bot-guardrail {
+  padding: 19px;
+  border-color: var(--dc-info-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-accent-soft);
+}
+.crm-app.design-c .evelyn-bot-guardrail-list {
+  gap: 8px;
+}
+.crm-app.design-c .evelyn-bot-guardrail-chip {
+  border-color: var(--dc-info-border);
+  border-radius: 5px;
+  background: var(--dc-surface);
+  color: var(--dc-accent-text);
+  font-size: var(--dc-type-xs);
+  font-weight: 500;
+  line-height: 1.7;
+}
+.crm-app.design-c .evelyn-bot-metrics {
+  gap: 14px;
+}
+.crm-app.design-c .evelyn-bot-metric {
+  min-width: 0;
+  padding: 21px 18px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+  box-shadow: var(--dc-shadow);
+}
+.crm-app.design-c .evelyn-bot-metric-label {
+  color: var(--dc-muted);
+  font-size: var(--dc-type-xs);
+  font-weight: 550;
+  letter-spacing: 0.035em;
+  line-height: 1.8;
+  text-transform: none;
+}
+.crm-app.design-c .evelyn-bot-metric-value {
+  margin-top: 11px;
+  font-size: 30px;
+  font-weight: 550;
+  letter-spacing: -0.04em;
+  line-height: 1.3;
+}
+.crm-app.design-c :is(.evelyn-bot-overview-grid, .evelyn-bot-inbox-grid, .evelyn-bot-knowledge-grid) {
+  min-width: 0;
+  gap: 22px;
+  align-items: start;
+}
+.crm-app.design-c .evelyn-bot-panel {
+  min-width: 0;
+  padding: 25px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius);
+  background: var(--dc-surface);
+  box-shadow: var(--dc-shadow);
+}
+.crm-app.design-c .evelyn-bot-panel-title {
+  font-size: var(--dc-type-heading);
+  font-weight: 550;
+  letter-spacing: -0.025em;
+  line-height: 1.6;
+}
+.crm-app.design-c .evelyn-bot-card {
+  min-width: 0;
+  padding: 20px;
+  border-color: var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+}
+.crm-app.design-c :is(.evelyn-bot-card-header, .evelyn-bot-channel-header) {
+  min-width: 0;
+  gap: 15px;
+}
+.crm-app.design-c .evelyn-bot-card-header > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+.crm-app.design-c :is(.evelyn-bot-card-actions, .evelyn-bot-card-meta) {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.crm-app.design-c :is(.evelyn-bot-pill, .evelyn-bot-status) {
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: var(--dc-type-xs);
+  font-weight: 550;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.crm-app.design-c .evelyn-bot-checklist-row {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-canvas);
+  font-size: var(--dc-type-body-sm);
+}
+.crm-app.design-c .evelyn-bot-channel-grid {
+  gap: 18px;
+}
+.crm-app.design-c .evelyn-bot-channel-card {
+  padding: 23px;
+}
+.crm-app.design-c .evelyn-bot-channel-name {
+  font-size: var(--dc-type-body);
+  font-weight: 600;
+  line-height: 1.6;
+}
+.crm-app.design-c .evelyn-bot-channel-details {
+  gap: 12px;
+  font-size: var(--dc-type-sm);
+}
+.crm-app.design-c .evelyn-bot-channel-details > div {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.crm-app.design-c .evelyn-bot-channel-details dt {
+  color: var(--dc-muted);
+}
+.crm-app.design-c .evelyn-bot-channel-details dd {
+  margin: 0;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.crm-app.design-c .evelyn-bot-channel-steps {
+  padding: 16px;
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-canvas);
+}
+.crm-app.design-c .evelyn-bot-channel-step {
+  min-width: 0;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: var(--dc-type-sm);
+  line-height: 1.8;
+}
+.crm-app.design-c .evelyn-bot-channel-step-number {
+  border: 1px solid var(--dc-line);
+  color: var(--dc-accent-text);
+  font-size: var(--dc-type-xs);
+}
+@media (max-width: 1280px) {
+  .crm-app.design-c .evelyn-knowledge-workspace {
+    grid-template-columns: 192px minmax(0, 1fr);
+    gap: 18px;
+  }
+  .crm-app.design-c .evelyn-knowledge-panel {
+    padding: 22px;
+  }
+  .crm-app.design-c .evelyn-knowledge-actions {
+    grid-template-columns: 1fr;
+  }
+  .crm-app.design-c .evelyn-knowledge-add-source {
+    min-height: 92px;
+  }
+  .crm-app.design-c .evelyn-knowledge-add-source > span:nth-child(2) {
+    align-self: center;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-header {
+    flex-wrap: wrap;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-title {
+    flex-basis: calc(100% - 60px);
+  }
+  .crm-app.design-c .evelyn-knowledge-source-version {
+    display: flex;
+    max-width: none;
+    flex-wrap: wrap;
+    gap: 5px 16px;
+    padding-left: 56px;
+    text-align: left;
+  }
+}
+@media (max-width: 1000px) {
+  .crm-app.design-c .evelyn-knowledge-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crm-app.design-c .evelyn-knowledge-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 5px;
+    padding: 8px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .crm-app.design-c .evelyn-knowledge-nav .evelyn-knowledge-nav-item {
+    flex-shrink: 0;
+    width: auto;
+    white-space: nowrap;
+  }
+  .crm-app.design-c .evelyn-knowledge-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .crm-app.design-c .evelyn-knowledge-add-source {
+    flex-direction: column;
+    min-height: 160px;
+  }
+  .crm-app.design-c .evelyn-knowledge-add-source > span:nth-child(2) {
+    align-self: stretch;
+  }
+  .crm-app.design-c .evelyn-bot-card-header {
+    flex-direction: column;
+  }
+}
+@media (max-width: 720px) {
+  .crm-app.design-c :is(.evelyn-domain-hero, .evelyn-bot-hero) {
+    padding: 22px;
+  }
+  .crm-app.design-c :is(.evelyn-domain-title, .evelyn-bot-title) {
+    font-size: 25px;
+  }
+  .crm-app.design-c .evelyn-knowledge-summary {
+    gap: 12px;
+    padding-top: 17px;
+  }
+  .crm-app.design-c .evelyn-knowledge-summary > div {
+    padding: 0 0 0 12px;
+  }
+  .crm-app.design-c .evelyn-knowledge-summary dt {
+    font-size: var(--dc-type-xs);
+  }
+  .crm-app.design-c .evelyn-knowledge-summary dd {
+    font-size: 25px;
+  }
+  .crm-app.design-c .evelyn-knowledge-panel {
+    padding: 19px;
+  }
+  .crm-app.design-c .evelyn-knowledge-section {
+    gap: 20px;
+  }
+  .crm-app.design-c .evelyn-knowledge-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crm-app.design-c .evelyn-knowledge-add-source {
+    min-height: 96px;
+    flex-direction: row;
+    padding: 17px;
+  }
+  .crm-app.design-c .evelyn-knowledge-add-source > span:nth-child(2) {
+    align-self: center;
+  }
+  .crm-app.design-c :is(.evelyn-knowledge-filters, .evelyn-knowledge-editor, .evelyn-knowledge-review) {
+    padding: 17px;
+  }
+  .crm-app.design-c .evelyn-knowledge-source {
+    padding: 18px;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-icon {
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-icon > svg {
+    width: 18px;
+    height: 18px;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-header {
+    gap: 12px;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-title {
+    flex-basis: calc(100% - 49px);
+  }
+  .crm-app.design-c .evelyn-knowledge-source-title > h5 {
+    font-size: var(--dc-type-body-sm);
+  }
+  .crm-app.design-c .evelyn-knowledge-source-version {
+    padding-left: 47px;
+    font-size: var(--dc-type-xs);
+  }
+  .crm-app.design-c .evelyn-domain-actions > :is(button, a, details, label) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .crm-app.design-c .evelyn-domain-actions > details > summary {
+    display: flex;
+  }
+  .crm-app.design-c .evelyn-knowledge-area,
+  .crm-app.design-c .evelyn-knowledge-usage-card {
+    padding: 19px;
+  }
+  .crm-app.design-c .evelyn-knowledge-channels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crm-app.design-c .evelyn-knowledge-channel {
+    padding: 18px;
+  }
+  .crm-app.design-c .evelyn-bot-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .crm-app.design-c .evelyn-bot-scope {
+    font-size: var(--dc-type-xs);
+  }
+  .crm-app.design-c .evelyn-bot-tabs {
+    gap: 20px;
+  }
+  .crm-app.design-c .evelyn-bot-guardrail {
+    padding: 16px;
+  }
+  .crm-app.design-c .evelyn-bot-guardrail > p {
+    font-size: var(--dc-type-sm);
+    line-height: 1.8;
+  }
+  .crm-app.design-c .evelyn-bot-metrics {
+    gap: 11px;
+  }
+  .crm-app.design-c .evelyn-bot-metric {
+    padding: 17px;
+  }
+  .crm-app.design-c .evelyn-bot-metric-value {
+    font-size: 27px;
+  }
+  .crm-app.design-c :is(.evelyn-bot-overview-grid, .evelyn-bot-inbox-grid, .evelyn-bot-knowledge-grid) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .crm-app.design-c .evelyn-bot-panel {
+    padding: 20px;
+  }
+  .crm-app.design-c .evelyn-bot-card {
+    padding: 17px;
+  }
+  .crm-app.design-c :is(.evelyn-bot-card-header, .evelyn-bot-channel-header) {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .crm-app.design-c .evelyn-bot-card-meta {
+    flex-shrink: 1;
+  }
+  .crm-app.design-c .evelyn-bot-card-actions > button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .crm-app.design-c .evelyn-bot-channel-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crm-app.design-c .evelyn-bot-channel-card {
+    padding: 20px;
+  }
+}
+@media (max-width: 390px) {
+  .crm-app.design-c :is(.evelyn-domain-hero, .evelyn-bot-hero, .evelyn-knowledge-panel, .evelyn-bot-panel) {
+    padding: 17px;
+  }
+  .crm-app.design-c .evelyn-knowledge-context,
+  .crm-app.design-c .evelyn-knowledge-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crm-app.design-c .evelyn-knowledge-summary > div {
+    padding-left: 8px;
+  }
+  .crm-app.design-c .evelyn-knowledge-summary dt {
+    overflow-wrap: anywhere;
+  }
+  .crm-app.design-c .evelyn-knowledge-source-version {
+    padding-left: 0;
+  }
+  .crm-app.design-c .evelyn-knowledge-source {
+    padding: 15px;
+  }
+  .crm-app.design-c :is(.evelyn-knowledge-editor, .evelyn-knowledge-review) {
+    padding: 14px;
+  }
+  .crm-app.design-c .evelyn-bot-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* Keep unavailable actions visibly unavailable after primary variant styling. */
+.crm-app.design-c .evelyn-domain-button.evelyn-domain-button-primary:disabled {
+  border-color: var(--dc-line) !important;
+  background: var(--dc-neutral-bg) !important;
+  color: var(--dc-muted) !important;
+}

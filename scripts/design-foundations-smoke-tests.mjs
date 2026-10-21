@@ -45,7 +45,7 @@ test("Inter is bundled for the CRM while the established public theme remains av
   assert.match(await read("src/styles/crm-theme.css"), /font-family: "Inter Variable", Inter/);
 });
 
-test("current Novalure website tokens drive the authenticated CRM theme", async () => {
+test("public Novalure tokens remain available alongside the authenticated Design C opt-in", async () => {
   const [crmTheme, globals, tokens] = await Promise.all([
     read("src/styles/crm-theme.css"),
     read("src/app/globals.css"),
@@ -81,6 +81,70 @@ test("current Novalure website tokens drive the authenticated CRM theme", async 
   assert.match(crmTheme, /\.crm-app \[data-crm-sidebar\]/);
   assert.match(crmTheme, /var\(--nl-gold\)/);
   assert.match(crmTheme, /var\(--nl-graphite\)/);
+});
+
+test("the actual CRM opts into the shared Design C source after the legacy theme", async () => {
+  const [theme, globals, workspace, primitives] = await Promise.all([
+    read("src/styles/evelyn-design-c.css"),
+    read("src/app/globals.css"),
+    read("src/components/crm-workspace.tsx"),
+    read("src/components/ui/foundations.module.css"),
+  ]);
+
+  assert.match(globals, /@import "\.\.\/styles\/evelyn-design-c\.css"/);
+  assert.ok(globals.indexOf("evelyn-design-c.css") > globals.indexOf("crm-theme.css"));
+  assert.match(theme, /@import "\.\.\/\.\.\/design-c\/styles\/tokens\.css"/);
+  assert.match(theme, /@import "\.\.\/\.\.\/design-c\/styles\/foundations\.css" layer\(base\)/);
+  assert.ok(workspace.includes('className="crm-app design-c '), "the real CRM shell must opt into Design C");
+  assert.match(theme, /\.crm-app\.design-c \{/);
+  assert.match(theme, /--nl-bg: var\(--dc-canvas\)/);
+  assert.match(theme, /--nl-gold: var\(--dc-accent\)/);
+  assert.match(theme, /--nl-button-primary-text: var\(--dc-on-accent\)/);
+  assert.match(primitives, /color: var\(--nl-button-primary-text, #211800\)/);
+  assert.match(primitives, /box-shadow: var\(--nl-button-primary-shadow, 0 14px 32px rgb\(255 212 59 \/ 22%\)\)/);
+  assert.match(primitives, /border-color: var\(--nl-info-border, #ead36a\)/);
+});
+
+test("Design C uses the verified C palette and preserves semantic contrast", async () => {
+  const tokens = await read("design-c/styles/tokens.css");
+  const lightScope = tokens.match(/\.design-c \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const values = Object.fromEntries(Array.from(lightScope.matchAll(/(--dc-[\w-]+): (#[\da-f]{6});/gi), match => [match[1], match[2]]));
+  assert.equal(values["--dc-accent"], "#666ad1");
+  assert.equal(values["--dc-canvas"], "#f7f8fc");
+  assert.equal(values["--dc-surface"], "#ffffff");
+  assert.equal(values["--dc-text"], "#252c40");
+  assert.equal(values["--dc-rail"], "#171d30");
+  for (const [foreground, background] of [
+    ["--dc-on-accent", "--dc-accent"],
+    ["--dc-muted", "--dc-canvas"],
+    ["--dc-text", "--dc-surface"],
+    ["--dc-rail-text", "--dc-rail"],
+    ["--dc-info-text", "--dc-info-bg"],
+    ["--dc-success-text", "--dc-success-bg"],
+    ["--dc-warning-text", "--dc-warning-bg"],
+    ["--dc-danger-text", "--dc-danger-bg"],
+    ["--dc-violet-text", "--dc-violet-bg"],
+  ]) {
+    assert.ok(contrastRatio(values[foreground], values[background]) >= 4.5, `${foreground} on ${background} must meet AA`);
+  }
+  assert.ok(contrastRatio(values["--dc-border"], values["--dc-surface"]) >= 3);
+  assert.ok(contrastRatio(values["--dc-focus"], values["--dc-surface"]) >= 3);
+  assert.ok(contrastRatio(values["--dc-rail-indicator"], values["--dc-rail"]) >= 3);
+});
+
+test("Design C covers existing shell, controls, tables and dialogs without public selectors", async () => {
+  const theme = await read("src/styles/evelyn-design-c.css");
+  for (const hook of ["sidebar", "nav-item", "header", "header-title", "content", "context", "mobile-bar", "mobile-drawer"]) {
+    assert.ok(theme.includes(`[data-crm-${hook}]`), `${hook} must share the CRM theme`);
+  }
+  assert.match(theme, /\.crm-app\.design-c button \{[\s\S]*?min-block-size: var\(--dc-control-height-compact\)/);
+  assert.match(theme, /\.crm-app\.design-c th,[\s\S]*?border-color: var\(--dc-line\) !important/);
+  assert.match(theme, /\.crm-app\.design-c \[role="dialog"\]/);
+  assert.match(theme, /\.crm-app\.design-c :is\(\[data-crm-sidebar\], \[data-crm-mobile-drawer\]\) :focus-visible \{\s*outline-color: var\(--dc-rail-indicator\)/);
+  assert.match(theme, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(theme, /animation: none !important/);
+  assert.doesNotMatch(theme, /(?:^|\n)(?::root|body|html)\s*\{/);
+  assert.doesNotMatch(theme, /#[0-9a-f]{3,8}\b/i);
 });
 
 test("required text and status token pairs meet WCAG AA contrast", () => {

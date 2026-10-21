@@ -1,0 +1,33 @@
+
+> novalure-crm@0.1.0 test:integration
+> node --test scripts/qa-security-and-scope-smoke-tests.mjs
+
+(node:3401) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/novalure-crm/src/lib/bots/webhook-security.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/novalure-crm/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ CI pins the exact Node runtime and fails closed for QA targets (6.846061ms)
+✔ Growth RLS proof quarantines stale probes and cannot let application writes block teardown (1.816965ms)
+✔ database infrastructure targets are lazy, explicit and fail closed (2.49892ms)
+✔ migration connections verify the actual Neon branch, database and role (1.099827ms)
+✔ protected QA runtime-role binding is explicit and uses only the direct migration connection (1.836864ms)
+✔ database scripts use the central target guard without embedded provider fingerprints (4.438467ms)
+✔ legacy direct production migration entrypoints are fail-closed (2.046737ms)
+✔ secret scanning is immutable, full-history and least-privilege (0.979749ms)
+✔ CI pins the exact runtime, canonicalizes SBOM and never prints raw app logs (1.091505ms)
+✔ Meta webhook HMAC is bound to the unchanged raw body (1.151654ms)
+✔ Meta payloads cannot downgrade to the custom webhook authentication path (0.226437ms)
+✔ webhook request media type, content encoding and byte limit fail closed (24.156671ms)
+✔ webhook route has no unsigned Meta, caller-workspace or replay side-effect path (2.833378ms)
+✔ media signatures reject MIME/content mismatches (0.273056ms)
+✔ media share tokens are high entropy, hashed and safe for response headers (0.863144ms)
+✔ private media routes stream through the app and never redirect to Blob (11.56093ms)
+✔ media consumers do not serialize storage URLs or persist share tokens (1.767712ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 196.444356

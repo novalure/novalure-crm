@@ -2,6 +2,26 @@ import { withCrmSalesWrite } from "@/lib/crm-sales-http";
 import { NextResponse } from "next/server";
 import type { AppSession } from "@/lib/auth/session";
 import { upsertLeadRecord } from "@/lib/db/crm-write-repositories";
+import { requirePermission } from "@/lib/auth/session";
+import { withCrmRead } from "@/lib/crm-command";
+import { queryOne } from "@/lib/db/client";
+import { parseStudioEnquiryView } from "@/lib/studio-enquiry-view";
+
+export async function GET(request: Request) {
+  const auth=await requirePermission(request,"crm:read");
+  if(!auth.ok)return auth.response;
+  const id=new URL(request.url).searchParams.get("id")||"";
+  const headers={"cache-control":"private, no-store","x-content-type-options":"nosniff"};
+  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id))return NextResponse.json({error:"Invalid lead."},{status:400,headers});
+  try {
+    const row=await withCrmRead(auth.session,(_tx,session)=>queryOne<{enquiry:unknown}>(
+      "select metadata->'studioEnquiry' as enquiry from leads where workspace_id=$1::uuid and id=$2::uuid",[session.workspaceId,id]));
+    if(!row)return NextResponse.json({error:"Lead not found."},{status:404,headers});
+    const enquiry=parseStudioEnquiryView(row.enquiry);
+    if(!enquiry)return NextResponse.json({error:"Confirmed enquiry details are unavailable."},{status:404,headers});
+    return NextResponse.json({enquiry},{headers});
+  } catch {return NextResponse.json({error:"Confirmed enquiry details could not be read."},{status:503,headers});}
+}
 
 async function readJson(request: Request) {
   try {

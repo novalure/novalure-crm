@@ -1,0 +1,638 @@
+{
+  "generatedAt": "2026-10-19T21:45:05.751676+00:00",
+  "status": "DESIGN_C_DEVELOPMENT_READERS_ACCEPTED",
+  "branch": "codex/evelyn-crm-design-c-integration",
+  "baseCommit": "aa6b329942ab19c165bc610822f03ed5874af189",
+  "originalDesignCommit": "37338cba018ab7b5a00cc59edb746de8796ee724",
+  "controlledDesignImport": "b7a1ab62f7aa1f8d7ae98da7ae1a18847dfbd4c0",
+  "integrationSourceFingerprint": "11a93afa7f30be479c4d99e74b2dc08ca87e8a86d12a311046e4fe7af9859541",
+  "fingerprintedFiles": [
+    ".github/workflows/livegang-e2e.yml",
+    ".gitignore",
+    "migrations/106_crm_operational_readers.sql",
+    "package.json",
+    "scripts/admin-navigation-smoke-tests.mjs",
+    "scripts/bot-command-center-knowledge-tests.ts",
+    "scripts/calendar-oauth-source-tests.mjs",
+    "scripts/crm-machine-auth-tests.ts",
+    "scripts/crm-operational-read-tests.ts",
+    "scripts/customer-access-presentation-tests.ts",
+    "scripts/design-c-integration-tests.ts",
+    "scripts/design-foundations-smoke-tests.mjs",
+    "scripts/form-command-center-source-tests.mjs",
+    "scripts/lead-inbox-presentation-tests.ts",
+    "scripts/lib/design-c-integration-fixture.mjs",
+    "scripts/newsletter-source-availability-tests.tsx",
+    "scripts/phase6-bot-grounding-smoke-tests.mjs",
+    "scripts/phase7-mobile-smoke-tests.mjs",
+    "scripts/qa-design-c-integration.mjs",
+    "scripts/qa-sales-browser-server.mjs",
+    "scripts/touch-target-smoke-tests.mjs",
+    "src/app/api/approvals/route.ts",
+    "src/app/api/bots/actions/route.ts",
+    "src/app/api/bots/channels/route.ts",
+    "src/app/api/meetings/oauth/status/route.ts",
+    "src/app/globals.css",
+    "src/components/bot-command-center.tsx",
+    "src/components/company-profile-settings.tsx",
+    "src/components/contact-command-center.tsx",
+    "src/components/crm-command-search.tsx",
+    "src/components/crm-workspace.tsx",
+    "src/components/customer-access-cockpit.tsx",
+    "src/components/evelyn-command-center.tsx",
+    "src/components/form-command-center.tsx",
+    "src/components/knowledge-command-center.tsx",
+    "src/components/lead-inbox.tsx",
+    "src/components/newsletter-command-center.tsx",
+    "src/components/ui/foundations.module.css",
+    "src/lib/crm-presentation-data.ts",
+    "src/lib/crm-self-service-navigation.ts",
+    "src/lib/db/crm-operational-readers.ts",
+    "src/lib/evelyn-command-center.ts",
+    "src/lib/operational-read-http.ts",
+    "src/styles/evelyn-command-center.css",
+    "src/styles/evelyn-design-c.css",
+    "src/styles/evelyn-domain-panels.css",
+    "vercel.json"
+  ],
+  "nextBuildId": "a_VQWjyuCc-T0Gq4P1sRg",
+  "localChecks": {
+    "typecheck": "PASS; final8608e72 production build runs full TypeScript",
+    "build": "PASS,104 generated pages;8608e72 application source",
+    "lint": "PASS full repository before final workspace guards; all subsequently changed source/test files targeted ESLint PASS",
+    "operationalDatabase": "12/12 PASS against unchanged forced-RLS predecessors plus additive106; SQL unchanged after af38bd9",
+    "botCalendarAndAccessibility": "26/26 combined PASS atcb2b1ec (14bot+7calendar+5existing calendar accessibility); final8608e72 calendar changes rechecked12/12 (7calendar+5accessibility), bot source unchanged",
+    "designCCompatibility": "27/27 PASS (13 integration data/navigation +14 existing source/SSR); these areas unchanged by final workspace guards",
+    "existingConsentShareContactOAuth": "19/19 PASS; final calendar accessibility subset rechecked separately",
+    "machineAuthChronology": "5/5 PASS after historical fixture stops at90 before unchanged092/093",
+    "legacyBotGroundingSmoke": "5/5 PASS after updating stale literal-fetch structural assertion to the actual workspace-scoped reader; application source unchanged"
+  },
+  "wholeBrowserRun": {
+    "summary": {
+      "passed": 48,
+      "failed": 2,
+      "axeScans": 4
+    },
+    "checks": [
+      {
+        "name": "Anonymous CRM and Knowledge APIs deny access",
+        "status": "PASS"
+      },
+      {
+        "name": "Regular operator login rejects bad password/TOTP and completes real MFA",
+        "status": "PASS"
+      },
+      {
+        "name": "Operator chooses its existing authorized internal navigation profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Authorized database API supplies the dashboard without synthetic preview fallbacks",
+        "status": "PASS"
+      },
+      {
+        "name": "Every visible operator navigation entry retains the live Design C shell",
+        "status": "PASS"
+      },
+      {
+        "name": "Authorized search uses a native modal and never reveals another tenant",
+        "status": "PASS"
+      },
+      {
+        "name": "A real empty Forms response never creates prepared business forms",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer access fallback state exposes no sample records or unknown zero counts",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer access network state exposes no sample records or unknown zero counts",
+        "status": "PASS"
+      },
+      {
+        "name": "Unlicensed Knowledge uses its actual entitlement state and rejects writes",
+        "status": "PASS"
+      },
+      {
+        "name": "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
+        "status": "PASS"
+      },
+      {
+        "name": "Project scope switch clears another project's contact records",
+        "status": "PASS"
+      },
+      {
+        "name": "Explicit operator membership authorizes customer and canonical Studio workspaces only",
+        "status": "FAIL"
+      },
+      {
+        "name": "Customer owner signs in through separate password and real MFA",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer chooses its existing authorized real-estate workspace profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer workspace cannot read operator, foreign contacts, projects or Knowledge",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer property and assistant views show actual scoped database records",
+        "status": "PASS"
+      },
+      {
+        "name": "Unknown assistant approval and conversation data remains unavailable rather than zero",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer Knowledge area and draft are saved by the real self-service forms",
+        "status": "PASS"
+      },
+      {
+        "name": "Knowledge assignment and explicit publication gate real webchat retrieval",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer PDF upload extracts private text and requires explicit review",
+        "status": "PASS"
+      },
+      {
+        "name": "Read-only customer authenticates normally and cannot escalate Knowledge rights",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer mobile navigation traps focus, closes with Escape and restores trigger",
+        "status": "PASS"
+      },
+      {
+        "name": "Reduced motion preference disables integration shell movement",
+        "status": "PASS"
+      },
+      {
+        "name": "RLS remains forced and runtime role cannot bypass row security",
+        "status": "PASS"
+      },
+      {
+        "name": "No browser exceptions, server failures, browser outbound requests or preview UI",
+        "status": "FAIL"
+      }
+    ],
+    "axe": [
+      {
+        "name": "dashboard-1440",
+        "violations": 0
+      },
+      {
+        "name": "knowledge-1440",
+        "violations": 0
+      },
+      {
+        "name": "settings-1440",
+        "violations": 0
+      },
+      {
+        "name": "customer-mobile-dashboard",
+        "violations": 0
+      }
+    ],
+    "browserExceptions": 0,
+    "browserOutboundRequests": 0,
+    "observedForeignLeaks": 0,
+    "http500Endpoints": [
+      "/api/approvals",
+      "/api/bots/actions",
+      "/api/bots/channels",
+      "/api/meetings/oauth/status"
+    ]
+  },
+  "focusedWorkspaceStudioRun": {
+    "summary": {
+      "passed": 4,
+      "failed": 0,
+      "axeScans": 0
+    },
+    "checks": [
+      {
+        "name": "Anonymous CRM and Knowledge APIs deny access",
+        "status": "PASS"
+      },
+      {
+        "name": "Regular operator login rejects bad password/TOTP and completes real MFA",
+        "status": "PASS"
+      },
+      {
+        "name": "Operator chooses its existing authorized internal navigation profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Explicit operator membership authorizes customer and canonical Studio workspaces only",
+        "status": "PASS"
+      }
+    ],
+    "axe": [],
+    "browserExceptions": 0,
+    "browserOutboundRequests": 0,
+    "observedForeignLeaks": 0,
+    "http500Endpoints": []
+  },
+  "browserEvidenceNote": "Historical whole48/50 and workspace4/4 runs remain preserved separately. Final focused operational readers run30/30 closes the four read blockers and repeats relevant authenticated workspace boundaries. No new whole-integration or axe scan result is claimed. An earlier focused run was stopped after a same-hash-navigation fault-injection harness problem; the final harness requires fresh intercepted GETs. A setup-only rerun exposed the empty Next route announcer sharing role=alert; the existing negative-login assertions now target the actual p[role=alert], retaining their401/no-session checks. Final30/30 is from8608e72.",
+  "runtime": {
+    "syntheticOnly": true,
+    "productionWrites": 0,
+    "sessionInjection": false,
+    "normalPasswordAndMfa": true,
+    "testDatabase": "disposable loopback neondb",
+    "runtimeRole": "generated sales_qa_* inheriting novalure_app; NOSUPERUSER NOBYPASSRLS",
+    "unchangedPinnedPredecessors": [
+      "091",
+      "092",
+      "093",
+      "094",
+      "095",
+      "096",
+      "100",
+      "101",
+      "102",
+      "103"
+    ],
+    "excludedHistoricalFeatures": [
+      "optional pgvector column/index",
+      "manual062",
+      "preview097–099"
+    ],
+    "additiveLocalReadMigration": "106_crm_operational_readers.sql",
+    "rawLegacyTableGrantsAdded": false,
+    "securityPoliciesChanged": false,
+    "productionMigrations": 0
+  },
+  "production": {
+    "observedCommit": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "observedDeployment": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "newDeployment": null,
+    "integrationBranchAutoDeploy": false,
+    "hostedPreview": null
+  },
+  "limitations": [
+    "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
+    "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
+    "The isolated fixture applies unchanged pinned 091–096, 100–103 and additive 106; optional pgvector, historical manual media migration 062, preview migrations 097–099 and package-3 migrations 104–105 remain excluded. This is not a full production migration proof.",
+    "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
+    "No hosted Preview, production migration/deployment, OAuth provider health probe or Universal Booking Engine is included. The four SQL readers require additive migration106 in an approved target; missing sources yield503 safely.",
+    "No raw legacy SELECT or write privilege, RLS exception, approval/sending/OAuth permission expansion, or Package3 integration was introduced."
+  ],
+  "baselineVerification": {
+    "commit": "485575a1fd6e8be92b1e4446c4e9b414858fdd85",
+    "status": "UI_INTEGRATED_ACCEPTANCE_BLOCKED_BY_EXISTING_RUNTIME_READERS",
+    "generatedAt": "2026-10-19T21:15:35.539099+00:00",
+    "integrationSourceFingerprint": "df84e42897c7ace1cafbdfda084bb5a7d8ca68f2035f7b62e1495bade9834176",
+    "localChecks": {
+      "typecheck": "PASS (also part of final full build)",
+      "build": "PASS, 104 generated pages",
+      "lint": "PASS full repository plus final targeted navigation and harness lint",
+      "unit": "243 PASS; affected navigation checks rechecked after final hash correction",
+      "designCIntegration": "13 pure + 14 loader/SSR PASS",
+      "knowledge": "118 engine PASS; final 14 UI PASS",
+      "sales": "92/93 initial; isolated missing-browser-channel print case subsequently PASS with chromium; no aggregate single-run93/93 claim",
+      "adminStudioNavigation": "11 PASS after final hash correction"
+    }
+  },
+  "implementationCommit": "8608e728e9c4081ce1d259abe74c92e9c88d285e",
+  "sourceFingerprintFormat": "SHA-256 of sorted filename + NUL + file bytes + NUL; includes application, migrations and test harness; documentation/evidence excluded",
+  "focusedOperationalReadersRun": {
+    "report": "readers-browser.json",
+    "applicationCommit": "8608e728e9c4081ce1d259abe74c92e9c88d285e",
+    "nextBuildId": "a_VQWjyuCc-T0Gq4P1sRg",
+    "summary": {
+      "passed": 30,
+      "failed": 0,
+      "axeScans": 0
+    },
+    "ordinaryPasswordAndMfa": true,
+    "checks": [
+      {
+        "name": "Anonymous operational readers deny access",
+        "status": "PASS"
+      },
+      {
+        "name": "Regular operator login rejects bad password/TOTP and completes real MFA",
+        "status": "PASS",
+        "detail": {
+          "ordinaryPassword": true,
+          "mfaRequired": true,
+          "totpFromEnrollmentUi": true,
+          "sessionInjected": false
+        }
+      },
+      {
+        "name": "Operator chooses its existing authorized internal navigation profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Scoped reader functions leave raw table privileges and runtime identity restricted",
+        "status": "PASS"
+      },
+      {
+        "name": "channels: real runtime returns a verified empty database result",
+        "status": "PASS"
+      },
+      {
+        "name": "channels: actual read panel distinguishes verified empty data",
+        "status": "PASS"
+      },
+      {
+        "name": "channels: missing-source becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 2
+        }
+      },
+      {
+        "name": "channels: network becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 2
+        }
+      },
+      {
+        "name": "approvals: real runtime returns a verified empty database result",
+        "status": "PASS"
+      },
+      {
+        "name": "approvals: actual read panel distinguishes verified empty data",
+        "status": "PASS"
+      },
+      {
+        "name": "approvals: missing-source becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 2
+        }
+      },
+      {
+        "name": "approvals: network becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 2
+        }
+      },
+      {
+        "name": "actions: real runtime returns a verified empty database result",
+        "status": "PASS"
+      },
+      {
+        "name": "actions: actual read panel distinguishes verified empty data",
+        "status": "PASS"
+      },
+      {
+        "name": "actions: missing-source becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 2
+        }
+      },
+      {
+        "name": "actions: network becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 2
+        }
+      },
+      {
+        "name": "calendar: real runtime returns a verified empty database result",
+        "status": "PASS"
+      },
+      {
+        "name": "calendar: actual read panel distinguishes verified empty data",
+        "status": "PASS"
+      },
+      {
+        "name": "calendar: missing-source becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 1
+        }
+      },
+      {
+        "name": "calendar: network becomes unavailable without an empty-success claim",
+        "status": "PASS",
+        "detail": {
+          "interceptedRequests": 1
+        }
+      },
+      {
+        "name": "Nonempty operational reads preserve safe records while excluding raw private payloads",
+        "status": "PASS"
+      },
+      {
+        "name": "Real project and bot filters exclude another authorized project",
+        "status": "PASS"
+      },
+      {
+        "name": "Malformed, ambiguous and unsupported read scopes are rejected",
+        "status": "PASS"
+      },
+      {
+        "name": "Managed workspace selection uses the target membership's operational rows",
+        "status": "PASS"
+      },
+      {
+        "name": "Reader customer owner uses ordinary password and TOTP",
+        "status": "PASS",
+        "detail": {
+          "ordinaryPassword": true,
+          "mfaRequired": true,
+          "totpFromEnrollmentUi": true,
+          "sessionInjected": false
+        }
+      },
+      {
+        "name": "Customer reads own operational records and cannot select another tenant",
+        "status": "PASS"
+      },
+      {
+        "name": "Reader viewer signs in normally with existing role-based MFA policy",
+        "status": "PASS",
+        "detail": {
+          "ordinaryPassword": true,
+          "mfaRequired": false,
+          "totpFromEnrollmentUi": false,
+          "sessionInjected": false
+        }
+      },
+      {
+        "name": "Viewer read permissions and tenant boundaries remain enforced",
+        "status": "PASS"
+      },
+      {
+        "name": "Existing owner cookie cannot retain privileges after a real membership downgrade",
+        "status": "PASS"
+      },
+      {
+        "name": "Targeted reader traffic has no HTTP500, browser exception, mutation or observed foreign leak",
+        "status": "PASS",
+        "detail": {
+          "serverErrors": 0,
+          "uncaughtErrors": 0,
+          "browserOutboundRequests": 0,
+          "operationalMutations": 0
+        }
+      }
+    ],
+    "browserExceptions": 0,
+    "http5xx": 0,
+    "browserOutboundRequests": 0,
+    "observedForeignLeaks": 0,
+    "operationalMutations": 0,
+    "passiveResponseInspectionErrors": 15
+  },
+  "previouslyBlockedReadContracts": {
+    "/api/bots/channels": "bot_channel_webhooks",
+    "/api/approvals": "approval_requests",
+    "/api/bots/actions": "bot_document_sends",
+    "/api/meetings/oauth/status": "provider_connections"
+  },
+  "blockedReadContracts": {},
+  "resolvedReadContracts": {
+    "/api/bots/channels": {
+      "cause": "Existing legacy table SELECT denied (42501); no scoped DTO contract and transaction-bound history read",
+      "adapter": "crm_read_bot_channels",
+      "relations": "workspace/account/bot/project; raw payload, credentials and processing/reply data excluded"
+    },
+    "/api/approvals": {
+      "cause": "Existing approval_requests SELECT denied (42501); no authorized DTO projection",
+      "adapter": "crm_read_approvals",
+      "relations": "workspace/project and persisted known entity models; no automatic decision; safe payload allowlist"
+    },
+    "/api/bots/actions": {
+      "cause": "Existing bot_document_sends SELECT denied (42501); secondary booking read and metadata fallback also lacked safe scope",
+      "adapter": "crm_read_bot_actions",
+      "relations": "workspace/bot/conversation/project/contact ownership/media; no send; explicit unavailable booking aggregate for bot filter"
+    },
+    "/api/meetings/oauth/status": {
+      "cause": "Existing provider_connections SELECT denied (42501); private config lookup was reused for a public status DTO",
+      "adapter": "crm_read_calendar_connections",
+      "relations": "workspace-wide verified saved Google/Microsoft status only; no config/token/providerIO/OAuth changes"
+    }
+  },
+  "githubCi": {
+    "snapshotTiming": "Evidence generated before the final evidence commit is pushed; current-head CI outcome is recorded in PR91 description/checks after execution",
+    "currentHeadStatusAtEvidenceCreation": "PENDING_NEW_HEAD_AFTER_LEGACY_SMOKE_FIX",
+    "checksUrl": "https://github.com/novalure/novalure-crm/pull/91/checks",
+    "baselineHead": "485575a1fd6e8be92b1e4446c4e9b414858fdd85",
+    "baselineQuality": "FAILURE",
+    "baselineRun": "https://github.com/novalure/novalure-crm/actions/runs/39326450441",
+    "baselineCause": "Machine auth test replayed unchanged092 after additive Knowledge migrations; required68/68 forced-RLS relations, observed79/79",
+    "correction": "Dedicated historical machine fixture caps baseline at90 before unchanged092/093; no guard/grant change; focused5/5PASS",
+    "observedPostImplementationRun": {
+      "head": "fcc3db55292fe0b68f49dd07ab836cf707021320",
+      "run": "https://github.com/novalure/novalure-crm/actions/runs/39329604294",
+      "quality": "FAILURE",
+      "passedSteps": [
+        "lint",
+        "typecheck"
+      ],
+      "unit": "242PASS/1FAIL; stale phase6 literal-fetch assertion",
+      "secretScan": "SUCCESS",
+      "dependencyAuditAndSbom": "SUCCESS",
+      "correction": "Existing phase6 smoke now checks persisted knowledge path, reader call and scoped URL; focused5/5PASS. No application code/build/browser result changed."
+    }
+  }
+}

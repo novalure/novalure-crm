@@ -1,0 +1,36 @@
+{
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "ordinaryPasswordAndMfa": true,
+  "results": [
+    {
+      "name": "anonymous Knowledge API denies access",
+      "status": "PASS"
+    },
+    {
+      "name": "ordinary password and real TOTP enrollment create the session",
+      "status": "PASS"
+    },
+    {
+      "name": "disabled module shows an honest state with no sample knowledge",
+      "status": "PASS"
+    },
+    {
+      "name": "area and source forms persist real scoped drafts",
+      "status": "PASS"
+    },
+    {
+      "name": "explicit assistant assignment never activates an unpublished draft",
+      "status": "PASS"
+    },
+    {
+      "name": "admin publication uses an exact version and subsequent edits remain drafts",
+      "status": "PASS"
+    },
+    {
+      "name": "desktop and mobile views remain usable without horizontal overflow",
+      "status": "PASS"
+    }
+  ],
+  "pageErrors": []
+}

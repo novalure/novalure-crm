@@ -1,0 +1,934 @@
+{
+  "schemaVersion": 2,
+  "recordedAtUtc": "2026-10-20T09:49:25.075616Z",
+  "scope": "Bounded unchanged-component Hosted18 reuse plus actual compatibility5, genuine QA machine40/5, exact Appc291/Tool5f CI and completed same-project COW database/private-file restore with separate final Source availability. Security incident remains BLOCKED; no Production approval.",
+  "status": "BLOCKIERT",
+  "implementationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "sourceTrees": {
+    "src": "0b47226a80382f48eb6f9a9874492ab167491358",
+    "migrations": "9221b7e098c28d158e9f97b92e90ddd80ff9da6a",
+    "design-c": "76100f8ea94b8c45028a94f4807697e9597c9d6d"
+  },
+  "sourceBinding": "qa/package4-integration-2026-10-20/source-binding.json",
+  "gates": {
+    "A": "PASS",
+    "B": "BLOCKED",
+    "C": "PASS",
+    "D": "BLOCKED",
+    "E": "PASS",
+    "F": "PASS",
+    "G": "BLOCKED"
+  },
+  "gateLimits": {
+    "A": "Verified parent integration and current runtime/SQL bytes; reporting commits are separate.",
+    "B": "Automatic Appc291/Tool5f/report7dd97c8 Quality/Secrets PASS; configured required Vercel check MISSING and required manual QA job SKIPPED, so merge checks remain open. Branch Git deploy disabled; extra5 PG type tests local only.",
+    "C": "Actual same-project COW equality20catalog/DBmetadata/167tables/793rows/60ledger, all17privatefiles41950560bytes SHA+403,5 normal authenticated in-process restored App checks, unchanged Source and actual endpoint/pool closure PASS; failed attempts preserved. Not native pg_dump, cross-project DR, second restored Hosted deployment or Production-version parity.",
+    "D": "Replacement generated, future-build default selected and bounded platform access validated under explicit narrow authorization; old exposed credential remains active by explicit user retention decision, configured/external consumers UNKNOWN. Security not closed.",
+    "E": "Actual18/18 baseline only for unchanged components plus actual5compatibility and40machine calls; no production provider activation.",
+    "F": "Bounded18 reuse, actual compatibility5 and genuineQA40/5 PASS; after full restore closure separate Source-only enable,5 normal readonly Source App checks and3 HTTP protection checks PASS; Working/Restored remain disabled+idle.",
+    "G": "No CRM Production release authorization/request. Exactly two separately authorized Evelyn credential writes and three fixed GETs completed; old exposed key explicitly retained. No CRM migration/build/promotion/domain/MFA/cron mutation."
+  },
+  "ci": {
+    "status": "PASS",
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "receipt": "qa/package4-hosted-2026-10-20/ci-c291e21.json",
+    "jobs": [
+      {
+        "name": "Gitleaks full-history and current-tree scan",
+        "conclusion": "success",
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714157/job/118508180792"
+      },
+      {
+        "name": "Lockfile, lint, typecheck, tests and build",
+        "conclusion": "success",
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217/job/118508181677"
+      },
+      {
+        "name": "Production dependency audit and SBOM",
+        "conclusion": "success",
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217/job/118508181839"
+      },
+      {
+        "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+        "conclusion": "skipped",
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217/job/118510725993"
+      }
+    ],
+    "optionalManualJob": "SKIPPED; no PASS claim",
+    "toolingHead": {
+      "sourceSha": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+      "status": "PASS",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/ci-5f7bed6.json",
+        "sha256": "27ed20078b81605bb055827a891be66eb255c2e59e7f75c142d53f42d7b33dc1"
+      },
+      "jobs": [
+        {
+          "name": "Gitleaks full-history and current-tree scan",
+          "conclusion": "success",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39390975073/job/118522125683"
+        },
+        {
+          "name": "Lockfile, lint, typecheck, tests and build",
+          "conclusion": "success",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39390975218/job/118522126949"
+        },
+        {
+          "name": "Production dependency audit and SBOM",
+          "conclusion": "success",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39390975218/job/118522127278"
+        },
+        {
+          "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+          "conclusion": "skipped",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39390975218/job/118524911149"
+        }
+      ],
+      "targetedExtraLocalPostgresTestsExecutedInRemoteCi": false
+    },
+    "previousReportingCommit": {
+      "revision": "7dd97c879cb215cc780232d8b06e5f105d497829",
+      "status": "PASS",
+      "qualityRunId": 39401068223,
+      "qualityUrl": "https://github.com/novalure/novalure-crm/actions/runs/39401068223",
+      "secretRunId": 39401068290,
+      "secretUrl": "https://github.com/novalure/novalure-crm/actions/runs/39401068290",
+      "optionalManualJob": "SKIPPED",
+      "configuredRequiredVercelCheck": "MISSING",
+      "gitAutoDeploymentDisabled": true,
+      "newReportAmendmentCiClaimed": false,
+      "newApplicationDeploymentClaimed": false,
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/ci-7dd97c8.json",
+        "sha256": "cb5dcc7d73fbf5d8880a334e821c903736bd1e20ec755b9e6ecd2f1c93ba1343"
+      },
+      "allConfiguredRequiredMergeChecksPass": false,
+      "requiredManualQaJob": "SKIPPED",
+      "automaticQualityAndSecretsSuccess": true
+    }
+  },
+  "historicalLocalAcceptance": {
+    "recordedAtUtc": "2026-10-19T22:31:25.832Z",
+    "sourceTrees": {
+      "src": "9961fe69517d2879413b43fb6e4322ded34e2cb9",
+      "migrations": "9221b7e098c28d158e9f97b92e90ddd80ff9da6a",
+      "design-c": "76100f8ea94b8c45028a94f4807697e9597c9d6d"
+    },
+    "buildSourceCommit": "d3c1cbe625db61742ab08b07123aeff1e592bb77",
+    "localBrowser": {
+      "designC": 50,
+      "knowledge": 13,
+      "integratedPackage4": 13,
+      "failed": 0,
+      "ordinaryPasswordAndTotp": true,
+      "externalWebsiteProviderTested": false,
+      "syntheticScannerRequests": 1,
+      "limitation": "50 and 13 existing suites passed on the combined built fixture; the additional 13 passed after focused harness corrections on a fresh combined fixture. Final CI reruns the complete wrapper on one fresh fixture."
+    },
+    "localChecks": "qa/package4-integration-2026-10-20/local-checks.json",
+    "countsOverlap": true,
+    "notCurrentHostedExecution": true
+  },
+  "hostedBaseline": {
+    "status": "PASS",
+    "sourceSha": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+    "deploymentId": "dpl_5mBs8F79zEijbAYbJxFEYowLW4ru",
+    "passed": 18,
+    "receipt": "qa/package4-hosted-2026-10-20/hosted-196f0da.json",
+    "actualExternalHttps": true,
+    "actualHostedManualBatch": true,
+    "near10MiBPrivatePdfDocxRoundtrips": true,
+    "draftAndPrivateHistoryAndTenantDenials": true,
+    "rerunOnC291": false
+  },
+  "currentCompatibility": {
+    "status": "PASS",
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "deploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "passed": 5,
+    "receipt": "qa/package4-hosted-2026-10-20/auth-compatibility-c291e21.json",
+    "ordinaryPasswordAndExistingTotp": true,
+    "sessionInjection": false,
+    "sourceComparison": {
+      "baselineRevision": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+      "candidateRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "hashFormat": "SHA256 of raw Git blob bytes; package.json excludes only test:/qa: script entries; component digests hash sorted path/mode/SHA256 records",
+      "status": "PASS",
+      "components": {
+        "existingHostedHarness": {
+          "baseline": {
+            "files": 3,
+            "sha256": "44c11c2e63985a75a3eaa411bb815d371bc385f6101d9f8ed09d32a8279a7082"
+          },
+          "candidate": {
+            "files": 3,
+            "sha256": "44c11c2e63985a75a3eaa411bb815d371bc385f6101d9f8ed09d32a8279a7082"
+          },
+          "unchanged": true,
+          "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+        },
+        "knowledgeImplementation": {
+          "baseline": {
+            "files": 23,
+            "sha256": "fe24cb43added6c07b1d50ab1275715fab6a11a87dc73e7db30234081f17007c"
+          },
+          "candidate": {
+            "files": 23,
+            "sha256": "fe24cb43added6c07b1d50ab1275715fab6a11a87dc73e7db30234081f17007c"
+          },
+          "unchanged": true,
+          "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+        },
+        "knowledgeRoutes": {
+          "baseline": {
+            "files": 15,
+            "sha256": "6108f8b8ec4fc7d4c2f4e08215198940f26ca9dc43492d7a196a9c900d71980e"
+          },
+          "candidate": {
+            "files": 15,
+            "sha256": "6108f8b8ec4fc7d4c2f4e08215198940f26ca9dc43492d7a196a9c900d71980e"
+          },
+          "unchanged": true,
+          "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+        },
+        "migrationHistory": {
+          "baseline": {
+            "files": 108,
+            "sha256": "678455122131235ccb78ed5cf971d7266cc614b726085c99722b1d9e5a3211d2"
+          },
+          "candidate": {
+            "files": 108,
+            "sha256": "678455122131235ccb78ed5cf971d7266cc614b726085c99722b1d9e5a3211d2"
+          },
+          "unchanged": true,
+          "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+        },
+        "otherRuntimeAndBuild": {
+          "baseline": {
+            "files": 309,
+            "sha256": "299d684f69dda8e190a88a10c386005a5d41075b4d693a945acff19978f27730"
+          },
+          "candidate": {
+            "files": 309,
+            "sha256": "299d684f69dda8e190a88a10c386005a5d41075b4d693a945acff19978f27730"
+          },
+          "unchanged": true,
+          "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+        },
+        "presentation": {
+          "baseline": {
+            "files": 87,
+            "sha256": "4ac908e7df5be9c191302d1235d67e1a517080961d97572158ed16e3fb57245c"
+          },
+          "candidate": {
+            "files": 87,
+            "sha256": "4ac908e7df5be9c191302d1235d67e1a517080961d97572158ed16e3fb57245c"
+          },
+          "unchanged": true,
+          "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+        },
+        "reviewedAuthDelta": {
+          "baseline": {
+            "files": 2,
+            "sha256": "32f66bc54529f0e34af8f9d792445d902d2ddf13a3801ce9f43824f3f59c89e3"
+          },
+          "candidate": {
+            "files": 3,
+            "sha256": "53fa5ca87c7cf256274ea27291bba1f8d39add003c5b5f3e8d06bc742d04f2af"
+          },
+          "unchanged": false,
+          "interpretation": "Auth delta requires its own review/tests and targeted smoke; the baseline does not cover the new machine profile"
+        }
+      },
+      "changedFiles": [
+        {
+          "path": "src/lib/auth/session.ts",
+          "baseline": {
+            "mode": "100644",
+            "sha256": "e6c478ca8a887f73d092d0397023e02e7b4efc40d24a86a06ff52f644bcfce74"
+          },
+          "candidate": {
+            "mode": "100644",
+            "sha256": "af40e1e8c3f3f8136fdbc5f244fc40bb792c0d631e993ece0016ae78951827dd"
+          },
+          "reviewedAuthDelta": true
+        },
+        {
+          "path": "src/lib/knowledge-center/assistant-http.ts",
+          "baseline": {
+            "mode": "100644",
+            "sha256": "4b40d2cca87b8dd9da2f0019415acbb6900a9460ef3309da47d11e5a7ea53cd5"
+          },
+          "candidate": {
+            "mode": "100644",
+            "sha256": "232485177bd094283da1ec16e459c28fd3425dbd8237568232120d45a2cc0048"
+          },
+          "reviewedAuthDelta": true
+        },
+        {
+          "path": "src/lib/knowledge-center/qa-machine-auth.ts",
+          "baseline": null,
+          "candidate": {
+            "mode": "100644",
+            "sha256": "98c076805a89c7b692c41ce84a2fedfbe2f03bae0bfc73276e2cfd206a65d4e5"
+          },
+          "reviewedAuthDelta": true
+        }
+      ],
+      "unexpectedRuntimeChanges": [],
+      "productionMachineVerifierUnchanged": true,
+      "note": "This is a source comparison, not a rerun or extension of the original 18/18 hosted result. New machine authentication needs separate positive/negative evidence."
+    },
+    "allBlockedOutboundBrowserServerAndProviderErrorCollectionsEmpty": true,
+    "doesNotClaim18ScenarioRerun": true,
+    "expectedNormalQueryUsageAuditWrites": 2,
+    "normalLoginMfaSessionAuditWritesAlsoOccur": true
+  },
+  "genuineQaMachine": {
+    "status": "PASS",
+    "receipt": "qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json",
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "phases": [
+      "baseline",
+      "voice-off",
+      "bindings-on",
+      "principal-disabled",
+      "final-revoked"
+    ],
+    "actualApplicationRequests": 40,
+    "expectedPublishedV1Retrievals": 5,
+    "expectedApplicationDenials": 35,
+    "freshDistinctCustomJtiHashes": 20,
+    "blankRuntimeKeys": 15,
+    "expectedRawFailPhasesRetained": [
+      "voice-off",
+      "principal-disabled",
+      "final-revoked"
+    ],
+    "nativeSameTenantSavedBindings": true,
+    "defaultOrWrongAudienceNotAccepted": true,
+    "platformProtectionHtmlNotAcceptedAsAppDenial": true,
+    "nativeFinalRevocationAndBothBindingsRevoked": true,
+    "productionOnlyAuthenticatorPositive": "NOT TESTED",
+    "callerJwtDeploymentOrBranchClaimAssumed": false,
+    "blankRuntimeKeyScope": "Exactly15 inventoried project Preview application keys; excludes provider-managed system variables.",
+    "providerManagedSystemEnvironmentFullyNeutralized": false,
+    "fixtureReadsOrForwardsProviderAutomationCredential": false
+  },
+  "database": {
+    "localMigrationAndRollbackCases": 20,
+    "localStatus": "PASS",
+    "neonBootstrap": "PASS",
+    "ledgerRows": 60,
+    "sourceMigrationChecksums": 13,
+    "forcedRlsTables": 94,
+    "databaseOnlyRecovery": "PASS",
+    "fullDatabaseAndPrivateFiles": {
+      "status": "PASS",
+      "scope": "Synthetic same-project Neon COW database recovery plus exhaustive private files in a separately bound private Blob store",
+      "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+      "resultSha256": "7f956ff4fccba08c129feb2d69d02fb9164c72ba6d9c51bbd93b9cf3b22f6f63",
+      "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+      "completedAtUtc": "2026-10-20T09:03:31.101Z",
+      "finalCompletionElapsedMs": 347199,
+      "singleUninterruptedRun": false,
+      "elapsedIsTotalRecoveryRto": false,
+      "catalogCategories": 20,
+      "databaseMetadataAndGlobalRoleSettingsIncluded": true,
+      "dataTables": 167,
+      "dataRows": 793,
+      "canonicalLedgerRows": 60,
+      "strictSourceAndRestoredCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+      "workingCombinedSha256": "74c8eea535435d1333aa173470b6977d408d4affbc7d63a34c91aca651acf4d1",
+      "originalNormalWorkingTaskCommits": 1,
+      "additionalWorkingCommitsDuringCompletion": 0,
+      "ignoredCategories": 0,
+      "aclNormalization": false,
+      "privateFiles": 17,
+      "privateBytes": 41950560,
+      "existingVerifiedFilesRetained": 8,
+      "missingFilesCreatedExactlyOnce": 9,
+      "allFileSizesAndSha256Match": true,
+      "allAnonymousFileReadsStatus": 403,
+      "historicalVersionsIncluded": true,
+      "sourceAndTargetPrivateInventoryExhaustive": true,
+      "overwritesOrDeletes": 0,
+      "actualRestoredApplicationChecks": {
+        "status": "PASS",
+        "count": 5,
+        "mode": "Actual candidate repository/route code in process, restored DB, normal browser cookies and real private target store",
+        "authenticatedSessionVerified": true,
+        "runtimeRole": "novalure_app",
+        "runtimeIsOwnerSuperuserOrBypassRls": false,
+        "secondRestoredHostedDeploymentVerified": false,
+        "intentionalRestoredFunctionalWritesOnlyAfterStrictInitialEquality": true
+      },
+      "sourceDatabaseAndFilesUnchanged": true,
+      "allFourPoolsClosed": true,
+      "allThreeSourceWorkingRestoredEndpointsDisabledIdleAtClosure": true,
+      "branchCount": 9,
+      "branchCap": 10,
+      "newBranchesDuringFinalCompletion": 0,
+      "checkpointBranch": "br-broad-mouse-baohb06c",
+      "workingBranch": "br-little-lake-bagp4n0i",
+      "restoredBranch": "br-nameless-sun-bazc0qdt",
+      "parentLsn": "0/32A4C10",
+      "nativePgDumpRestoreProven": false,
+      "crossProjectDisasterRecoveryProven": false,
+      "productionVersionParityProven": false,
+      "productionChanges": 0,
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+        "sha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3"
+      },
+      "lifecycleReceipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+        "sha256": "b4d18f9451a278ed5d503cbebc1c9f180badadf2c45116799f03f8967dc8eff0"
+      },
+      "rootReviewReceipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+        "sha256": "ad32043480127ab81aa83fe519cb3a08d1d81e56a230ede556b6dc9e1b9dc036"
+      },
+      "historicalFailuresPreserved": {
+        "firstCaptureTextUuid": {
+          "status": "FAIL",
+          "sqlstate": "42883",
+          "archiveBytes": 0,
+          "databaseOrStorageWrites": 0,
+          "newBranches": 0,
+          "correctedInTooling": "5f7bed6578d8c29631745f6627bbec1bf605f3c8"
+        },
+        "firstR2WebSocketProcessAbort": {
+          "status": "FAIL",
+          "attempt": "R2",
+          "observedProcessAbortAtUtc": "2026-10-20T08:22:00Z",
+          "error": "Unhandled Neon WebSocket: Connection terminated unexpectedly",
+          "actualRootClassification": "FAIL; restored database equality, private file copy and application verification did not complete",
+          "rawResultStatus": "RUNNING_STALE_AFTER_PROCESS_CRASH",
+          "rawResultSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+          "rawArtifactMustNeverBeTreatedAsPass": true,
+          "rootCauseProven": false,
+          "precisePoolOrPendingSqlCause": "UNKNOWN",
+          "idleOwnerHeldAcrossMetadataOrBlobPause": "Plausible hypothesis only; unconfirmed",
+          "checkpoint": {
+            "branchId": "br-broad-mouse-baohb06c",
+            "parentLsn": "0/32A4C10"
+          },
+          "working": {
+            "branchId": "br-little-lake-bagp4n0i",
+            "initialFullEqualityPassed": true,
+            "normalRuntimeTaskRowsCommitted": 1
+          },
+          "restored": {
+            "branchId": "br-nameless-sun-bazc0qdt",
+            "created": true,
+            "completeDatabaseEquality": "NOT TESTED",
+            "privateFilesCopiedComplete": 0,
+            "applicationChecksCompleted": false
+          },
+          "cleanup": {
+            "status": "PASS",
+            "verifiedAtUtc": "2026-10-20T08:23:11Z",
+            "sourceWorkingAndRestoredEndpointsDisabledAndIdle": true,
+            "sourceBranchId": "br-sweet-surf-ba6iahut",
+            "workingBranchId": "br-little-lake-bagp4n0i",
+            "restoredBranchId": "br-nameless-sun-bazc0qdt"
+          },
+          "targetStorageReadback": {
+            "verifiedAtUtc": "2026-10-20T08:25:17Z",
+            "files": 0,
+            "bytes": 0
+          },
+          "deletesOrBranchResetsOrRetriesPerformed": false,
+          "currentOperationActive": false,
+          "guardedSameBranchContinuation": "Historical state at first R2 failure; subsequently completed on the same branches with separately preserved receipts."
+        },
+        "firstSameBranchFileRead": {
+          "status": "FAIL",
+          "elapsedMs": 445876,
+          "receipt": {
+            "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+            "sha256": "0d4a5d395208968bd17b98a2311674b7531a4e27742df82aed504657ae1e8e8e"
+          },
+          "resultSha256": "347f2c212bdd46cce47b8dc6ff59dbdc055d2b1a5c2c13643d7058735e110d3f",
+          "strictDatabaseEqualityPassed": true,
+          "eighthObjectImmediateSdkBodyBytes": 0,
+          "expectedEighthObjectBytes": 10485760,
+          "rootCauseIsDatabaseTransportProven": false
+        },
+        "partialTargetReconciliation": {
+          "status": "PASS",
+          "receipt": {
+            "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+            "sha256": "5daaad8c4e086de6080a6a15b3c84a0758dfe87ac93492803768741b34259a20"
+          },
+          "resultSha256": "3bd2ca63d2f443ab44e8912fece59c149fe4df8f1dc828b6dbb693fa4e85da18",
+          "filesVerifiedWithShaAnd403": 8,
+          "missingFiles": 9,
+          "unexpectedFiles": 0
+        },
+        "originalProviderDefaultGrantMismatchAndBothTemplateFailuresRemainPreserved": true
+      }
+    },
+    "sourceAvailability": {
+      "status": "PASS",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+        "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be"
+      },
+      "sourceOnlyEnableSeparateAfterFullRecoveryClosure": true,
+      "normalExistingCookiesNoLoginOrSessionMint": true,
+      "actualReadonlySourceApplicationChecks": 5,
+      "httpProtectionChecks": 3,
+      "sourceWrites": 0,
+      "sourceProviderState": "active; disabled=false",
+      "workingAndRestoredProviderState": "disabled=true; idle",
+      "providerReadbackAtUtc": "2026-10-20T09:06:04.574Z",
+      "sameApplicationRevisionDeploymentAndOrigin": true,
+      "secondHostedSuiteOrNewDeployment": false,
+      "productionChanges": 0
+    }
+  },
+  "security": {
+    "status": "BLOCKED",
+    "incident": "qa/package4-hosted-2026-10-20/credential-output-incident.json",
+    "historicalCredentialToolOutputOccurred": true,
+    "credentialValueIncludedInThisReport": false,
+    "publicGitOrReceiptCredentialCopyObserved": false,
+    "rotationAuthorizedNow": true,
+    "projectWideProductionImpactPossible": true,
+    "requiredRemediation": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+    "codeReviewOpenFindings": 0,
+    "trustedAppAttestationClaimed": false,
+    "allNoSecretOutputClaimAllowed": false,
+    "consumerInventory": {
+      "status": "STATIC_REFERENCE_INVENTORY_COMPLETE_CONSUMER_CENSUS_INCOMPLETE",
+      "sourceInventoryFile": "package4-evelyn-credential-consumer-inventory.json",
+      "sourceInventorySha256": "dcf0b378cd10ec02c697f5bc00956a7e0cecbfc1b1fbd9d801e4fd33d5b323aa",
+      "independentReviewOpenFindings": 0,
+      "uniqueSourceVariants": 13,
+      "conditionalTransports": 5,
+      "exactEvelynProductionRevision": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+      "localEvelynHeadUnchanged": "14aecea14e3304bfc187480cd1158febab6ad2b9",
+      "exactProductionObjectFetchedOnly": true,
+      "allRecordedVariantAndWorkflowHashesVerifiedAgainstGit": true,
+      "threeNameDirectRuntimeAndCiReferences": 0,
+      "configuredConsumerCount": "UNKNOWN",
+      "absenceOfExternalOrIndirectConsumersProven": false,
+      "secretValuesQueriedOrIncluded": false,
+      "productionRotationAuthorizedAtHistoricalInventory": false,
+      "historicalInventoryActionsOnly": true,
+      "productionHttpProbesPerformedByHistoricalInventory": false,
+      "requiredBeforeOldRetirement": "Actual configured/private/external consumer census and owners, validated cutover and a new explicit retirement decision; user currently requires old credential active."
+    },
+    "rotationAuthorizationScope": "Only completed two Evelyn credential writes and three fixed bounded GETs; not CRM release or old-key revocation",
+    "oldCredentialRetainedByExplicitUserDecision": true,
+    "oldRevocationAuthorized": false,
+    "currentRotationProgress": {
+      "status": "BLOCKED",
+      "phase": "REPLACEMENT_VALIDATED_OLD_EXPOSED_CREDENTIAL_RETAINED_BY_USER",
+      "recordedAtUtc": "2026-10-20T09:49:25.075616Z",
+      "scope": "Explicit user-authorized Evelyn project-wide automation credential rotation only; no CRM Production release authorization",
+      "userDecision": "Alten Schlüssel vorerst aktiv lassen",
+      "replacementCreated": true,
+      "replacementSelectedForFutureBuilds": true,
+      "replacementPlatformAccessValidated": true,
+      "providerWrites": 2,
+      "providerWriteOperations": [
+        "GENERATE_ONE_REPLACEMENT",
+        "SELECT_REPLACEMENT_FOR_FUTURE_BUILDS"
+      ],
+      "productionHttpRequests": 3,
+      "requestResults": [
+        {
+          "ordinal": 1,
+          "httpStatus": 302,
+          "status": "FAIL",
+          "classification": "Initial classifier omitted legitimate Vercel SSO redirect; immutable original failure retained"
+        },
+        {
+          "ordinal": 2,
+          "httpStatus": 302,
+          "status": "PASS",
+          "classification": "Exact Vercel SSO protection denial baseline; redirect not followed"
+        },
+        {
+          "ordinal": 3,
+          "httpStatus": 403,
+          "status": "PASS",
+          "classification": "Replacement reached exact JSON application denial PRODUCTION_ACCESS_DENIED with no-store; no successful app authentication/health claim"
+        }
+      ],
+      "httpScope": "Exactly fixed Evelyn Production immutable /api/health, no app Bearer/Cookie, no redirects, no retries; runtime/access metadata logging possible",
+      "oldCredentialActive": true,
+      "oldCredentialRevoked": false,
+      "oldRevocationAuthorized": false,
+      "revocationHelperExecuted": false,
+      "revocationAuthorizationFileCreated": false,
+      "currentNativeCredentialMapKeys": 2,
+      "replacementIsFutureEnvironmentDefault": true,
+      "oldIsFutureEnvironmentDefault": false,
+      "preRotationOneKeyBaseline": "Historical baseline only; current native map has exactly old and replacement keys",
+      "configuredConsumerCount": "UNKNOWN",
+      "consumerCutoverProven": false,
+      "consumerAbsenceProven": false,
+      "immutableDeploymentEnvironmentCopiesUpdated": false,
+      "productionDeploymentUnchanged": true,
+      "protectionPolicyUnchanged": true,
+      "projectEnvironmentMetadataRows": 37,
+      "projectEnvironmentMetadataUnchanged": true,
+      "unrelatedProjectMetadataUnchanged": true,
+      "crmDeploymentDatabaseDomainMfaCronMutations": 0,
+      "nextStep": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+      "securityPassAllowed": false,
+      "credentialValuesIncluded": false,
+      "evidence": {
+        "credential-rotation-progress": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-progress.json",
+          "sha256": "90387e28466e4837811d41d4010ee0bcccee02252b50b9f8ebfb31a3d8ec1004"
+        },
+        "credential-retention-decision": {
+          "path": "qa/package4-hosted-2026-10-20/credential-retention-decision.json",
+          "sha256": "ce64bf5fed2c2bea9ff50802b1b72aac0bc6422207abd535313c5b9eb5ed4bc1"
+        },
+        "independent-rotation-native-state": {
+          "path": "qa/package4-hosted-2026-10-20/independent-rotation-native-state.json",
+          "sha256": "0da4b9faa879d641d20274eec79277bce9b46697efcba0443f6edb4a64658140"
+        },
+        "independent-rotation-helper-review": {
+          "path": "qa/package4-hosted-2026-10-20/independent-rotation-helper-review.json",
+          "sha256": "183da6f522d33af33c32f966ad9a4b657aeb6215fb7b258da0e2f38e2dfae40a"
+        },
+        "rotation-configured-consumer-selectors": {
+          "path": "qa/package4-hosted-2026-10-20/rotation-configured-consumer-selectors.json",
+          "sha256": "e525db421ec49361af66f75e982c33f08771ccb47779b54e88eaf974fc3e461f"
+        },
+        "credential-rotation-validation-prerequisite": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-validation-prerequisite.json",
+          "sha256": "aa3f31443358c714295676b2c7fcfc34fe21d543cae7d6fd30659623eed23da7"
+        },
+        "credential-rotation-baseline-redirect-failure": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+          "sha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa"
+        },
+        "credential-rotation-preflight": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-preflight.json",
+          "sha256": "24587c826fb459f3dba1c9f2a1c5a469551ccdb0154c5bdcd33d316408f1e09c"
+        }
+      }
+    }
+  },
+  "cleanup": {
+    "status": "PASS",
+    "receipt": "qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json",
+    "nativePrincipalState": "REVOKED",
+    "bothSavedBindingsDisabledAndRevoked": true,
+    "finalGenuineAppDenials": 8,
+    "temporaryPreviewTrustPairRemoved": true,
+    "productionAndOtherTrustPairsUnchanged": true,
+    "newBranchKeysRemoved": 2,
+    "branchEntriesBefore": 173,
+    "branchEntriesAfter": 171,
+    "existingMetadataRowsPreserved": 405,
+    "productionEntriesUnchanged": 74,
+    "globalPreviewEntriesUnchanged": 65,
+    "freshDeploymentScopedAccessCredentialRevoked": true,
+    "projectWideExposedCredentialRotationStillOpen": true,
+    "existingDeploymentEnvironmentImmutable": true,
+    "noDeploymentOrBuildForCleanup": true,
+    "partialApplyPatchResponseFailurePreserved": true,
+    "acceptedApplyReconciledByGetOnlyNoRetry": true,
+    "callerDeploymentDeletion": {
+      "status": "PASS",
+      "receipt": "qa/package4-hosted-2026-10-20/evelyn-caller-retirement-c291e21.json",
+      "nativeState": "DELETED",
+      "independentAuthenticatedGetStatus": 404,
+      "publicUrlStatus": 404,
+      "productionUnchanged": true,
+      "deleteRetried": false,
+      "initialOverlyStrictPublicStatusAssertionFailurePreserved": true,
+      "permanentImmediateByteErasureClaimed": false
+    }
+  },
+  "historicalFailuresPreserved": [
+    {
+      "kind": "Initial local Sales unavailable Chrome",
+      "resolution": "Same suite passed with installed Chromium as CI; original failure retained."
+    },
+    {
+      "kind": "DesignC48of50 and2additional local harness failures",
+      "receipts": [
+        "qa/package4-integration-2026-10-20/browser-first-design-c.json",
+        "qa/package4-integration-2026-10-20/browser-package4-first.json",
+        "qa/package4-integration-2026-10-20/browser-package4-second.json"
+      ]
+    },
+    {
+      "kind": "HostedBusyUploadAndTargetedProbeFAIL",
+      "receipts": [
+        "qa/package4-hosted-2026-10-20/hosted-attempt1.json",
+        "qa/package4-hosted-2026-10-20/hosted-upload-probe.json"
+      ]
+    },
+    {
+      "kind": "HostedNativeSearchEscapeFAIL15passed",
+      "receipt": "qa/package4-hosted-2026-10-20/hosted-attempt2.json",
+      "resolution": "QA asserted firstEscape clears search while dialog visible, secondEscape closes and restores focus; no App guard change."
+    },
+    {
+      "kind": "SecretScanner2SourceSha256FalsePositives",
+      "receipt": "qa/package4-hosted-2026-10-20/secret-scan-false-positives.json",
+      "separateFromRealOutputIncident": true
+    },
+    {
+      "kind": "OriginalCowFingerprintMismatch",
+      "status": "FAIL",
+      "receipt": "qa/package4-hosted-2026-10-20/neon-cow-original-fail.json",
+      "onlyProviderDefaultGrantRowsDiffered": 9
+    },
+    {
+      "kind": "SqlTemplate2AttemptsProviderWorker55006",
+      "status": "FAIL",
+      "receipts": [
+        "qa/package4-hosted-2026-10-20/neon-template-attempt1-fail.json",
+        "qa/package4-hosted-2026-10-20/neon-template-attempt2-fail.json"
+      ]
+    },
+    {
+      "kind": "AcceptedTrustApplyPartialPatchResponse",
+      "originalStatus": "FAIL",
+      "reconciliation": "GET only; accepted apply not retried; original failure hash preserved in cleanup evidence.",
+      "receipt": "qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json"
+    },
+    {
+      "kind": "FirstFullRecoveryCaptureTextUuidOperator",
+      "status": "FAIL",
+      "sqlstate": "42883",
+      "archiveBytesCompleted": 0,
+      "databaseOrStorageWritePerformed": false,
+      "newBranchesCreated": 0,
+      "finalFullRestoreStatus": "PASS in separate final completion; original capture remains FAIL"
+    },
+    {
+      "kind": "FullRecoveryR2UnhandledNeonWebSocketTermination",
+      "status": "FAIL",
+      "staleRawArtifactStatus": "RUNNING",
+      "rawResultSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+      "baselineCaptureRetainsPass": true,
+      "completedRestoredFileObjects": 0,
+      "all3EndpointsDisabledAndIdleAfterFailure": true,
+      "exactRootCauseProven": false
+    },
+    {
+      "kind": "FirstSameBranchPrivateFileReadEmptyBody",
+      "status": "FAIL",
+      "elapsedMs": 445876,
+      "receipt": "qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+      "partialReconciliationReceipt": "qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+      "strictDatabaseEqualityPassed": true,
+      "eightTargetObjectsVerifiedBeforeCompletion": true,
+      "laterCompletionPreservedEightAndCreatedOnlyNineMissing": true
+    },
+    {
+      "kind": "CredentialRotationInitialSso302Classifier",
+      "status": "FAIL",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+        "sha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa"
+      },
+      "laterNarrowCorrectedBaseline": "PASS at second fixed GET; original FAIL unchanged",
+      "replacementCanary": "Exact app JSON403/no-store; not authenticated HTTP200 health"
+    }
+  ],
+  "blockers": [
+    "Exposed old Evelyn project-wide automation credential remains active by explicit user instruction; replacement is created/selected/validated, actual configured/external consumers remain UNKNOWN, no old-key retirement authorized.",
+    "No CRM Production release authorization or approval request; configured required Vercel check MISSING with branch Git deployments disabled."
+  ],
+  "evidenceRefs": {
+    "ci": "qa/package4-hosted-2026-10-20/ci-c291e21.json",
+    "deployment": "qa/package4-hosted-2026-10-20/deployment-c291e21.json",
+    "compatibility": "qa/package4-hosted-2026-10-20/auth-compatibility-c291e21.json",
+    "machine": "qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json",
+    "native": "qa/package4-hosted-2026-10-20/machine-qa-native-c291e21.json",
+    "callerArtifact": "qa/package4-hosted-2026-10-20/evelyn-caller-artifact-c291e21.json",
+    "callerDeployment": "qa/package4-hosted-2026-10-20/evelyn-caller-deployment-c291e21.json",
+    "cleanup": "qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json",
+    "incident": "qa/package4-hosted-2026-10-20/credential-output-incident.json",
+    "productionReleasePlan": "qa/package4-hosted-2026-10-20/production-release-plan.json",
+    "productionRunnerPlan": "qa/package4-hosted-2026-10-20/production-runner-plan.json",
+    "fullRecovery": "qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+    "fullRecoveryLifecycle": "qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+    "fullRecoveryAppAvailability": "qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+    "callerRetirement": "qa/package4-hosted-2026-10-20/evelyn-caller-retirement-c291e21.json",
+    "toolingCi": "qa/package4-hosted-2026-10-20/ci-5f7bed6.json",
+    "fullRecoveryRootReview": "qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+    "fullRecoveryWebSocketFailure": "qa/package4-hosted-2026-10-20/neon-full-recovery-websocket-failure.json",
+    "fullRecoveryFileReadFailure": "qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+    "fullRecoveryPartialReconciliation": "qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+    "credentialConsumerInventory": "qa/package4-hosted-2026-10-20/evelyn-credential-consumer-inventory.json",
+    "credential_rotation_progress": "qa/package4-hosted-2026-10-20/credential-rotation-progress.json",
+    "credential_retention_decision": "qa/package4-hosted-2026-10-20/credential-retention-decision.json",
+    "independent_rotation_native_state": "qa/package4-hosted-2026-10-20/independent-rotation-native-state.json",
+    "independent_rotation_helper_review": "qa/package4-hosted-2026-10-20/independent-rotation-helper-review.json",
+    "rotation_configured_consumer_selectors": "qa/package4-hosted-2026-10-20/rotation-configured-consumer-selectors.json",
+    "credential_rotation_validation_prerequisite": "qa/package4-hosted-2026-10-20/credential-rotation-validation-prerequisite.json",
+    "credential_rotation_baseline_redirect_failure": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+    "credential_rotation_preflight": "qa/package4-hosted-2026-10-20/credential-rotation-preflight.json",
+    "reportingCi7dd97c8": "qa/package4-hosted-2026-10-20/ci-7dd97c8.json",
+    "rotationEvidenceReview": "qa/package4-hosted-2026-10-20/credential-rotation-evidence-review.json"
+  },
+  "artifacts": [
+    {
+      "file": "audit.txt",
+      "sha256": "ea1f32ffa99510dc0cebe61ef2913fb7ff4d634afdbe1de35adfe0c7496d47b1"
+    },
+    {
+      "file": "browser-design-c.json",
+      "sha256": "933ef335f4e480f22544ba68de09a4a151b64e3ce8a0c28e2e6dd403f205fd65"
+    },
+    {
+      "file": "browser-first-design-c.json",
+      "sha256": "b82c768b76fd70283b6ab0c2ce713058e3097f033054c5cef677d224247a637a"
+    },
+    {
+      "file": "browser-first-run.json",
+      "sha256": "65464ef815f77eaadab9285d5d18d1f70f4d0d36412a772f90573c6ed8776b73"
+    },
+    {
+      "file": "browser-knowledge.json",
+      "sha256": "211a572776b1e4c6b25368eabfbd668611d415f60bc5d2dc51e3b61a11ab7d2e"
+    },
+    {
+      "file": "browser-package4-first.json",
+      "sha256": "ab4417ecc170fce9aab400056f686c88515345d3ab3c02dd01c38fc96076d3f6"
+    },
+    {
+      "file": "browser-package4-second.json",
+      "sha256": "c6b4ef1aca659868a4ed781407bfd28c6b60486968babb01ce85515d1d11d45e"
+    },
+    {
+      "file": "browser-package4.json",
+      "sha256": "99780b18339922f16a99c009f94e6b643dab7b2937c4b3aba21c05870ea5cb8f"
+    },
+    {
+      "file": "browser-package4.txt",
+      "sha256": "79d1450d1ad30b44f1bf73bda7a0f436ac3f1c2706a01d4d8f44b86c47740214"
+    },
+    {
+      "file": "browser-second-run.json",
+      "sha256": "7cb9db8c1bd42499fe5272905f0eaf5d3cf9df816af85832b0677fee05fca3b4"
+    },
+    {
+      "file": "build-final.txt",
+      "sha256": "8e14036f74675b952798ee1ef8d1cd7d15f5e7e482b4f567bc8618b5ef0b16d0"
+    },
+    {
+      "file": "design-c.txt",
+      "sha256": "ef4dbdff2dca4ea9f271ef4a833f3fa7afff617ebf0ae74acc9cea921d4722b0"
+    },
+    {
+      "file": "desktop.png",
+      "sha256": "99db2f035cdaed723efcd482835a4c68eac1b62073b93a3c87fea70cd79b4c70"
+    },
+    {
+      "file": "g08.txt",
+      "sha256": "647529fe48f192c69f1272e074514910f769616aa9845627b16f6e30ba4dbf7e"
+    },
+    {
+      "file": "gateway.txt",
+      "sha256": "53988c3305e1fffdba236940f2a7a1159eb580fc4f5c2e41ceb7cd7ba45ea3fd"
+    },
+    {
+      "file": "git-inputs.json",
+      "sha256": "bb77e9afb721f24daf6c7d2a3ac1766ada7cb35e685da8b28edfb6217f894d65"
+    },
+    {
+      "file": "infrastructure.json",
+      "sha256": "776bebabff4097f9ac48aec0691b690475f1f0a88c658ce51b4100e0cf40817e"
+    },
+    {
+      "file": "integration.txt",
+      "sha256": "3ea01945cb82846ebdec150df22ced9747bb8b551a2abcfbbec82c9631ed5926"
+    },
+    {
+      "file": "knowledge.txt",
+      "sha256": "9543636e1e11aeb04dd36f3284b53c146138cb89961379ee241db1cc5eb6751b"
+    },
+    {
+      "file": "lint.txt",
+      "sha256": "8d64093a7856e856ee5b645a83767520b5d1ddf43dd43a501351a4fa2a747b8a"
+    },
+    {
+      "file": "local-checks.json",
+      "sha256": "baaa49148dea9bd02372f7acc06c71b34a6bccef11dfcf44ab29b86039d69d47"
+    },
+    {
+      "file": "migrations-final.txt",
+      "sha256": "3086324b17d7630fe0199629698d0f58880a53621e72c6eef6f7f9695e75d14c"
+    },
+    {
+      "file": "migrations.json",
+      "sha256": "bb607766f7feb30f109e065360be099422f0b481bda943dd122d1c2c915780c2"
+    },
+    {
+      "file": "mobile.png",
+      "sha256": "9d70a058427018f639fd3974749dfa8639e9b3f1439e1c8ddee2abc877af0c7a"
+    },
+    {
+      "file": "operational-readers.txt",
+      "sha256": "cb15171ffb3511cc73c7c25031d85f63e2ea34e3eee18f60a50ce9399d92085c"
+    },
+    {
+      "file": "package3-final.txt",
+      "sha256": "09219bcd81df4bd1c68ae3388d03ef66e02a8f3efa6f82583f4054151c346dcc"
+    },
+    {
+      "file": "protected-preview.txt",
+      "sha256": "8e6048e41b3280cb8d33e0e01e13a3cebae819045765df264ab6dc263759314d"
+    },
+    {
+      "file": "sales-final.txt",
+      "sha256": "ea6fad83d0830e704de3494611b7227fdea83d10022d67f334e14aa2c564374d"
+    },
+    {
+      "file": "sales.txt",
+      "sha256": "c42d4a17d15b9a9a42a4c525c20032dc1e038edd42de3f90f3cde2a599f164ed"
+    },
+    {
+      "file": "security-final.txt",
+      "sha256": "9db2e07dde78fcdf652911bfce270942c56eb686275452aedd8e455649c01956"
+    },
+    {
+      "file": "source-binding.json",
+      "sha256": "d5936d51ac2e8f9c28384243755bd1ed037a6ccfe9dab6b55b372277453c049d"
+    },
+    {
+      "file": "studio-enquiry-view.txt",
+      "sha256": "7a2093124d594d070c0cf19a2118372390df944de5a6708f83a4433440cb6c48"
+    },
+    {
+      "file": "studio.txt",
+      "sha256": "776ef17d1a6bf7f2ae09c4965a55cc23ffdeb17b02520b6777dd89acd6dd823d"
+    },
+    {
+      "file": "typecheck.txt",
+      "sha256": "78b3395e7b9e5263b968c019a932702e74f3c4174cfe03ce68bcdd0a501bf197"
+    },
+    {
+      "file": "unit.txt",
+      "sha256": "5755eab07d294b713182eb0f128066b994a3cc3f9a70cfdf87c4f54768faf6fc"
+    }
+  ],
+  "productionMutationPerformed": true,
+  "productionApprovalRequested": false,
+  "credentialValueIncludedInThisReport": false,
+  "historicalCredentialOutputOccurred": true,
+  "overallTechnicalCompletionClaimed": false,
+  "overallStatus": "BLOCKIERT",
+  "versionParityLimitation": "Actual QA PG18.6/vector0.8.6 versus Production PG17.11/vector0.8.0; static SQL review is not version parity or a Production restore test.",
+  "qaProofsCompleteWithinStatedScopes": true,
+  "productionMutationScope": "Exactly2 explicitly authorized Evelyn project credential writes; no CRM Production release, DB, domain, MFA or cron mutation",
+  "productionCredentialWrites": 2,
+  "boundedEvelynProductionGetRequests": 3
+}

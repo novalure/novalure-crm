@@ -1,3 +1,13 @@
 *.sql text eol=lf
 migrations/*.sql text eol=lf
 docs/go-live/changed-files-2026-08-11.md whitespace=-blank-at-eof
+# Immutable historical console evidence retains its original hashed bytes.
+# Keep source whitespace checks enabled; these exact logs contain progress CRs.
+docs/qa/knowledge-center-2026-10-19/build.log whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
+docs/qa/knowledge-center-2026-10-19/lint.log whitespace=-blank-at-eof
+qa/knowledge-center-completion-2026-10-19/build.log whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
+qa/knowledge-center-completion-2026-10-19/lint.log whitespace=-blank-at-eof
+qa/knowledge-center-completion-2026-10-19/typecheck.log whitespace=-blank-at-eof
+qa/knowledge-center-package3-2026-10-19/build.txt whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
+qa/knowledge-center-package3-2026-10-19/lint.txt whitespace=-blank-at-eof
+qa/knowledge-center-package3-2026-10-19/typecheck.txt whitespace=-blank-at-eof

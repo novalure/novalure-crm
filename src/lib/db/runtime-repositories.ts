@@ -6,6 +6,9 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secret-box";
 import { hasProductCapability } from "@/lib/product-model";
+import { retrieveKnowledgeForSavedChannel } from "@/lib/knowledge-center/integrations";
+import type { KnowledgeChannel } from "@/lib/knowledge-center/types";
+import { assertCrmUuid, assertProjectGrant, CrmCommandError, withCrmRead, type TenantTransactionOptions } from "@/lib/crm-command";
 
 type IdRow = { id: string };
 
@@ -103,6 +106,7 @@ function toBotEvaluationRun(row: {
 
   return {
     botId: row.botId ?? undefined,
+    evaluationChannel: typeof result.evaluationChannel === "string" ? result.evaluationChannel : undefined,
     cases,
     createdAt: toIso(row.createdAt),
     hallucinationFailures: Number(row.hallucinationFailures ?? 0),
@@ -860,220 +864,34 @@ async function resolveSubmissionProjectId(workspaceId: string, projectId: string
   return fallback?.id ?? null;
 }
 
-export async function insertKnowledgeSourceWithChunks(input: {
-  session: AppSession;
-  projectId?: string | null;
-  title: string;
-  sourceType: string;
-  location?: string;
-  status: string;
-  chunks: Array<{
-    chunkIndex: number;
-    content: string;
-    tokenCount: number;
-    citationTitle: string;
-    citationUrl?: string;
-    embedding?: number[];
-    embeddingModel?: string;
-  }>;
-  metadata?: unknown;
-}) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) {
-    return null;
-  }
+const runtimeKnowledgeChannels = new Set<string>(["webchat", "whatsapp", "instagram", "messenger", "email", "internal"]);
 
-  const params: unknown[] = [input.session.workspaceId];
-  const projectSql = addUuidParam(params, input.projectId);
-  const titleSql = addParam(params, input.title);
-  const sourceTypeSql = addParam(params, input.sourceType);
-  const statusSql = addParam(params, input.status);
-  const countSql = addParam(params, input.chunks.length);
-  const locationSql = addParam(params, input.location ?? null);
-  const metadataSql = addParam(params, JSON.stringify(input.metadata ?? {}));
-
-  const source = await queryOne<IdRow>(
-    `
-      insert into knowledge_sources (
-        workspace_id, project_id, name, source_type, status, item_count, location, metadata
-      )
-      values ($1, ${projectSql}, ${titleSql}, ${sourceTypeSql}, ${statusSql}, ${countSql}, ${locationSql}, ${metadataSql}::jsonb)
-      returning id
-    `,
-    params,
-  );
-
-  if (!source) return null;
-
-  for (const chunk of input.chunks) {
-    const chunkParams: unknown[] = [source.id];
-    const indexSql = addParam(chunkParams, chunk.chunkIndex);
-    const contentSql = addParam(chunkParams, chunk.content);
-    const titleSql = addParam(chunkParams, chunk.citationTitle);
-    const urlSql = addParam(chunkParams, chunk.citationUrl ?? null);
-    const embeddingSql = chunk.embedding?.length ? `${addParam(chunkParams, `[${chunk.embedding.join(",")}]`)}::vector` : "null";
-    const tokenSql = addParam(chunkParams, chunk.tokenCount);
-    const modelSql = addParam(chunkParams, chunk.embeddingModel ?? null);
-    const metadataSql = addParam(
-      chunkParams,
-      JSON.stringify({ embeddingReady: Boolean(chunk.embedding), embedding: chunk.embedding ? "stored" : null }),
-    );
-
-    await queryOne(
-      `
-        insert into knowledge_chunks (
-          source_id, chunk_index, content, citation_title, citation_url, embedding, token_count, embedding_model, metadata
-        )
-        values ($1, ${indexSql}, ${contentSql}, ${titleSql}, ${urlSql}, ${embeddingSql}, ${tokenSql}, ${modelSql}, ${metadataSql}::jsonb)
-        returning id
-      `,
-      chunkParams,
-    );
-  }
-
-  await writeAuditLog({
-    session: input.session,
-    action: "knowledge.source.imported",
-    entityType: "knowledge_source",
-    entityId: source.id,
-    after: { chunks: input.chunks.length, status: input.status },
-  });
-
-  return source.id;
-}
-
-export async function listKnowledgeSources(input: {
-  session: AppSession;
-  limit?: number;
-}) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) {
-    return [];
-  }
-
-  return queryRows<{
-    id: string;
-    projectId: string | null;
-    title: string;
-    sourceType: string;
-    status: string;
-    location: string | null;
-    itemCount: number;
-    chunkCount: number;
-    embeddedChunkCount: number;
-    createdAt: string | Date;
-    updatedAt: string | Date;
-  }>(
-    `
-      select
-        ks.id,
-        ks.project_id as "projectId",
-        ks.name as title,
-        ks.source_type as "sourceType",
-        ks.status,
-        ks.location,
-        ks.item_count as "itemCount",
-        count(kc.id)::int as "chunkCount",
-        count(kc.embedding)::int as "embeddedChunkCount",
-        ks.created_at as "createdAt",
-        ks.updated_at as "updatedAt"
-      from knowledge_sources ks
-      left join knowledge_chunks kc on kc.source_id = ks.id
-      where ks.workspace_id = $1
-      group by ks.id
-      order by ks.updated_at desc, ks.created_at desc
-      limit $2
-    `,
-    [input.session.workspaceId, input.limit ?? 50],
-  );
-}
-
+/** Runtime retrieval is always bound to a persisted bot and its explicit channel assignment. */
 export async function searchPersistedKnowledge(input: {
   session: AppSession;
   query: string;
-  embedding?: number[];
+  botId: string | null;
+  channel: string | null;
   limit?: number;
-  projectId?: string | null;
 }) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) {
-    return [];
-  }
+  if (
+    !canPersist() || !input.session.authenticated || input.session.source === "demo" ||
+    !isUuid(input.session.workspaceId) || !isUuid(input.session.userId) ||
+    !isUuid(input.botId) || !input.channel || !runtimeKnowledgeChannels.has(input.channel)
+  ) return [];
 
-  const projectId = isUuid(input.projectId) ? input.projectId : null;
-
-  if (input.embedding?.length) {
-    const vectorResults = await queryRows<{
-      chunkId: string;
-      sourceId: string;
-      title: string;
-      excerpt: string;
-      content: string;
-      citationUrl: string | null;
-      embeddingModel: string | null;
-      score: number;
-    }>(
-      `
-        select
-          kc.id as "chunkId",
-          ks.id as "sourceId",
-          kc.citation_title as title,
-          left(kc.content, 280) as excerpt,
-          kc.content,
-          kc.citation_url as "citationUrl",
-          kc.embedding_model as "embeddingModel",
-          greatest(0, 1 - (kc.embedding <=> $2::vector)) as score
-        from knowledge_chunks kc
-        join knowledge_sources ks on ks.id = kc.source_id
-        where ks.workspace_id = $1
-          and kc.embedding is not null
-          and ($4::uuid is null or ks.project_id is null or ks.project_id = $4::uuid)
-          and (
-            ks.status in ('Vector bereit', 'vector_ready', 'approved', 'synced')
-            or lower(coalesce(ks.metadata->>'approval', '')) in ('approved', 'freigegeben')
-          )
-        order by kc.embedding <=> $2::vector
-        limit $3
-      `,
-      [input.session.workspaceId, `[${input.embedding.join(",")}]`, input.limit ?? 5, projectId],
-    );
-
-    if (vectorResults.length) {
-      return vectorResults;
-    }
-  }
-
-  return queryRows<{
-    chunkId: string;
-    sourceId: string;
-    title: string;
-    excerpt: string;
-    content: string;
-    citationUrl: string | null;
-    embeddingModel: string | null;
-    score: number;
-  }>(
-    `
-      select
-        kc.id as "chunkId",
-        ks.id as "sourceId",
-        kc.citation_title as title,
-        left(kc.content, 280) as excerpt,
-        kc.content,
-        kc.citation_url as "citationUrl",
-        kc.embedding_model as "embeddingModel",
-        ts_rank_cd(to_tsvector('simple', kc.content || ' ' || kc.citation_title), plainto_tsquery('simple', $2)) as score
-      from knowledge_chunks kc
-      join knowledge_sources ks on ks.id = kc.source_id
-      where ks.workspace_id = $1
-        and ($4::uuid is null or ks.project_id is null or ks.project_id = $4::uuid)
-        and (
-          ks.status in ('Vector bereit', 'vector_ready', 'approved', 'synced')
-          or lower(coalesce(ks.metadata->>'approval', '')) in ('approved', 'freigegeben')
-        )
-        and to_tsvector('simple', kc.content || ' ' || kc.citation_title) @@ plainto_tsquery('simple', $2)
-      order by score desc
-      limit $3
-    `,
-    [input.session.workspaceId, input.query, input.limit ?? 5, projectId],
-  );
+  const result = await retrieveKnowledgeForSavedChannel(input.session, {
+    query: input.query,
+    assistantId: input.botId,
+    channel: input.channel as KnowledgeChannel,
+    maxResults: input.limit,
+  });
+  return result.matches.map((match) => ({
+    ...match,
+    // This compatibility shape contains only the engine's approved-version excerpt.
+    content: match.excerpt,
+    embeddingModel: null,
+  }));
 }
 
 export async function insertBotEvaluationRun(input: {
@@ -1187,46 +1005,102 @@ export async function listBotEvaluationRuns(input: {
 }): Promise<BotEvaluationRun[]> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return [];
 
-  const botId = isUuid(input.botId) ? input.botId : null;
-  const projectId = isUuid(input.projectId) ? input.projectId : null;
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const botId = isUuid(input.botId) ? input.botId : null;
+    const projectId = isUuid(input.projectId) ? input.projectId : null;
 
-  const rows = await queryRows<{
-    botId: string | null;
-    createdAt: string | Date;
-    hallucinationFailures: number;
-    handoffFailures: number;
-    id: string;
-    projectId: string | null;
-    redTeamFailures: number;
-    result: unknown;
-    score: number;
-    sourceCoverage: number | string;
-    workspaceId: string;
-  }>(
-    `
-      select
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        bot_id as "botId",
-        score,
-        source_coverage as "sourceCoverage",
-        hallucination_failures as "hallucinationFailures",
-        handoff_failures as "handoffFailures",
-        red_team_failures as "redTeamFailures",
-        result,
-        created_at as "createdAt"
-      from bot_evaluation_runs
-      where workspace_id = $1
-        and ($2::uuid is null or bot_id = $2::uuid)
-        and ($3::uuid is null or project_id = $3::uuid)
-      order by created_at desc
-      limit $4
-    `,
-    [input.session.workspaceId, botId, projectId, input.limit ?? 20],
-  );
+    const rows = await tx.query<{
+      botId: string | null;
+      createdAt: string | Date;
+      hallucinationFailures: number;
+      handoffFailures: number;
+      id: string;
+      projectId: string | null;
+      redTeamFailures: number;
+      result: unknown;
+      score: number;
+      sourceCoverage: number | string;
+      workspaceId: string;
+    }>(
+      `
+        select
+          id,
+          workspace_id as "workspaceId",
+          project_id as "projectId",
+          bot_id as "botId",
+          score,
+          source_coverage as "sourceCoverage",
+          hallucination_failures as "hallucinationFailures",
+          handoff_failures as "handoffFailures",
+          red_team_failures as "redTeamFailures",
+          result,
+          created_at as "createdAt"
+        from bot_evaluation_runs
+        where workspace_id = $1
+          and ($2::uuid is null or bot_id = $2::uuid)
+          and ($3::uuid is null or project_id = $3::uuid)
+          and (project_id is null or crm_project_access(workspace_id,project_id,false))
+          and (bot_id is null or exists(select 1 from bots b where b.id=bot_evaluation_runs.bot_id
+            and b.workspace_id=bot_evaluation_runs.workspace_id
+            and b.project_id is not distinct from bot_evaluation_runs.project_id))
+        order by created_at desc
+        limit $4
+      `,
+      [fresh.workspaceId, botId, projectId, input.limit ?? 20],
+    );
 
-  return rows.map(toBotEvaluationRun);
+    return rows.map(toBotEvaluationRun);
+  });
+}
+
+const botConversationChannels = ["webchat", "whatsapp", "instagram", "messenger", "email", "internal", "voice", "telephone", "api", "admin", "test"];
+
+type BotConversationContext = {
+  botId: string;
+  projectId: string | null;
+  channel: string;
+  conversationId: string | null;
+};
+
+/** Resolve saved bot scope and verify history ownership before any runtime effects. */
+export async function resolveBotConversationContext(input: {
+  session: AppSession;
+  botId?: string | null;
+  projectId?: string | null;
+  channel?: string | null;
+  conversationId?: string | null;
+  deriveFromConversation?: boolean;
+}, options: TenantTransactionOptions = {}): Promise<BotConversationContext> {
+  if (!input.session.authenticated || input.session.source === "demo" || !isUuid(input.session.userId) || !isUuid(input.session.workspaceId)) {
+    throw new CrmCommandError("UNAUTHENTICATED", "A persisted workspace identity is required", 401);
+  }
+  if (input.conversationId) assertCrmUuid(input.conversationId, "conversationId");
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const existing = input.conversationId
+      ? await tx.queryOne<{ id: string; botId: string | null; projectId: string | null; channel: string | null }>(
+          `select id,bot_id as "botId",project_id as "projectId",metadata->>'channel' as channel
+           from bot_conversations where id=$1::uuid and workspace_id=$2::uuid for share`,
+          [input.conversationId, fresh.workspaceId],
+        )
+      : null;
+    if (input.conversationId && !existing) throw new CrmCommandError("NOT_FOUND", "Conversation is unavailable", 404);
+    const botId = input.botId ?? (input.deriveFromConversation ? existing?.botId : null);
+    const channel = input.channel ?? (input.deriveFromConversation ? existing?.channel : null);
+    if (!isUuid(botId) || !channel || !botConversationChannels.includes(channel)) {
+      throw new CrmCommandError("BOT_CONTEXT_REQUIRED", "A saved bot and explicit channel are required", 400);
+    }
+    const bot = await tx.queryOne<{ id: string; projectId: string | null }>(
+      `select id,project_id as "projectId" from bots where id=$1::uuid and workspace_id=$2::uuid`,
+      [botId, fresh.workspaceId],
+    );
+    if (!bot) throw new CrmCommandError("NOT_FOUND", "Bot is unavailable", 404);
+    if (bot.projectId) await assertProjectGrant(tx, fresh, bot.projectId);
+    if ((input.projectId != null && input.projectId !== bot.projectId) ||
+        (existing && (existing.botId !== bot.id || existing.projectId !== bot.projectId || existing.channel !== channel))) {
+      throw new CrmCommandError("BOT_CONTEXT_MISMATCH", "Conversation does not match the selected bot context", 403);
+    }
+    return { botId: bot.id, projectId: bot.projectId, channel, conversationId: existing?.id ?? null };
+  }, options);
 }
 
 export async function getOrCreateBotConversation(input: {
@@ -1234,6 +1108,7 @@ export async function getOrCreateBotConversation(input: {
   conversationId?: string | null;
   projectId?: string | null;
   botId?: string | null;
+  channel: string;
   contactId?: string | null;
   leadId?: string | null;
   title: string;
@@ -1241,53 +1116,26 @@ export async function getOrCreateBotConversation(input: {
   model: string;
   metadata?: unknown;
 }) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
-
-  if (isUuid(input.conversationId)) {
-    const existing = await queryOne<IdRow>(
-      `
-        select id
-        from bot_conversations
-        where id = $1 and workspace_id = $2
-        limit 1
-      `,
-      [input.conversationId, input.session.workspaceId],
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const context = await resolveBotConversationContext(input);
+    if (context.conversationId) return context.conversationId;
+    const row = await tx.queryOne<IdRow>(
+      `insert into bot_conversations(workspace_id,project_id,bot_id,contact_id,lead_id,title,language,model,metadata)
+       values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8,$9::jsonb) returning id`,
+      [fresh.workspaceId, context.projectId, context.botId, isUuid(input.contactId) ? input.contactId : null,
+        isUuid(input.leadId) ? input.leadId : null, input.title, input.language, input.model,
+        JSON.stringify({ ...asPlainObject(input.metadata), channel: context.channel })],
     );
-
-    if (existing) return existing.id;
-  }
-
-  const params: unknown[] = [input.session.workspaceId];
-  const projectSql = addUuidParam(params, input.projectId);
-  const botSql = addUuidParam(params, input.botId);
-  const contactSql = addUuidParam(params, input.contactId);
-  const leadSql = addUuidParam(params, input.leadId);
-  const titleSql = addParam(params, input.title);
-  const languageSql = addParam(params, input.language);
-  const modelSql = addParam(params, input.model);
-  const metadataSql = addParam(params, JSON.stringify(input.metadata ?? {}));
-
-  const row = await queryOne<IdRow>(
-    `
-      insert into bot_conversations (
-        workspace_id, project_id, bot_id, contact_id, lead_id, title, language, model, metadata
-      )
-      values ($1, ${projectSql}, ${botSql}, ${contactSql}, ${leadSql}, ${titleSql}, ${languageSql}, ${modelSql}, ${metadataSql}::jsonb)
-      returning id
-    `,
-    params,
-  );
-
-  return row?.id ?? null;
+    return row?.id ?? null;
+  });
 }
 
 export async function listBotConversations(input: {
   session: AppSession;
   limit?: number;
 }) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) return [];
-
-  return queryRows<{
+  if (!canPersist()) return [];
+  return withCrmRead(input.session, async (tx, fresh) => tx.query<{
     id: string;
     title: string;
     status: string;
@@ -1322,6 +1170,7 @@ export async function listBotConversations(input: {
         c.created_at as "createdAt",
         c.updated_at as "updatedAt"
       from bot_conversations c
+      join bots b on b.id=c.bot_id and b.workspace_id=c.workspace_id
       left join lateral (
         select role, content, created_at, metadata
         from bot_messages
@@ -1331,11 +1180,14 @@ export async function listBotConversations(input: {
         limit 1
       ) lm on true
       where c.workspace_id = $1
+        and c.project_id is not distinct from b.project_id
+        and (c.project_id is null or crm_project_access(c.workspace_id,c.project_id,false))
+        and c.metadata->>'channel'=any($3::text[])
       order by c.updated_at desc
       limit $2
     `,
-    [input.session.workspaceId, input.limit ?? 25],
-  );
+    [fresh.workspaceId, Math.max(1, Math.min(100, Number.isSafeInteger(input.limit) ? input.limit! : 25)), botConversationChannels],
+  ));
 }
 
 export async function getDefaultWorkspaceForWebhook() {
@@ -1638,27 +1490,31 @@ export async function linkBotConversationToCrmEntities(input: {
   sync?: unknown;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return null;
+  const conversationId = input.conversationId;
+  return withCrmRead(input.session, async () => {
+    await resolveBotConversationContext({ session: input.session, conversationId: conversationId, deriveFromConversation: true });
 
-  const row = await queryOne<IdRow>(
-    `
-      update bot_conversations
-      set contact_id = coalesce($3::uuid, contact_id),
-          lead_id = coalesce($4::uuid, lead_id),
-          metadata = metadata || $5::jsonb,
-          updated_at = now()
-      where id = $1 and workspace_id = $2
-      returning id
-    `,
-    [
-      input.conversationId,
-      input.session.workspaceId,
-      isUuid(input.contactId) ? input.contactId : null,
-      isUuid(input.leadId) ? input.leadId : null,
-      JSON.stringify({ crmSync: input.sync ?? null }),
-    ],
-  );
+    const row = await queryOne<IdRow>(
+      `
+        update bot_conversations
+        set contact_id = coalesce($3::uuid, contact_id),
+            lead_id = coalesce($4::uuid, lead_id),
+            metadata = metadata || $5::jsonb,
+            updated_at = now()
+        where id = $1 and workspace_id = $2
+        returning id
+      `,
+      [
+        conversationId,
+        input.session.workspaceId,
+        isUuid(input.contactId) ? input.contactId : null,
+        isUuid(input.leadId) ? input.leadId : null,
+        JSON.stringify({ crmSync: input.sync ?? null }),
+      ],
+    );
 
-  return row?.id ?? null;
+    return row?.id ?? null;
+  });
 }
 
 export async function updateBotConversationStatus(input: {
@@ -1668,25 +1524,29 @@ export async function updateBotConversationStatus(input: {
   metadata?: unknown;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return null;
+  const conversationId = input.conversationId;
+  return withCrmRead(input.session, async () => {
+    await resolveBotConversationContext({ session: input.session, conversationId: conversationId, deriveFromConversation: true });
 
-  const row = await queryOne<IdRow>(
-    `
-      update bot_conversations
-      set status = $3,
-          metadata = metadata || $4::jsonb,
-          updated_at = now()
-      where id = $1 and workspace_id = $2
-      returning id
-    `,
-    [
-      input.conversationId,
-      input.session.workspaceId,
-      input.status,
-      JSON.stringify(input.metadata ?? {}),
-    ],
-  );
+    const row = await queryOne<IdRow>(
+      `
+        update bot_conversations
+        set status = $3,
+            metadata = metadata || $4::jsonb,
+            updated_at = now()
+        where id = $1 and workspace_id = $2
+        returning id
+      `,
+      [
+        conversationId,
+        input.session.workspaceId,
+        input.status,
+        JSON.stringify(input.metadata ?? {}),
+      ],
+    );
 
-  return row?.id ?? null;
+    return row?.id ?? null;
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -2023,11 +1883,14 @@ export async function listBotChannelWebhookEvents(input: {
 export async function listBotMessages(input: {
   session: AppSession;
   conversationId: string;
+  botId?: string | null;
+  projectId?: string | null;
+  channel?: string | null;
   limit?: number;
 }) {
-  if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return [];
-
-  return queryRows<{
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const context = await resolveBotConversationContext({ ...input, deriveFromConversation: true });
+    return tx.query<{
     id: string;
     role: "system" | "user" | "assistant" | "tool";
     content: string;
@@ -2052,11 +1915,14 @@ export async function listBotMessages(input: {
       where m.workspace_id = $1
         and m.conversation_id = $2
         and c.workspace_id = $1
+        and c.bot_id=$4::uuid and c.project_id is not distinct from $5::uuid
+        and c.metadata->>'channel'=$6
       order by m.created_at desc
       limit $3
     `,
-    [input.session.workspaceId, input.conversationId, input.limit ?? 50],
-  ).then((rows) => rows.reverse());
+    [fresh.workspaceId, input.conversationId, Math.max(1, Math.min(100, Number.isSafeInteger(input.limit) ? input.limit! : 50)), context.botId, context.projectId, context.channel],
+    ).then((rows) => rows.reverse());
+  });
 }
 
 export async function insertBotMessage(input: {
@@ -2070,48 +1936,52 @@ export async function insertBotMessage(input: {
   metadata?: unknown;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return null;
+  const conversationId = input.conversationId;
+  return withCrmRead(input.session, async () => {
+    await resolveBotConversationContext({ session: input.session, conversationId: conversationId, deriveFromConversation: true });
 
-  const row = await queryOne<IdRow>(
-    `
-      insert into bot_messages (
-        workspace_id, conversation_id, role, content, tool_name, tool_call_id, model, metadata
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      input.conversationId,
-      input.role,
-      input.content,
-      input.toolName ?? null,
-      input.toolCallId ?? null,
-      input.model ?? null,
-      JSON.stringify(input.metadata ?? {}),
-    ],
-  );
+    const row = await queryOne<IdRow>(
+      `
+        insert into bot_messages (
+          workspace_id, conversation_id, role, content, tool_name, tool_call_id, model, metadata
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+        returning id
+      `,
+      [
+        input.session.workspaceId,
+        conversationId,
+        input.role,
+        input.content,
+        input.toolName ?? null,
+        input.toolCallId ?? null,
+        input.model ?? null,
+        JSON.stringify(input.metadata ?? {}),
+      ],
+    );
 
-  await queryOne(
-    `
-      update bot_conversations
-      set updated_at = now()
-      where id = $1 and workspace_id = $2
-      returning id
-    `,
-    [input.conversationId, input.session.workspaceId],
-  );
+    await queryOne(
+      `
+        update bot_conversations
+        set updated_at = now()
+        where id = $1 and workspace_id = $2
+        returning id
+      `,
+      [conversationId, input.session.workspaceId],
+    );
 
-  if (row?.id && input.role === "assistant") {
-    await recordFirstResponseAnalyticsEvent({
-      conversationId: input.conversationId,
-      messageId: row.id,
-      metadata: input.metadata,
-      model: input.model,
-      session: input.session,
-    });
-  }
+    if (row?.id && input.role === "assistant") {
+      await recordFirstResponseAnalyticsEvent({
+        conversationId: conversationId,
+        messageId: row.id,
+        metadata: input.metadata,
+        model: input.model,
+        session: input.session,
+      });
+    }
 
-  return row?.id ?? null;
+    return row?.id ?? null;
+  });
 }
 
 async function recordFirstResponseAnalyticsEvent(input: {
@@ -2228,33 +2098,39 @@ export async function insertBotToolCall(input: {
   error?: string | null;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
+  return withCrmRead(input.session, async () => {
 
-  const params: unknown[] = [input.session.workspaceId];
-  const conversationSql = addUuidParam(params, input.conversationId);
-  const botSql = addUuidParam(params, input.botId);
-  const toolSql = addParam(params, input.toolName);
-  const riskSql = addParam(params, input.riskLevel ?? "low");
-  const inputSql = addParam(params, JSON.stringify(input.input ?? {}));
-  const outputSql = addParam(params, JSON.stringify(input.output ?? null));
-  const statusSql = addParam(params, input.status ?? "completed");
-  const approvalSql = addParam(params, Boolean(input.requiresApproval));
-  const errorSql = addParam(params, input.error ?? null);
+    const context = await resolveBotConversationContext({
+      session: input.session, botId: input.botId, conversationId: input.conversationId,
+      channel: input.conversationId ? undefined : "api", deriveFromConversation: true,
+    });
+    const params: unknown[] = [input.session.workspaceId];
+    const conversationSql = addUuidParam(params, input.conversationId);
+    const botSql = addUuidParam(params, context.botId);
+    const toolSql = addParam(params, input.toolName);
+    const riskSql = addParam(params, input.riskLevel ?? "low");
+    const inputSql = addParam(params, JSON.stringify(input.input ?? {}));
+    const outputSql = addParam(params, JSON.stringify(input.output ?? null));
+    const statusSql = addParam(params, input.status ?? "completed");
+    const approvalSql = addParam(params, Boolean(input.requiresApproval));
+    const errorSql = addParam(params, input.error ?? null);
 
-  const row = await queryOne<IdRow>(
-    `
-      insert into bot_tool_calls (
-        workspace_id, conversation_id, bot_id, tool_name, risk_level, input, output, status, requires_approval, error
-      )
-      values (
-        $1, ${conversationSql}, ${botSql}, ${toolSql}, ${riskSql}, ${inputSql}::jsonb,
-        ${outputSql}::jsonb, ${statusSql}, ${approvalSql}, ${errorSql}
-      )
-      returning id
-    `,
-    params,
-  );
+    const row = await queryOne<IdRow>(
+      `
+        insert into bot_tool_calls (
+          workspace_id, conversation_id, bot_id, tool_name, risk_level, input, output, status, requires_approval, error
+        )
+        values (
+          $1, ${conversationSql}, ${botSql}, ${toolSql}, ${riskSql}, ${inputSql}::jsonb,
+          ${outputSql}::jsonb, ${statusSql}, ${approvalSql}, ${errorSql}
+        )
+        returning id
+      `,
+      params,
+    );
 
-  return row?.id ?? null;
+    return row?.id ?? null;
+  });
 }
 
 export async function insertBotDocumentSend(input: {

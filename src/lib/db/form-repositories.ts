@@ -561,6 +561,10 @@ export async function persistWebsiteFormSubmission(input: {
   formData: FormDataLike;
   formKey: string;
   requestUrl: string;
+  /** Server-only Studio enquiry mode; never supplied by a public form field. */
+  preserveProvidedIdentity?: boolean;
+  /** Validated server snapshot marker; public form fields never select this authority. */
+  studioSyntheticTest?: boolean;
 }): Promise<PersistenceResult & { form?: WebsiteForm; redirectUrl?: string }> {
   if (!hasDatabaseUrl()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
@@ -579,11 +583,22 @@ export async function persistWebsiteFormSubmission(input: {
     return { persisted: false, reason: "Actor context mismatch" };
   }
 
-  const form = lookup.form;
-  const answers = extractAnswers(form, input.formData);
-  const consent = extractConsent(form, input.formData);
   const signedWebsiteSales = input.formKey === websiteSalesFormId
     && input.actorUserId === websiteSalesActorId && lookup.id === websiteSalesFormId;
+  if (input.preserveProvidedIdentity && !signedWebsiteSales) return { persisted: false, reason: "studio_identity_scope_required" };
+  const enquiry = input.preserveProvidedIdentity === true;
+  const form: WebsiteForm = enquiry ? { ...lookup.form, crmTarget: "lead", doubleOptIn: false,
+    fields: lookup.form.fields.map(field => ({ ...field, required: field.type === "consent" ? field.required : false })),
+    actions: { ...lookup.form.actions, createTask: false, followUpEmail: false, internalNotification: false,
+      newsletterList: false, showMeeting: false, redirectUrl: "" } } : lookup.form;
+  const answers = extractAnswers(form, input.formData);
+  const consent = extractConsent(form, input.formData);
+  if (enquiry) {
+    // Confirmation grants storage/follow-up only; it never grants marketing.
+    consent.marketing = false;
+    if (typeof input.studioSyntheticTest !== "boolean" || answers.synthetic_test !== String(input.studioSyntheticTest) ||
+        !consent.privacy) return { persisted: false, reason: "studio_confirmation_required" };
+  }
 
   if (form.fields.some((field) => field.type === "consent" && field.required) && !consent.privacy) {
     return { persisted: false, reason: "privacy_consent_required" };
@@ -597,7 +612,9 @@ export async function persistWebsiteFormSubmission(input: {
   const tracking = extractTracking(input.formData, input.requestUrl, form);
   const email = firstString(answers, ["email", "e_mail", "mail"]);
   const phone = firstString(answers, ["phone", "telefon", "telephone"]);
-  const name = firstString(answers, ["name", "full_name", "fullname", "contact_name"]) || email || "Website Formular";
+  const providedName = firstString(answers, ["name", "full_name", "fullname", "contact_name"]);
+  const name = enquiry ? providedName : providedName || email || "Website Formular";
+  if (enquiry && !email && !phone) return { persisted: false, reason: "contact_required" };
   const message = firstString(answers, ["message", "nachricht", "intent", "bedarf"]);
   const intent = message || `${form.name} Anfrage`;
   const score = scoreFormSubmission(form, answers, consent);

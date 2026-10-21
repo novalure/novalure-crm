@@ -18,8 +18,11 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import type { KnowledgeChannel, KnowledgeSource } from "@/lib/knowledge-center/types";
 
 type BotCommandCenterProps = {
+  workspaceId: string;
+  sessionWorkspaceId?: string;
   automations: Automation[];
   bots: CrmBot[];
   callInsights: BotCallInsight[];
@@ -179,22 +182,17 @@ type BotDocumentsApiResponse = {
 };
 
 type BotEvaluationsApiResponse = {
-  runs?: BotEvaluationRun[];
+  runs?: ChannelEvaluationRun[];
   source?: string;
 };
 
 type KnowledgeApiResponse = {
-  sources?: Array<{
-    chunkCount?: number;
-    embeddedChunkCount?: number;
-    id: string;
-    itemCount?: number;
-    projectId?: string | null;
-    status: string;
-    title: string;
-  }>;
+  available: boolean;
+  sources?: KnowledgeSource[];
   source?: string;
 };
+type ChannelEvaluationRun = BotEvaluationRun & { evaluationChannel?: KnowledgeChannel };
+type BotKnowledgeSummary = Pick<KnowledgeItem, "id" | "name" | "status"> & { published: boolean };
 
 type BotSetupMutationResponse = {
   blockers?: string[];
@@ -208,6 +206,7 @@ type BotActionMutationResponse = {
 };
 
 type ChannelApiResponse = {
+  source?: string;
   autonomyControls?: {
     disabledReason?: string | null;
     killSwitch: boolean;
@@ -295,7 +294,7 @@ function Pill({
   };
 
   return (
-    <span className={`inline-flex max-w-full whitespace-normal break-words rounded-md px-2 py-1 text-left text-xs font-semibold leading-snug ${tones[tone]}`}>
+    <span className={`evelyn-bot-pill inline-flex max-w-full whitespace-normal break-words rounded-md px-2 py-1 text-left text-xs font-semibold leading-snug ${tones[tone]}`} data-tone={tone}>
       {children}
     </span>
   );
@@ -303,7 +302,7 @@ function Pill({
 
 function StatusPill({ label, status }: { label: string; status: string }) {
   return (
-    <span className={`inline-flex max-w-full whitespace-normal break-words rounded-md px-2 py-1 text-left text-xs font-semibold leading-snug ${statusStyles[status] ?? statusStyles.draft}`}>
+    <span className={`evelyn-bot-status inline-flex max-w-full whitespace-normal break-words rounded-md px-2 py-1 text-left text-xs font-semibold leading-snug ${statusStyles[status] ?? statusStyles.draft}`} data-status={status}>
       {label}
     </span>
   );
@@ -345,23 +344,33 @@ function getNumberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function knowledgeItemFromApi(source: NonNullable<KnowledgeApiResponse["sources"]>[number]): KnowledgeItem {
-  const chunks = Math.max(1, Number(source.chunkCount ?? source.itemCount ?? source.embeddedChunkCount ?? 1));
-  const embedded = Math.max(0, Number(source.embeddedChunkCount ?? 0));
-  const normalizedStatus = source.status.trim().toLowerCase();
-  const approved =
-    embedded > 0 ||
-    ["approved", "synced", "vector_ready", "vector bereit"].includes(normalizedStatus);
-
+export function knowledgeItemFromApi(source: KnowledgeSource): BotKnowledgeSummary {
+  const published = Boolean(source.approvedVersionId);
   return {
     id: source.id,
-    workspaceId: "",
-    projectId: source.projectId ?? "",
-    name: source.title,
-    items: chunks,
-    coverage: `${Math.min(100, Math.round((embedded / chunks) * 100))}%`,
-    status: approved ? "approved" : "needs-review",
+    name: source.name,
+    published,
+    status: published && !source.draftVersionId ? "approved" : "needs-review",
   };
+}
+
+export function knowledgeItemsFromSnapshot(snapshot: KnowledgeApiResponse | null): BotKnowledgeSummary[] {
+  return snapshot?.available === true ? (snapshot.sources ?? []).map(knowledgeItemFromApi) : [];
+}
+
+/** Only saved, active customer channels can be selected; no internal grant is
+ * inferred from API/Webhook or Slack/Teams connector labels. */
+export function configuredEvaluationChannels(bot: Pick<CrmBot, "channels">): Array<{ channel: KnowledgeChannel; label: string }> {
+  const names: Record<string, KnowledgeChannel> = { webchat: "webchat", "website bot": "webchat", whatsapp: "whatsapp",
+    instagram: "instagram", "facebook messenger": "messenger", messenger: "messenger", "e-mail": "email", email: "email",
+    telefon: "telephone", telephone: "telephone", voice: "voice" };
+  const seen = new Set<KnowledgeChannel>();
+  return bot.channels.flatMap(config => {
+    const channel = names[config.channel.trim().toLowerCase()];
+    if (!config.active || !channel || seen.has(channel)) return [];
+    seen.add(channel);
+    return [{ channel, label: config.channel }];
+  });
 }
 
 function getDocumentDeliveryError(documentSend: BotActionDocumentSend) {
@@ -458,20 +467,142 @@ function ConversationActionSummary({
   );
 }
 
+/** Only endpoints whose handlers reauthorize the selected workspace use this URL. */
+export function botWorkspaceUrl(path: string, workspaceId: string) {
+  return `${path}${path.includes("?") ? "&" : "?"}workspaceId=${encodeURIComponent(workspaceId)}`;
+}
+
+type BotReadResponses = {
+  chat: LiveChatApiResponse;
+  channels: ChannelApiResponse;
+  approvals: ApprovalsApiResponse;
+  actions: BotActionsApiResponse;
+  documents: BotDocumentsApiResponse;
+  knowledge: KnowledgeApiResponse;
+};
+
+function hasRecordRows(value: unknown, keys: readonly string[], optionalStrings: readonly string[] = []) {
+  return Array.isArray(value) && value.every((row) => isRecord(row)
+    && keys.every((key) => typeof row[key] === "string")
+    && optionalStrings.every((key) => row[key] == null || typeof row[key] === "string"));
+}
+
+function isBotReadPayload(kind: keyof BotReadResponses, value: unknown) {
+  if (!isRecord(value) || (kind !== "documents" && value.source !== "database")) return false;
+  if (kind === "chat") return hasRecordRows(value.conversations, ["id", "title", "status", "updatedAt"], ["latestMessageContent", "latestMessageRole", "latestMessageCreatedAt"]);
+  if (kind === "approvals") return hasRecordRows(value.approvals, ["id", "entityType", "action", "summary", "status", "createdAt"]);
+  if (kind === "actions") return hasRecordRows(value.documentSends, ["id", "channel", "createdAt", "documentName", "status"])
+    && hasRecordRows(value.meetingBookings, ["id", "contactEmail", "contactName", "createdAt", "endsAt", "slug", "startsAt", "status", "title"]);
+  if (kind === "channels") {
+    const controls = value.autonomyControls;
+    return hasRecordRows(value.recentWebhookEvents, ["id", "channel", "eventType", "status", "receivedAt"])
+      && (value.recentWebhookEvents as Record<string, unknown>[]).every((event) => event.normalizedMessage == null
+        || (isRecord(event.normalizedMessage) && (event.normalizedMessage.text == null || typeof event.normalizedMessage.text === "string")))
+      && hasRecordRows(value.policyRules, ["id", "label", "effect"])
+      && (value.policyRules as Record<string, unknown>[]).every((rule) => ["allow", "block", "test"].includes(String(rule.effect)))
+      && isRecord(controls)
+      && ["killSwitch", "requireHumanApproval", "strictKnowledge", "testMode"].every((key) => typeof controls[key] === "boolean");
+  }
+  if (kind === "knowledge") return typeof value.available === "boolean" && hasRecordRows(value.sources, ["id", "name", "status"])
+    && (value.sources as Record<string, unknown>[]).every((source) => ["approvedVersionId", "draftVersionId"].every((key) => source[key] === null || typeof source[key] === "string"));
+  const quota = value.quota;
+  return hasRecordRows(value.assets, ["id", "name", "folder", "mimeType", "url"])
+    && (value.assets as Record<string, unknown>[]).every((asset) => typeof asset.sizeBytes === "number" && Number.isFinite(asset.sizeBytes) && asset.sizeBytes >= 0)
+    && isRecord(quota)
+    && ["limitBytes", "maxFileBytes", "remainingBytes", "usedBytes"].every((key) => typeof quota[key] === "number" && Number.isFinite(quota[key]) && quota[key] >= 0);
+}
+
+/** Legacy endpoints have no selected-workspace contract. Missing context stays read-only. */
+export function isHomeBotWorkspace(workspaceId: string, sessionWorkspaceId?: string) {
+  return Boolean(sessionWorkspaceId && workspaceId === sessionWorkspaceId);
+}
+
+export async function homeWorkspaceBotRequest(
+  workspaceId: string,
+  sessionWorkspaceId: string | undefined,
+  readOnlyMessage: string,
+  url: string,
+  init: RequestInit,
+  fetcher: (url: string, init?: RequestInit) => Promise<Response> = csrfFetch,
+) {
+  if (!isHomeBotWorkspace(workspaceId, sessionWorkspaceId)) throw new Error(readOnlyMessage);
+  return fetcher(url, init);
+}
+
+/** Each reader settles independently; a denied sibling cannot replace real data. */
+export async function readBotSource<K extends keyof BotReadResponses>(
+  kind: K,
+  workspaceId: string,
+  fetcher: (url: string) => Promise<Response> = csrfFetch,
+  sessionWorkspaceId?: string,
+): Promise<{ status: "ready"; data: BotReadResponses[K] } | { status: "error" }> {
+  if (kind === "documents" && !isHomeBotWorkspace(workspaceId, sessionWorkspaceId)) return { status: "error" };
+  const paths = {
+    chat: "/api/bots/chat?limit=12",
+    channels: "/api/bots/channels",
+    approvals: "/api/approvals?status=pending",
+    actions: "/api/bots/actions",
+    documents: "/api/bots/documents",
+    knowledge: "/api/bots/knowledge?limit=50",
+  };
+  try {
+    const response = await fetcher(kind === "documents" ? paths[kind] : botWorkspaceUrl(paths[kind], workspaceId));
+    if (!response.ok) return { status: "error" };
+    const data: unknown = await response.json();
+    return isBotReadPayload(kind, data) ? { status: "ready", data: data as BotReadResponses[K] } : { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/** Counts are known only after their actual endpoint group loaded successfully. */
+export function botLivePresentation({
+  liveStatus, approvalLoadStatus, botActionStatus, liveConversations, approvals,
+  documentSends, meetingBookings,
+}: {
+  liveStatus: "loading" | "ready" | "error";
+  approvalLoadStatus: "loading" | "ready" | "error";
+  botActionStatus: "loading" | "ready" | "error";
+  liveConversations: LiveBotConversation[];
+  approvals: BotApproval[];
+  documentSends: BotActionDocumentSend[];
+  meetingBookings: BotActionMeetingBooking[];
+}) {
+  const displayConversations = liveStatus === "ready"
+    ? liveConversations.filter((conversation) => conversation.source === "live")
+    : [];
+  const pendingApprovalCount = approvalLoadStatus === "ready" ? approvals.length : null;
+  return {
+    displayConversations,
+    pendingApprovalCount,
+    approvalsReady: pendingApprovalCount === 0,
+    openConversationCount: liveStatus === "ready"
+      ? displayConversations.filter((conversation) => conversation.status !== "resolved").length
+      : null,
+    openBotActionCount: botActionStatus === "ready"
+      ? documentSends.filter((item) => item.status !== "sent").length
+        + meetingBookings.filter((item) => item.status === "requested").length
+      : null,
+  };
+}
+
 export function BotCommandCenter({
+  workspaceId,
+  sessionWorkspaceId,
   automations,
   bots,
-  callInsights,
   canManageBotSetup = true,
-  conversations,
-  knowledgeItems,
   language,
   projectLabel,
   testPanel,
-  tools,
   workflows,
 }: BotCommandCenterProps) {
   const text = getBotCommandCenterCopy(language);
+  const isHomeWorkspace = isHomeBotWorkspace(workspaceId, sessionWorkspaceId);
+  const readOnlyMessage = language === "de"
+    ? "Die Kanal-, Freigabe- und Aktionshistorien sind hier nur lesbar. Änderungen an Freigaben, Aktionen oder der Bot-Einrichtung sowie Dokument-Uploads sind nur im angemeldeten Arbeitsbereich verfügbar."
+    : "Channel, approval and action histories are read-only here. Approval decisions, action changes, bot setup and document uploads are available only in your signed-in workspace.";
+  const legacyRequest = (url: string, init: RequestInit) => homeWorkspaceBotRequest(workspaceId, sessionWorkspaceId, readOnlyMessage, url, init);
   const [activeTab, setActiveTab] = useState<BotTab>("overview");
   const [approvalActionResult, setApprovalActionResult] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<BotApproval[]>([]);
@@ -488,25 +619,32 @@ export function BotCommandCenter({
   const [documentUploadErrors, setDocumentUploadErrors] = useState<Record<string, string>>({});
   const [documentUploadingId, setDocumentUploadingId] = useState<string | null>(null);
   const [documentSends, setDocumentSends] = useState<BotActionDocumentSend[]>([]);
-  const [evaluationRuns, setEvaluationRuns] = useState<BotEvaluationRun[]>([]);
+  const [evaluationRuns, setEvaluationRuns] = useState<ChannelEvaluationRun[]>([]);
+  const [evaluationChannels, setEvaluationChannels] = useState<Record<string, KnowledgeChannel>>({});
   const [evaluationStatus, setEvaluationStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [evaluationRunningId, setEvaluationRunningId] = useState<string | null>(null);
   const [evaluationResult, setEvaluationResult] = useState<string | null>(null);
   const [meetingBookings, setMeetingBookings] = useState<BotActionMeetingBooking[]>([]);
   const [liveConversations, setLiveConversations] = useState<LiveBotConversation[]>([]);
   const [liveWebhookEvents, setLiveWebhookEvents] = useState<ChannelApiResponse["recentWebhookEvents"]>([]);
-  const [liveKnowledgeItems, setLiveKnowledgeItems] = useState<KnowledgeItem[]>([]);
+  const [liveKnowledgeItems, setLiveKnowledgeItems] = useState<BotKnowledgeSummary[]>([]);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<"loading" | "ready" | "disabled" | "error">("loading");
   const [autonomyControls, setAutonomyControls] = useState<ChannelApiResponse["autonomyControls"] | null>(null);
   const [policyRules, setPolicyRules] = useState<NonNullable<ChannelApiResponse["policyRules"]>>([]);
   const [liveStatus, setLiveStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [channelStatus, setChannelStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [documentStatus, setDocumentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showAdvancedTechnology, setShowAdvancedTechnology] = useState(false);
-  const displayedKnowledgeItems = liveKnowledgeItems.length ? liveKnowledgeItems : knowledgeItems;
-  const approvalTools = tools.filter((tool) => tool.requiresHumanApproval);
+  const displayedKnowledgeItems = liveKnowledgeItems;
+  const selectedEvaluationChannel = (bot: CrmBot) => {
+    const available = configuredEvaluationChannels(bot);
+    return available.find(option => option.channel === evaluationChannels[bot.id])?.channel ?? available[0]?.channel ?? "";
+  };
   const allChannels = bots.flatMap((bot) => bot.channels.map((channel) => ({ bot, channel })));
   const connectedChannels = allChannels.filter(({ channel }) => channel.active || channel.setupStatus === "connected");
   const setupItems = bots.flatMap((bot) => bot.setupChecklist ?? []);
   const doneSetupItems = setupItems.filter((item) => item.done);
-  const approvedKnowledgeItems = displayedKnowledgeItems.filter((item) => item.status === "approved");
+  const approvedKnowledgeItems = displayedKnowledgeItems.filter((item) => item.published);
   const actionPolicies = bots.flatMap((bot) =>
     (bot.actionPolicies ?? []).map((policy) => ({
       ...policy,
@@ -514,24 +652,26 @@ export function BotCommandCenter({
     })),
   );
   const activeBotCount = bots.filter((bot) => bot.status === "active").length;
-  const approvalCount =
-    approvalTools.length +
-    callInsights.filter((insight) => insight.requiresApproval).length +
-    workflows.reduce((total, workflow) => total + workflow.approvalQueue, 0);
-  const pendingApprovalCount = approvalLoadStatus === "ready" ? approvals.length : approvalCount;
-  const openDocumentActionCount = documentSends.filter((item) => item.status !== "sent").length;
-  const openMeetingActionCount = meetingBookings.filter((item) => item.status === "requested").length;
-  const openBotActionCount = openDocumentActionCount + openMeetingActionCount;
+  const { displayConversations, pendingApprovalCount, approvalsReady, openConversationCount, openBotActionCount } = botLivePresentation({
+    liveStatus, approvalLoadStatus, botActionStatus, liveConversations, approvals, documentSends, meetingBookings,
+  });
+  const unknownCountLabel = (status: "loading" | "ready" | "error") => status === "error" ? text.liveDataUnavailable : "—";
+  const liveSourceLabel = liveStatus === "loading" ? text.loadingLiveData : liveStatus === "error" ? text.liveDataUnavailable : text.liveData;
+  const channelSourceLabel = channelStatus === "loading" ? text.loadingLiveData : channelStatus === "error" ? text.liveDataUnavailable : text.liveData;
+  const conversationEmptyLabel = liveStatus === "ready" ? text.noConversations : liveSourceLabel;
+  const autonomyKnown = channelStatus === "ready" && autonomyControls !== null;
   const incompleteSetupItem = setupItems.find((item) => !item.done);
-  const knowledgeReady = approvedKnowledgeItems.length > 0 && bots.some((bot) => bot.strictKnowledge);
+  const knowledgeReady = knowledgeStatus === "ready" && approvedKnowledgeItems.length > 0 && bots.some((bot) => bot.strictKnowledge);
   const channelsReady = connectedChannels.length > 0;
   const handoffReady = bots.some((bot) => bot.channels.some((channel) => channel.handoffRules.length > 0));
   const testReady = bots.some((bot) => bot.status === "test" || bot.status === "active");
-  const evaluationReady = bots.length > 0 && bots.every((bot) =>
-    evaluationRuns.some((run) => run.botId === bot.id && isEvaluationRunReady(run)),
+  const evaluationReady = evaluationStatus === "ready" && bots.length > 0 && bots.every((bot) =>
+    evaluationRuns.some((run) => run.botId === bot.id && run.evaluationChannel === selectedEvaluationChannel(bot) && isEvaluationRunReady(run)),
   );
-  const readyToPublish = Boolean(channelsReady && knowledgeReady && handoffReady && testReady && evaluationReady && !pendingApprovalCount);
-  const nextRecommendedStep = pendingApprovalCount
+  const readyToPublish = Boolean(channelsReady && knowledgeReady && handoffReady && testReady && evaluationReady && approvalsReady);
+  const nextRecommendedStep = approvalLoadStatus !== "ready"
+    ? approvalLoadStatus === "loading" ? text.loadingApprovals : text.approvalLoadError
+    : pendingApprovalCount
     ? text.nextStepReviewApprovals
     : incompleteSetupItem
       ? incompleteSetupItem.label
@@ -552,41 +692,20 @@ export function BotCommandCenter({
     { done: handoffReady, label: text.publishHandoffReady },
     { done: testReady, label: text.publishTestReady },
     { done: evaluationReady, label: text.publishEvaluationReady },
-    { done: pendingApprovalCount === 0, label: text.publishApprovalsReady },
+    { done: approvalsReady, label: text.publishApprovalsReady },
   ];
-  const demoConversations: LiveBotConversation[] = conversations.map((conversation) => ({
-    botId: conversation.botId,
-    contactId: conversation.contactId,
-    id: conversation.id,
-    latestMessage: conversation.messages.at(-1)
-      ? {
-          content: conversation.messages.at(-1)?.content ?? "",
-          createdAt: conversation.messages.at(-1)?.createdAt ?? null,
-          role: conversation.messages.at(-1)?.role ?? "user",
-        }
-      : null,
-    projectId: conversation.projectId,
-    source: "demo",
-    status: conversation.status,
-    title: conversation.title,
-    updatedAt: conversation.updatedAt,
-  }));
-  const displayConversations = activeBotCount > 0
-    ? liveConversations.length ? liveConversations : demoConversations
-    : [];
-  const sendableDocumentAssets = documentAssets.filter(isSendableDocumentAsset);
-  const openConversationCount = displayConversations.filter((conversation) => conversation.status !== "resolved").length;
+  const sendableDocumentAssets = isHomeWorkspace ? documentAssets.filter(isSendableDocumentAsset) : [];
   const endpointCards = [
-    { id: "chat", method: text.methodPost, path: "/api/bots/chat" },
-    { id: "agent", method: text.methodGetPost, path: "/api/bots/agent" },
+    { id: "chat", method: text.methodPost, path: botWorkspaceUrl("/api/bots/chat", workspaceId) },
+    { id: "agent", method: text.methodGetPost, path: botWorkspaceUrl("/api/bots/agent", workspaceId) },
     { id: "channels", method: text.methodGetPost, path: "/api/bots/channels" },
     { id: "channelWebhook", method: text.methodGetPost, path: "/api/bots/channels/webhook" },
     { id: "actions", method: text.methodGetPost, path: "/api/bots/actions" },
     { id: "leads", method: text.methodPost, path: "/api/bots/leads" },
     { id: "documents", method: text.methodGetPost, path: "/api/bots/documents" },
     { id: "meetings", method: text.methodGetPost, path: "/api/bots/meetings" },
-    { id: "knowledge", method: text.methodPost, path: "/api/bots/knowledge" },
-    { id: "evaluations", method: text.methodGetPost, path: "/api/bots/evaluations" },
+    { id: "knowledge", method: text.methodPost, path: botWorkspaceUrl("/api/bots/knowledge", workspaceId) },
+    { id: "evaluations", method: text.methodGetPost, path: botWorkspaceUrl("/api/bots/evaluations", workspaceId) },
     { id: "calls", method: text.methodPost, path: "/api/bots/calls" },
   ] as const;
   const tabs: Array<{ id: BotTab; label: string }> = [
@@ -604,7 +723,7 @@ export function BotCommandCenter({
     async function loadEvaluationRuns() {
       try {
         setEvaluationStatus("loading");
-        const response = await csrfFetch("/api/bots/evaluations?limit=20");
+        const response = await csrfFetch(botWorkspaceUrl("/api/bots/evaluations?limit=20", workspaceId));
 
         if (!response.ok) {
           throw new Error("Bot evaluations unavailable");
@@ -630,14 +749,16 @@ export function BotCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [activeTab]);
+  }, [activeTab, workspaceId]);
 
   async function runBotEvaluation(bot: CrmBot) {
     try {
       setEvaluationResult(null);
+      const channel = selectedEvaluationChannel(bot);
+      if (!channel) throw new Error("A configured evaluation channel is required");
       setEvaluationRunningId(bot.id);
-      const response = await csrfFetch("/api/bots/evaluations", {
-        body: JSON.stringify({ botId: bot.id, projectId: bot.projectId }),
+      const response = await csrfFetch(botWorkspaceUrl("/api/bots/evaluations", workspaceId), {
+        body: JSON.stringify({ botId: bot.id, channel, projectId: bot.projectId }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
@@ -646,13 +767,13 @@ export function BotCommandCenter({
         throw new Error("Bot evaluation failed");
       }
 
-      const data = (await response.json()) as { run?: BotEvaluationRun };
+      const data = (await response.json()) as { run?: ChannelEvaluationRun };
 
       if (!data.run) {
         throw new Error("Bot evaluation missing result");
       }
 
-      setEvaluationRuns((current) => [data.run as BotEvaluationRun, ...current.filter((run) => run.id !== data.run?.id)]);
+      setEvaluationRuns((current) => [data.run as ChannelEvaluationRun, ...current.filter((run) => run.id !== data.run?.id)]);
       setEvaluationStatus("ready");
       setEvaluationResult(text.evaluationRunSaved);
     } catch {
@@ -667,74 +788,65 @@ export function BotCommandCenter({
     let cancelled = false;
 
     async function loadLiveBotState() {
-      try {
-        setLiveStatus("loading");
-        setApprovalLoadStatus("loading");
-        setBotActionStatus("loading");
-        const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse, knowledgeResponse] = await Promise.all([
-          csrfFetch("/api/bots/chat?limit=12"),
-          csrfFetch("/api/bots/channels"),
-          csrfFetch("/api/approvals?status=pending"),
-          csrfFetch("/api/bots/actions"),
-          csrfFetch("/api/bots/documents"),
-          csrfFetch("/api/bots/knowledge?limit=50"),
-        ]);
-
-        if (!chatResponse.ok || !channelResponse.ok || !approvalResponse.ok || !actionResponse.ok || !documentResponse.ok) {
-          throw new Error("Bot live state unavailable");
-        }
-
-        const chatData = (await chatResponse.json()) as LiveChatApiResponse;
-        const channelData = (await channelResponse.json()) as ChannelApiResponse;
-        const approvalData = (await approvalResponse.json()) as ApprovalsApiResponse;
-        const actionData = (await actionResponse.json()) as BotActionsApiResponse;
-        const documentData = (await documentResponse.json()) as BotDocumentsApiResponse;
-        const knowledgeData = knowledgeResponse.ok ? (await knowledgeResponse.json()) as KnowledgeApiResponse : null;
-
-        if (cancelled) return;
-
-        setLiveConversations(
-          (chatData.conversations ?? []).map((conversation) => ({
+      setLiveStatus("loading");
+      setChannelStatus("loading");
+      setKnowledgeStatus("loading");
+      setLiveKnowledgeItems([]);
+      setApprovalLoadStatus("loading");
+      setBotActionStatus("loading");
+      setDocumentStatus("loading");
+      await Promise.all([
+        readBotSource("chat", workspaceId).then((result) => {
+          if (cancelled) return;
+          setLiveConversations(result.status === "ready" ? (result.data.conversations ?? []).map((conversation) => ({
             botId: conversation.botId,
             contactId: conversation.contactId,
             id: conversation.id,
-            latestMessage: conversation.latestMessageContent
-              ? {
-                  content: conversation.latestMessageContent,
-                  createdAt: conversation.latestMessageCreatedAt ?? null,
-                  metadata: conversation.latestMessageMetadata,
-                  role: conversation.latestMessageRole ?? "user",
-                }
-              : null,
+            latestMessage: conversation.latestMessageContent ? {
+              content: conversation.latestMessageContent,
+              createdAt: conversation.latestMessageCreatedAt ?? null,
+              metadata: conversation.latestMessageMetadata,
+              role: conversation.latestMessageRole ?? "user",
+            } : null,
             leadId: conversation.leadId,
             projectId: conversation.projectId,
             source: "live",
             status: conversation.status,
             title: conversation.title,
             updatedAt: conversation.updatedAt,
-          })),
-        );
-        setLiveWebhookEvents(channelData.recentWebhookEvents ?? []);
-        setAutonomyControls(channelData.autonomyControls ?? null);
-        setPolicyRules(channelData.policyRules ?? []);
-        setApprovals(approvalData.approvals ?? []);
-        setDocumentAssets(documentData.assets ?? []);
-        setDocumentQuota(documentData.quota ?? null);
-        setDocumentSends(actionData.documentSends ?? []);
-        setMeetingBookings(actionData.meetingBookings ?? []);
-        if (knowledgeData?.sources?.length) {
-          setLiveKnowledgeItems(knowledgeData.sources.map(knowledgeItemFromApi));
-        }
-        setApprovalLoadStatus("ready");
-        setBotActionStatus("ready");
-        setLiveStatus("ready");
-      } catch {
-        if (!cancelled) {
-          setApprovalLoadStatus("error");
-          setBotActionStatus("error");
-          setLiveStatus("error");
-        }
-      }
+          })) : []);
+          setLiveStatus(result.status);
+        }),
+        readBotSource("channels", workspaceId).then((result) => {
+          if (cancelled) return;
+          setLiveWebhookEvents(result.status === "ready" ? result.data.recentWebhookEvents ?? [] : []);
+          setAutonomyControls(result.status === "ready" ? result.data.autonomyControls ?? null : null);
+          setPolicyRules(result.status === "ready" ? result.data.policyRules ?? [] : []);
+          setChannelStatus(result.status);
+        }),
+        readBotSource("approvals", workspaceId).then((result) => {
+          if (cancelled) return;
+          setApprovals(result.status === "ready" ? result.data.approvals ?? [] : []);
+          setApprovalLoadStatus(result.status);
+        }),
+        readBotSource("actions", workspaceId).then((result) => {
+          if (cancelled) return;
+          setDocumentSends(result.status === "ready" ? result.data.documentSends ?? [] : []);
+          setMeetingBookings(result.status === "ready" ? result.data.meetingBookings ?? [] : []);
+          setBotActionStatus(result.status);
+        }),
+        readBotSource("documents", workspaceId, csrfFetch, sessionWorkspaceId).then((result) => {
+          if (cancelled) return;
+          setDocumentAssets(result.status === "ready" ? result.data.assets ?? [] : []);
+          setDocumentQuota(result.status === "ready" ? result.data.quota ?? null : null);
+          setDocumentStatus(result.status);
+        }),
+        readBotSource("knowledge", workspaceId).then((result) => {
+          if (cancelled) return;
+          setLiveKnowledgeItems(knowledgeItemsFromSnapshot(result.status === "ready" ? result.data : null));
+          setKnowledgeStatus(result.status === "error" ? "error" : result.data.available ? "ready" : "disabled");
+        }),
+      ]);
     }
 
     void loadLiveBotState();
@@ -742,12 +854,13 @@ export function BotCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [activeTab]);
+  }, [activeTab, workspaceId, sessionWorkspaceId]);
 
   async function decideApproval(approvalId: string, decision: ApprovalDecision) {
+    if (!isHomeWorkspace) return;
     try {
       setApprovalUpdatingId(approvalId);
-      const response = await csrfFetch("/api/approvals", {
+      const response = await legacyRequest("/api/approvals", {
         body: JSON.stringify({ approvalId, decision }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -769,12 +882,10 @@ export function BotCommandCenter({
           .replace("{{count}}", formatNumber(typeof result.updatedToolCalls === "number" ? result.updatedToolCalls : 0, language))
           .replace("{{actions}}", formatNumber(actionCount, language)),
       );
-      const actionResponse = await csrfFetch("/api/bots/actions");
-      if (actionResponse.ok) {
-        const actionData = (await actionResponse.json()) as BotActionsApiResponse;
-        setDocumentSends(actionData.documentSends ?? []);
-        setMeetingBookings(actionData.meetingBookings ?? []);
-      }
+      const actionRead = await readBotSource("actions", workspaceId);
+      setDocumentSends(actionRead.status === "ready" ? actionRead.data.documentSends ?? [] : []);
+      setMeetingBookings(actionRead.status === "ready" ? actionRead.data.meetingBookings ?? [] : []);
+      setBotActionStatus(actionRead.status);
       setApprovalLoadStatus("ready");
     } catch {
       setApprovalActionResult(null);
@@ -785,11 +896,12 @@ export function BotCommandCenter({
   }
 
   async function saveBotSetup(bot: CrmBot) {
+    if (!isHomeWorkspace) return;
     try {
       setBotSetupSaveMessage(null);
       setBotSetupSaveStatus("idle");
       setBotSetupSavingId(bot.id);
-      const response = await csrfFetch("/api/crm/bots", {
+      const response = await legacyRequest("/api/crm/bots", {
         body: JSON.stringify({ bot }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -814,10 +926,11 @@ export function BotCommandCenter({
     id: string;
     type: "document_send" | "meeting_booking";
   }) {
+    if (!isHomeWorkspace) return;
     try {
       setBotActionUpdatingId(input.id);
       setBotActionResult(null);
-      const response = await csrfFetch("/api/bots/actions", {
+      const response = await legacyRequest("/api/bots/actions", {
         body: JSON.stringify(input),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -854,6 +967,7 @@ export function BotCommandCenter({
   }
 
   async function attachDocumentAsset(documentSendId: string, mediaAssetId: string) {
+    if (!isHomeWorkspace) return false;
     try {
       setBotActionUpdatingId(documentSendId);
       setBotActionResult(null);
@@ -863,7 +977,7 @@ export function BotCommandCenter({
         return next;
       });
 
-      const response = await csrfFetch("/api/bots/actions", {
+      const response = await legacyRequest("/api/bots/actions", {
         body: JSON.stringify({
           action: "attach_media_asset",
           id: documentSendId,
@@ -901,6 +1015,7 @@ export function BotCommandCenter({
   }
 
   async function uploadDocumentForAction(documentSend: BotActionDocumentSend, file: File) {
+    if (!isHomeWorkspace) return;
     const maxFileBytes = documentQuota?.maxFileBytes ?? 10 * 1024 * 1024;
 
     if (file.size > maxFileBytes) {
@@ -925,7 +1040,7 @@ export function BotCommandCenter({
         return next;
       });
 
-      const response = await csrfFetch("/api/media", {
+      const response = await legacyRequest("/api/media", {
         body: formData,
         method: "POST",
       });
@@ -953,26 +1068,29 @@ export function BotCommandCenter({
   }
 
   return (
-    <section className="space-y-4">
-      <div className="rounded-lg border border-stone-200 bg-white p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="evelyn-bot-center space-y-4" data-active-tab={activeTab}>
+      <div className="evelyn-bot-hero rounded-lg border border-stone-200 bg-white p-5">
+        <div className="evelyn-bot-header flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+            <p className="evelyn-bot-eyebrow text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               {text.commandCenterEyebrow}
             </p>
-            <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">{text.cleanTitle}</h3>
-            <p className="mt-2 max-w-4xl break-words text-sm text-stone-600">{text.cleanDescription}</p>
+            <h3 className="evelyn-bot-title mt-1 break-words text-xl font-semibold text-slate-950">{text.cleanTitle}</h3>
+            <p className="evelyn-bot-description mt-2 max-w-4xl break-words text-sm text-stone-600">{text.cleanDescription}</p>
           </div>
-          <span className="rounded-md bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-700">
+          <span className="evelyn-bot-scope rounded-md bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-700">
             {text.scope}: {projectLabel}
           </span>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <div className="flex min-w-max gap-2 rounded-lg bg-stone-100 p-1">
+        {!isHomeWorkspace ? <p className="mt-4 rounded-md bg-stone-50 p-3 text-sm text-stone-600" role="status">{readOnlyMessage}</p> : null}
+
+        <nav aria-label={text.cleanTitle} className="evelyn-bot-tabs-scroll mt-5 overflow-x-auto">
+          <div className="evelyn-bot-tabs flex min-w-max gap-2 rounded-lg bg-stone-100 p-1">
             {tabs.map((tab) => (
               <button
-                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                aria-pressed={activeTab === tab.id}
+                className={`evelyn-bot-tab rounded-md px-3 py-2 text-sm font-semibold transition ${
                   activeTab === tab.id
                     ? "bg-white text-slate-950 shadow-sm"
                     : "text-stone-600 hover:bg-white/70 hover:text-slate-900"
@@ -985,13 +1103,13 @@ export function BotCommandCenter({
               </button>
             ))}
           </div>
-        </div>
-        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+        </nav>
+        <div className="evelyn-bot-guardrail mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-sm font-semibold text-emerald-950">{text.guardrailTitle}</p>
           <p className="mt-1 text-sm leading-6 text-emerald-900">{text.guardrailDescription}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="evelyn-bot-guardrail-list mt-3 flex flex-wrap gap-2">
             {text.guardrailItems.map((item) => (
-              <span className="rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-950" key={item}>
+              <span className="evelyn-bot-guardrail-chip rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-950" key={item}>
                 {item}
               </span>
             ))}
@@ -1000,35 +1118,35 @@ export function BotCommandCenter({
       </div>
 
       {activeTab === "overview" ? (
-        <div className="grid gap-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="evelyn-bot-overview grid gap-4">
+          <div className="evelyn-bot-metrics grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             {[
               [text.activeBots, activeBotCount],
               [text.connectedChannels, connectedChannels.length],
-              [text.approvals, pendingApprovalCount],
-              [text.openConversations, openConversationCount],
+              [text.approvals, pendingApprovalCount ?? unknownCountLabel(approvalLoadStatus)],
+              [text.openConversations, openConversationCount ?? unknownCountLabel(liveStatus)],
               [text.setupProgress, `${doneSetupItems.length}/${Math.max(setupItems.length, 1)}`],
               [text.publishReadiness, readyToPublish ? text.readyToPublish : text.notReadyToPublish],
             ].map(([label, value]) => (
-              <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{label}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">
+              <div className="evelyn-bot-metric rounded-lg border border-stone-200 bg-white p-4" key={label}>
+                <p className="evelyn-bot-metric-label text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{label}</p>
+                <p className="evelyn-bot-metric-value mt-2 text-2xl font-semibold text-slate-950">
                   {typeof value === "number" ? formatNumber(value, language) : value}
                 </p>
               </div>
             ))}
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-            <section className="rounded-lg border border-stone-200 bg-white p-5">
-              <h3 className="text-lg font-semibold text-slate-950">{text.setupChecklist}</h3>
+          <div className="evelyn-bot-overview-grid grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+            <section className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+              <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.setupChecklist}</h3>
               <p className="mt-1 text-sm text-stone-600">{text.setupChecklistDescription}</p>
               <div className="mt-4 space-y-2">
                 {setupItems.length ? (
                   setupItems.map((item) => (
-                    <div className="flex items-center justify-between gap-3 rounded-md bg-stone-50 p-3" key={item.label}>
+                    <div className="evelyn-bot-checklist-row flex items-center justify-between gap-3 rounded-md bg-stone-50 p-3" key={item.label}>
                       <span className="min-w-0 break-words text-sm font-semibold text-slate-900">{item.label}</span>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className="evelyn-bot-card-meta flex shrink-0 items-center gap-2">
                         <Pill>{text.owner}: {item.owner}</Pill>
                         <Pill tone={item.done ? "green" : "slate"}>{item.done ? text.enabled : text.disabled}</Pill>
                       </div>
@@ -1040,17 +1158,17 @@ export function BotCommandCenter({
               </div>
             </section>
 
-            <section className="rounded-lg border border-stone-200 bg-white p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <section className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+              <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-950">{text.nextOperationalSteps}</h3>
+                  <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.nextOperationalSteps}</h3>
                   <p className="mt-1 text-sm text-stone-600">{text.nextRecommendedStep}</p>
                 </div>
                 <Pill tone={readyToPublish ? "green" : "amber"}>{nextRecommendedStep}</Pill>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {bots.map((bot) => (
-                  <article className="rounded-lg border border-stone-200 p-4" key={bot.id}>
+                  <article className="evelyn-bot-card evelyn-bot-summary rounded-lg border border-stone-200 p-4" key={bot.id}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-slate-950">{bot.name}</p>
@@ -1069,23 +1187,19 @@ export function BotCommandCenter({
             </section>
           </div>
 
-          <section className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <section className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.liveInboxTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.liveInboxTitle}</h3>
                 <p className="mt-1 text-sm text-stone-600">{text.liveInboxDescription}</p>
               </div>
-              <Pill tone={liveStatus === "ready" && liveConversations.length ? "green" : "slate"}>
-                {liveStatus === "loading"
-                  ? text.loadingLiveData
-                  : liveConversations.length
-                    ? text.liveData
-                    : text.demoData}
+              <Pill tone={liveStatus === "ready" ? "green" : "slate"}>
+                {liveSourceLabel}
               </Pill>
             </div>
             <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               {displayConversations.slice(0, 3).map((conversation) => (
-                <article className="min-w-0 rounded-lg border border-stone-200 p-4" key={conversation.id}>
+                <article className="evelyn-bot-card min-w-0 rounded-lg border border-stone-200 p-4" key={conversation.id}>
                   <div className="flex items-start justify-between gap-3">
                     <p className="min-w-0 break-words text-sm font-semibold text-slate-950">{conversation.title}</p>
                     <StatusPill
@@ -1099,15 +1213,15 @@ export function BotCommandCenter({
                   </p>
                   <ConversationActionSummary conversation={conversation} text={text} />
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Pill tone={conversation.source === "live" ? "green" : "slate"}>
-                      {conversation.source === "live" ? text.liveData : text.demoData}
+                    <Pill tone="green">
+                      {text.liveData}
                     </Pill>
                     <Pill>{new Date(conversation.updatedAt).toLocaleString(language === "de" ? "de-AT" : "en-US")}</Pill>
                   </div>
                 </article>
               ))}
               {!displayConversations.length ? (
-                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noConversations}</p>
+                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{conversationEmptyLabel}</p>
               ) : null}
             </div>
           </section>
@@ -1115,22 +1229,22 @@ export function BotCommandCenter({
       ) : null}
 
       {activeTab === "inbox" ? (
-        <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <section className="evelyn-bot-inbox-grid grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.inboxTabTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.inboxTabTitle}</h3>
                 <p className="mt-1 text-sm text-stone-600">{text.inboxTabDescription}</p>
               </div>
-              <Pill tone={liveStatus === "ready" && liveConversations.length ? "green" : "slate"}>
-                {liveStatus === "error" ? text.liveDataUnavailable : liveConversations.length ? text.liveData : text.demoData}
+              <Pill tone={liveStatus === "ready" ? "green" : "slate"}>
+                {liveSourceLabel}
               </Pill>
             </div>
             <div className="mt-4 space-y-3">
               {displayConversations.length ? (
                 displayConversations.map((conversation) => (
-                  <article className="rounded-lg border border-stone-200 p-4" key={conversation.id}>
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <article className="evelyn-bot-card evelyn-bot-conversation rounded-lg border border-stone-200 p-4" key={conversation.id}>
+                    <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="break-words text-base font-semibold text-slate-950">{conversation.title}</h4>
@@ -1145,9 +1259,9 @@ export function BotCommandCenter({
                         </p>
                         <ConversationActionSummary conversation={conversation} text={text} />
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <Pill tone={conversation.source === "live" ? "green" : "slate"}>
-                          {conversation.source === "live" ? text.liveData : text.demoData}
+                      <div className="evelyn-bot-card-meta flex shrink-0 flex-wrap gap-2">
+                        <Pill tone="green">
+                          {text.liveData}
                         </Pill>
                         <Pill>{new Date(conversation.updatedAt).toLocaleString(language === "de" ? "de-AT" : "en-US")}</Pill>
                       </div>
@@ -1155,18 +1269,18 @@ export function BotCommandCenter({
                   </article>
                 ))
               ) : (
-                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noConversations}</p>
+                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{conversationEmptyLabel}</p>
               )}
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-950">{text.webhookInboxTitle}</h3>
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.webhookInboxTitle}</h3>
             <p className="mt-1 text-sm text-stone-600">{text.webhookInboxDescription}</p>
             <div className="mt-4 space-y-3">
-              {liveWebhookEvents?.length ? (
+              {channelStatus === "ready" && liveWebhookEvents?.length ? (
                 liveWebhookEvents.map((event) => (
-                  <div className="rounded-lg border border-stone-200 p-4" key={event.id}>
+                  <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4" key={event.id}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-950">{event.channel}</p>
@@ -1182,7 +1296,7 @@ export function BotCommandCenter({
                   </div>
                 ))
               ) : (
-                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noWebhookEvents}</p>
+                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{channelStatus === "ready" ? text.noWebhookEvents : channelSourceLabel}</p>
               )}
             </div>
           </article>
@@ -1190,14 +1304,14 @@ export function BotCommandCenter({
       ) : null}
 
       {activeTab === "automations" ? (
-        <section className="rounded-lg border border-stone-200 bg-white p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <section className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+          <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-950">{text.approvalCenterTitle}</h3>
+              <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.approvalCenterTitle}</h3>
               <p className="mt-1 max-w-3xl text-sm text-stone-600">{text.approvalCenterDescription}</p>
             </div>
-            <Pill tone={pendingApprovalCount ? "amber" : "green"}>
-              {formatNumber(pendingApprovalCount, language)} {text.pendingApprovals}
+            <Pill tone={pendingApprovalCount === null ? "slate" : pendingApprovalCount ? "amber" : "green"}>
+              {pendingApprovalCount === null ? unknownCountLabel(approvalLoadStatus) : formatNumber(pendingApprovalCount, language)} {text.pendingApprovals}
             </Pill>
           </div>
 
@@ -1227,7 +1341,7 @@ export function BotCommandCenter({
               <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={item.label}>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{item.label}</p>
                 <p className="mt-2">
-                  <Pill tone={item.tone}>{item.value}</Pill>
+                  <Pill tone={autonomyKnown ? item.tone : "slate"}>{autonomyKnown ? item.value : unknownCountLabel(channelStatus)}</Pill>
                 </p>
               </div>
             ))}
@@ -1269,7 +1383,7 @@ export function BotCommandCenter({
               <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.loadingApprovals}</p>
             ) : null}
 
-            {approvalLoadStatus !== "loading" && approvals.length ? (
+            {approvalLoadStatus === "ready" && approvals.length ? (
               approvals.map((approval) => {
                 const payload = getApprovalPayload(approval);
                 const requestedActions = getRequestedActions(approval);
@@ -1285,8 +1399,8 @@ export function BotCommandCenter({
                 const isUpdating = approvalUpdatingId === approval.id;
 
                 return (
-                  <article className="rounded-lg border border-stone-200 p-4" key={approval.id}>
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <article className="evelyn-bot-card evelyn-bot-approval rounded-lg border border-stone-200 p-4" key={approval.id}>
+                    <div className="evelyn-bot-card-header flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="break-words text-base font-semibold text-slate-950">{approval.summary}</h4>
@@ -1309,7 +1423,7 @@ export function BotCommandCenter({
                           </div>
                         ) : null}
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
+                      <div className="evelyn-bot-card-meta flex shrink-0 flex-wrap gap-2">
                         <Pill>{new Date(approval.createdAt).toLocaleString(language === "de" ? "de-AT" : "en-US")}</Pill>
                         <Pill>{getCrmEnumLabel(approval.entityType, language)}</Pill>
                       </div>
@@ -1338,10 +1452,10 @@ export function BotCommandCenter({
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <div className="evelyn-bot-card-actions mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <button
                         className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isUpdating}
+                        disabled={isUpdating || !isHomeWorkspace}
                         onClick={() => void decideApproval(approval.id, "handoff")}
                         type="button"
                       >
@@ -1349,7 +1463,7 @@ export function BotCommandCenter({
                       </button>
                       <button
                         className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isUpdating}
+                        disabled={isUpdating || !isHomeWorkspace}
                         onClick={() => void decideApproval(approval.id, "denied")}
                         type="button"
                       >
@@ -1357,7 +1471,7 @@ export function BotCommandCenter({
                       </button>
                       <button
                         className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isUpdating}
+                        disabled={isUpdating || !isHomeWorkspace}
                         onClick={() => void decideApproval(approval.id, "approved")}
                         type="button"
                       >
@@ -1369,7 +1483,7 @@ export function BotCommandCenter({
               })
             ) : null}
 
-            {approvalLoadStatus !== "loading" && !approvals.length ? (
+            {approvalLoadStatus === "ready" && !approvals.length ? (
               <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noPendingApprovals}</p>
             ) : null}
           </div>
@@ -1377,8 +1491,8 @@ export function BotCommandCenter({
       ) : null}
 
       {activeTab === "setup" ? (
-        <section className="rounded-lg border border-stone-200 bg-white p-5">
-          <h3 className="text-lg font-semibold text-slate-950">{text.setupTabTitle}</h3>
+        <section className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+          <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.setupTabTitle}</h3>
           <p className="mt-1 text-sm text-stone-600">{text.setupTabDescription}</p>
           {botSetupSaveStatus === "ready" ? (
             <p className="mt-4 rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
@@ -1395,8 +1509,8 @@ export function BotCommandCenter({
           <div className="mt-4 grid gap-3">
             {bots.length ? (
               bots.map((bot) => (
-                <article className="rounded-lg border border-stone-200 p-4" key={bot.id}>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <article className="evelyn-bot-card evelyn-bot-setup-card rounded-lg border border-stone-200 p-4" key={bot.id}>
+                  <div className="evelyn-bot-card-header flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="break-words text-base font-semibold text-slate-950">{bot.name}</h4>
@@ -1404,7 +1518,7 @@ export function BotCommandCenter({
                       </div>
                       <p className="mt-2 max-w-3xl break-words text-sm text-stone-600">{bot.description}</p>
                     </div>
-                    <div className="grid shrink-0 gap-3">
+                    <div className="evelyn-bot-card-actions grid shrink-0 gap-3">
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">
                         <div className="rounded-md bg-stone-50 px-3 py-2">
                           <p className="font-semibold text-slate-950">{bot.channels.length}</p>
@@ -1422,7 +1536,7 @@ export function BotCommandCenter({
                       {canManageBotSetup ? (
                         <button
                           className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={botSetupSavingId === bot.id}
+                          disabled={botSetupSavingId === bot.id || !isHomeWorkspace}
                           onClick={() => void saveBotSetup(bot)}
                           type="button"
                         >
@@ -1441,15 +1555,15 @@ export function BotCommandCenter({
       ) : null}
 
       {activeTab === "setup" ? (
-        <section className="rounded-lg border border-stone-200 bg-white p-5">
-          <h3 className="text-lg font-semibold text-slate-950">{text.channelSetup}</h3>
+        <section className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+          <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.channelSetup}</h3>
           <p className="mt-1 text-sm text-stone-600">{text.channelsDescription}</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="evelyn-bot-channel-grid mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {allChannels.map(({ bot, channel }) => (
-              <article className="rounded-lg border border-stone-200 p-4" key={`${bot.id}-${channel.id}`}>
-                <div className="flex items-start justify-between gap-3">
+              <article className="evelyn-bot-card evelyn-bot-channel-card rounded-lg border border-stone-200 p-4" key={`${bot.id}-${channel.id}`} data-active={channel.active}>
+                <div className="evelyn-bot-channel-header flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-semibold text-slate-950">{channel.channel}</p>
+                    <p className="evelyn-bot-channel-name break-words text-sm font-semibold text-slate-950">{channel.channel}</p>
                     <p className="mt-1 break-words text-xs text-stone-500">{bot.name}</p>
                   </div>
                   <StatusPill
@@ -1457,7 +1571,7 @@ export function BotCommandCenter({
                     status={channel.setupStatus ?? (channel.active ? "connected" : "not_connected")}
                   />
                 </div>
-                <dl className="mt-4 grid gap-2 text-sm">
+                <dl className="evelyn-bot-channel-details mt-4 grid gap-2 text-sm">
                   <div>
                     <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.provider}</dt>
                     <dd className="mt-1 break-words text-slate-900">{channel.provider ?? channel.channel}</dd>
@@ -1467,15 +1581,15 @@ export function BotCommandCenter({
                     <dd className="mt-1 break-words font-mono text-xs text-slate-700">{channel.webhookPath ?? "/api/bots/chat"}</dd>
                   </div>
                 </dl>
-                <div className="mt-4 rounded-md bg-stone-50 p-3">
+                <div className="evelyn-bot-channel-steps mt-4 rounded-md bg-stone-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.customerSetupFlow}
                   </p>
                   <div className="mt-3 grid gap-2">
                     {(channel.setupSteps?.length ? channel.setupSteps : [text.connectStep, text.verifyStep, text.testStep]).map(
                       (step, index) => (
-                        <div className="flex items-center gap-2 text-sm" key={step}>
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-900">
+                        <div className="evelyn-bot-channel-step flex items-center gap-2 text-sm" key={step}>
+                          <span className="evelyn-bot-channel-step-number flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-900">
                             {index + 1}
                           </span>
                           <span className="min-w-0 break-words text-stone-700">{step}</span>
@@ -1491,11 +1605,11 @@ export function BotCommandCenter({
       ) : null}
 
       {activeTab === "knowledge" ? (
-        <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <section className="evelyn-bot-knowledge-grid grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.knowledgeTabTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.knowledgeTabTitle}</h3>
                 <p className="mt-1 max-w-3xl text-sm text-stone-600">{text.knowledgeTabDescription}</p>
               </div>
               <a className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" href="#knowledge">
@@ -1505,11 +1619,11 @@ export function BotCommandCenter({
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.knowledgeSources}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{displayedKnowledgeItems.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{knowledgeStatus === "ready" ? displayedKnowledgeItems.length : "—"}</p>
               </div>
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.approvedKnowledge}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{approvedKnowledgeItems.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{knowledgeStatus === "ready" ? approvedKnowledgeItems.length : "—"}</p>
               </div>
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.strictKnowledge}</p>
@@ -1524,9 +1638,6 @@ export function BotCommandCenter({
                   <div className="flex items-center justify-between gap-3 rounded-md border border-stone-200 p-3" key={item.id}>
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-slate-950">{item.name}</p>
-                      <p className="mt-1 text-xs text-stone-500">
-                        {item.items} {text.chunks} · {item.coverage}
-                      </p>
                     </div>
                     <Pill tone={item.status === "approved" ? "green" : "amber"}>
                       {getBotVisibleStatusLabel(item.status, text, language)}
@@ -1534,17 +1645,19 @@ export function BotCommandCenter({
                   </div>
                 ))
               ) : (
-                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noKnowledgeSources}</p>
+                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{
+                  knowledgeStatus === "loading" ? text.loadingLiveData : knowledgeStatus === "error" ? text.liveDataUnavailable : knowledgeStatus === "disabled" ? text.disabled : text.noKnowledgeSources
+                }</p>
               )}
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-950">{text.documentLibrary}</h3>
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.documentLibrary}</h3>
             <p className="mt-1 text-sm text-stone-600">{text.documentLibraryDescription}</p>
             <div className="mt-4 grid gap-3">
               {bots.map((bot) => (
-                <div className="rounded-lg border border-stone-200 p-4" key={bot.id}>
+                <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4" key={bot.id}>
                   <div className="flex items-start justify-between gap-3">
                     <p className="break-words text-sm font-semibold text-slate-950">{bot.name}</p>
                     <Pill tone={bot.strictKnowledge ? "green" : "amber"}>
@@ -1573,14 +1686,14 @@ export function BotCommandCenter({
 
       {activeTab === "automations" ? (
         <section className="space-y-4">
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.actionOutboxTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.actionOutboxTitle}</h3>
                 <p className="mt-1 max-w-3xl text-sm text-stone-600">{text.actionOutboxDescription}</p>
               </div>
-              <Pill tone={openBotActionCount ? "amber" : "green"}>
-                {formatNumber(openBotActionCount, language)} {text.openActions}
+              <Pill tone={openBotActionCount === null ? "slate" : openBotActionCount ? "amber" : "green"}>
+                {openBotActionCount === null ? unknownCountLabel(botActionStatus) : formatNumber(openBotActionCount, language)} {text.openActions}
               </Pill>
             </div>
 
@@ -1596,13 +1709,13 @@ export function BotCommandCenter({
             ) : null}
 
             <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              <div className="rounded-lg border border-stone-200 p-4">
+              <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4">
                 <h4 className="text-base font-semibold text-slate-950">{text.documentOutbox}</h4>
                 <div className="mt-3 space-y-3">
                   {botActionStatus === "loading" ? (
                     <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.loadingLiveData}</p>
                   ) : null}
-                  {botActionStatus !== "loading" && documentSends.length ? (
+                  {botActionStatus === "ready" && documentSends.length ? (
                     documentSends.map((documentSend) => {
                       const isUpdating = botActionUpdatingId === documentSend.id;
                       const isUploading = documentUploadingId === documentSend.id;
@@ -1612,7 +1725,7 @@ export function BotCommandCenter({
 
                       return (
                         <div className="rounded-md bg-stone-50 p-3" key={documentSend.id}>
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="evelyn-bot-card-header flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
                               <p className="break-words text-sm font-semibold text-slate-950">
                                 {documentSend.mediaAssetName ?? documentSend.documentName}
@@ -1645,6 +1758,7 @@ export function BotCommandCenter({
                                   onChange={(event) => {
                                     if (event.target.value) void attachDocumentAsset(documentSend.id, event.target.value);
                                   }}
+                                  disabled={!isHomeWorkspace || isUpdating || isUploading}
                                   value={documentSend.mediaAssetId ?? ""}
                                 >
                                   <option value="">{text.selectDocumentPlaceholder}</option>
@@ -1659,7 +1773,7 @@ export function BotCommandCenter({
                                   <input
                                     accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
                                     className="sr-only"
-                                    disabled={isUploading || isUpdating}
+                                    disabled={isUploading || isUpdating || !isHomeWorkspace}
                                     onChange={(event) => {
                                       const file = event.target.files?.[0];
                                       if (file) void uploadDocumentForAction(documentSend, file);
@@ -1670,7 +1784,7 @@ export function BotCommandCenter({
                                 </label>
                               </div>
                               {!sendableDocumentAssets.length ? (
-                                <p className="text-xs text-stone-500">{text.noDocumentAssets}</p>
+                                <p className="text-xs text-stone-500">{!isHomeWorkspace ? readOnlyMessage : documentStatus === "ready" ? text.noDocumentAssets : documentStatus === "loading" ? text.loadingLiveData : text.liveDataUnavailable}</p>
                               ) : null}
                             </div>
                           ) : null}
@@ -1682,7 +1796,7 @@ export function BotCommandCenter({
                           {documentSend.status !== "sent" ? (
                             <button
                               className="mt-3 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={isUpdating || isUploading || !canSendDocument}
+                              disabled={isUpdating || isUploading || !canSendDocument || !isHomeWorkspace}
                               onClick={() => void runBotAction({ action: "mark_sent", id: documentSend.id, type: "document_send" })}
                               type="button"
                             >
@@ -1693,25 +1807,25 @@ export function BotCommandCenter({
                       );
                     })
                   ) : null}
-                  {botActionStatus !== "loading" && !documentSends.length ? (
+                  {botActionStatus === "ready" && !documentSends.length ? (
                     <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noDocumentActions}</p>
                   ) : null}
                 </div>
               </div>
 
-              <div className="rounded-lg border border-stone-200 p-4">
+              <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4">
                 <h4 className="text-base font-semibold text-slate-950">{text.meetingOutbox}</h4>
                 <div className="mt-3 space-y-3">
                   {botActionStatus === "loading" ? (
                     <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.loadingLiveData}</p>
                   ) : null}
-                  {botActionStatus !== "loading" && meetingBookings.length ? (
+                  {botActionStatus === "ready" && meetingBookings.length ? (
                     meetingBookings.map((meetingBooking) => {
                       const isUpdating = botActionUpdatingId === meetingBooking.id;
 
                       return (
                         <div className="rounded-md bg-stone-50 p-3" key={meetingBooking.id}>
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="evelyn-bot-card-header flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
                               <p className="break-words text-sm font-semibold text-slate-950">
                                 {meetingBooking.contactName || text.unknownContact}
@@ -1729,7 +1843,7 @@ export function BotCommandCenter({
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
                                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={isUpdating}
+                                disabled={isUpdating || !isHomeWorkspace}
                                 onClick={() => void runBotAction({ action: "confirm", id: meetingBooking.id, type: "meeting_booking" })}
                                 type="button"
                               >
@@ -1737,7 +1851,7 @@ export function BotCommandCenter({
                               </button>
                               <button
                                 className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={isUpdating}
+                                disabled={isUpdating || !isHomeWorkspace}
                                 onClick={() => void runBotAction({ action: "cancel", id: meetingBooking.id, type: "meeting_booking" })}
                                 type="button"
                               >
@@ -1749,7 +1863,7 @@ export function BotCommandCenter({
                       );
                     })
                   ) : null}
-                  {botActionStatus !== "loading" && !meetingBookings.length ? (
+                  {botActionStatus === "ready" && !meetingBookings.length ? (
                     <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noMeetingActions}</p>
                   ) : null}
                 </div>
@@ -1758,8 +1872,8 @@ export function BotCommandCenter({
           </article>
 
           <div className="grid gap-4 xl:grid-cols-3">
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-950">{text.actionsTabTitle}</h3>
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.actionsTabTitle}</h3>
             <p className="mt-1 text-sm text-stone-600">{text.actionsTabDescription}</p>
             <div className="mt-4 overflow-x-auto">
               <table className="min-w-full text-left text-sm">
@@ -1785,12 +1899,12 @@ export function BotCommandCenter({
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-950">{text.leadAutomation}</h3>
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.leadAutomation}</h3>
             <div className="mt-4 space-y-3">
               {workflows.length ? (
               workflows.map((workflow) => (
-                <div className="rounded-lg border border-stone-200 p-4" key={workflow.id}>
+                <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4" key={workflow.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-slate-950">{workflow.name}</p>
@@ -1811,13 +1925,13 @@ export function BotCommandCenter({
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-950">{text.crmAutomationsTitle}</h3>
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.crmAutomationsTitle}</h3>
             <p className="mt-1 text-sm text-stone-600">{text.crmAutomationsDescription}</p>
             <div className="mt-4 space-y-3">
               {automations.length ? (
                 automations.map((automation) => (
-                  <div className="rounded-lg border border-stone-200 p-4" key={automation.id}>
+                  <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4" key={automation.id}>
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-slate-950">{automation.name}</p>
@@ -1842,10 +1956,10 @@ export function BotCommandCenter({
 
       {activeTab === "testPublish" ? (
         <section className="space-y-4">
-          <div className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.testPublishTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.testPublishTitle}</h3>
                 <p className="mt-1 text-sm text-stone-600">{text.testPublishDescription}</p>
               </div>
               <Pill tone={readyToPublish ? "green" : "amber"}>{readyToPublish ? text.readyToPublish : text.notReadyToPublish}</Pill>
@@ -1865,10 +1979,10 @@ export function BotCommandCenter({
             </p>
           </div>
           {testPanel}
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.evaluationTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.evaluationTitle}</h3>
                 <p className="mt-1 text-sm text-stone-600">{text.evaluationDescription}</p>
               </div>
               <Pill tone={evaluationStatus === "error" ? "rose" : evaluationReady ? "green" : "amber"}>
@@ -1881,7 +1995,9 @@ export function BotCommandCenter({
             <div className="mt-5 space-y-3">
               {bots.length ? (
                 bots.map((bot) => {
-                  const latestRun = evaluationRuns.find((run) => run.botId === bot.id);
+                  const evaluationChannel = selectedEvaluationChannel(bot);
+                  const availableChannels = configuredEvaluationChannels(bot);
+                  const latestRun = evaluationRuns.find((run) => run.botId === bot.id && run.evaluationChannel === evaluationChannel);
                   const passed = isEvaluationRunReady(latestRun);
                   const failedCases = latestRun?.cases.filter((evaluationCase) => !evaluationCase.passed) ?? [];
                   const citationCases = latestRun?.cases.filter((evaluationCase) => evaluationCase.citationsRequired) ?? [];
@@ -1897,7 +2013,7 @@ export function BotCommandCenter({
 
                   return (
                     <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={bot.id}>
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="font-semibold text-slate-950">{bot.name}</p>
                           <p className="mt-1 text-xs text-stone-500">
@@ -1909,14 +2025,25 @@ export function BotCommandCenter({
                         <div className="flex flex-wrap items-center gap-2">
                           <Pill tone={passed ? "green" : "amber"}>{passed ? text.readyToPublish : text.notReadyToPublish}</Pill>
                           {canManageBotSetup ? (
+                            <>
+                            <label className="text-xs font-semibold text-slate-700">
+                              <span className="sr-only">{bot.name} · {text.channels}</span>
+                              <select className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={evaluationChannel}
+                                disabled={!availableChannels.length || evaluationRunningId === bot.id}
+                                onChange={event => setEvaluationChannels(current => ({...current,[bot.id]:event.target.value as KnowledgeChannel}))}>
+                                {!availableChannels.length ? <option value="">{text.nextStepConnectChannels}</option> : null}
+                                {availableChannels.map(option => <option key={option.channel} value={option.channel}>{option.label}</option>)}
+                              </select>
+                            </label>
                             <button
                               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={evaluationRunningId === bot.id}
+                              disabled={!evaluationChannel || evaluationRunningId === bot.id}
                               onClick={() => void runBotEvaluation(bot)}
                               type="button"
                             >
                               {evaluationRunningId === bot.id ? text.runningEvaluation : text.runEvaluation}
                             </button>
+                            </>
                           ) : null}
                         </div>
                       </div>
@@ -1992,7 +2119,7 @@ export function BotCommandCenter({
                               {latestRun.cases.length ? (
                                 latestRun.cases.map((evaluationCase) => (
                                   <article className="rounded-md border border-stone-200 bg-stone-50 p-3" key={evaluationCase.id}>
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="evelyn-bot-card-header flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                       <div className="min-w-0">
                                         <p className="break-words text-sm font-semibold text-slate-950">
                                           {text.evaluationCaseKindLabels[evaluationCase.kind]} - {evaluationCase.id}
@@ -2040,10 +2167,10 @@ export function BotCommandCenter({
               )}
             </div>
           </article>
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <article className="evelyn-bot-panel rounded-lg border border-stone-200 bg-white p-5">
+            <div className="evelyn-bot-card-header flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">{text.advancedTechnologyTitle}</h3>
+                <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.advancedTechnologyTitle}</h3>
                 <p className="mt-1 text-sm text-stone-600">{text.advancedTechnologyDescription}</p>
               </div>
               <button

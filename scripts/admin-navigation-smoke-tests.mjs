@@ -26,8 +26,8 @@ test("three admin entries have distinct stable hashes and dedicated panels", () 
   assert.match(workspace, /auditLog: "audit-log"/);
   assert.match(workspace, /governanceCompliance: "governance-compliance"/);
   assert.match(workspace, /systemReleases: "system-releases"/);
-  assert.match(workspace, /readInitialNavigationEntry\(storedPreset\)/);
-  assert.match(workspace, /readInitialNavigationEntry\(normalizedActivePreset\)/);
+  assert.match(workspace, /readInitialNavigationEntry\(storedPreset, sessionProductRole\)/);
+  assert.match(workspace, /readInitialNavigationEntry\(normalizedActivePreset, sessionProductRole\)/);
   assert.match(workspace, /<AuditLogPanel language=\{language\}/);
   assert.match(workspace, /<GovernanceCompliancePanel language=\{language\}/);
   assert.match(workspace, /<SystemReleasesPanel language=\{language\}/);

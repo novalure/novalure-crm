@@ -1,0 +1,83 @@
+{
+  "schema": "package4-scoped-owner-transport-local-proof-v1",
+  "completedAtUtc": "2026-10-20T08:40:24.125956+00:00",
+  "status": "LOCAL_PASS_INDEPENDENT_REVIEW_PASS",
+  "files": [
+    {
+      "path": "/workspace/package4-scoped-owner-transport.mjs",
+      "sha256": "27742e47c303e459939ba0e07b68668917019a0822e80a257c88f0c9574d197d"
+    },
+    {
+      "path": "/workspace/package4-scoped-owner-transport-tests.mjs",
+      "sha256": "7de38a0ede2b61d256e41174b108849bde6671924a8bf5e13560b9a919989c76"
+    }
+  ],
+  "tests": {
+    "command": "node --test /workspace/package4-scoped-owner-transport-tests.mjs",
+    "exitCode": 0,
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 1289.762794,
+    "deterministicLifecycleAndFailureInjectionTests": 22,
+    "actualNeonDriverLocalPostgresTests": 1,
+    "actualDriverProof": "Actual @neondatabase/serverless Pool over a loopback-only websocket-to-TCP bridge into disposable embedded PostgreSQL: release(true) emitted end, three separate physical leases ended, transaction PID remained stable, owner connection count was zero before the local Blob callback.",
+    "failureCoverage": [
+      "connect failure/timeout and late connection",
+      "identity failure",
+      "BEGIN/query/COMMIT rejection without replay",
+      "client error/end between and during queries",
+      "pool error with no lease",
+      "active-query close and late query rejection",
+      "bounded pool close and missing client end",
+      "concurrent-call refusal",
+      "asynchronous event-sink rejection",
+      "raw SQL/password/params/error-message non-emission"
+    ],
+    "sourceToolingUnchanged": true,
+    "localClusterAndWebsocketClosed": true
+  },
+  "checks": {
+    "nodeSyntax": "PASS",
+    "eslintNoUndefNoUnusedVars": "PASS 0 errors/0 warnings in both files"
+  },
+  "independentReview": {
+    "reviewer": "/root/hosted_upload_debug",
+    "openFindings": 0,
+    "status": "PASS_SOURCE_AND_TEST_REVIEW",
+    "testsRepeatedByReviewer": false
+  },
+  "interface": {
+    "factory": "createScopedOwnerTransport({pool,binding,label,attestIdentity,onEvent?,closeTimeoutMs=5000,connectTimeoutMs=20000,queryTimeoutMs=30000})",
+    "ports": [
+      "query(stringSql,params?)",
+      "close()",
+      "status()",
+      "events()"
+    ],
+    "attestation": "Existing assertPackage4RestoreIdentity receives direct physical query port; no recursive use of the scoped facade.",
+    "transaction": "Exactly one physical lease from BEGIN to successful COMMIT/ROLLBACK. Any failure poisons the transport permanently and destroys the same lease; no reconnect/replay or fabricated rollback success.",
+    "outsideTransaction": "One caller query plus exact identity attestation per new physical lease; release(true) and observed end before returning to an external port.",
+    "listeners": "Dedicated pool error listener before connect; client error/end listeners before attestation. No event handler throws; safe fatal state rejects active/next query.",
+    "bounds": "Connect20s/query30s/lease+pool-close5s defaults. Caller still owns an overall operation deadline and independent provider-endpoint finally.",
+    "safeTelemetry": "Fixed label/project/branch/role, lease/backend PID, query SHA256/activity/timestamp and allowlisted driver codes; never SQL, params, URI or raw error objects."
+  },
+  "callerObligations": [
+    "Use a fresh dedicated pool per scoped source/working/restored port with connectionTimeoutMillis20000/query_timeout30000 and unchanged strict TLS transport.",
+    "Pass the unchanged exact identity verifier; no Neon identity GUC overrides.",
+    "Omit onEvent for asynchronous file logging and persist events() snapshots after awaited operations.",
+    "Catch/retain the original operation error; collect bounded close failures as secondary cleanup errors. A close failure must never mask the first phase/proof failure or skip independent endpoint closure.",
+    "No owner lease may be held over provider RPC, Blob, or ordinary application callbacks.",
+    "Preserve deployed app c291 and committed recovery tooling5f source binding; hash and independently approve the private adapter/launcher continuation separately."
+  ],
+  "actionsByThisSubagent": {
+    "providerRequests": 0,
+    "remoteDatabaseQueries": 0,
+    "capture": 0,
+    "retry": 0,
+    "primaryCheckoutEdits": 0,
+    "commits": 0,
+    "localLoopbackOnlyDriverTest": true
+  },
+  "remoteRecoveryResult": "NOT_TESTED; the prior R2 failure is retained. This local adapter proof is not a successful provider restore."
+}

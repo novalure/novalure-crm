@@ -1,0 +1,66 @@
+{
+  "format": "package4-hosted-transport-fix-review-v1",
+  "recordedAt": "2026-10-20T06:35:20.558Z",
+  "priorApplicationRevision": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+  "status": "LOCAL_VERIFIED_HOSTED_RETEST_REQUIRED",
+  "independentReview": {
+    "reviewer": "/root/masterplan_context",
+    "openFindings": 0,
+    "scope": [
+      "Same-page actual prepare grant, actor/workspace/TTL/source-store binding and exact SDK provider API",
+      "OPTIONS/PUT, one pathname query, no ungranted API paths, no CRM OIDC/toolbar header forwarding",
+      "Response-stage cross-origin redirect denial before CORS follows",
+      "Unchanged blockedOutbound zero-assertion and bounded metadata-only observability",
+      "AbortError + upload/import deadline race, no late upload/finalization, timer cleanup"
+    ]
+  },
+  "validation": {
+    "targetGuards": 6,
+    "chromiumRedirectAndCors": 2,
+    "uploadDeadline": 5,
+    "focusedLint": "PASS",
+    "typecheck": "PASS",
+    "gitDiffCheck": "PASS",
+    "hostedAfterFix": "NOT TESTED"
+  },
+  "files": [
+    {
+      "path": "scripts/lib/package4-hosted-browser-access.mjs",
+      "sha256": "96b6fa4d5475dc9d45c5d75e5bd3aaf4c5a2fec0b4e9316503bdd24827d8efcb"
+    },
+    {
+      "path": "scripts/package4-hosted-browser-access-tests.mjs",
+      "sha256": "ad6fa4bca52b399b85a938172c3d35db7dfddfd7c9881e657729ea030405dae2"
+    },
+    {
+      "path": "scripts/lib/package4-hosted-target.mjs",
+      "sha256": "6a83ce98997864c1233a6fc36d3dd49d19c990a606abafdee22f4c34c9cf7a8a"
+    },
+    {
+      "path": "scripts/package4-hosted-target-tests.mjs",
+      "sha256": "26994649297df4072c6440416f93ae99e70647739c79e5027ed9056138f1755a"
+    },
+    {
+      "path": "scripts/qa-package4-hosted.mjs",
+      "sha256": "4d79346d996dd9b26f8574faca93a32c97dfdbdb2ff819ad314e0b6932700b97"
+    },
+    {
+      "path": "src/lib/knowledge-center/document-upload-client.ts",
+      "sha256": "01a0fc6c7263ff2ddf5458cd0f38cbc8b1acfc679ccba710eb95cf58b36e47cc"
+    },
+    {
+      "path": "src/lib/knowledge-center/document-upload-transport.ts",
+      "sha256": "8c9897c3b76b95cb8783085234ec97715b10d7a0d50ece300a0aae9f5c615d2d"
+    },
+    {
+      "path": "scripts/knowledge-document-upload-client-tests.ts",
+      "sha256": "47432d3df51a7791e1b65faead2c67cc3bdea5c7e9af334c413d63307d3db382"
+    },
+    {
+      "path": "package.json",
+      "sha256": "f48a72e7a3c8917d08fb60290fe56fc80f76ed425a46d8eb120fd6adeed7025a"
+    }
+  ],
+  "productionMutations": 0,
+  "secretValuesEmitted": false
+}

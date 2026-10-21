@@ -1,5 +1,6 @@
 import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { hasNotificationQueueAccess } from "@/lib/db/notification-queue-access";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { getProductRoleCapabilities } from "@/lib/product-model";
@@ -710,6 +711,10 @@ export async function queueTeamsNotification(input: {
   }
 
   try {
+    // Missing optional provider grants must not poison the enclosing CRM transaction.
+    if (!await hasNotificationQueueAccess("teams")) {
+      return { queued: false, reason: "Notification queue access is unavailable" };
+    }
     const projectId = isUuid(input.projectId) ? input.projectId : null;
     const projectIsValid = await projectBelongsToWorkspace(input.session.workspaceId, projectId);
     if (!projectIsValid) {

@@ -1,5 +1,6 @@
 import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { hasNotificationQueueAccess } from "@/lib/db/notification-queue-access";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getProductRoleCapabilities } from "@/lib/product-model";
 import {
@@ -683,6 +684,10 @@ export async function queueGoogleNotification(input: {
   }
 
   try {
+    // Missing optional provider grants must not poison the enclosing CRM transaction.
+    if (!await hasNotificationQueueAccess("google")) {
+      return { queued: false, reason: "Notification queue access is unavailable" };
+    }
     const projectId = isUuid(input.projectId) ? input.projectId : null;
     const projectIsValid = await projectBelongsToWorkspace(input.session.workspaceId, projectId);
     if (!projectIsValid) {

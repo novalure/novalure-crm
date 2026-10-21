@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { del, get, put } from "@vercel/blob";
+import { del, get, head, put } from "@vercel/blob";
 import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { currentTenantTransaction } from "@/lib/db/transaction-context";
+import type { TenantPool } from "@/lib/db/tenant-client";
 import type { MediaLifecycleErrorCode, PropertyMediaDeletionTarget } from "@/lib/media-lifecycle";
 import {
   createMediaShareToken,
@@ -111,9 +113,25 @@ const allowedExtensionsByMimeType = new Map<string, Set<string>>([
 ]);
 const allowedImageMimeTypes = new Set([...allowedExtensionsByMimeType.keys()].filter((value) => value.startsWith("image/")));
 const allowedMediaMimeTypes = new Set(allowedExtensionsByMimeType.keys());
+const knowledgeTextExtensions = new Map<string, Set<string>>([
+  ["text/plain",new Set([".txt", ".md"])],
+  ["text/markdown",new Set([".md"])],
+  ["text/csv",new Set([".csv"])],
+  ["application/json",new Set([".json"])],
+]);
 const mediaRoot = process.env.NOVALURE_MEDIA_ROOT || path.join(process.cwd(), ".data", "media");
 const uploadRoot = path.join(mediaRoot, "uploads");
 const libraryPath = path.join(mediaRoot, "library.json");
+// A permanent storage classification, retained after a source is archived or
+// a new version replaces its attachment. Do not infer privacy from source RLS:
+// the source may deliberately be invisible to the current media-library user.
+export const knowledgeMediaFolderPrefix = "knowledge-private-";
+const authorizedKnowledgeReads = new WeakSet<MediaAsset>();
+const verifiedKnowledgeUploads = new WeakMap<File, { actorId: string; workspaceId: string; pathname: string }>();
+const knowledgeUploadRollbacks = new WeakMap<MediaAsset, { asset: MediaAsset; actorId: string; transaction: NonNullable<ReturnType<typeof currentTenantTransaction>>["transaction"] }>();
+const validMediaScopeId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const isKnowledgePrivateMedia = (asset: Pick<MediaAsset, "folder">) => asset.folder.toLowerCase().startsWith(knowledgeMediaFolderPrefix);
+const ordinaryMediaSql = (alias = "ma") => `left(lower(${alias}.folder), ${knowledgeMediaFolderPrefix.length}) <> '${knowledgeMediaFolderPrefix}'`;
 
 function mediaAssetSelect(alias = "ma", includeShareStatus = true) {
   return `
@@ -198,9 +216,69 @@ export async function saveWorkspaceFile(input: {
   name?: string;
   workspaceId: string;
 }) {
-  const sizeBytes = input.file.size;
+  if (input.folder?.trim().toLowerCase().startsWith(knowledgeMediaFolderPrefix)) {
+    throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "Knowledge documents require the Knowledge Center upload.");
+  }
+  return saveMediaFile(input);
+}
 
-  if (!isAllowedMediaFile(input.file)) {
+/** Only the authenticated Knowledge upload route may call this, after checking
+ * write permission and commercial limits. No caller-selected folder is accepted. */
+export async function saveKnowledgeFile(input: {
+  actorId: string; workspaceId: string; file: File; name?: string; alt?: string;
+}) {
+  const active = currentTenantTransaction();
+  if (!validMediaScopeId(input.actorId) || !validMediaScopeId(input.workspaceId) ||
+      active?.scope.actorId !== input.actorId || active.scope.workspaceId !== input.workspaceId) {
+    throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "An authorized Knowledge upload is required.");
+  }
+  const verifiedUpload = verifiedKnowledgeUploads.get(input.file);
+  if (verifiedUpload && (verifiedUpload.actorId !== input.actorId || verifiedUpload.workspaceId !== input.workspaceId)) {
+    throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "The private upload belongs to another actor or workspace.");
+  }
+  const asset = await saveMediaFile({ ...input, folder: `${knowledgeMediaFolderPrefix}${input.actorId.toLowerCase()}` }, true);
+  knowledgeUploadRollbacks.set(asset, { asset: Object.freeze({ ...asset }), actorId: input.actorId, transaction: active.transaction });
+  return asset;
+}
+
+/** The direct transport registers only bytes it read from the exact private
+ * object and verified against the signed size/hash. File identity is the opaque
+ * capability; ordinary client locators never reach saveKnowledgeFile. */
+export function bindVerifiedPrivateKnowledgeUpload(file: File, scope: { actorId: string; workspaceId: string; pathname: string }) {
+  const prefix = `${scope.workspaceId}/knowledge-staging-${scope.actorId}/`;
+  if (!validMediaScopeId(scope.actorId) || !validMediaScopeId(scope.workspaceId) || !scope.pathname.startsWith(prefix) ||
+      scope.pathname !== path.posix.normalize(scope.pathname) || !/^\d+-[0-9a-f-]+\.[a-z]+$/.test(scope.pathname.slice(prefix.length))) {
+    throw new MediaStoreError("INVALID_STORAGE_REFERENCE", "The verified private upload reference is invalid.");
+  }
+  verifiedKnowledgeUploads.set(file, Object.freeze({ ...scope }));
+}
+
+/** Compensate only this process's failed upload after authoritative DB absence.
+ * Never delete a committed asset after an uncertain COMMIT acknowledgement.
+ * The opaque object and captured locator prevent arbitrary storage deletion.
+ */
+export async function discardUncommittedKnowledgeFile(asset: MediaAsset): Promise<boolean> {
+  const upload = knowledgeUploadRollbacks.get(asset);
+  const active = currentTenantTransaction();
+  if (!upload || !active || active.transaction === upload.transaction || active.scope.actorId !== upload.actorId ||
+      active.scope.workspaceId !== upload.asset.workspaceId) return false;
+  // The importing transaction held this same lock through COMMIT. Acquiring it
+  // waits for an in-flight ambiguous commit before testing metadata visibility.
+  await active.transaction.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [`knowledge-center:${upload.asset.workspaceId}`]);
+  const confirmed = await active.transaction.queryOne<{ absent: boolean }>(`select knowledge_document_upload_absent($1::uuid) as absent`, [upload.asset.id]);
+  if (confirmed?.absent !== true) { knowledgeUploadRollbacks.delete(asset); return false; }
+  await deleteStoredFile(upload.asset);
+  knowledgeUploadRollbacks.delete(asset);
+  return true;
+}
+
+async function saveMediaFile(input: {
+  alt?: string; file: File; folder?: string; name?: string; workspaceId: string;
+}, knowledgeUpload = false) {
+  const sizeBytes = input.file.size;
+  const knowledgeText = knowledgeUpload && Boolean(knowledgeTextExtensions.get(input.file.type.toLowerCase())?.has(path.extname(input.file.name).toLowerCase()));
+
+  if (!isAllowedMediaFile(input.file) && !knowledgeText) {
     throw new MediaStoreError("UNSUPPORTED_FILE_TYPE", "Only images, PDF, DOC and DOCX files are supported.");
   }
 
@@ -209,11 +287,19 @@ export async function saveWorkspaceFile(input: {
   }
 
   const signatureBytes = new Uint8Array(await input.file.slice(0, 64).arrayBuffer());
-  if (!hasExpectedMediaMagicBytes(signatureBytes, input.file.type)) {
+  if (knowledgeText) {
+    try {
+      const content = new TextDecoder("utf-8", { fatal: true }).decode(await input.file.arrayBuffer());
+      if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(content)) throw new Error("Binary text");
+      if (input.file.type.toLowerCase() === "application/json") JSON.parse(content);
+    } catch {
+      throw new MediaStoreError("FILE_CONTENT_MISMATCH", "Knowledge text files must contain valid UTF-8 text.");
+    }
+  } else if (!hasExpectedMediaMagicBytes(signatureBytes, input.file.type)) {
     throw new MediaStoreError("FILE_CONTENT_MISMATCH", "The file content does not match its declared media type.");
   }
 
-  const existingAssets = await readWorkspaceAssets(input.workspaceId);
+  const existingAssets = await readWorkspaceAssets(input.workspaceId, true);
   const usedBytes = getMediaUsage(existingAssets, input.workspaceId);
   if (usedBytes + sizeBytes > workspaceImageQuotaBytes) {
     throw new MediaStoreError("WORKSPACE_QUOTA_EXCEEDED", "This account has reached the 1 GB image storage limit.");
@@ -226,7 +312,17 @@ export async function saveWorkspaceFile(input: {
   const folderSegment = sanitizeSegment(folder);
   const fileName = `${new Date().getTime()}-${sanitizeSegment(path.basename(input.file.name, extension))}-${id.slice(0, 8)}${extension}`;
   const relativePath = path.posix.join(workspaceSegment, folderSegment, fileName);
-  const stored = await storeMediaFile(input.file, relativePath);
+  const verifiedUpload = knowledgeUpload ? verifiedKnowledgeUploads.get(input.file) : undefined;
+  let stored: Pick<MediaAsset, "relativePath" | "storageAccess" | "storageProvider">;
+  if (verifiedUpload) {
+    // The importer and expired cleanup hold the same workspace lock. Confirm
+    // existence inside that lock before attaching an immutable provider object.
+    const token = privateBlobToken();
+    if (!token) throw new MediaStoreError("PRIVATE_STORAGE_UNAVAILABLE", "Private media storage is unavailable.");
+    const blob = await head(verifiedUpload.pathname, { token, abortSignal: AbortSignal.timeout(15_000) });
+    if (blob.size !== sizeBytes || blob.contentType.split(";", 1)[0].trim().toLowerCase() !== input.file.type.toLowerCase()) throw new MediaStoreError("FILE_CONTENT_MISMATCH", "The verified private upload changed.");
+    stored = { relativePath: verifiedUpload.pathname, storageAccess: "private", storageProvider: "vercel-blob" };
+  } else stored = await storeMediaFile(input.file, relativePath);
 
   const asset: MediaAsset = {
     id,
@@ -276,6 +372,7 @@ export async function findPublicMediaAsset(publicToken: string) {
           and mas.revoked_at is null
           and mas.expires_at > now()
           and ma.is_public = true
+          and ${ordinaryMediaSql()}
         limit 1
       `,
       [tokenHash, mediaPublicShareScope],
@@ -285,20 +382,36 @@ export async function findPublicMediaAsset(publicToken: string) {
 
   const library = await readMediaLibrary();
   const share = library.shares.find((item) => isActiveShare(item) && item.tokenHash === tokenHash && item.scope === mediaPublicShareScope);
-  return share ? library.assets.find((asset) => asset.id === share.assetId && asset.workspaceId === share.workspaceId && asset.isPublic) ?? null : null;
+  return share ? library.assets.find((asset) => asset.id === share.assetId && asset.workspaceId === share.workspaceId && asset.isPublic && !isKnowledgePrivateMedia(asset)) ?? null : null;
 }
 
 export async function findWorkspaceMediaAsset(assetId: string, workspaceId: string) {
   if (hasDatabaseUrl()) {
     const row = await queryOne<MediaAssetRow>(
-      `select ${mediaAssetSelect()} from media_assets ma where ma.id = $1 and ma.workspace_id = $2 limit 1`,
+      `select ${mediaAssetSelect()} from media_assets ma where ma.id = $1 and ma.workspace_id = $2 and ${ordinaryMediaSql()} limit 1`,
       [assetId, workspaceId],
     );
     return row ? normalizeMediaAsset(row) : null;
   }
 
   const library = await readMediaLibrary();
-  return library.assets.find((asset) => asset.id === assetId && asset.workspaceId === workspaceId) ?? null;
+  return library.assets.find((asset) => asset.id === assetId && asset.workspaceId === workspaceId && !isKnowledgePrivateMedia(asset)) ?? null;
+}
+
+/** Source/project RBAC must precede this server-only storage lookup. The opaque
+ * object capability permits byte access without opening the generic media API. */
+export async function authorizedKnowledgeMediaAsset(assetId: string, workspaceId: string) {
+  if (currentTenantTransaction()?.scope.workspaceId !== workspaceId || !hasDatabaseUrl() ||
+      !validMediaScopeId(assetId)) return null;
+  const row = await queryOne<MediaAssetRow>(`select ${mediaAssetSelect()} from media_assets ma
+    where ma.id=$1 and ma.workspace_id=$2 and not (${ordinaryMediaSql()})
+      and ma.storage_access='private' and not ma.is_public and ma.public_token is null
+      and not exists(select 1 from media_asset_shares s where s.asset_id=ma.id and s.workspace_id=ma.workspace_id)
+    limit 1`, [assetId,workspaceId]);
+  if (!row) return null;
+  const asset = normalizeMediaAsset(row);
+  authorizedKnowledgeReads.add(asset);
+  return asset;
 }
 
 export async function publishWorkspaceMedia(
@@ -328,6 +441,7 @@ export async function publishWorkspaceMedia(
               end
           where id = $1
             and workspace_id = $2
+            and ${ordinaryMediaSql("media_assets")}
           returning *
         ), created_share as (
           insert into media_asset_shares (
@@ -358,7 +472,7 @@ export async function publishWorkspaceMedia(
 
   const library = await readMediaLibrary();
   const asset = library.assets.find((item) => item.id === assetId && item.workspaceId === workspaceId);
-  if (!asset) return null;
+  if (!asset || isKnowledgePrivateMedia(asset)) return null;
 
   asset.isPublic = true;
   asset.hasActivePublicShare = true;
@@ -384,6 +498,7 @@ export async function revokeWorkspaceMediaShare(
   workspaceId: string,
   publicShareId: string,
 ) {
+  if (!await findWorkspaceMediaAsset(assetId, workspaceId)) return null;
   if (hasDatabaseUrl()) {
     const row = await queryOne<MediaAssetRow>(
       `
@@ -463,6 +578,7 @@ export async function extendWorkspaceMediaShare(
   publicShareId: string,
   expiresInSeconds: number,
 ) {
+  if (!await findWorkspaceMediaAsset(assetId, workspaceId)) return null;
   const expiresAt = new Date(Date.now() + getMediaShareTtlSeconds(expiresInSeconds) * 1000).toISOString();
 
   if (hasDatabaseUrl()) {
@@ -501,6 +617,7 @@ export async function extendWorkspaceMediaShare(
 }
 
 export async function revokeWorkspaceMediaPublication(assetId: string, workspaceId: string) {
+  if (!await findWorkspaceMediaAsset(assetId, workspaceId)) return null;
   if (hasDatabaseUrl()) {
     const row = await queryOne<MediaAssetRow>(
       `
@@ -609,13 +726,20 @@ export function mediaAssetPath(asset: MediaAsset) {
 export async function deleteWorkspaceMedia(assetId: string, workspaceId: string, options: {
   actorId?: string;
   target?: PropertyMediaDeletionTarget;
+  /** Isolated test transport, never populated from a request. */
+  pool?: TenantPool;
 } = {}) {
   if (hasDatabaseUrl()) {
     const { deleteDatabaseMedia, MediaLifecycleError } = await import("@/lib/media-lifecycle");
     try {
       return await deleteDatabaseMedia({ assetId, workspaceId, actorId: options.actorId ?? "", target: options.target,
+        pool: options.pool,
         assetSelect: `${mediaAssetSelect("ma", false)}, ma.public_token as "publicToken"`,
-        normalizeAsset: row => normalizeMediaAsset(row as MediaAssetRow), deleteFile: deleteStoredFile });
+        normalizeAsset: row => {
+          const asset = normalizeMediaAsset(row as MediaAssetRow);
+          if (isKnowledgePrivateMedia(asset)) throw new MediaStoreError("MEDIA_DELETE_IN_USE", "This file has a protected Knowledge lifecycle.");
+          return asset;
+        }, deleteFile: deleteStoredFile });
     } catch (error) {
       if (error instanceof MediaLifecycleError) throw new MediaStoreError(error.code, error.message);
       throw error;
@@ -624,7 +748,7 @@ export async function deleteWorkspaceMedia(assetId: string, workspaceId: string,
   if (options.target) throw new MediaStoreError("MEDIA_DELETE_VISIBILITY_UNCONFIRMED", "Property deletion requires database persistence.");
   const initialLibrary = await readMediaLibrary();
   const asset = initialLibrary.assets.find((item) => item.id === assetId && item.workspaceId === workspaceId) ?? null;
-  if (!asset) return null;
+  if (!asset || isKnowledgePrivateMedia(asset)) return null;
   if (asset.storageAccess !== "private" || asset.isPublic || initialLibrary.shares.some(share => share.assetId === assetId)) {
     throw new MediaStoreError("MEDIA_DELETE_IN_USE", "This file has a protected lifecycle or sharing history and cannot be deleted here.");
   }
@@ -661,6 +785,7 @@ export function isBlobAsset(asset: MediaAsset) {
 }
 
 export async function readMediaAssetContent(asset: MediaAsset) {
+  if (isKnowledgePrivateMedia(asset) && !authorizedKnowledgeReads.has(asset)) return null;
   if (asset.storageProvider === "local") {
     try {
       const body = await readFile(mediaAssetPath(asset));
@@ -701,6 +826,7 @@ export class MediaStoreError extends Error {
     | "FILE_TOO_LARGE"
     | "IMAGE_TOO_LARGE"
     | "INVALID_STORAGE_REFERENCE"
+    | "KNOWLEDGE_MEDIA_PRIVATE"
     | "MEDIA_FILE_DELETE_UNCONFIRMED"
     | "MEDIA_RECORD_DELETE_UNCONFIRMED"
     | "PRIVATE_STORAGE_UNAVAILABLE"
@@ -829,13 +955,14 @@ function storagePathname(asset: Pick<MediaAsset, "relativePath" | "workspaceId">
   return normalized;
 }
 
-async function readWorkspaceAssets(workspaceId: string) {
+async function readWorkspaceAssets(workspaceId: string, includeKnowledge = false) {
   if (hasDatabaseUrl()) {
     const rows = await queryRows<MediaAssetRow>(
       `
         select ${mediaAssetSelect()}
         from media_assets ma
         where ma.workspace_id = $1
+          ${includeKnowledge ? "" : `and ${ordinaryMediaSql()}`}
         order by ma.created_at desc
       `,
       [workspaceId],
@@ -845,7 +972,7 @@ async function readWorkspaceAssets(workspaceId: string) {
 
   const library = await readMediaLibrary();
   return library.assets
-    .filter((asset) => asset.workspaceId === workspaceId)
+    .filter((asset) => asset.workspaceId === workspaceId && (includeKnowledge || !isKnowledgePrivateMedia(asset)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -930,13 +1057,17 @@ async function deleteStoredFile(asset: MediaAsset) {
   await rm(mediaAssetPath(asset), { force: true });
 }
 
-function privateBlobToken() {
+/** Server-only credential for the existing private store; never use the public
+ * store's fallback credentials for confidential document transport. */
+export function getPrivateMediaBlobToken() {
   return (
     process.env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() ||
     process.env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim() ||
     ""
   );
 }
+
+const privateBlobToken = getPrivateMediaBlobToken;
 
 function publicBlobToken() {
   return (
@@ -975,7 +1106,7 @@ function protectedMediaPath(assetId: string) {
 }
 
 function safeMediaMimeType(value: string) {
-  return allowedMediaMimeTypes.has(value.toLowerCase()) ? value.toLowerCase() : "application/octet-stream";
+  return allowedMediaMimeTypes.has(value.toLowerCase()) || knowledgeTextExtensions.has(value.toLowerCase()) ? value.toLowerCase() : "application/octet-stream";
 }
 
 function normalizeMediaAsset(asset: MediaAsset | MediaAssetRow): MediaAsset {

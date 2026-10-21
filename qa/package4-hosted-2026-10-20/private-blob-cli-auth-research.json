@@ -1,0 +1,147 @@
+{
+  "format": "package4-private-blob-cli-auth-research-v1",
+  "observedAtUtc": "2026-10-20T11:01:26.140Z",
+  "status": "LOCAL_STATIC_RESEARCH_COMPLETE_NO_REMOTE_ACTION",
+  "privateStoreId": "store_vCn7LiyRocYNC8pM",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "scope": "Installed official Vercel CLI64.7.0 / Blob SDK2.8.0 source only; no auth/env values opened, no API/store requests, minting, rotation, connection or env writes.",
+  "sensitiveValueBoundary": {
+    "sensitiveEnvironmentName": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+    "redactedBlankMeans": "UNKNOWN/withheld, not proof that Production is unset.",
+    "privateTokenSourceFallback": "BLOB_PRIVATE_READ_WRITE_TOKEN",
+    "publicFallbackForbiddenForPrivateBackup": "BLOB_READ_WRITE_TOKEN; source public-media credential path only; distinct store binding must never be replaced."
+  },
+  "cliDataAuthorization": {
+    "directAccountAuthFallback": false,
+    "acceptedInputs": [
+      "Explicit read-write token.",
+      "Existing explicit oidc-token paired with store-id.",
+      "Existing VERCEL_OIDC_TOKEN+BLOB_STORE_ID in process or .env.local.",
+      "BLOB_READ_WRITE_TOKEN in process or .env.local as generic SDK RW input; unsuitable if it points to public store."
+    ],
+    "storeIdAlone": "Rejected by paired OIDC-flag guard.",
+    "linkedProject": "Help mentions project linkage, but this implemented getBlobRWToken resolver only reads existing flags/env/.env.local. No account-to-Blob data delegation call occurs there.",
+    "listAndGet": "Forward token or oidcToken/storeId to Blob SDK; no additional native account token exchange."
+  },
+  "endpoints": {
+    "metadata": {
+      "method": "GET",
+      "url": "https://api.vercel.com/v1/storage/stores/store_vCn7LiyRocYNC8pM",
+      "scope": "CLI account auth/team context, metadata only; no data-authorization conclusion."
+    },
+    "list": {
+      "method": "GET",
+      "baseUrl": "https://vercel.com/api/blob",
+      "query": [
+        "limit",
+        "prefix",
+        "cursor",
+        "mode"
+      ],
+      "headers": {
+        "authorization": "Bearer existing RW or signed OIDC token (never the CLI account token by inference).",
+        "x-vercel-blob-store-id": "vCn7LiyRocYNC8pM (SDK strips store_ prefix).",
+        "x-api-version": "12"
+      },
+      "response": "Inventory metadata; raw list may reveal private paths and must remain private or be projected to counts/hashes."
+    },
+    "privateContent": {
+      "method": "GET",
+      "urlTemplate": "https://<store-suffix>.private.blob.vercel-storage.com/<exact-bound-pathname>",
+      "headers": {
+        "authorization": "Bearer same existing RW/OIDC token"
+      },
+      "notes": [
+        "SDK constructs URL from normalized explicit store ID for a pathname.",
+        "Content get sends direct Bearer; no separate token exchange and no x-store header.",
+        "CLI get without --output streams content to stdout; do not use this for private bytes in visible logs.",
+        "Future controlled helper must pin exact private origin, consume/hash streams with bounds and avoid redirects/SDK retry ambiguity as separately reviewed."
+      ]
+    },
+    "signedDelegation": {
+      "method": "POST",
+      "url": "https://vercel.com/api/blob/signed-token",
+      "bodyFields": [
+        "pathname",
+        "operations",
+        "validUntil",
+        "maximumSizeInBytes",
+        "allowedContentTypes"
+      ],
+      "requires": "Existing RW/OIDC data authorization first.",
+      "classification": "New secret issuance, not readonly account fallback; no list operation in delegated operations. Not executed or authorized by this research."
+    },
+    "explicitProjectOidc": {
+      "method": "POST",
+      "cliPath": "/projects/{projectId}/token",
+      "cliBody": {
+        "source": "vercel-cli"
+      },
+      "sdkRefreshUrl": "https://api.vercel.com/v1/projects/{projectId}/token?source=vercel-oidc-refresh&teamId=<team>",
+      "sdkRefreshMethod": "POST",
+      "scope": "Token issuance using account Bearer; source provides no target/environment request field or production-claim guarantee. Not executed."
+    }
+  },
+  "projectEnvPull": {
+    "method": "GET",
+    "url": "https://api.vercel.com/v3/env/pull/prj_R32Okl6AHijTohvuKmryuTLjWMsk/production?source=vercel-cli%3Aenv%3Apull&teamId=team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "sourceProof": "pull() defaultsource vercel-cli:env:pull, explicit parseTarget environment; pullEnvRecords adds target path for project ID.",
+    "consumedField": "response.env for project pull; response.buildEnv for deployment pull.",
+    "oidcHandling": "records.VERCEL_OIDC_TOKEN copied unchanged by CLI; no local signing, rewriting, JWT environment verification or Production guarantee.",
+    "actualClaims": "UNKNOWN until a trusted native response is inspected privately. Requested Production environment alone does not establish OIDC environment=production.",
+    "oneSafeRootProjection": [
+      "Token presence/nonempty boolean only.",
+      "Whitelisted decoded metadata issuer/audience/project/owner/environment/sub/iat/exp, with no token, signature, raw payload, jti or credential-derived hash.",
+      "Decoded metadata alone is not independent cryptographic signature verification; do not relabel a development token as production or loosen Blob/store environment policy.",
+      "Confirm exact same CRM project/team and existing private store connection/allowed environment before any later Blob read.",
+      "Keep sensitive blanks withheld; no fallback to public-store credential."
+    ]
+  },
+  "legacyStorePermission": {
+    "status": "NOT_PROVEN",
+    "required": "Existing store-to-project binding and server-enforced OIDC environment permission; no support guarantee from store ID or generic CLI login.",
+    "sdkEvidence": "Blob SDK has explicit oidc_environment_not_allowed error handling; data API enforces policy.",
+    "noConnectionOrPermissionMutationProposed": true
+  },
+  "sourceProofs": [
+    {
+      "file": "/home/agent/.npm/_npx/3b18615b9ad4807e/node_modules/vercel/dist/commands-bulk.js",
+      "sha256": "2e77988a3dcff2b42cd124e82378f5903298b06135e6d708a488c1334b57908d"
+    },
+    {
+      "file": "/home/agent/.npm/_npx/3b18615b9ad4807e/node_modules/vercel/dist/chunks/chunk-BMQREWR6.js",
+      "sha256": "09e522f82a6375830f197afd12f4ab1cbe8dcc1f11345130337cdee397161968"
+    },
+    {
+      "file": "/home/agent/.npm/_npx/3b18615b9ad4807e/node_modules/vercel/dist/chunks/chunk-QW4W2UB6.js",
+      "sha256": "eebfcf19d7c224b0ccdc160f649380b0e0dd365b7c4d0d95e35d663e8d1ee9d0"
+    },
+    {
+      "file": "/home/agent/.npm/_npx/3b18615b9ad4807e/node_modules/@vercel/blob/dist/index.js",
+      "sha256": "49c3427b1f3a04c7d473a4e1e33064dbd9c3459330236078ebad5af6ce4fa162"
+    },
+    {
+      "file": "/home/agent/.npm/_npx/3b18615b9ad4807e/node_modules/@vercel/blob/dist/chunk-YYMLUMXS.js",
+      "sha256": "26f2117c463494a728fe664a071db6106cde4f85d5226dd33b215909cc838047"
+    },
+    {
+      "file": "/home/agent/.npm/_npx/3b18615b9ad4807e/node_modules/@vercel/oidc/dist/token-util.js",
+      "sha256": "0b750fc022624cdd0b6308fa2e0dad1e47e304422fe0f8f61dafc727eb8059ec"
+    },
+    {
+      "file": "/workspace/novalure-crm/src/lib/media-store.ts",
+      "sha256": "004ec1fdd96a13517b2273e8cc799029daab26744327aee51d0887a2a824a3e1"
+    }
+  ],
+  "actions": {
+    "localSourceReads": true,
+    "providerRequests": 0,
+    "blobRequests": 0,
+    "credentialValueReads": 0,
+    "tokenIssuanceRequests": 0,
+    "credentialRotations": 0,
+    "environmentWrites": 0,
+    "sourceEdits": 0
+  }
+}

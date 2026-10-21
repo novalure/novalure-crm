@@ -1,0 +1,1472 @@
+{
+  "format": "package4-neon-bootstrap-v1",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v",
+    "databaseName": "neondb",
+    "runtimeRole": "novalure_app"
+  },
+  "implementationRevision": "eb889bb826a5f5fed87d37781f5d0019fae509a6",
+  "manifestDigest": "cfd7f04f4323f6f5fdf273f51ba02f7b4a579f11b53fa2fd4eec779c6c61e3ed",
+  "startedAt": "2026-10-20T05:39:47.027Z",
+  "status": "PASS",
+  "productionAccess": 0,
+  "originalSqlExceptExplicit061Receipt": true,
+  "vectorSubstitution": false,
+  "excludedPreviewMigrations": [
+    "migrations/097_studio_sales_calendar_bridge.sql",
+    "migrations/098_studio_enquiry_handoff.sql",
+    "migrations/099_studio_enquiry_public_launch.sql"
+  ],
+  "applied": [
+    {
+      "file": "001_initial_novalure_crm.sql",
+      "sourceChecksum": "2198dfda8433aae0cc62832ce2c16fb323c45a04bf08244449395a73cf432a11",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "002_product_runtime.sql",
+      "sourceChecksum": "bc1cfcf52b87432d90215111d638e7b3f8f81d7eb0e21224b13aa9003ea7ce0c",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "003_media_storage.sql",
+      "sourceChecksum": "364bdd293c38048d9d38d4797787c1984f1314d7191201a69576de8229deb525",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "004_forms_runtime.sql",
+      "sourceChecksum": "1493a9a5c2628bec54c89ada1bfffc81d1fe9a5c079bd161a24a59ed0969cf31",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "005_meeting_pages.sql",
+      "sourceChecksum": "329aed17dc824d3bd898356cd1fad93c59c647fe598cd1e3e3f2129bdf37aa0f",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "006_meeting_bookings.sql",
+      "sourceChecksum": "5aaa16a26705251e6b7f244c49bd90749ec3c304d1343a8fc4fc91b7f4980fef",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "007_bot_omnichannel_agents.sql",
+      "sourceChecksum": "7f8c6ed8241fea944344a49d623581b4f27805bcb31c5b502392598767707899",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "008_meeting_calendar_integrations.sql",
+      "sourceChecksum": "e10f001800869bad16809d2a38ca417dd6c9c349dc83448a1303c6ab33224596",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "009_bot_autonomy_policy.sql",
+      "sourceChecksum": "3b433f4378a7693faa41e8bfc32d3686d8b83fa3e0f8bd942dd99c81e0513cb8",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "010_media_public_shares.sql",
+      "sourceChecksum": "455621a111873530fbe9f7d7d82b9bf8f9033e4b354f8bf8bddf5d94ebfee1d5",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "011_customer_meta_channel_accounts.sql",
+      "sourceChecksum": "61400be430172264d12395dd7e64563949e77d550bd5974067073b8fa00b90f7",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "012_lead_sequences.sql",
+      "sourceChecksum": "3493a077847f67a854b90ce7400a66409aa794796a7c2ad06bfed886e8f87772",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "013_analysis_bot_70_sprint.sql",
+      "sourceChecksum": "5b39942b0e8aea5490956936515f19447d4c58df645aef13a1e605dab20d241f",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "013_newsletter_suppressions.sql",
+      "sourceChecksum": "953280db3946a6021fbee5840cf273d2888d1743dcd64fd0887441cd612ca139",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "014_password_reset.sql",
+      "sourceChecksum": "e1cd5df7a82dcb20c72fa96469d473d18efbbbaadee8a258ccd1846e9504a039",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "015_pipeline_governance.sql",
+      "sourceChecksum": "8a2e9b7fbdb5ee3c6e4c74e4bf7448e2fa7f437849cdf94524587b63dfc94681",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "016_teams_notifications.sql",
+      "sourceChecksum": "7ca6b33ff5f39aa7ac590944ad52f4ef92cae6a7915ba5774dd32dc2c066791d",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "017_google_meet_notifications.sql",
+      "sourceChecksum": "2b8a66b704f14d3cb88f55b20001b820fd08c7d6edd17220357267c5649af49c",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "018_crm_analytics_events.sql",
+      "sourceChecksum": "532ba6c9a7ba313119d598563f93eac6d743ea1534b7c02c3f5ff46b897e94fa",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "019_customer_access_cockpit.sql",
+      "sourceChecksum": "e50ecced0790b3cfd0e8bcf6f0f31d4f9936ada1f47406b92f4c069ffd2a18b7",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "020_production_readiness_repair.sql",
+      "sourceChecksum": "fe62ead0dde7c4df7d2291fa69c77d1b6d70a20ddb08ac403bed99c8ac099069",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "021_reservation_workflow_notifications.sql",
+      "sourceChecksum": "798e8c443bba1b457e8568e10d15c06a572ebe9d16be44ee57ed50298fbb89d8",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "022_recommendation_runtime.sql",
+      "sourceChecksum": "6b572a1f2bc4efc4427c1ea724548f4155d0466d7078d7b2b496e654efd5841d",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "023_recommendation_depth.sql",
+      "sourceChecksum": "26d4e25d5fbb0704e643898db268caf7e9e6ae68cddb9623e61e2204321050d7",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "024_follow_up_delivery_runtime.sql",
+      "sourceChecksum": "0c70938e462b55f561935c16052ef8ca312572c70d8e81b0f50a8094925d3c55",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "025_analysis_recommendation_completion.sql",
+      "sourceChecksum": "aa6866b4870e26dbb60ef53495154f8ac61384ad6bbdc9f7016e23c1bd1056b7",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "026_workspace_operating_model.sql",
+      "sourceChecksum": "0d8ba624f4440cfc26b0cdddaec514fbde5fcd9f498c1d7fb0da545b66572741",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "027_broker_pipeline_preflights.sql",
+      "sourceChecksum": "4cbc8d19dbb33be334847a2405730573ee7c20c3a3db2008fdc7c2da4d845426",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "028_contact_archiving.sql",
+      "sourceChecksum": "5299c0948849bb946298d07ca7abfccc53a73a858e5121e8b0a0a7f4ae9bfbb8",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "029_contact_owner_scope.sql",
+      "sourceChecksum": "03ebfe25106a9eebb92000d625d6e39f00961c6fc8d04c12e9a8c95ac8078f6c",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "030_novalure_growth_workspace.sql",
+      "sourceChecksum": "4e5af5f996a1d763fd86100e7674d64e340a884292e18bb27928d837fd37fc6e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "031_user_onboarding.sql",
+      "sourceChecksum": "259db764c372b80b42799aa8862d9469dc6d37ade88b729b2ec756bc6539e1e0",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "032_public_slug_routing.sql",
+      "sourceChecksum": "dee06d1800ae7800e5987b2938710ff1bf8a0a2e33bd392939036737ca3199fb",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "033_rename_demo_form_source.sql",
+      "sourceChecksum": "b232911695dd29b42732e70545a80b61fa7e388b4ab208d982c897964ba2d947",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "034_property_department.sql",
+      "sourceChecksum": "7be9cb5013845a73c099562e43863e975f483e860ec4dfc7ca2db3a4353a764f",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "035_property_department_content.sql",
+      "sourceChecksum": "36e3ed616b79033a0c1e22b60ace4717a8a081d550ce5dbc4b4d473430be8376",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "036_company_profiles.sql",
+      "sourceChecksum": "e98922f0184593ffc4c48c1d396d7fae44f236bf47ac15bbac9bef98878218ea",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "037_novalure_growth_alignment.sql",
+      "sourceChecksum": "c0f4da64c99329459f8a952bdf78b336b867ec206e5076cee796d04ab83e3d3e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "038_property_default_units.sql",
+      "sourceChecksum": "ce074f0166d84eca95fbd437a049dacf3e28910b6da2e7cce16800dda8ba3f32",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "039_property_content_partial_unique_indexes.sql",
+      "sourceChecksum": "1234febeab30040e9570201fcdd8f33d92eae2a0c7e40e0f7c2cc634d3f56a16",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "040_property_reservation_active_unique_index.sql",
+      "sourceChecksum": "bc66349afb0860d9e8cdefe9fc9924373530c6ca7229fc0c1c4458f97759102e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "041_schema_ledger_baseline.sql",
+      "sourceChecksum": "24f8937ca066775e7cc93e6ea61c07798183e143c3bd0e04023f7ee7c8f93045",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "042_teams_notification_reservation_workflow_constraint.sql",
+      "sourceChecksum": "c51f01cfe6a8081e2d741b733b79ae7ddfc7795a2d86143c3b8442b69118b38f",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "043_leads_idempotency.sql",
+      "sourceChecksum": "a3c0f025781067cb22f1fc7c09a5b5dd14c7cd368993695a8d98a1b1f71238d6",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "044_fk_performance_indexes.sql",
+      "sourceChecksum": "e94833d9e8bf85c537a585e2f05216b33503a36eadd0154292e692bbc3bb231c",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "045_media_schema.sql",
+      "sourceChecksum": "caa10d953f41f0f9a4a9351c5cea3c27a6ddc2c62cea2dfb3b63836310c6a2db",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "046_schema_residual_reconciliation.sql",
+      "sourceChecksum": "39b4a114922912de86192dccab8740441b92511651c33c925d5456b628535ec9",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "047_deals_idempotency.sql",
+      "sourceChecksum": "ef1309f10a9772ea934e401f039035dd36035014460e66daee8c38b484d3d5a6",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "048_bot_webhook_integrity.sql",
+      "sourceChecksum": "f5993d9f44ad61f71862570a702c14a7f549269f0a30b57bc007e57b06115b9d",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "049_property_inventory_tenant_guards.sql",
+      "sourceChecksum": "ffd4be362a4a25a324067c0621a3de8438d0da97d02acf41159b6e8f7eed942b",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "050_durable_job_leasing.sql",
+      "sourceChecksum": "62dc4b16f770aadeb5e4557a90fe34d93d62e859494aed806d8e7a9d742f4439",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "051_private_media_access.sql",
+      "sourceChecksum": "2222942814ab1db328acee645439f9dd9ec2200be4ca3b01d133601ae1f4c12b",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "052_validate_property_inventory_tenant_guards.sql",
+      "sourceChecksum": "a8f10a4f62e10da8e4c099383decc3805520a1d755e1c8c2a2994f297aeb0233",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "053_oauth_state_integrity.sql",
+      "sourceChecksum": "c78f509d09ddb6ff8f6d445e60c2d06e0620c578f1e7a1995c5f8b189d881b28",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "054_csrf_token_integrity.sql",
+      "sourceChecksum": "d6cba6c9cd616c4b4a52ecc3b251f412150d479cefcd2fc71abd90de99ae5504",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "055_public_submission_abuse_guards.sql",
+      "sourceChecksum": "f0ddb2b3103ba7d6d70b5a41883f768831b1cffc3fc8d689254aa408ca0ac358",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "056_auth_identity_sessions_mfa.sql",
+      "sourceChecksum": "621d5c856a80ab10b4700642e53d42e821a6c7b9048ad434200df5caec66deba",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "057_bot_webhook_legacy_index_cutover.sql",
+      "sourceChecksum": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "062_private_media_contract_cutover.sql",
+      "sourceChecksum": "e07103bc6eff0cf3e45154e591b15254ec3629497fcdb8acd5e75c94c8bd7e96",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "060_tenant_rls_pilot_prepare.sql",
+      "sourceChecksum": "b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "061_validate_and_activate_tenant_rls_pilot.sql",
+      "sourceChecksum": "0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23",
+      "execution": "explicit061CompatibilityReceipt",
+      "receipt": {
+        "receiptId": "eaad9ed2-3a85-4890-955f-048c00aac548",
+        "profileId": "package4-qa:neon-provider-creator-admin-only-061-v1",
+        "sourceChecksum": "0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23",
+        "executedSqlChecksum": "43142babb17c11cf78cbc4046394af25d08592a1a635f9b66fdef88d80c030ed",
+        "evidence": {
+          "executionContext": {
+            "headCommit": "eb889bb826a5f5fed87d37781f5d0019fae509a6",
+            "planDigest": "0047c567f833c68399e6d301335a9674087e186744e9308eb70e064951edeadc"
+          },
+          "identity": {
+            "projectId": "green-thunder-49879900",
+            "branchId": "br-shiny-darkness-baz4524v",
+            "databaseName": "neondb",
+            "currentUser": "neondb_owner",
+            "sessionUser": "neondb_owner",
+            "serverVersionNum": 180006
+          },
+          "roles": {
+            "group": "novalure_tenant_app",
+            "creator": "neondb_owner",
+            "grantor": "cloud_admin",
+            "runtime": "novalure_app",
+            "ignoredCreatorEdge": {
+              "admin": true,
+              "inherit": false,
+              "set": false,
+              "effectiveUsage": false,
+              "effectiveSet": false
+            },
+            "directMembers": [
+              {
+                "role": "neondb_owner",
+                "grantor": "cloud_admin",
+                "admin": true,
+                "inherit": false,
+                "set": false
+              },
+              {
+                "role": "novalure_app",
+                "grantor": "neondb_owner",
+                "admin": false,
+                "inherit": true,
+                "set": false
+              }
+            ],
+            "pilotOwners": [
+              {
+                "table": "audit_logs",
+                "owner": "neondb_owner"
+              },
+              {
+                "table": "contacts",
+                "owner": "neondb_owner"
+              },
+              {
+                "table": "deals",
+                "owner": "neondb_owner"
+              },
+              {
+                "table": "leads",
+                "owner": "neondb_owner"
+              },
+              {
+                "table": "projects",
+                "owner": "neondb_owner"
+              }
+            ],
+            "runtimePrivilegedReachability": false
+          },
+          "foreignKeysValidated": [
+            "audit_logs_workspace_actor_fk",
+            "audit_logs_workspace_deal_fk",
+            "audit_logs_workspace_project_fk",
+            "contacts_workspace_archived_by_fk",
+            "contacts_workspace_organization_fk",
+            "contacts_workspace_owner_fk",
+            "contacts_workspace_project_fk",
+            "deals_workspace_contact_fk",
+            "deals_workspace_lead_fk",
+            "deals_workspace_organization_fk",
+            "deals_workspace_owner_fk",
+            "deals_workspace_project_fk",
+            "leads_workspace_assignee_fk",
+            "leads_workspace_contact_fk",
+            "leads_workspace_project_fk"
+          ],
+          "forcedRlsTables": [
+            "audit_logs",
+            "contacts",
+            "deals",
+            "leads",
+            "projects"
+          ],
+          "historicalLedgerChecksumMeaning": "unaltered source bytes normalized to LF",
+          "executedChecksumMeaning": "actual SQL with only two narrowly qualified creator-edge exclusions"
+        }
+      }
+    },
+    {
+      "file": "064_notification_provider_and_lead_assignee_integrity.sql",
+      "sourceChecksum": "bb70c95a27cedc065535e689390036262084759aed7e3fd932d12a5c61ae130e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "065_notification_guard_search_path_hardening.sql",
+      "sourceChecksum": "1f944f5d2d315de4c960ffa574dfe78af4828b5ad9739a2b16bf490cc7a84b3b",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "066_oauth_state_workspace_user_guard.sql",
+      "sourceChecksum": "dca5893b5bf788b1b0ecac798b0ed965977678b5ca5a6e37b936214dcce717f0",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "067_app_role_runtime_grants.sql",
+      "sourceChecksum": "c48afb3409308f74ee03743ec0932c7fc3460bf3085c55c5b8ae753c545f2f3e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "068_qa_batch_reset_safety.sql",
+      "sourceChecksum": "9f93c0f8e1b03544285bf0b118c78355190f8d6ef78e62b0348b7eb37ff704a3",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "069_property_unit_idempotency.sql",
+      "sourceChecksum": "5d8807bea865dbc12e4492277f400931252cad115c686c8a0d22a5138ec28cc7",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "070_funnel_submission_idempotency_recovery.sql",
+      "sourceChecksum": "14fee3cca4530a5ab93b18aa9291837dc055a9f0b3f7132a11bb0ddbc1cc1598",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "071_forms_owner_tenant_guard.sql",
+      "sourceChecksum": "504180c4f5f7da5f3e7b57547b3b07023fd83edcd29a452a1b0175edf5637011",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "072_form_submission_atomicity.sql",
+      "sourceChecksum": "5313d802ed2087c64d859292e8851a5817cda174be8470d70514ba54c7cd311d",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "073_launch_tenant_relation_guards.sql",
+      "sourceChecksum": "5e65eb70b7c5e20e66ed921f52539dde141bb5c02fd974c1a38164803e05e80d",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "074_validate_launch_tenant_relation_guards.sql",
+      "sourceChecksum": "a644091fc9c2239968c9934651f8992bc913e1740077c907839b647dae6246e9",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "075_public_funnel_visit_truth.sql",
+      "sourceChecksum": "0b0e5d08e6e82ef5a0a01c4514ea9c4a907ef8508f9f0a464b9eb5e27c710466",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "076_bot_webhook_durable_processing.sql",
+      "sourceChecksum": "c440582584555c006845f99a7c71ceab5318cd1acbd1138325b2034d4f0f0086",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "077_schema_ledger_runtime_projection.sql",
+      "sourceChecksum": "6465c9173b38198f1000204acee5d18ef3c370f32755454570aa983d0c46d6ae",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "078_company_profile_approval_integrity.sql",
+      "sourceChecksum": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "079_public_funnel_visit_role_boundary.sql",
+      "sourceChecksum": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "080_crm_command_safety.sql",
+      "sourceChecksum": "9f401db3b2d08cd4458c5a4b3ab0d114d76bdc2ae87e5a1528de3309b379174e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "081_crm_offer_workflow.sql",
+      "sourceChecksum": "ce629bd48ef61d96fa8be4e7a75e4dbaff0f80dc6f6b5844340ece7e30bb0f54",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "082_crm_property_sales_workflow.sql",
+      "sourceChecksum": "7266aba1e0f6a1f597465ba2ae730520c571be6c6e31c3a5155093b7761182bb",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "083_crm_core_cas.sql",
+      "sourceChecksum": "0ca41b859e15cd92c173e1da239e98c1b9c7c82f1afdb78bd04dc9eaf06e864a",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "084_crm_contract_service_boundary.sql",
+      "sourceChecksum": "3258b3a4e99d2a78bd4cdb06ad88c9aa699fd9a1ed1dd98fd31804deeccc1a11",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "085_crm_approval_evidence.sql",
+      "sourceChecksum": "0d2f9aa924f8199798b2af5040033c6b3579d5639652861f8980540a365759f9",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "086_crm_evelyn_preview_contract.sql",
+      "sourceChecksum": "31609898bb8ed86e46a350c2262e91e361cb199b946509253705ecf75fc6af81",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "087_d11_crm_source_of_truth_closure.sql",
+      "sourceChecksum": "c618a95363ade2705ba1345bf647822c8d1dc4e834b7c0d15136d936b766eeb4",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "088_property_media_runtime_access.sql",
+      "sourceChecksum": "4588186cd69c9c59a1d51a8e8f70473d2572527bdeee8000a768e294c2fa78bd",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "089_property_surface_runtime_access.sql",
+      "sourceChecksum": "a03daea3b2252cf6d5b5e4a1866be1537adcef75e7f991c494d77170b021deac",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "090_property_media_delete_runtime.sql",
+      "sourceChecksum": "39d566b4575f90b72b84ac08f5df9ffd603392dcba33e48ebf5b7eec211ecb0c",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "091_production_runtime_forced_rls_cutover.sql",
+      "sourceChecksum": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "092_crm_production_machine_identity.sql",
+      "sourceChecksum": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "093_crm_machine_internal_context.sql",
+      "sourceChecksum": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "094_website_sales_ingestion.sql",
+      "sourceChecksum": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "095_form_tenant_isolation.sql",
+      "sourceChecksum": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "096_public_integration_gateway.sql",
+      "sourceChecksum": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "100_studio_enquiry_production.sql",
+      "sourceChecksum": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "101_knowledge_center.sql",
+      "sourceChecksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "102_knowledge_document_processing.sql",
+      "sourceChecksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "103_knowledge_assistant_service.sql",
+      "sourceChecksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "104_knowledge_publication_workflow.sql",
+      "sourceChecksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "105_knowledge_website_monitoring.sql",
+      "sourceChecksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "execution": "unchangedOriginalSql"
+    },
+    {
+      "file": "106_crm_operational_readers.sql",
+      "sourceChecksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "execution": "unchangedOriginalSql"
+    }
+  ],
+  "staged": [
+    {
+      "path": "migrations/staged/087_d11_crm_source_of_truth_backfill.sql",
+      "checksum": "73130f5b7ab0a4247897a51eb9e02d22b6edaa4fe5168be0e95ea6b95b71834b",
+      "actualExecution": true
+    },
+    {
+      "path": "migrations/staged/087_d11_crm_source_of_truth_contract.sql",
+      "checksum": "68be992a666854784854c41ecfbe9a40dbbbcfa0e1b4b163d1b45bc187d66ab8",
+      "actualExecution": true
+    }
+  ],
+  "identity": {
+    "project": "green-thunder-49879900",
+    "branch": "br-shiny-darkness-baz4524v",
+    "database": "neondb",
+    "role": "neondb_owner",
+    "session_role": "neondb_owner",
+    "server_version": 180006,
+    "database_owner": "neondb_owner"
+  },
+  "combined104105106FailureRollback": {
+    "status": "PASS",
+    "sqlState": "22012",
+    "schemaAndLedgerDigestUnchanged": "81654961cd93fb287080c46fa0a50aa289505949b63e4af3c51558184ddf9189"
+  },
+  "providerBaseline": {
+    "databaseOid": 16396,
+    "metadataSha256": "ae049b989f049006456097e8b5596e85f752b8e158652666b5fc8e773ab5380e",
+    "categories": [
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      2
+    ],
+    "preservedDatabase": "package4_provider_baseline_20261020",
+    "unchangedBeforeAndAfter": true
+  },
+  "final": {
+    "ledgerRows": 60,
+    "ledger": [
+      {
+        "version": "041_schema_ledger_baseline",
+        "name": "041_schema_ledger_baseline.sql",
+        "checksum": "24f8937ca066775e7cc93e6ea61c07798183e143c3bd0e04023f7ee7c8f93045"
+      },
+      {
+        "version": "042_teams_notification_reservation_workflow_constraint",
+        "name": "042_teams_notification_reservation_workflow_constraint.sql",
+        "checksum": "c51f01cfe6a8081e2d741b733b79ae7ddfc7795a2d86143c3b8442b69118b38f"
+      },
+      {
+        "version": "043_leads_idempotency",
+        "name": "043_leads_idempotency.sql",
+        "checksum": "a3c0f025781067cb22f1fc7c09a5b5dd14c7cd368993695a8d98a1b1f71238d6"
+      },
+      {
+        "version": "044_fk_performance_indexes",
+        "name": "044_fk_performance_indexes.sql",
+        "checksum": "e94833d9e8bf85c537a585e2f05216b33503a36eadd0154292e692bbc3bb231c"
+      },
+      {
+        "version": "045_media_schema",
+        "name": "045_media_schema.sql",
+        "checksum": "caa10d953f41f0f9a4a9351c5cea3c27a6ddc2c62cea2dfb3b63836310c6a2db"
+      },
+      {
+        "version": "046_schema_residual_reconciliation",
+        "name": "046_schema_residual_reconciliation.sql",
+        "checksum": "39b4a114922912de86192dccab8740441b92511651c33c925d5456b628535ec9"
+      },
+      {
+        "version": "047_deals_idempotency",
+        "name": "047_deals_idempotency.sql",
+        "checksum": "ef1309f10a9772ea934e401f039035dd36035014460e66daee8c38b484d3d5a6"
+      },
+      {
+        "version": "048_bot_webhook_integrity",
+        "name": "048_bot_webhook_integrity.sql",
+        "checksum": "f5993d9f44ad61f71862570a702c14a7f549269f0a30b57bc007e57b06115b9d"
+      },
+      {
+        "version": "049_property_inventory_tenant_guards",
+        "name": "049_property_inventory_tenant_guards.sql",
+        "checksum": "ffd4be362a4a25a324067c0621a3de8438d0da97d02acf41159b6e8f7eed942b"
+      },
+      {
+        "version": "050_durable_job_leasing",
+        "name": "050_durable_job_leasing.sql",
+        "checksum": "62dc4b16f770aadeb5e4557a90fe34d93d62e859494aed806d8e7a9d742f4439"
+      },
+      {
+        "version": "051_private_media_access",
+        "name": "051_private_media_access.sql",
+        "checksum": "2222942814ab1db328acee645439f9dd9ec2200be4ca3b01d133601ae1f4c12b"
+      },
+      {
+        "version": "052_validate_property_inventory_tenant_guards",
+        "name": "052_validate_property_inventory_tenant_guards.sql",
+        "checksum": "a8f10a4f62e10da8e4c099383decc3805520a1d755e1c8c2a2994f297aeb0233"
+      },
+      {
+        "version": "053_oauth_state_integrity",
+        "name": "053_oauth_state_integrity.sql",
+        "checksum": "c78f509d09ddb6ff8f6d445e60c2d06e0620c578f1e7a1995c5f8b189d881b28"
+      },
+      {
+        "version": "054_csrf_token_integrity",
+        "name": "054_csrf_token_integrity.sql",
+        "checksum": "d6cba6c9cd616c4b4a52ecc3b251f412150d479cefcd2fc71abd90de99ae5504"
+      },
+      {
+        "version": "055_public_submission_abuse_guards",
+        "name": "055_public_submission_abuse_guards.sql",
+        "checksum": "f0ddb2b3103ba7d6d70b5a41883f768831b1cffc3fc8d689254aa408ca0ac358"
+      },
+      {
+        "version": "056_auth_identity_sessions_mfa",
+        "name": "056_auth_identity_sessions_mfa.sql",
+        "checksum": "621d5c856a80ab10b4700642e53d42e821a6c7b9048ad434200df5caec66deba"
+      },
+      {
+        "version": "057_bot_webhook_legacy_index_cutover",
+        "name": "057_bot_webhook_legacy_index_cutover.sql",
+        "checksum": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f"
+      },
+      {
+        "version": "060_tenant_rls_pilot_prepare",
+        "name": "060_tenant_rls_pilot_prepare.sql",
+        "checksum": "b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf"
+      },
+      {
+        "version": "061_validate_and_activate_tenant_rls_pilot",
+        "name": "061_validate_and_activate_tenant_rls_pilot.sql",
+        "checksum": "0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23"
+      },
+      {
+        "version": "062_private_media_contract_cutover",
+        "name": "062_private_media_contract_cutover.sql",
+        "checksum": "e07103bc6eff0cf3e45154e591b15254ec3629497fcdb8acd5e75c94c8bd7e96"
+      },
+      {
+        "version": "064_notification_provider_and_lead_assignee_integrity",
+        "name": "064_notification_provider_and_lead_assignee_integrity.sql",
+        "checksum": "bb70c95a27cedc065535e689390036262084759aed7e3fd932d12a5c61ae130e"
+      },
+      {
+        "version": "065_notification_guard_search_path_hardening",
+        "name": "065_notification_guard_search_path_hardening.sql",
+        "checksum": "1f944f5d2d315de4c960ffa574dfe78af4828b5ad9739a2b16bf490cc7a84b3b"
+      },
+      {
+        "version": "066_oauth_state_workspace_user_guard",
+        "name": "066_oauth_state_workspace_user_guard.sql",
+        "checksum": "dca5893b5bf788b1b0ecac798b0ed965977678b5ca5a6e37b936214dcce717f0"
+      },
+      {
+        "version": "067_app_role_runtime_grants",
+        "name": "067_app_role_runtime_grants.sql",
+        "checksum": "c48afb3409308f74ee03743ec0932c7fc3460bf3085c55c5b8ae753c545f2f3e"
+      },
+      {
+        "version": "068_qa_batch_reset_safety",
+        "name": "068_qa_batch_reset_safety.sql",
+        "checksum": "9f93c0f8e1b03544285bf0b118c78355190f8d6ef78e62b0348b7eb37ff704a3"
+      },
+      {
+        "version": "069_property_unit_idempotency",
+        "name": "069_property_unit_idempotency.sql",
+        "checksum": "5d8807bea865dbc12e4492277f400931252cad115c686c8a0d22a5138ec28cc7"
+      },
+      {
+        "version": "070_funnel_submission_idempotency_recovery",
+        "name": "070_funnel_submission_idempotency_recovery.sql",
+        "checksum": "14fee3cca4530a5ab93b18aa9291837dc055a9f0b3f7132a11bb0ddbc1cc1598"
+      },
+      {
+        "version": "071_forms_owner_tenant_guard",
+        "name": "071_forms_owner_tenant_guard.sql",
+        "checksum": "504180c4f5f7da5f3e7b57547b3b07023fd83edcd29a452a1b0175edf5637011"
+      },
+      {
+        "version": "072_form_submission_atomicity",
+        "name": "072_form_submission_atomicity.sql",
+        "checksum": "5313d802ed2087c64d859292e8851a5817cda174be8470d70514ba54c7cd311d"
+      },
+      {
+        "version": "073_launch_tenant_relation_guards",
+        "name": "073_launch_tenant_relation_guards.sql",
+        "checksum": "5e65eb70b7c5e20e66ed921f52539dde141bb5c02fd974c1a38164803e05e80d"
+      },
+      {
+        "version": "074_validate_launch_tenant_relation_guards",
+        "name": "074_validate_launch_tenant_relation_guards.sql",
+        "checksum": "a644091fc9c2239968c9934651f8992bc913e1740077c907839b647dae6246e9"
+      },
+      {
+        "version": "075_public_funnel_visit_truth",
+        "name": "075_public_funnel_visit_truth.sql",
+        "checksum": "0b0e5d08e6e82ef5a0a01c4514ea9c4a907ef8508f9f0a464b9eb5e27c710466"
+      },
+      {
+        "version": "076_bot_webhook_durable_processing",
+        "name": "076_bot_webhook_durable_processing.sql",
+        "checksum": "c440582584555c006845f99a7c71ceab5318cd1acbd1138325b2034d4f0f0086"
+      },
+      {
+        "version": "077_schema_ledger_runtime_projection",
+        "name": "077_schema_ledger_runtime_projection.sql",
+        "checksum": "6465c9173b38198f1000204acee5d18ef3c370f32755454570aa983d0c46d6ae"
+      },
+      {
+        "version": "078_company_profile_approval_integrity",
+        "name": "078_company_profile_approval_integrity.sql",
+        "checksum": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339"
+      },
+      {
+        "version": "079_public_funnel_visit_role_boundary",
+        "name": "079_public_funnel_visit_role_boundary.sql",
+        "checksum": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432"
+      },
+      {
+        "version": "080_crm_command_safety",
+        "name": "080_crm_command_safety.sql",
+        "checksum": "9f401db3b2d08cd4458c5a4b3ab0d114d76bdc2ae87e5a1528de3309b379174e"
+      },
+      {
+        "version": "081_crm_offer_workflow",
+        "name": "081_crm_offer_workflow.sql",
+        "checksum": "ce629bd48ef61d96fa8be4e7a75e4dbaff0f80dc6f6b5844340ece7e30bb0f54"
+      },
+      {
+        "version": "082_crm_property_sales_workflow",
+        "name": "082_crm_property_sales_workflow.sql",
+        "checksum": "7266aba1e0f6a1f597465ba2ae730520c571be6c6e31c3a5155093b7761182bb"
+      },
+      {
+        "version": "083_crm_core_cas",
+        "name": "083_crm_core_cas.sql",
+        "checksum": "0ca41b859e15cd92c173e1da239e98c1b9c7c82f1afdb78bd04dc9eaf06e864a"
+      },
+      {
+        "version": "084_crm_contract_service_boundary",
+        "name": "084_crm_contract_service_boundary.sql",
+        "checksum": "3258b3a4e99d2a78bd4cdb06ad88c9aa699fd9a1ed1dd98fd31804deeccc1a11"
+      },
+      {
+        "version": "085_crm_approval_evidence",
+        "name": "085_crm_approval_evidence.sql",
+        "checksum": "0d2f9aa924f8199798b2af5040033c6b3579d5639652861f8980540a365759f9"
+      },
+      {
+        "version": "086_crm_evelyn_preview_contract",
+        "name": "086_crm_evelyn_preview_contract.sql",
+        "checksum": "31609898bb8ed86e46a350c2262e91e361cb199b946509253705ecf75fc6af81"
+      },
+      {
+        "version": "087_d11_crm_source_of_truth_closure",
+        "name": "087_d11_crm_source_of_truth_closure.sql",
+        "checksum": "c618a95363ade2705ba1345bf647822c8d1dc4e834b7c0d15136d936b766eeb4"
+      },
+      {
+        "version": "088_property_media_runtime_access",
+        "name": "088_property_media_runtime_access.sql",
+        "checksum": "4588186cd69c9c59a1d51a8e8f70473d2572527bdeee8000a768e294c2fa78bd"
+      },
+      {
+        "version": "089_property_surface_runtime_access",
+        "name": "089_property_surface_runtime_access.sql",
+        "checksum": "a03daea3b2252cf6d5b5e4a1866be1537adcef75e7f991c494d77170b021deac"
+      },
+      {
+        "version": "090_property_media_delete_runtime",
+        "name": "090_property_media_delete_runtime.sql",
+        "checksum": "39d566b4575f90b72b84ac08f5df9ffd603392dcba33e48ebf5b7eec211ecb0c"
+      },
+      {
+        "version": "091_production_runtime_forced_rls_cutover",
+        "name": "091_production_runtime_forced_rls_cutover.sql",
+        "checksum": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155"
+      },
+      {
+        "version": "092_crm_production_machine_identity",
+        "name": "092_crm_production_machine_identity.sql",
+        "checksum": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104"
+      },
+      {
+        "version": "093_crm_machine_internal_context",
+        "name": "093_crm_machine_internal_context.sql",
+        "checksum": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a"
+      },
+      {
+        "version": "094_website_sales_ingestion",
+        "name": "094_website_sales_ingestion.sql",
+        "checksum": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac"
+      },
+      {
+        "version": "095_form_tenant_isolation",
+        "name": "095_form_tenant_isolation.sql",
+        "checksum": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219"
+      },
+      {
+        "version": "096_public_integration_gateway",
+        "name": "096_public_integration_gateway.sql",
+        "checksum": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000"
+      },
+      {
+        "version": "100_studio_enquiry_production",
+        "name": "100_studio_enquiry_production.sql",
+        "checksum": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778"
+      },
+      {
+        "version": "101_knowledge_center",
+        "name": "101_knowledge_center.sql",
+        "checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e"
+      },
+      {
+        "version": "102_knowledge_document_processing",
+        "name": "102_knowledge_document_processing.sql",
+        "checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd"
+      },
+      {
+        "version": "103_knowledge_assistant_service",
+        "name": "103_knowledge_assistant_service.sql",
+        "checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98"
+      },
+      {
+        "version": "104_knowledge_publication_workflow",
+        "name": "104_knowledge_publication_workflow.sql",
+        "checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610"
+      },
+      {
+        "version": "105_knowledge_website_monitoring",
+        "name": "105_knowledge_website_monitoring.sql",
+        "checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30"
+      },
+      {
+        "version": "106_crm_operational_readers",
+        "name": "106_crm_operational_readers.sql",
+        "checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf"
+      }
+    ],
+    "extensions": [
+      {
+        "extname": "pgcrypto",
+        "extversion": "1.4"
+      },
+      {
+        "extname": "plpgsql",
+        "extversion": "1.0"
+      },
+      {
+        "extname": "vector",
+        "extversion": "0.8.6"
+      }
+    ],
+    "originalVectorColumnAndIndex": true,
+    "runtime": {
+      "rolcanlogin": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolreplication": false,
+      "rolbypassrls": false
+    },
+    "runtimeOwnsNoPublicObjects": true,
+    "actualRuntimeConnectionVerified": true,
+    "missingContextDeniesKnowledge": true,
+    "privateProvisioningTablesDenied": true,
+    "forcedRls": [
+      {
+        "relname": "analytics_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "audit_logs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bot_conversations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bot_messages",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bot_tool_calls",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bots",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "broker_mandates",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "buyer_search_profiles",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "calendar_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "company_profile_versions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "company_profiles",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "consent_policy_decisions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "consent_records",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "contact_timeline_items",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "contacts",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_command_receipts",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_domain_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_actions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_approvals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_executions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_revisions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_preview_targets",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offer_approvals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offer_deliveries",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offer_revisions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offers",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_outreach_deliveries",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_pipeline_stages",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_pipelines",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_project_sales_authorities",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_service_audit_bindings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_service_principals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_service_resource_bindings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_synthetic_approval_effects",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_synthetic_approval_evidence",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_synthetic_approval_requests",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "dashboard_views",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "deal_stage_history",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "deals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "editor_preflight_runs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_chat_messages",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_chat_sessions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_integration_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_integration_widget_configs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_integrations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "form_submissions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "forms",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "funnel_steps",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "funnels",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_area_grants",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_areas",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_assistant_service_bindings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_center_entitlements",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_change_proposals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_chunks",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_maintenance_configurations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_publication_workflows",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_query_usage",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_source_versions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_sources",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_website_monitoring",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_website_scan_runs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_workflow_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "lead_sales_handovers",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "leads",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "media_assets",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "newsletter_campaigns",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "newsletter_segments",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "newsletter_suppressions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "organizations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "projects",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_activity_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_building_idempotency",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_buildings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_cost_items",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_documents",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_media",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_offer_milestones",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_reservations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_sales",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_text_blocks",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_unit_audit_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_unit_idempotency",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_units",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_viewing_slots",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "qa_batch_objects",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "qa_batches",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "qa_reset_audit_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "seller_listings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "speed_to_lead_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "studio_enquiry_assets",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "studio_enquiry_transfers",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "tasks",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      }
+    ]
+  },
+  "completedAt": "2026-10-20T05:40:58.568Z"
+}

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth/session";
+import { requirePermission, resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { evaluateBotAction, getBotRuntimeControls } from "@/lib/bots/policy";
 import { sendBotDocument } from "@/lib/bots/provider-actions";
 import { evaluateOutboundConsent, type ConsentPolicyChannel } from "@/lib/db/consent-policy";
-import { queryOne, queryRows } from "@/lib/db/client";
+import { queryOne } from "@/lib/db/client";
 import { confirmMeetingBooking } from "@/lib/db/meeting-repositories";
 import { canPersist, insertNewsletterSend, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import {
@@ -16,6 +16,8 @@ import {
   revokeWorkspaceMediaShare,
 } from "@/lib/media-store";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
+import { readBotActionHistory } from "@/lib/db/crm-operational-readers";
+import { operationalReadErrorResponse, operationalReadJson, parseOperationalReadQuery } from "@/lib/operational-read-http";
 
 export const maxDuration = 30;
 
@@ -279,46 +281,19 @@ async function extendSentDocumentShare(input: {
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "bots:run");
-  if (!auth.ok) return auth.response;
-
-  if (!canPersist() || !isUuid(auth.session.workspaceId)) {
-    return NextResponse.json({
-      documentSends: [],
-      meetingBookings: [],
-      metrics: { openDocuments: 0, openMeetings: 0 },
-      source: "demo",
-    });
+  try {
+    const scope = parseOperationalReadQuery(request, "bot");
+    const auth = await resolveWorkspaceScopedSession(request, { permission: "bots:run" });
+    if (!auth.ok) {
+      auth.response.headers.set("cache-control", "private, no-store");
+      auth.response.headers.set("x-content-type-options", "nosniff");
+      auth.response.headers.set("referrer-policy", "no-referrer");
+      return auth.response;
+    }
+    return operationalReadJson(await readBotActionHistory(auth.session, scope));
+  } catch (error) {
+    return operationalReadErrorResponse(error);
   }
-
-  const documentSends = (await queryRows<BotDocumentSendRow>(
-    `${getDocumentSendSelect(`
-      where bds.workspace_id = $1
-    `)}
-    order by "createdAt" desc
-    limit 50`,
-    [auth.session.workspaceId],
-  )).map(toClientDocumentSend);
-
-  const meetingBookings = await queryRows<BotMeetingBookingRow>(
-    `${getMeetingBookingSelect(`
-      where workspace_id = $1
-        and source in ('bot_approval', 'bot_autonomy', 'bot')
-    `)}
-    order by "createdAt" desc
-    limit 50`,
-    [auth.session.workspaceId],
-  );
-
-  return NextResponse.json({
-    documentSends,
-    meetingBookings,
-    metrics: {
-      openDocuments: documentSends.filter((item) => item.status !== "sent").length,
-      openMeetings: meetingBookings.filter((item) => item.status === "requested").length,
-    },
-    source: "database",
-  });
 }
 
 export async function POST(request: Request) {

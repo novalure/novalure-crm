@@ -105,7 +105,7 @@ export async function executeQuery(query: string, params: unknown[] = []) {
 export async function withPublicSubmissionTransaction<Result>(
   scope: { actorId: string; workspaceId: string },
   callback: () => Promise<Result>,
-  options: { pool?: { connect(): Promise<PoolClient> } } = {},
+  options: { pool?: { connect(): Promise<PoolClient> }; readOnly?: boolean } = {},
 ): Promise<Result> {
   if (currentTenantTransaction() || publicSubmissionTransactions.getStore()) {
     throw new Error("Public submission transactions cannot be nested");
@@ -134,7 +134,7 @@ export async function withPublicSubmissionTransaction<Result>(
   let queryFailure: unknown;
   let pendingQuery: Promise<unknown> = Promise.resolve();
   try {
-    await client.query("begin");
+    await client.query(options.readOnly ? "begin read only" : "begin");
     begun = true;
     const role = await client.query<{ safe: boolean }>(`
       select (

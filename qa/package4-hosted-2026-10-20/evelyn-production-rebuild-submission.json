@@ -1,0 +1,106 @@
+{
+  "format": "package4-evelyn-production-rebuild-submission-v1",
+  "status": "SUBMITTED_AWAITING_NATIVE_READY_AND_BINDING_VERIFICATION",
+  "startedAtUtc": "2026-10-20T10:46:24.359Z",
+  "helperSha256": "c707caffdbfdb12e30ff44fb1ab9776d2ea6e970f7003a00aabce455034d9cda",
+  "planSha256": "f265f1b379e676338fc19749b5a60da89e1eb92683a883ac48ed1db77e9b8184",
+  "userInstructionSha256": "c6402bd098a245580b7b106781fa1d5096a8bbad9d7e8f558a50989054b62054",
+  "source": {
+    "commit": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "tree": "ad30ccdf4db3819a510c74224701cf53139fb079",
+    "clean": true,
+    "realGitDirectory": true,
+    "fileCount": 1112,
+    "fileManifestSha256": "9241bf53bac3844e6d49a0014de75b1b372561df38035e025d3a95016e4b510a",
+    "knownPins": [
+      {
+        "path": "package.json",
+        "sha256": "94cd62edc2e62139a120a9c1b812d2c7a54e447fa657b00d197852a4a03be7bf"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "3685c2b18a287e0a99aed00ea586ea371eec9201ce7f5cde8266256df7f302a9"
+      },
+      {
+        "path": "vercel.json",
+        "sha256": "6cb523e1459b8060232ac43a05ae4d3436f83c6679cdfcc3267a91a48c3175bd"
+      },
+      {
+        "path": "scripts/vercel-build.mjs",
+        "sha256": "36c7e1a420b803b8c86d2aac59f4eaf480dc8ed7c3b9648a4dfd380a46a9a679"
+      }
+    ],
+    "cliVersion": "64.7.0",
+    "planSha256": "f265f1b379e676338fc19749b5a60da89e1eb92683a883ac48ed1db77e9b8184"
+  },
+  "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "oldDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+  "deploymentSubmissions": 1,
+  "promotions": 0,
+  "revocations": 0,
+  "applicationHttpRequests": 0,
+  "rawOutputsPersisted": false,
+  "credentialValuesEmitted": false,
+  "cronRoutesManuallyInvoked": 0,
+  "nativeBefore": {
+    "observedAtUtc": "2026-10-20T10:46:25.008Z",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "productionDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "canonicalAliasDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "exactSelectedKeyMap": true,
+    "knownKeyCount": 2,
+    "replacementSoleDefault": true,
+    "oldRetained": true,
+    "projectMetadataUnchanged": true,
+    "projectStableMetadataSha256": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+    "environmentMetadataRows": 37,
+    "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+    "environmentMetadataUnchanged": true,
+    "crons": {
+      "deploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+      "disabledAt": null,
+      "enabledAt": 1791298548000,
+      "updatedAt": 1792401354740,
+      "definitions": [
+        {
+          "path": "/api/internal/reviewer/scan",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-22di2vnz6-novalure.vercel.app"
+        },
+        {
+          "path": "/api/internal/teams/a1-outbox/cron",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-22di2vnz6-novalure.vercel.app"
+        }
+      ]
+    }
+  },
+  "capture": {
+    "stdout": {
+      "bytes": 1530,
+      "overflowOmitted": false,
+      "redactionApplied": false,
+      "sanitizedSha256": "32718c86ebfb4d77b33c4595ab91cc5b2ef71393bee079feedae8fa625abcaa6",
+      "deploymentOrigins": [
+        "https://evelyn-n9z0kksgj-novalure.vercel.app"
+      ]
+    },
+    "stderr": {
+      "bytes": 229,
+      "overflowOmitted": false,
+      "redactionApplied": false,
+      "sanitizedSha256": "93279152e7a771465427eb95a8fc592dcf6aaea73ff900905d925bac6866c910",
+      "deploymentOrigins": [
+        "https://evelyn-n9z0kksgj-novalure.vercel.app"
+      ]
+    }
+  },
+  "timedOut": false,
+  "spawnFailed": false,
+  "exitCode": 0,
+  "completedAtUtc": "2026-10-20T10:46:28.065Z",
+  "automaticRetryAllowed": false,
+  "providerDeploymentCancellationAllowed": false
+}

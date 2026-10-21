@@ -901,6 +901,7 @@ export function CompanyProfileSettings({
                       <td className="px-3 py-3 text-stone-700">{user.email}</td>
                       <td className="px-3 py-3">
                         <select
+                          aria-label={`${language === "de" ? "Produktrolle" : "Product role"}: ${user.name} (${user.email})`}
                           className="min-h-11 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
                           disabled={!accessPayload?.canManage}
                           onChange={(event) => {
@@ -919,6 +920,7 @@ export function CompanyProfileSettings({
                       </td>
                       <td className="px-3 py-3">
                         <select
+                          aria-label={`${language === "de" ? "Workspace-Rolle" : "Workspace role"}: ${user.name} (${user.email})`}
                           className="min-h-11 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
                           disabled={!accessPayload?.canManage}
                           onChange={(event) => patchAccessUser(user.id, { role: event.target.value as WorkspaceRole })}
@@ -931,6 +933,7 @@ export function CompanyProfileSettings({
                       </td>
                       <td className="px-3 py-3">
                         <select
+                          aria-label={`${text.status}: ${user.name} (${user.email})`}
                           className="min-h-11 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
                           disabled={!accessPayload?.canManage}
                           onChange={(event) => patchAccessUser(user.id, { status: event.target.value as WorkspaceUser["status"] })}

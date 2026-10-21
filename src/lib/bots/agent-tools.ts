@@ -79,15 +79,28 @@ function asOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/** Prices and unit status need current authorized CRM facts, never imported excerpts. */
+export function requiresLivePropertyFacts(prompt: string) {
+  const normalized = prompt.normalize("NFKC").toLowerCase()
+    .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+  const property = /\b(wohnung\w*|einheit\w*|apartment\w*|unit\w*|immobilie\w*|property|properties|haus|haeuser|vivienda\w*|piso\w*)\b/.test(normalized);
+  const price = /\b(preis(?:e|en)?|kaufpreis(?:e)?|price(?:s)?|pricing|kost(?:en|et)|cost(?:s)?|precio(?:s)?|cuesta|coste|mietpreis(?:e)?|miete|rent|teuer\w*|expensive)\b/.test(normalized) ||
+    /(?:€|\beur\b|\beuro\b|\$)\s*[0-9]|[0-9]\s*(?:€|\beur\b|\beuro\b)/.test(normalized) ||
+    (property && /\b(how much|wie viel|wieviel|cuanto|cuánto|vale)\b/.test(normalized));
+  const availability = /\b(verfuegbar\w*|availability|available|disponib\w*|reserviert\w*|reserved|verkauft\w*|sold|ausverkauft\w*)\b/.test(normalized);
+  const meetingOnly = /\b(termin\w*|meeting\w*|appointment\w*|slot\w*)\b/.test(normalized) &&
+    !/\b(wohnung\w*|einheit\w*|apartment\w*|unit\w*|immobilie\w*|property|properties|haus|haeuser|vivienda\w*|piso\w*)\b/.test(normalized);
+  return price || (availability && !meetingOnly) || (property && /\b(frei(?:e|en|em|es)?|vacant|libre(?:s)?)\b/.test(normalized));
+}
+
 export function runCrmBotTool(toolName: string, input: Record<string, unknown>): CrmBotToolExecution {
   if (toolName === "search_approved_knowledge") {
     return {
       tool: "search_approved_knowledge",
       query: String(input.query || ""),
-      sources: [
-        { title: "Wohnpark Graz Exposé", url: "/knowledge/wohnpark-graz", confidence: 0.86 },
-        { title: "Pricing and units", url: "/knowledge/pricing-units", confidence: 0.8 },
-      ],
+      // Synchronous tools have no authorized persisted knowledge context.
+      // The API/runtime resolves this tool through the Knowledge Center instead.
+      sources: [],
     };
   }
 

@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "package": "EVELYN_KNOWLEDGE_CENTER_2_OF_4",
+  "recorded_at_utc": "2026-10-19T19:49:34.852094+00:00",
+  "display_timezone": "Europe/Vienna",
+  "branch": "codex/knowledge-center-package2-20261019",
+  "implementation_commit": "da0a043e50603603fbc59394884d00af270d474e",
+  "verified_production_baseline": {
+    "commit": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "deployment_id": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "earlier_commit": "b0e99c4cedc23a24ba3b9d4e67a59423f7b54f92",
+    "earlier_deployment_id": "dpl_5DFrPtNs1pLmux8j8DM2WZDWtArk",
+    "read_only_provider_metadata": true
+  },
+  "checks": {
+    "suite": {
+      "status": "PASS",
+      "tests": 85,
+      "failed": 0,
+      "skipped": 0,
+      "groups": [
+        74,
+        11
+      ]
+    },
+    "unit": {
+      "status": "PASS",
+      "tests": 240,
+      "failed": 0,
+      "skipped": 0,
+      "groups": [
+        240
+      ]
+    },
+    "browser": {
+      "status": "PASS",
+      "tests": 7,
+      "failed": 0,
+      "page_errors": 0,
+      "normal_password_totp_login": true,
+      "synthetic_loopback_only": true,
+      "source_commit": "da0a043e50603603fbc59394884d00af270d474e"
+    },
+    "typescript": {
+      "status": "PASS",
+      "command": "npm run build (full Next TypeScript phase)"
+    },
+    "eslint": {
+      "status": "PASS",
+      "command": "npm run lint",
+      "warnings": 0
+    },
+    "production_build": {
+      "status": "PASS",
+      "command": "npm run build",
+      "source_commit": "da0a043e50603603fbc59394884d00af270d474e"
+    },
+    "production_dependency_audit": {
+      "status": "PASS",
+      "command": "npm audit --omit=dev --audit-level=moderate",
+      "vulnerabilities": 0
+    }
+  },
+  "migration": {
+    "file": "migrations/101_knowledge_center.sql",
+    "sha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+    "tested_targets": [
+      "disposable PostgreSQL18 with non-superuser/non-BYPASSRLS migration owner and distinct runtime",
+      "unchanged091-096 then100 then101 in isolated predecessor fixture"
+    ],
+    "limitations": [
+      "historical optional pgvector column/index substitution in portable fixture",
+      "historical manual062 excluded in shared fixture",
+      "no invented097-099 predecessor rows",
+      "test callback confirms file deletion in predecessor fixture; no Blob provider call"
+    ],
+    "production_applied": false
+  },
+  "independent_review": {
+    "kind": "LOCAL_INDEPENDENT_AI_AGENT",
+    "agent": "independent_review",
+    "base_commit": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "head_commit": "da0a043e50603603fbc59394884d00af270d474e",
+    "unresolved_p0": 0,
+    "unresolved_p1": 0,
+    "unresolved_p2": 0,
+    "exact_commit_independent_runtime_tests": 13,
+    "exact_commit_independent_component_tests": 6,
+    "reviewer_source_edits": false,
+    "github_app_approval": false,
+    "remote_ci": false,
+    "production_acceptance": false
+  },
+  "effects": {
+    "production_database_mutations": false,
+    "production_customer_data_mutations": false,
+    "production_deployments": false,
+    "stripe_actions": false,
+    "paid_provider_actions": false,
+    "phone_number_purchase_or_telephony_activation": false,
+    "hosted_preview_url": null,
+    "knowledge_deployment_id": null,
+    "local_preview_stopped": true
+  },
+  "prepared_only": [
+    "Stripe durable event and provisioning writer",
+    "Vapi and verified external service identity binding",
+    "periodic website scheduler",
+    "persistent maintenance proposals",
+    "PDF/DOCX extraction and OCR",
+    "bot-to-unit live-property resolver activation",
+    "complete package3 publication/restore UX",
+    "general user/assistant provisioning limits"
+  ],
+  "artifact_sha256": {
+    "unit.log": "58e0d0a14d6d5a820f16058fbea60f341faf786e03badd25048aba6e83ad147e",
+    "browser-result.json": "dd083307c2b2f435e8181c9564e06052cdf0e759b4d018db3b2b3b4c546edb4c",
+    "lint.log": "0a655bc9181b646d57f081b6a0c3f2d23e521f445bc7c59e0ad7f405d1f56f07",
+    "browser.log": "41a910ace79a91098c8ee683681fcf87e155d7ba29aca59c29b042864406df14",
+    "dependency-audit.log": "6d8c5c8f3d7684adb070417bd608d01ae90aa3dc26a65af03ffda4955f38d9a3",
+    "build.log": "06eb19cacdbb24618e91d67b0a9069a7e1220b2f7203196b9d639082794bcc01",
+    "desktop.png": "59249edef3375ebf91a290a28bd7d6ccdb36621fa4a412915e74239734e9bbf8",
+    "suite.log": "ed7f8555f89368c6fbbe6ef58ec56f487d01c26f4b8641a674ae2f6a1d20887a",
+    "mobile.png": "785ad17cbc673abf4bc995ab49ad2bd8481083fd746ba304968f1a29e15699d9"
+  }
+}

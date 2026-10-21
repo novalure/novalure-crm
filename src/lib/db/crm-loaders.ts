@@ -160,6 +160,7 @@ type ContactRow = {
 };
 
 type LeadRow = {
+  hasStudioEnquiry?: boolean;
   version?: number | string;
   syntheticTest?: boolean;
   id: string;
@@ -2967,7 +2968,8 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
       buyer_profile as "buyerProfile",
       seller_profile as "sellerProfile",
       investor_profile as "investorProfile",
-      (metadata #>> '{websiteSales,syntheticTest}') = 'true' as "syntheticTest"
+      (metadata #>> '{websiteSales,syntheticTest}') = 'true' as "syntheticTest",
+      metadata ? 'studioEnquiry' as "hasStudioEnquiry"
     from leads
     where workspace_id = $1
     order by received_at desc
@@ -2979,6 +2981,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
   return rows.map((row) => ({
     version: row.version === undefined ? undefined : Number(row.version),
     syntheticTest: row.syntheticTest === true,
+    hasStudioEnquiry: row.hasStudioEnquiry === true,
     id: row.id,
     division: row.division,
     workspaceId: row.workspaceId,

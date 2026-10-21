@@ -1,0 +1,41 @@
+{
+  "observedAtUtc": "2026-10-20T06:23:52.579960+00:00",
+  "deploymentId": "dpl_4BD3dwh4bVj7Pbn3bJiBKzYTGniz",
+  "status": "OFFICIAL_REQUEST_SCOPED_AUTOMATION_OPTOUT_FOUND_NO_MUTATION",
+  "solution": {
+    "headerName": "x-vercel-skip-toolbar",
+    "headerValue": "1",
+    "scope": "Only exact approved Preview origin; through existing CDP origin routing, starting with the first navigation in a fresh full run",
+    "providerConfigurationChangeRequired": false,
+    "protectionChangeRequired": false,
+    "outboundDomainWhitelistChangeRequired": false,
+    "existingOriginAndTokenGuardMustRemainUnchanged": true,
+    "existingBlockedRequestsMustRemainRecorded": true
+  },
+  "source": {
+    "url": "https://vercel.com/docs/vercel-toolbar/managing-toolbar#disable-toolbar-for-automation",
+    "lastUpdated": "2026-08-11",
+    "sha256": "8e4ee4d05f6a9ed78b78d81d5e8a51b12e0dd1924405bd72e9787e031334e7de",
+    "excerpts": [
+      {
+        "line": 96,
+        "quote": "You can use the `x-vercel-skip-toolbar` header to prevent interference with automated end-to-end tests:"
+      },
+      {
+        "line": 98,
+        "quote": "1. Add the `x-vercel-skip-toolbar` header to the request sent to [the preview deployment URL](/docs/deployments/environments#preview-environment-pre-production#preview-urls)"
+      },
+      {
+        "line": 99,
+        "quote": "2. Optionally, you can assign the value `1` to the header. However, presence of the header itself triggers Vercel to disable the toolbar"
+      }
+    ]
+  },
+  "alternativeNotNeeded": {
+    "branchOnlyEnv": "VERCEL_PREVIEW_FEEDBACK_ENABLED=0",
+    "reason": "Would require environment/deployment change; request-scoped documented header solves current automation requirement."
+  },
+  "providerMutationsPerformed": false,
+  "remotePreviewRequestsPerformedByThisTask": false,
+  "secretValuesEmitted": false
+}

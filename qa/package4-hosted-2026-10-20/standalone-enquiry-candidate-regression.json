@@ -1,0 +1,181 @@
+{
+  "format": "package4-standalone-enquiry-candidate-regression-v1",
+  "preparedAtUtc": "2026-10-20T16:07:30.206158+00:00",
+  "repository": "novalure/novalure-crm",
+  "branch": "codex/evelyn-crm-package4-integration",
+  "pullRequest": 92,
+  "failedNativeRun": {
+    "id": 39448551530,
+    "attempt": 1,
+    "headSha": "7967e2321b87fd81f525b2f7c6d05b984522c968",
+    "jobId": 118720894124,
+    "conclusion": "failure",
+    "crmApiStep": "success",
+    "candidateStep": "failure",
+    "observedError": "QA_WEBSITE_SALES_OR_KPI_FAILED",
+    "nativeHttpResponseLogged": false,
+    "newRunPassed": false
+  },
+  "diagnosis": {
+    "kind": "QA matrix used the legacy 097 endpoint against the intentionally separate standalone 100 schema",
+    "actualQaProject": "green-thunder-49879900",
+    "actualQaBranch": "br-sweet-surf-ba6iahut",
+    "database": "neondb",
+    "nativeSchemaRead": {
+      "studioSalesHandoffsPresent": false,
+      "standalone100Present": true,
+      "preview097098099Present": false,
+      "consumedCandidateWorkspaces": 2
+    },
+    "causalLimit": "The native run logged an aggregate failure only. Missing legacy handoff schema is source/catalog-confirmed; no native HTTP status or SQLSTATE is invented."
+  },
+  "activeStudioSource": {
+    "origin": "https://novalurestudio.ie",
+    "deploymentId": "dpl_41FzbhvXZtfCfjidfZoJg6ZyPVCA",
+    "state": "READY",
+    "environment": "production",
+    "sourceSha": "63bf05f6435c63f193a65cc50099685c7544766b",
+    "repository": "novalure/novalure-web-design",
+    "contract": "studio-enquiry-v1",
+    "crmPath": "/api/public/website-sales/enquiry",
+    "evidenceSha256": "79c04a304f7e020dd31d88664fdf1a225518cfd5f18432dbb485df7e8095a18d",
+    "limits": "Deployment metadata and exact source wiring, not enabled-setting or successful live-delivery evidence; unknown external legacy callers remain unknown."
+  },
+  "change": {
+    "candidateContract": "studio-enquiry-v1",
+    "migration": "100_studio_enquiry_production",
+    "scope": "Text-only synthetic reserve/finalize/replay/status/receipt/KPI/signature matrix",
+    "ciBinding": [
+      "workflow_dispatch",
+      "exact repository, integration ref and workflow ref",
+      "run/attempt scoped synthetic recipient",
+      "loopback POST only",
+      "no Vercel mode",
+      "exact nonproduction database identity and role plus session role",
+      "native FORCE RLS, fixed actor and form"
+    ],
+    "secrets": "Existing QA signing material is scoped to the server and matrix processes; no new key or application-runtime GitHub credential.",
+    "storage": "Resolve private storage only when a pending request has file targets; file-bearing requests retain private-store validation; Production binding still requires its private store.",
+    "unchanged": [
+      "original migration SQL",
+      "database ACLs",
+      "RLS policies",
+      "Production and Preview target guards",
+      "branch/environment/reviewer protection",
+      "one-use candidate branch guard"
+    ]
+  },
+  "validation": {
+    "standalone100Regression": {
+      "passed": 24,
+      "failed": 0
+    },
+    "pureCandidateBoundary": {
+      "passed": 6,
+      "failed": 0
+    },
+    "typecheck": "PASS",
+    "scopedEslint": "PASS",
+    "workflowYamlAndBindings": "PASS",
+    "originalFull60LocalSchema": {
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "original_full60_schema_and_runtime_without_ledger_privilege",
+          "status": "PASS"
+        },
+        {
+          "name": "candidate_readiness_under_original_runtime_acl_and_native_local_identity",
+          "status": "PASS"
+        },
+        {
+          "name": "actual_matrix_text_only_protocol_durable_replay_and_kpi_on_full60",
+          "status": "PASS"
+        },
+        {
+          "name": "schema_acl_rls_and_ledger_unchanged",
+          "status": "PASS"
+        }
+      ],
+      "pgVersion": "17.11",
+      "pgvectorVersion": "0.8.0",
+      "runtime": "novalure_app",
+      "runtimeLedgerSelect": false,
+      "ledgerRows": 60,
+      "catalogAclRlsLedgerUnchanged": true,
+      "localOnly": true,
+      "syntheticGucsAreNotNeonProof": true,
+      "positiveProtocolAdapterIsNotHttpOrProviderProof": true,
+      "privateEvidenceSha256": "275032719a10a614b25800ce9bd242ba4c41584bb17e85d9be264dde3b14fcd4"
+    },
+    "independentReview": {
+      "openFindings": 0,
+      "runtimeLedgerPrivilegeFinding": "Fixed without granting Runtime ledger access"
+    },
+    "localContainer": "STOPPED_AND_REMOVED"
+  },
+  "nextRun": {
+    "status": "BLOCKED",
+    "freshBranchRequired": true,
+    "existingCandidateBranchConsumed": true,
+    "sourcePristineBranch": "br-shiny-darkness-baz4524v",
+    "sourceLedger60ChecksumsReadVerified": true,
+    "projectQuota": {
+      "computeTimeSecondsLimit": 3600,
+      "reportedComputeTimeSecondsUsed": 3566,
+      "activeTimeSecondsLimit": 14400,
+      "reportedActiveTimeSecondsUsed": 14108,
+      "usageHasLag": true,
+      "type": "additional per-project hard consumption quota",
+      "plan": "free",
+      "quotaChanged": false
+    },
+    "dispatchesStarted": 0,
+    "environmentBindingsChanged": 0,
+    "productionChanges": 0,
+    "handoffAfterFreshBranch": "Refresh only the six QA DB secret bindings and the project/branch selector values through the supported sealed handoff; keep the other nine secrets and neondb unchanged."
+  },
+  "sourceHashes": [
+    {
+      "path": ".github/workflows/livegang-e2e.yml",
+      "sha256": "53648b00b8047380f1f934aa1a2953023361268e3e861bbfa941d0a33cccd654"
+    },
+    {
+      "path": "package.json",
+      "sha256": "621d3bc14e1424a9870cf7eb4957a70dbca083fd030f3cb899e823808553756c"
+    },
+    {
+      "path": "scripts/qa-public-form-candidate.mjs",
+      "sha256": "1a961c4d0f34f5fd041366057a3ea04f222f7534b34fc8632c6c0eb89b5717bd"
+    },
+    {
+      "path": "scripts/lib/qa-studio-enquiry-candidate.mjs",
+      "sha256": "222e44025e68aebed647e088a924a0ee8f6a3b373fb92cc8c222ee5164a8742c"
+    },
+    {
+      "path": "scripts/studio-enquiry-tests.ts",
+      "sha256": "4d19f5767ecc58a27151180d43b86cee727b7db2ee86fd8fd2ca0abb77dba4ad"
+    },
+    {
+      "path": "scripts/studio-enquiry-candidate-tests.ts",
+      "sha256": "9332b820b30547b600188be0f16ad14a3e02e9b32de8ae823072480f969c6f01"
+    },
+    {
+      "path": "src/app/api/public/website-sales/enquiry/route.ts",
+      "sha256": "16c8b948eddbc845224c696cd387bebd4c5523c5271fe52acaea18b708ce9c12"
+    },
+    {
+      "path": "src/lib/studio-enquiry.ts",
+      "sha256": "33b6b7f71c713ff54e552078d1050b0cbfa91daeed1d243d08b952cdec1dbc23"
+    },
+    {
+      "path": "src/lib/studio-enquiry-candidate.ts",
+      "sha256": "252d965a8f24f55397a04f8241a91e5ce6f001a4378f77dbbfd83c1579ed40de"
+    }
+  ],
+  "limits": [
+    "No new native QA PASS; the historical failed run remains failed.",
+    "The text-only matrix is not private file-transfer acceptance.",
+    "No Production release, migration, storage restoration or authentication change was started for this correction."
+  ]
+}

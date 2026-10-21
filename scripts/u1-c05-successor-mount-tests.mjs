@@ -113,7 +113,7 @@ test("property media deletion uses the lifecycle protocol and globally complete 
   assert.match(route, /parsePropertyMediaDeletionTarget/);
   assert.match(route, /deletionComplete: true/);
   assert.match(store, /deleteDatabaseMedia/);
-  assert.match(lifecycle, /crm_media_reference_counts\(\$1::uuid\)/);
+  assert.match(lifecycle, /crm_studio_media_reference_counts\(\$1::uuid\)/);
   const remainingReferenceCheck = lifecycle.indexOf("Asset references remain");
   const assetDelete = lifecycle.indexOf("delete from public.media_assets");
   assert.ok(remainingReferenceCheck > 0 && assetDelete > remainingReferenceCheck,

@@ -1,0 +1,119 @@
+{
+  "format": "package4-evelyn-caller-deployment-v1",
+  "status": "PASS",
+  "nativeDeployment": {
+    "id": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+    "url": "evelyn-g8lve1qmp-novalure.vercel.app",
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+    "readyState": "READY",
+    "target": null,
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I"
+  },
+  "submittedArtifact": {
+    "format": "package4-evelyn-caller-deploy-submission-v1",
+    "sourceCommit": "c291e21288903e2807b108bba852a597f77b777a",
+    "callerProjectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "target": "preview",
+    "cliVersion": "64.7.0",
+    "state": "SUBMITTED_AWAITING_NATIVE_VERIFICATION",
+    "timedOut": false,
+    "spawnTimeoutMs": 60000,
+    "exitCode": 0,
+    "spawnFailed": false,
+    "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+    "blankKeyCount": 15,
+    "challengeInArgv": false,
+    "rawOutputPersisted": false,
+    "summaries": {
+      "stdout": {
+        "bytes": 1494,
+        "overflowOmitted": false,
+        "redactionApplied": false,
+        "sanitizedSha256": "2876b1bc9f2158052ff9f356a7ff50ffc305e6cef53cb26e1ae8fb31efc1c349",
+        "deploymentOrigins": [
+          "https://evelyn-g8lve1qmp-novalure.vercel.app"
+        ]
+      },
+      "stderr": {
+        "bytes": 613,
+        "overflowOmitted": false,
+        "redactionApplied": false,
+        "sanitizedSha256": "2621e680be5de6e030745466ddb19449512ec4ad201e9fb12dbf1f38342fb085",
+        "deploymentOrigins": [
+          "https://evelyn-g8lve1qmp-novalure.vercel.app"
+        ]
+      }
+    },
+    "limits": [
+      "Submission does not prove READY, protection policy, runtime environment isolation or application acceptance.",
+      "A timed-out CLI means UNKNOWN_RECONCILE_NATIVE_NO_RETRY: stop only the local process, inspect native deployment state, and never retry automatically or cancel the deployment.",
+      "Parent must verify native deployment/artifact/project binding and unchanged production/env metadata before proof calls."
+    ]
+  },
+  "providerStateAfterProof": {
+    "format": "package4-caller-provider-state-v1",
+    "status": "PASS",
+    "observedAt": "2026-10-20T07:49:36.298Z",
+    "phase": "after-proof",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "productionDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "productionUnchanged": true,
+    "oidc": {
+      "enabled": true,
+      "issuerMode": "team"
+    },
+    "sso": {
+      "deploymentType": "all"
+    },
+    "autoExposeSystemEnvs": true,
+    "environmentMetadataRows": 37,
+    "previewRows": 21,
+    "uniquePreviewKeys": 15,
+    "metadataUnchanged": true,
+    "metadataSha256": "38fc534502bee5d4f3370c0c8e258c63011fcffc365c25a7f43efc0f0cda73b4",
+    "noSecretDecryption": true,
+    "secretValuesEmitted": false
+  },
+  "materialization": {
+    "format": "package4-caller-materialization-v1",
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "receiverDeploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "receiverOrigin": "https://novalure-5j7pionbs-novalure.vercel.app",
+    "templateContractSha256": "ccd7be4748655e00f7a218cb3c8d6a3642bc1b005dd190de1b212988a60cc9c7",
+    "resolvedContractSha256": "e87101740f387ff24fb32decefd8dc3af578fa583999ed1c37f136fdb6429a06",
+    "onlySemanticChange": "receiverOrigin null to exact native READY CRM unique origin",
+    "sourceFiles": [
+      {
+        "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.mjs",
+        "sha256": "e9b90d4fcdd6f5ca5b6fbbbb5835a9d28b525930fdf3a8dba1734a6c1f7f3bfd"
+      },
+      {
+        "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/handler.mjs",
+        "sha256": "9c26d8bdab7dfa6a99880beb6691200959452a52da8885a425f8d4a1dd4885d8"
+      },
+      {
+        "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/contract.json",
+        "sha256": "ccd7be4748655e00f7a218cb3c8d6a3642bc1b005dd190de1b212988a60cc9c7"
+      },
+      {
+        "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/build.mjs",
+        "sha256": "a893aa43631f44eee10bd0224faeb78cfbf1efb0dacbbed837d5e5f14175bb0c"
+      },
+      {
+        "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.test.mjs",
+        "sha256": "9bd4704a57eeb24f63140b7754ff123de068996921cf97b6d72c4e5a7e3c44c5"
+      },
+      {
+        "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/README.md",
+        "sha256": "15f4ccd6708b7840690597cbcbf09faac76f07f91cfc2a11d85ee5991df18ac2"
+      }
+    ],
+    "privateSourceRoot": "/workspace/package4-caller-materialized-c291e212",
+    "stage": "/workspace/package4-caller-stage-c291e212",
+    "sourceFilesUnmodifiedOtherThanContractOrigin": true
+  },
+  "signedIdentityScope": "Evelyn Preview project/owner/environment/audience; exact deployment and source are separately bound by native metadata and frozen artifact hashes."
+}

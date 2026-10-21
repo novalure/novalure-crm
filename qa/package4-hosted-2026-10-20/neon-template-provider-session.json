@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-10-20T06:00:34.382Z",
+  "sessions": [
+    {
+      "pid": 1502,
+      "usename": "cloud_admin",
+      "datname": "neondb",
+      "application_name": "TimescaleDB Background Worker Scheduler for database 16564",
+      "state": null,
+      "backend_type": "TimescaleDB Background Worker Scheduler",
+      "backend_start": "2026-10-20T06:00:32.379Z",
+      "xact_start": "2026-10-20T06:00:32.380Z",
+      "state_change": null,
+      "wait_event_type": "Lock",
+      "wait_event": "virtualxid",
+      "last_query": ""
+    }
+  ]
+}

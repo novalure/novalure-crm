@@ -46,6 +46,8 @@ type ContactCommandCenterProps = {
   organizations: Organization[];
   projects: Project[];
   relationships: ContactRelationship[];
+  /** False when auxiliary collections have no authorized loaded data source. */
+  relatedDataAvailable?: boolean;
   showTechnicalFields?: boolean;
   tasks: Task[];
   timeline: ContactTimelineItem[];
@@ -208,6 +210,7 @@ export function ContactCommandCenter({
   organizations,
   projects,
   relationships,
+  relatedDataAvailable = true,
   showTechnicalFields = false,
   tasks,
   timeline,
@@ -215,6 +218,10 @@ export function ContactCommandCenter({
   workspaceId,
 }: ContactCommandCenterProps) {
   const copy = getContactCommandCenterCopy(language);
+  const relatedCopy = {
+    de: { unavailable: "Nicht verfügbar", organization: "Unternehmensdaten sind derzeit nicht verfügbar.", consent: "Kanalbezogene Einwilligungsnachweise sind derzeit nicht verfügbar. Die gespeicherte Kontaktnotiz bleibt bearbeitbar.", relationships: "Beziehungsdaten sind derzeit nicht verfügbar.", timeline: "Die Kontakthistorie ist derzeit nicht verfügbar.", partialQuality: "Prüfung der verfügbaren Kontaktdaten; Unternehmens-, Beziehungs- und Einwilligungsnachweise sind nicht enthalten." },
+    en: { unavailable: "Unavailable", organization: "Company data is currently unavailable.", consent: "Channel consent records are currently unavailable. The saved contact note remains editable.", relationships: "Relationship data is currently unavailable.", timeline: "Contact history is currently unavailable.", partialQuality: "Checks cover available contact data; company, relationship and consent records are not included." },
+  }[language];
   const [serverContactOverlays, setServerContactOverlays] = useState<Contact[]>([]);
   const [contactPatches, setContactPatches] = useState<Record<string, Partial<Contact>>>({});
   const [archivedContactIds, setArchivedContactIds] = useState<Set<string>>(() => new Set());
@@ -265,7 +272,7 @@ export function ContactCommandCenter({
     contactRecords.find((contact) => contact.id === effectiveSelectedContactId) ??
     contactRecords[0] ??
     null;
-  const selectedOrganization = selectedContact?.organizationId
+  const selectedOrganization = relatedDataAvailable && selectedContact?.organizationId
     ? organizations.find((organization) => organization.id === selectedContact.organizationId)
     : undefined;
   const selectedProject = selectedContact
@@ -274,16 +281,16 @@ export function ContactCommandCenter({
   const selectedLead = selectedContact
     ? leads.find((lead) => lead.contactId === selectedContact.id)
     : undefined;
-  const selectedRelationships = selectedContact
+  const selectedRelationships = selectedContact && relatedDataAvailable
     ? relationships.filter((relationship) => relationship.contactId === selectedContact.id)
     : [];
-  const selectedConsents = selectedContact
+  const selectedConsents = selectedContact && relatedDataAvailable
     ? consents.filter((consent) => consent.contactId === selectedContact.id)
     : [];
   const selectedTasks = selectedContact
     ? tasks.filter((task) => task.contactId === selectedContact.id)
     : [];
-  const selectedTimeline = selectedContact
+  const selectedTimeline = selectedContact && relatedDataAvailable
     ? timeline
         .filter((item) => item.contactId === selectedContact.id)
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
@@ -322,14 +329,14 @@ export function ContactCommandCenter({
     const normalizedQuery = searchTerm.trim().toLowerCase();
 
     return contactRecords.filter((contact) => {
-      const organization = contact.organizationId
+      const organization = relatedDataAvailable && contact.organizationId
         ? organizations.find((item) => item.id === contact.organizationId)
         : undefined;
       const lead = leads.find((item) => item.contactId === contact.id);
       const hasDuplicate = duplicateSignals.some((item) => item.id === contact.id);
       const hasContactData = Boolean(contact.email || contact.phone);
       const matchesView =
-        activeView === "all" ||
+        activeView === "all" || (!relatedDataAvailable && activeView === "missingConsent") ||
         (activeView === "hot" && Boolean(lead && lead.score >= 85)) ||
         (activeView === "missingData" && !hasContactData) ||
         (activeView === "missingConsent" && !consentContactIds.has(contact.id)) ||
@@ -350,7 +357,7 @@ export function ContactCommandCenter({
 
       return matchesView && (!normalizedQuery || searchable.includes(normalizedQuery));
     });
-  }, [activeView, consentContactIds, contactRecords, duplicateSignals, leads, organizations, searchTerm]);
+  }, [activeView, consentContactIds, contactRecords, duplicateSignals, leads, organizations, relatedDataAvailable, searchTerm]);
   const dataModelMapping = selectedContact
     ? [
         {
@@ -373,12 +380,14 @@ export function ContactCommandCenter({
         },
         {
           label: copy.mapping.organization,
+          requiresRelatedData: true,
           novalure: selectedOrganization?.name,
           targetField: "linked_organization",
           ready: Boolean(selectedOrganization),
         },
         {
           label: copy.mapping.lifecycle,
+          requiresRelatedData: true,
           novalure: selectedOrganization?.lifecycleStage
             ? getCrmLifecycleLabel(selectedOrganization.lifecycleStage, language)
             : undefined,
@@ -397,7 +406,7 @@ export function ContactCommandCenter({
           targetField: "owner_id",
           ready: Boolean(contactOwner),
         },
-      ]
+      ].filter(item => relatedDataAvailable || !item.requiresRelatedData)
     : [];
   const qualityChecks = selectedContact
     ? ([
@@ -408,11 +417,13 @@ export function ContactCommandCenter({
         },
         {
           label: copy.qualityOrganization,
+          requiresRelatedData: true,
           detail: selectedOrganization?.name ?? "",
           status: selectedOrganization ? "ok" : "warning",
         },
         {
           label: copy.qualityDealRole,
+          requiresRelatedData: true,
           detail: selectedRelationships
             .map((relationship) => getCrmRelationshipRoleLabel(relationship.role, language))
             .join(", "),
@@ -420,6 +431,7 @@ export function ContactCommandCenter({
         },
         {
           label: copy.qualityConsent,
+          requiresRelatedData: true,
           detail: selectedConsents
             .map((consent) => `${getCrmConsentChannelLabel(consent.channel, language)}: ${getCrmConsentStatusLabel(consent.status, language)}`)
             .join(", "),
@@ -435,7 +447,7 @@ export function ContactCommandCenter({
           detail: selectedDuplicateSignals.map((contact) => contact.name).join(", "),
           status: selectedDuplicateSignals.length === 0 ? "ok" : "warning",
         },
-      ] as const)
+      ] as const).filter(check => relatedDataAvailable || !("requiresRelatedData" in check))
     : [];
   const qualityScore = qualityChecks.length
     ? Math.round(
@@ -469,6 +481,13 @@ export function ContactCommandCenter({
     relationships: [copy.organizationRecord, copy.relationshipMap, copy.openDeals],
     timeline: [copy.lastActivity, copy.openTasks, copy.timeline],
   };
+  const relatedTabMessages: Partial<Record<ContactDetailTab, string>> = {
+    company: relatedCopy.organization,
+    consent: relatedCopy.consent,
+    relationships: relatedCopy.relationships,
+    timeline: relatedCopy.timeline,
+  };
+  const relatedTabMessage = relatedDataAvailable ? undefined : relatedTabMessages[activeDetailTab];
 
   const contactViews: Array<{ id: ContactView; label: string; count: number }> = [
     { id: "all", label: copy.allContacts, count: contactRecords.length },
@@ -484,11 +503,11 @@ export function ContactCommandCenter({
       label: copy.incompleteData,
       count: contactRecords.filter((contact) => !contact.email && !contact.phone).length,
     },
-    {
+    ...(relatedDataAvailable ? [{
       id: "missingConsent",
       label: copy.missingConsentView,
       count: contactRecords.filter((contact) => !consentContactIds.has(contact.id)).length,
-    },
+    } as const] : []),
     { id: "duplicates", label: copy.duplicatesView, count: duplicateSignals.length },
   ];
   const roleOptions = Array.from(new Set([...defaultRoleOptions, ...contactRecords.map((contact) => contact.role)]));
@@ -796,11 +815,11 @@ export function ContactCommandCenter({
               <p className="crm-kpi-label text-xs text-stone-500">{copy.people}</p>
             </div>
             <div className="rounded-md bg-stone-50 p-3">
-              <p className="font-semibold">{organizations.length}</p>
+              <p className="font-semibold">{relatedDataAvailable ? organizations.length : relatedCopy.unavailable}</p>
               <p className="crm-kpi-label text-xs text-stone-500">{copy.organizations}</p>
             </div>
             <div className="rounded-md bg-stone-50 p-3">
-              <p className="font-semibold">{primaryRelationships.length}</p>
+              <p className="font-semibold">{relatedDataAvailable ? primaryRelationships.length : relatedCopy.unavailable}</p>
               <p className="crm-kpi-label text-xs text-stone-500">{copy.primaryRoles}</p>
             </div>
             <div className="rounded-md bg-stone-50 p-3">
@@ -932,6 +951,7 @@ export function ContactCommandCenter({
                 {copy.organizationRecord}
                 <select
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  disabled={!relatedDataAvailable}
                   onChange={(event) =>
                     setNewContact((current) => ({
                       ...current,
@@ -940,8 +960,8 @@ export function ContactCommandCenter({
                   }
                   value={newContact.organizationId ?? ""}
                 >
-                  <option value="">{copy.noOrganization}</option>
-                  {organizations.map((organization) => (
+                  <option value="">{relatedDataAvailable ? copy.noOrganization : relatedCopy.unavailable}</option>
+                  {(relatedDataAvailable ? organizations : []).map((organization) => (
                     <option key={organization.id} value={organization.id}>
                       {organization.name}
                     </option>
@@ -1229,7 +1249,7 @@ export function ContactCommandCenter({
           <div className="mt-4 space-y-2">
             {filteredContacts.length > 0 ? (
               filteredContacts.map((contact) => {
-              const organization = contact.organizationId
+              const organization = relatedDataAvailable && contact.organizationId
                 ? organizations.find((item) => item.id === contact.organizationId)
                 : undefined;
               const lead = leads.find((item) => item.contactId === contact.id);
@@ -1259,14 +1279,14 @@ export function ContactCommandCenter({
                       isSelected ? "text-slate-300" : "text-stone-500"
                     }`}
                   >
-                      {getCrmLeadTypeLabel(contact.role, language)} · {organization?.name ?? copy.noOrganization}
+                      {getCrmLeadTypeLabel(contact.role, language)} · {relatedDataAvailable ? organization?.name ?? copy.noOrganization : relatedCopy.organization}
                   </span>
                   <span
                     className={`mt-2 block break-words text-xs ${
                       isSelected ? "text-slate-300" : "text-stone-500"
                     }`}
                   >
-                    {copy.lastActivity}: {contactTimeline[0]?.title ?? "-"}
+                    {copy.lastActivity}: {relatedDataAvailable ? contactTimeline[0]?.title ?? "-" : relatedCopy.unavailable}
                   </span>
                   <span className="mt-3 flex flex-wrap gap-2">
                     <span
@@ -1339,11 +1359,11 @@ export function ContactCommandCenter({
                       onClick={() => setActiveDetailTab(tab.id)}
                       type="button"
                     >
-                      {tab.label}
+                      {tab.label}{!relatedDataAvailable && relatedTabMessages[tab.id] ? ` · ${relatedCopy.unavailable}` : ""}
                     </button>
                   ))}
                 </div>
-                <div className="mt-3 rounded-md bg-stone-50 p-3">
+                {relatedTabMessage ? <p className="mt-3 rounded-md bg-stone-50 p-3 text-sm text-stone-600" role="status">{relatedTabMessage}</p> : <div className="mt-3 rounded-md bg-stone-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {copy.recommendedForTab}
                   </p>
@@ -1354,7 +1374,7 @@ export function ContactCommandCenter({
                       </span>
                     ))}
                   </div>
-                </div>
+                </div>}
               </div>
 
               <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
@@ -1467,11 +1487,12 @@ export function ContactCommandCenter({
                     {copy.organizationRecord}
                     <select
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                      disabled={!relatedDataAvailable}
                       onChange={(event) => updateSelectedContact("organizationId", event.target.value)}
                       value={selectedContact.organizationId ?? ""}
                     >
-                      <option value="">{copy.noOrganization}</option>
-                      {organizations.map((organization) => (
+                      <option value={relatedDataAvailable ? "" : selectedContact.organizationId ?? ""}>{relatedDataAvailable ? copy.noOrganization : relatedCopy.unavailable}</option>
+                      {(relatedDataAvailable ? organizations : []).map((organization) => (
                         <option key={organization.id} value={organization.id}>
                           {organization.name}
                         </option>
@@ -1549,7 +1570,7 @@ export function ContactCommandCenter({
                 {copy.organizationRecord}
               </p>
               <h4 className="mt-1 break-words text-xl font-semibold">
-                {selectedOrganization?.name ?? copy.noOrganization}
+                {relatedDataAvailable ? selectedOrganization?.name ?? copy.noOrganization : relatedCopy.organization}
               </h4>
               {selectedOrganization ? (
                 <>
@@ -1591,7 +1612,7 @@ export function ContactCommandCenter({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="text-lg font-semibold">{copy.dataQuality}</h4>
-                  <p className="mt-1 text-sm text-stone-500">{copy.importReadiness}</p>
+                  <p className="mt-1 text-sm text-stone-500">{relatedDataAvailable ? copy.importReadiness : relatedCopy.partialQuality}</p>
                 </div>
                 <span className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
                   {qualityScore}%
@@ -1624,6 +1645,7 @@ export function ContactCommandCenter({
             <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <h4 className="text-lg font-semibold">{copy.relationshipMap}</h4>
               <div className="mt-4 space-y-3">
+                {!relatedDataAvailable ? <p className="text-sm text-stone-500" role="status">{relatedCopy.relationships}</p> : null}
                 {selectedRelationships.map((relationship) => (
                   <div className="rounded-md bg-stone-50 p-3" key={relationship.id}>
                     <div className="flex items-center justify-between gap-3 text-sm">
@@ -1651,7 +1673,7 @@ export function ContactCommandCenter({
                     {getCrmConsentChannelLabel(consent.channel, language)}: {getCrmConsentStatusLabel(consent.status, language)}
                   </span>
                 ))}
-                {selectedConsents.length === 0 ? (
+                {!relatedDataAvailable ? <p className="text-sm text-stone-500" role="status">{relatedCopy.consent}</p> : selectedConsents.length === 0 ? (
                   <span className="text-sm text-stone-500">{copy.noConsent}</span>
                 ) : null}
               </div>
@@ -1751,7 +1773,7 @@ export function ContactCommandCenter({
                   </div>
                 </div>
               ))}
-              {selectedTimeline.length === 0 ? (
+              {!relatedDataAvailable ? <p className="text-sm text-stone-500" role="status">{relatedCopy.timeline}</p> : selectedTimeline.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-stone-300 p-4 text-sm text-stone-500">
                   {copy.noTimeline}
                 </div>

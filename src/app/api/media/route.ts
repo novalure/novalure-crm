@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { withCrmRead } from "@/lib/crm-command";
 import {
   listWorkspaceMedia,
@@ -14,7 +14,7 @@ import {
 const privateJsonHeaders = { "cache-control": "private, no-store" };
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "crm:read");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
   const media = await withCrmRead(auth.session, (_tx, session) =>
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermission(request, "crm:write");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write" });
   if (!auth.ok) return auth.response;
 
   if (request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
@@ -110,6 +110,7 @@ function isTruthy(value: FormDataEntryValue | null) {
 }
 
 function statusForMediaError(error: MediaStoreError) {
+  if (error.code === "KNOWLEDGE_MEDIA_PRIVATE") return 403;
   if (error.code === "FILE_TOO_LARGE" || error.code === "IMAGE_TOO_LARGE") return 413;
   if (error.code === "PRIVATE_STORAGE_UNAVAILABLE" || error.code === "PUBLIC_STORAGE_UNAVAILABLE") return 503;
   if (error.code === "WORKSPACE_QUOTA_EXCEEDED") return 409;

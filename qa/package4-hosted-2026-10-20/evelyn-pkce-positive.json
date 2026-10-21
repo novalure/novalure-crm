@@ -1,0 +1,121 @@
+{
+  "format": "package4-evelyn-pkce-positive-v1",
+  "status": "PASS",
+  "helperSha256": "4d26b6643e21582631f11d61ad495d3cebb402faca2c4690162df78c6a3b8c91",
+  "userInstructionSha256": "c6402bd098a245580b7b106781fa1d5096a8bbad9d7e8f558a50989054b62054",
+  "startedAtUtc": "2026-10-20T10:39:23.795Z",
+  "target": {
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "deploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "sourceCommit": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "canonicalOrigin": "https://evelyn-canary.novalure.eu",
+    "path": "/auth/callback"
+  },
+  "sourcePins": [
+    {
+      "file": "api/index.ts",
+      "sha256": "eecc4dba34f33905a6854f7b7077f1454353c0c885eeed8737fae0b74e3552ba"
+    },
+    {
+      "file": "src/production/pkce-page.ts",
+      "sha256": "6376b109e3880a0f5cc577b823fb39f2d930f959c42d924e8eb8892963dbf61d"
+    },
+    {
+      "file": "src/production/routes.ts",
+      "sha256": "4ec162f4957e374c9905998bd69069b336f2572ae4148b8058cbebffe47c33ef"
+    },
+    {
+      "file": "src/production/foundation.ts",
+      "sha256": "cddce16f47155dcd2d83ff364fd6040d06a2566b2c643029407f95f84f467a86"
+    },
+    {
+      "file": "src/production/host-auth.ts",
+      "sha256": "fe11bb003b3be48a2dfa28c00f0ba497df252c1e6f2de90fd78cabe647eaaac3"
+    },
+    {
+      "file": "vercel.json",
+      "sha256": "6cb523e1459b8060232ac43a05ae4d3436f83c6679cdfcc3267a91a48c3175bd"
+    }
+  ],
+  "applicationRequests": 1,
+  "providerRequests": 8,
+  "providerMutations": 0,
+  "credentialsEmitted": false,
+  "redirectsFollowed": 0,
+  "oauthBrowserExecution": false,
+  "applicationBearerOrCookieSent": false,
+  "scope": "Positive existing production PKCE page rendering and hosting credential transport only; no authenticated application-health or business/provider availability claim. Normal hosting/runtime metadata logs may occur.",
+  "before": {
+    "observedAtUtc": "2026-10-20T10:39:24.754Z",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "deploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "sourceCommit": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "targetReady": true,
+    "canonicalAliasPinned": true,
+    "knownAutomationKeyCount": 2,
+    "replacementIsDefault": true,
+    "oldIsNondefaultRetained": true,
+    "exactSelectedDescriptorsMatch": true,
+    "projectMetadataUnchanged": true,
+    "projectOtherMetadataSha256": "888e124ff66bb9110e5c9910aca6446c60280b00e60f6f1ed38086ada72eaac2",
+    "environmentMetadataCount": 37,
+    "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+    "environmentMetadataUnchanged": true,
+    "deploymentEnvNamesCount": 151,
+    "systemBypassEnvironmentNamePresent": true,
+    "runtimeCredentialByteIdentityProven": false
+  },
+  "applicationRequest": {
+    "status": 200,
+    "startedAtUtc": "2026-10-20T10:39:24.755Z",
+    "method": "GET",
+    "fixedUrl": "https://evelyn-canary.novalure.eu/auth/callback",
+    "credential": "EXISTING_REPLACEMENT_PLATFORM_HEADER_ONLY",
+    "maximumBytes": 65536,
+    "deadlineMs": 30000,
+    "automaticRetries": 0,
+    "completedAtUtc": "2026-10-20T10:39:25.413Z",
+    "classification": "EXACT_EXISTING_PKCE_PAGE",
+    "bytes": 5781,
+    "bodySha256": "440f71dc0c8f9582cc4d2235cd8abf35dd27ade6ea37dfb049ab62201d437cfb",
+    "checks": {
+      "status200": true,
+      "htmlContentType": true,
+      "noRedirectLocation": true,
+      "cacheNoStore": true,
+      "nonceCspExact": true,
+      "nonceMatchesBothElements": true,
+      "nosniff": true,
+      "frameDeny": true,
+      "referrerNone": true,
+      "exactPublicConfig": true,
+      "exactPkceMarkers": true,
+      "credentialEchoAbsent": true,
+      "bodyWithinBound": true
+    }
+  },
+  "after": {
+    "observedAtUtc": "2026-10-20T10:39:26.276Z",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "deploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "sourceCommit": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "targetReady": true,
+    "canonicalAliasPinned": true,
+    "knownAutomationKeyCount": 2,
+    "replacementIsDefault": true,
+    "oldIsNondefaultRetained": true,
+    "exactSelectedDescriptorsMatch": true,
+    "projectMetadataUnchanged": true,
+    "projectOtherMetadataSha256": "888e124ff66bb9110e5c9910aca6446c60280b00e60f6f1ed38086ada72eaac2",
+    "environmentMetadataCount": 37,
+    "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+    "environmentMetadataUnchanged": true,
+    "deploymentEnvNamesCount": 151,
+    "systemBypassEnvironmentNamePresent": true,
+    "runtimeCredentialByteIdentityProven": false
+  },
+  "completedAtUtc": "2026-10-20T10:39:26.277Z"
+}

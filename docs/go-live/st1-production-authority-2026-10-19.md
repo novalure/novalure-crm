@@ -1,0 +1,11 @@
+# ST1 Production release authority — 19 October 2026
+
+Franz explicitly authorized this bounded ST1 Production release, including additive migration100, minimal existing infrastructure/credential bindings, staged Production candidates, one bundled real acceptance, CRM-first activation and subsequent public Studio launch. The release commit containing this file defines the exact CRM source; the final operator record supplies full Studio/CRM SHAs and actual deployment IDs.
+
+The Owner's express exception to unavailable trusted-App SUCCESS applies only to this ST1 release and requires actual technical checks, independent targeted source review and real functional/security acceptance instead. Original App FAILURE `117981149748` remains FAILURE. The independent agent review and local checks do not become an App attestation. No branch protection or external access control is bypassed. The Evelyn Reviewer firewall hold remains active, with repair separate.
+
+The earlier protected-Preview exception was limited to the CRM App gate and did not waive browser inspection. The existing dated development evidence now records that executed browser inspection. Reused Preview/API/database evidence is never presented as new Production browser evidence. The historical Baseline finding,22-case offline countertest and remaining new-provider-database uncertainty remain preserved. This release creates no new database and does not rely on a historical bootstrap to prove all Provider conditions.
+
+Before public activation: verify the exact fixed Studio workspace, project, form, actor, role, database branch, private store and both HMAC/origin bindings; rehearse and apply only standalone100 through the existing migration runner; inspect private candidate behavior, accepted synthetic operation, files, isolation and same-operation replay. Record full SHA/plan/deployment and actual outcome. Source preparation itself claims no live result.
+
+Recovery preserves100 and accepted/uncertain data, disables new handoff admission and uses the new schema-compatible code. Do not blindly restore the old CRM deployment or customer database, remove foreign keys/RLS, rewrite historic evidence, or activate calendar/EF1/other tenants. See `studio-enquiry-public-launch.md` for the concrete schema/rollback boundary.

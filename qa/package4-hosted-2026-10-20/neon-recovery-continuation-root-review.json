@@ -1,0 +1,52 @@
+{
+  "format": "package4-r2-continuation-root-review-v1",
+  "stage": "R2_SAME_BRANCH_CONTINUATION_ONCE",
+  "authorized": true,
+  "releasedAt": "2026-10-20T08:42:43.790865+00:00",
+  "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+  "previousResultSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+  "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "localSha": {
+    "launcher": "06bd9d15eb22d05ff50d5d047fff81dbf9b2269ccc884d45e5137b38f2b9ad8a",
+    "ownerTransport": "27742e47c303e459939ba0e07b68668917019a0822e80a257c88f0c9574d197d",
+    "taskProbe": "27c976b06fbf4c05c3f09cc57eddc831d913a7624f4e954945759f4cd4fec29d",
+    "applicationProbe": "d62b27e47bd1aef3be85ca1b7df0f24528f20d06dc451dbfb217d39554b28ddb",
+    "codeBinding": "81a8602a2607ff19605cce77e5e289e79f2df36d63c5905ff937d5210b05a79f"
+  },
+  "resources": {
+    "source": {
+      "branch": "br-sweet-surf-ba6iahut",
+      "endpoint": "ep-crimson-forest-ba4kk6sb",
+      "host": "ep-crimson-forest-ba4kk6sb.c-8.eu-central-1.aws.neon.tech"
+    },
+    "working": {
+      "branch": "br-little-lake-bagp4n0i",
+      "endpoint": "ep-purple-truth-baye3wwh",
+      "host": "ep-purple-truth-baye3wwh.c-8.eu-central-1.aws.neon.tech"
+    },
+    "restored": {
+      "branch": "br-nameless-sun-bazc0qdt",
+      "endpoint": "ep-lively-dawn-ba2sskxd",
+      "host": "ep-lively-dawn-ba2sskxd.c-8.eu-central-1.aws.neon.tech"
+    }
+  },
+  "point": "br-broad-mouse-baohb06c",
+  "syntheticTestWritersPaused": true,
+  "noScheduledOrProviderWriters": true,
+  "productionAuthorized": false,
+  "newBranchesAuthorized": 0,
+  "workingCommitsAuthorized": 0,
+  "targetPrivateFilesAuthorized": 17,
+  "targetStoreId": "store_2FsqiotLlmJJ6toi",
+  "rootSourceAvailabilityActionSeparate": true,
+  "review": {
+    "root": "PASS",
+    "independentAgent": "PASS final06bd freeze independently acknowledged by /root/hosted_upload_debug before execution,0 open findings",
+    "transportTests": "23/23 local PASS; one actual Neon driver local PostgreSQL test",
+    "nativeBranchMetadata": "Root read confirmed9branches, exactLSN, missingTTL Source/point and secondsTTLs Working/Restored",
+    "acknowledgmentReceivedBeforeExecution": true
+  },
+  "status": "APPROVED_ONE_BOUNDED_QA_CONTINUATION",
+  "sourceAndOldFailurePreserved": true
+}

@@ -1,0 +1,372 @@
+{
+  "schema": "package4-machine-qa-native-v1",
+  "sourceRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "host": "ep-crimson-forest-ba4kk6sb.c-8.eu-central-1.aws.neon.tech",
+    "databaseName": "neondb",
+    "owner": "neondb_owner"
+  },
+  "installedAtUtc": "2026-10-20T07:41:07.245Z",
+  "workspaceId": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+  "principalId": "36574422-8ce7-4fa9-a1f3-225f170377ad",
+  "actorUserId": "97191de1-6de5-42e9-8aa1-0dd3f1b1b40e",
+  "botId": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+  "identity": {
+    "identityId": "EVELYN_CRM_KNOWLEDGE_QA_IDENTITY",
+    "authType": "VERCEL_OIDC_QA",
+    "environment": "preview",
+    "role": "Evelyn.QA",
+    "consumer": "EVELYN",
+    "issuer": "https://oidc.vercel.com/novalure",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "subject": "owner:novalure:project:evelyn:environment:preview",
+    "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08"
+  },
+  "ddlSha256": "e30df64409e1cca8d73f882dfe3a6a51d27c7143a568bd01f6b985ccf72e8d2e",
+  "fixtureSha256": "d90531068f0cc44a09b6f1ea4ac4407b7c02e66f8843fda46a5299e230dbb4a3",
+  "reader": {
+    "name": "crm_authenticate_knowledge_qa_machine",
+    "sha256": "4490f3005f1d4a4a49404c059113e6e0a12051c5b2993f83f9b1d1484b46d7e2",
+    "owner": "neondb_owner",
+    "volatility": "v",
+    "securityDefiner": true,
+    "searchPath": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{neondb_owner=X/neondb_owner,novalure_tenant_app=X/neondb_owner}"
+  },
+  "ledgerRows": 60,
+  "package4MigrationCount": 13,
+  "rlsBefore": {
+    "enabled": 94,
+    "forced": 94
+  },
+  "rlsAfter": {
+    "enabled": 94,
+    "forced": 94
+  },
+  "allExistingPublicFunctionsBeforeSha256": "c55d79c71858ee39524ac3e2afe921a50ecaba3ba9e4ad87030d302195e87bba",
+  "allExistingPublicFunctionsAfterSha256": "c55d79c71858ee39524ac3e2afe921a50ecaba3ba9e4ad87030d302195e87bba",
+  "allExistingPublicFunctionCount": 233,
+  "constraintsBefore": [
+    {
+      "conname": "crm_service_principals_agent_id_check",
+      "expression": "(agent_id = ANY (ARRAY['executive'::text, 'sales'::text, 'marketing'::text, 'buyer'::text, 'support'::text, 'finance'::text, 'engineering'::text, 'security'::text, 'legal'::text, 'qc'::text, 'procurement'::text, 'hr'::text, 'personal'::text, 'evelyn'::text]))",
+      "definition": "CHECK ((agent_id = ANY (ARRAY['executive'::text, 'sales'::text, 'marketing'::text, 'buyer'::text, 'support'::text, 'finance'::text, 'engineering'::text, 'security'::text, 'legal'::text, 'qc'::text, 'procurement'::text, 'hr'::text, 'personal'::text, 'evelyn'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_auth_model_check",
+      "expression": "(((auth_type = 'STATIC_HASH_QA'::text) AND (token_hash IS NOT NULL) AND (environment = 'simulation'::text) AND (service_role = 'Evelyn.QA'::text)) OR ((auth_type = 'VERCEL_OIDC'::text) AND (token_hash IS NULL) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text) AND (issuer IS NOT NULL) AND (audience IS NOT NULL) AND (oidc_project_id IS NOT NULL) AND (oidc_owner_id IS NOT NULL)))",
+      "definition": "CHECK ((((auth_type = 'STATIC_HASH_QA'::text) AND (token_hash IS NOT NULL) AND (environment = 'simulation'::text) AND (service_role = 'Evelyn.QA'::text)) OR ((auth_type = 'VERCEL_OIDC'::text) AND (token_hash IS NULL) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text) AND (issuer IS NOT NULL) AND (audience IS NOT NULL) AND (oidc_project_id IS NOT NULL) AND (oidc_owner_id IS NOT NULL))))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_auth_type_check",
+      "expression": "(auth_type = ANY (ARRAY['STATIC_HASH_QA'::text, 'VERCEL_OIDC'::text]))",
+      "definition": "CHECK ((auth_type = ANY (ARRAY['STATIC_HASH_QA'::text, 'VERCEL_OIDC'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_consumer_check",
+      "expression": "(consumer = 'EVELYN'::text)",
+      "definition": "CHECK ((consumer = 'EVELYN'::text))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_data_classification_check",
+      "expression": "(data_classification = ANY (ARRAY['PUBLIC'::text, 'INTERNAL'::text, 'CONFIDENTIAL'::text, 'RESTRICTED'::text]))",
+      "definition": "CHECK ((data_classification = ANY (ARRAY['PUBLIC'::text, 'INTERNAL'::text, 'CONFIDENTIAL'::text, 'RESTRICTED'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_data_context_check",
+      "expression": "((data_context = 'CUSTOMER_TENANT'::text) OR ((data_context = 'NOVALURE_INTERNAL'::text) AND (auth_type = 'VERCEL_OIDC'::text) AND (identity_id = 'EVELYN_CRM_SERVICE_IDENTITY'::text) AND (workspace_id = '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'::uuid) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text)))",
+      "definition": "CHECK (((data_context = 'CUSTOMER_TENANT'::text) OR ((data_context = 'NOVALURE_INTERNAL'::text) AND (auth_type = 'VERCEL_OIDC'::text) AND (identity_id = 'EVELYN_CRM_SERVICE_IDENTITY'::text) AND (workspace_id = '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'::uuid) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text))))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_environment_check",
+      "expression": "(environment = ANY (ARRAY['simulation'::text, 'production'::text]))",
+      "definition": "CHECK ((environment = ANY (ARRAY['simulation'::text, 'production'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_kill_reason_check",
+      "expression": "((NOT kill_switch_active) OR (NULLIF(TRIM(BOTH FROM kill_switch_reason), ''::text) IS NOT NULL))",
+      "definition": "CHECK (((NOT kill_switch_active) OR (NULLIF(TRIM(BOTH FROM kill_switch_reason), ''::text) IS NOT NULL)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_purpose_check",
+      "expression": "(purpose = 'OPERATIONS'::text)",
+      "definition": "CHECK ((purpose = 'OPERATIONS'::text))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_role_check",
+      "expression": "(service_role = ANY (ARRAY['Evelyn.QA'::text, 'Evelyn.Service'::text]))",
+      "definition": "CHECK ((service_role = ANY (ARRAY['Evelyn.QA'::text, 'Evelyn.Service'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_scopes_check",
+      "expression": "((cardinality(scopes) > 0) AND (scopes <@ ARRAY['crm.contacts.read'::text, 'crm.contacts.write'::text, 'crm.companies.read'::text, 'crm.developers.read'::text, 'crm.projects.read'::text, 'crm.projects.write'::text, 'crm.units.read'::text, 'crm.leads.read'::text, 'crm.leads.write'::text, 'crm.qualifications.read'::text, 'crm.offers.read'::text, 'crm.offers.prepare'::text, 'crm.tasks.read'::text, 'crm.tasks.write'::text, 'crm.appointments.read'::text, 'crm.viewings.read'::text, 'crm.reservations.read'::text, 'crm.reservations.prepare'::text, 'crm.sales.read'::text, 'crm.communications.read'::text, 'crm.communications.write'::text, 'crm.approvals.read'::text]))",
+      "definition": "CHECK (((cardinality(scopes) > 0) AND (scopes <@ ARRAY['crm.contacts.read'::text, 'crm.contacts.write'::text, 'crm.companies.read'::text, 'crm.developers.read'::text, 'crm.projects.read'::text, 'crm.projects.write'::text, 'crm.units.read'::text, 'crm.leads.read'::text, 'crm.leads.write'::text, 'crm.qualifications.read'::text, 'crm.offers.read'::text, 'crm.offers.prepare'::text, 'crm.tasks.read'::text, 'crm.tasks.write'::text, 'crm.appointments.read'::text, 'crm.viewings.read'::text, 'crm.reservations.read'::text, 'crm.reservations.prepare'::text, 'crm.sales.read'::text, 'crm.communications.read'::text, 'crm.communications.write'::text, 'crm.approvals.read'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_state_check",
+      "expression": "(state = ANY (ARRAY['ACTIVE'::text, 'REVOKED'::text, 'EXPIRED'::text, 'DISABLED'::text]))",
+      "definition": "CHECK ((state = ANY (ARRAY['ACTIVE'::text, 'REVOKED'::text, 'EXPIRED'::text, 'DISABLED'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_synthetic_check",
+      "expression": "synthetic",
+      "definition": "CHECK (synthetic)",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_tenant_alias_check",
+      "expression": "((tenant_alias ~ '^sim-[a-z0-9][a-z0-9:_-]{0,100}$'::text) OR (tenant_alias ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text))",
+      "definition": "CHECK (((tenant_alias ~ '^sim-[a-z0-9][a-z0-9:_-]{0,100}$'::text) OR (tenant_alias ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_token_hash_check",
+      "expression": "((token_hash IS NULL) OR (token_hash ~ '^[a-f0-9]{64}$'::text))",
+      "definition": "CHECK (((token_hash IS NULL) OR (token_hash ~ '^[a-f0-9]{64}$'::text)))",
+      "convalidated": true
+    }
+  ],
+  "constraintsAfter": [
+    {
+      "conname": "crm_service_principals_agent_id_check",
+      "expression": "(agent_id = ANY (ARRAY['executive'::text, 'sales'::text, 'marketing'::text, 'buyer'::text, 'support'::text, 'finance'::text, 'engineering'::text, 'security'::text, 'legal'::text, 'qc'::text, 'procurement'::text, 'hr'::text, 'personal'::text, 'evelyn'::text]))",
+      "definition": "CHECK ((agent_id = ANY (ARRAY['executive'::text, 'sales'::text, 'marketing'::text, 'buyer'::text, 'support'::text, 'finance'::text, 'engineering'::text, 'security'::text, 'legal'::text, 'qc'::text, 'procurement'::text, 'hr'::text, 'personal'::text, 'evelyn'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_auth_model_check",
+      "expression": "(((auth_type = 'STATIC_HASH_QA'::text) AND (token_hash IS NOT NULL) AND (environment = 'simulation'::text) AND (service_role = 'Evelyn.QA'::text)) OR ((auth_type = 'VERCEL_OIDC'::text) AND (token_hash IS NULL) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text) AND (issuer IS NOT NULL) AND (audience IS NOT NULL) AND (oidc_project_id IS NOT NULL) AND (oidc_owner_id IS NOT NULL)) OR COALESCE(((id = '36574422-8ce7-4fa9-a1f3-225f170377ad'::uuid) AND (workspace_id = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::uuid) AND (actor_user_id = '97191de1-6de5-42e9-8aa1-0dd3f1b1b40e'::uuid) AND (tenant_alias = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (identity_id = 'EVELYN_CRM_KNOWLEDGE_QA_IDENTITY'::text) AND (service_subject = 'owner:novalure:project:evelyn:environment:preview'::text) AND (auth_type = 'VERCEL_OIDC_QA'::text) AND (environment = 'preview'::text) AND (service_role = 'Evelyn.QA'::text) AND (consumer = 'EVELYN'::text) AND (issuer = 'https://oidc.vercel.com/novalure'::text) AND (audience = 'urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (oidc_project_id = 'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'::text) AND (oidc_owner_id = 'team_sjD78IkSicXJK6TAOR1JC7Wv'::text) AND (agent_id = 'evelyn'::text) AND (synthetic IS TRUE) AND (token_hash IS NULL) AND (data_context = 'CUSTOMER_TENANT'::text) AND (data_classification = 'CONFIDENTIAL'::text) AND (purpose = 'OPERATIONS'::text) AND (scopes = ARRAY['crm.projects.read'::text]) AND (expires_at <= (not_before + '01:00:00'::interval))), false))",
+      "definition": "CHECK ((((auth_type = 'STATIC_HASH_QA'::text) AND (token_hash IS NOT NULL) AND (environment = 'simulation'::text) AND (service_role = 'Evelyn.QA'::text)) OR ((auth_type = 'VERCEL_OIDC'::text) AND (token_hash IS NULL) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text) AND (issuer IS NOT NULL) AND (audience IS NOT NULL) AND (oidc_project_id IS NOT NULL) AND (oidc_owner_id IS NOT NULL)) OR COALESCE(((id = '36574422-8ce7-4fa9-a1f3-225f170377ad'::uuid) AND (workspace_id = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::uuid) AND (actor_user_id = '97191de1-6de5-42e9-8aa1-0dd3f1b1b40e'::uuid) AND (tenant_alias = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (identity_id = 'EVELYN_CRM_KNOWLEDGE_QA_IDENTITY'::text) AND (service_subject = 'owner:novalure:project:evelyn:environment:preview'::text) AND (auth_type = 'VERCEL_OIDC_QA'::text) AND (environment = 'preview'::text) AND (service_role = 'Evelyn.QA'::text) AND (consumer = 'EVELYN'::text) AND (issuer = 'https://oidc.vercel.com/novalure'::text) AND (audience = 'urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (oidc_project_id = 'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'::text) AND (oidc_owner_id = 'team_sjD78IkSicXJK6TAOR1JC7Wv'::text) AND (agent_id = 'evelyn'::text) AND (synthetic IS TRUE) AND (token_hash IS NULL) AND (data_context = 'CUSTOMER_TENANT'::text) AND (data_classification = 'CONFIDENTIAL'::text) AND (purpose = 'OPERATIONS'::text) AND (scopes = ARRAY['crm.projects.read'::text]) AND (expires_at <= (not_before + '01:00:00'::interval))), false)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_auth_type_check",
+      "expression": "((auth_type = ANY (ARRAY['STATIC_HASH_QA'::text, 'VERCEL_OIDC'::text])) OR COALESCE(((id = '36574422-8ce7-4fa9-a1f3-225f170377ad'::uuid) AND (workspace_id = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::uuid) AND (actor_user_id = '97191de1-6de5-42e9-8aa1-0dd3f1b1b40e'::uuid) AND (tenant_alias = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (identity_id = 'EVELYN_CRM_KNOWLEDGE_QA_IDENTITY'::text) AND (service_subject = 'owner:novalure:project:evelyn:environment:preview'::text) AND (auth_type = 'VERCEL_OIDC_QA'::text) AND (environment = 'preview'::text) AND (service_role = 'Evelyn.QA'::text) AND (consumer = 'EVELYN'::text) AND (issuer = 'https://oidc.vercel.com/novalure'::text) AND (audience = 'urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (oidc_project_id = 'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'::text) AND (oidc_owner_id = 'team_sjD78IkSicXJK6TAOR1JC7Wv'::text) AND (agent_id = 'evelyn'::text) AND (synthetic IS TRUE) AND (token_hash IS NULL) AND (data_context = 'CUSTOMER_TENANT'::text) AND (data_classification = 'CONFIDENTIAL'::text) AND (purpose = 'OPERATIONS'::text) AND (scopes = ARRAY['crm.projects.read'::text]) AND (expires_at <= (not_before + '01:00:00'::interval))), false))",
+      "definition": "CHECK (((auth_type = ANY (ARRAY['STATIC_HASH_QA'::text, 'VERCEL_OIDC'::text])) OR COALESCE(((id = '36574422-8ce7-4fa9-a1f3-225f170377ad'::uuid) AND (workspace_id = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::uuid) AND (actor_user_id = '97191de1-6de5-42e9-8aa1-0dd3f1b1b40e'::uuid) AND (tenant_alias = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (identity_id = 'EVELYN_CRM_KNOWLEDGE_QA_IDENTITY'::text) AND (service_subject = 'owner:novalure:project:evelyn:environment:preview'::text) AND (auth_type = 'VERCEL_OIDC_QA'::text) AND (environment = 'preview'::text) AND (service_role = 'Evelyn.QA'::text) AND (consumer = 'EVELYN'::text) AND (issuer = 'https://oidc.vercel.com/novalure'::text) AND (audience = 'urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (oidc_project_id = 'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'::text) AND (oidc_owner_id = 'team_sjD78IkSicXJK6TAOR1JC7Wv'::text) AND (agent_id = 'evelyn'::text) AND (synthetic IS TRUE) AND (token_hash IS NULL) AND (data_context = 'CUSTOMER_TENANT'::text) AND (data_classification = 'CONFIDENTIAL'::text) AND (purpose = 'OPERATIONS'::text) AND (scopes = ARRAY['crm.projects.read'::text]) AND (expires_at <= (not_before + '01:00:00'::interval))), false)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_consumer_check",
+      "expression": "(consumer = 'EVELYN'::text)",
+      "definition": "CHECK ((consumer = 'EVELYN'::text))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_data_classification_check",
+      "expression": "(data_classification = ANY (ARRAY['PUBLIC'::text, 'INTERNAL'::text, 'CONFIDENTIAL'::text, 'RESTRICTED'::text]))",
+      "definition": "CHECK ((data_classification = ANY (ARRAY['PUBLIC'::text, 'INTERNAL'::text, 'CONFIDENTIAL'::text, 'RESTRICTED'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_data_context_check",
+      "expression": "((data_context = 'CUSTOMER_TENANT'::text) OR ((data_context = 'NOVALURE_INTERNAL'::text) AND (auth_type = 'VERCEL_OIDC'::text) AND (identity_id = 'EVELYN_CRM_SERVICE_IDENTITY'::text) AND (workspace_id = '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'::uuid) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text)))",
+      "definition": "CHECK (((data_context = 'CUSTOMER_TENANT'::text) OR ((data_context = 'NOVALURE_INTERNAL'::text) AND (auth_type = 'VERCEL_OIDC'::text) AND (identity_id = 'EVELYN_CRM_SERVICE_IDENTITY'::text) AND (workspace_id = '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'::uuid) AND (environment = 'production'::text) AND (service_role = 'Evelyn.Service'::text))))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_environment_check",
+      "expression": "((environment = ANY (ARRAY['simulation'::text, 'production'::text])) OR COALESCE(((id = '36574422-8ce7-4fa9-a1f3-225f170377ad'::uuid) AND (workspace_id = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::uuid) AND (actor_user_id = '97191de1-6de5-42e9-8aa1-0dd3f1b1b40e'::uuid) AND (tenant_alias = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (identity_id = 'EVELYN_CRM_KNOWLEDGE_QA_IDENTITY'::text) AND (service_subject = 'owner:novalure:project:evelyn:environment:preview'::text) AND (auth_type = 'VERCEL_OIDC_QA'::text) AND (environment = 'preview'::text) AND (service_role = 'Evelyn.QA'::text) AND (consumer = 'EVELYN'::text) AND (issuer = 'https://oidc.vercel.com/novalure'::text) AND (audience = 'urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (oidc_project_id = 'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'::text) AND (oidc_owner_id = 'team_sjD78IkSicXJK6TAOR1JC7Wv'::text) AND (agent_id = 'evelyn'::text) AND (synthetic IS TRUE) AND (token_hash IS NULL) AND (data_context = 'CUSTOMER_TENANT'::text) AND (data_classification = 'CONFIDENTIAL'::text) AND (purpose = 'OPERATIONS'::text) AND (scopes = ARRAY['crm.projects.read'::text]) AND (expires_at <= (not_before + '01:00:00'::interval))), false))",
+      "definition": "CHECK (((environment = ANY (ARRAY['simulation'::text, 'production'::text])) OR COALESCE(((id = '36574422-8ce7-4fa9-a1f3-225f170377ad'::uuid) AND (workspace_id = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::uuid) AND (actor_user_id = '97191de1-6de5-42e9-8aa1-0dd3f1b1b40e'::uuid) AND (tenant_alias = '603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (identity_id = 'EVELYN_CRM_KNOWLEDGE_QA_IDENTITY'::text) AND (service_subject = 'owner:novalure:project:evelyn:environment:preview'::text) AND (auth_type = 'VERCEL_OIDC_QA'::text) AND (environment = 'preview'::text) AND (service_role = 'Evelyn.QA'::text) AND (consumer = 'EVELYN'::text) AND (issuer = 'https://oidc.vercel.com/novalure'::text) AND (audience = 'urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08'::text) AND (oidc_project_id = 'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'::text) AND (oidc_owner_id = 'team_sjD78IkSicXJK6TAOR1JC7Wv'::text) AND (agent_id = 'evelyn'::text) AND (synthetic IS TRUE) AND (token_hash IS NULL) AND (data_context = 'CUSTOMER_TENANT'::text) AND (data_classification = 'CONFIDENTIAL'::text) AND (purpose = 'OPERATIONS'::text) AND (scopes = ARRAY['crm.projects.read'::text]) AND (expires_at <= (not_before + '01:00:00'::interval))), false)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_kill_reason_check",
+      "expression": "((NOT kill_switch_active) OR (NULLIF(TRIM(BOTH FROM kill_switch_reason), ''::text) IS NOT NULL))",
+      "definition": "CHECK (((NOT kill_switch_active) OR (NULLIF(TRIM(BOTH FROM kill_switch_reason), ''::text) IS NOT NULL)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_purpose_check",
+      "expression": "(purpose = 'OPERATIONS'::text)",
+      "definition": "CHECK ((purpose = 'OPERATIONS'::text))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_role_check",
+      "expression": "(service_role = ANY (ARRAY['Evelyn.QA'::text, 'Evelyn.Service'::text]))",
+      "definition": "CHECK ((service_role = ANY (ARRAY['Evelyn.QA'::text, 'Evelyn.Service'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_scopes_check",
+      "expression": "((cardinality(scopes) > 0) AND (scopes <@ ARRAY['crm.contacts.read'::text, 'crm.contacts.write'::text, 'crm.companies.read'::text, 'crm.developers.read'::text, 'crm.projects.read'::text, 'crm.projects.write'::text, 'crm.units.read'::text, 'crm.leads.read'::text, 'crm.leads.write'::text, 'crm.qualifications.read'::text, 'crm.offers.read'::text, 'crm.offers.prepare'::text, 'crm.tasks.read'::text, 'crm.tasks.write'::text, 'crm.appointments.read'::text, 'crm.viewings.read'::text, 'crm.reservations.read'::text, 'crm.reservations.prepare'::text, 'crm.sales.read'::text, 'crm.communications.read'::text, 'crm.communications.write'::text, 'crm.approvals.read'::text]))",
+      "definition": "CHECK (((cardinality(scopes) > 0) AND (scopes <@ ARRAY['crm.contacts.read'::text, 'crm.contacts.write'::text, 'crm.companies.read'::text, 'crm.developers.read'::text, 'crm.projects.read'::text, 'crm.projects.write'::text, 'crm.units.read'::text, 'crm.leads.read'::text, 'crm.leads.write'::text, 'crm.qualifications.read'::text, 'crm.offers.read'::text, 'crm.offers.prepare'::text, 'crm.tasks.read'::text, 'crm.tasks.write'::text, 'crm.appointments.read'::text, 'crm.viewings.read'::text, 'crm.reservations.read'::text, 'crm.reservations.prepare'::text, 'crm.sales.read'::text, 'crm.communications.read'::text, 'crm.communications.write'::text, 'crm.approvals.read'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_state_check",
+      "expression": "(state = ANY (ARRAY['ACTIVE'::text, 'REVOKED'::text, 'EXPIRED'::text, 'DISABLED'::text]))",
+      "definition": "CHECK ((state = ANY (ARRAY['ACTIVE'::text, 'REVOKED'::text, 'EXPIRED'::text, 'DISABLED'::text])))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_synthetic_check",
+      "expression": "synthetic",
+      "definition": "CHECK (synthetic)",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_tenant_alias_check",
+      "expression": "((tenant_alias ~ '^sim-[a-z0-9][a-z0-9:_-]{0,100}$'::text) OR (tenant_alias ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text))",
+      "definition": "CHECK (((tenant_alias ~ '^sim-[a-z0-9][a-z0-9:_-]{0,100}$'::text) OR (tenant_alias ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)))",
+      "convalidated": true
+    },
+    {
+      "conname": "crm_service_principals_token_hash_check",
+      "expression": "((token_hash IS NULL) OR (token_hash ~ '^[a-f0-9]{64}$'::text))",
+      "definition": "CHECK (((token_hash IS NULL) OR (token_hash ~ '^[a-f0-9]{64}$'::text)))",
+      "convalidated": true
+    }
+  ],
+  "policyCatalogBeforeSha256": "46526ac991e4805575ddb40406737fafd39c43ed2265cbb54c59352c7c0c0a97",
+  "policyCatalogAfterSha256": "46526ac991e4805575ddb40406737fafd39c43ed2265cbb54c59352c7c0c0a97",
+  "relationCatalogSha256": "c7732b63be5cc44876d467ae25f0d79731c136691909cee1e3b566c1bee98df1",
+  "triggerCatalogSha256": "9cc8b982b087cbaf9bd4689bf635503a6ca75cc470062c148cb4d6549895750b",
+  "existingFunctionHashesUnchanged": true,
+  "oldPredicatesPreservedAndBaselineChecked": true,
+  "temporaryInsertPoliciesRemoved": true,
+  "existingGrantsRlsAndTriggersUnchanged": true,
+  "nativeAuthIdentityCreated": true,
+  "nativePrincipalLifetimeSeconds": 3600,
+  "passwordOrSessionMaterialCreated": false,
+  "sessionsCreated": false,
+  "providerActivations": false,
+  "productionTouched": false,
+  "status": "PASS",
+  "canonicalPackage4MigrationChecksums": [
+    {
+      "version": "091_production_runtime_forced_rls_cutover",
+      "name": "091_production_runtime_forced_rls_cutover.sql",
+      "checksum": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155"
+    },
+    {
+      "version": "092_crm_production_machine_identity",
+      "name": "092_crm_production_machine_identity.sql",
+      "checksum": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104"
+    },
+    {
+      "version": "093_crm_machine_internal_context",
+      "name": "093_crm_machine_internal_context.sql",
+      "checksum": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a"
+    },
+    {
+      "version": "094_website_sales_ingestion",
+      "name": "094_website_sales_ingestion.sql",
+      "checksum": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac"
+    },
+    {
+      "version": "095_form_tenant_isolation",
+      "name": "095_form_tenant_isolation.sql",
+      "checksum": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219"
+    },
+    {
+      "version": "096_public_integration_gateway",
+      "name": "096_public_integration_gateway.sql",
+      "checksum": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000"
+    },
+    {
+      "version": "100_studio_enquiry_production",
+      "name": "100_studio_enquiry_production.sql",
+      "checksum": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778"
+    },
+    {
+      "version": "101_knowledge_center",
+      "name": "101_knowledge_center.sql",
+      "checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e"
+    },
+    {
+      "version": "102_knowledge_document_processing",
+      "name": "102_knowledge_document_processing.sql",
+      "checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd"
+    },
+    {
+      "version": "103_knowledge_assistant_service",
+      "name": "103_knowledge_assistant_service.sql",
+      "checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98"
+    },
+    {
+      "version": "104_knowledge_publication_workflow",
+      "name": "104_knowledge_publication_workflow.sql",
+      "checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610"
+    },
+    {
+      "version": "105_knowledge_website_monitoring",
+      "name": "105_knowledge_website_monitoring.sql",
+      "checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30"
+    },
+    {
+      "version": "106_crm_operational_readers",
+      "name": "106_crm_operational_readers.sql",
+      "checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf"
+    }
+  ],
+  "preservedProductionFunctionHashes": [
+    {
+      "signature": "crm_authenticate_machine(text,text,text,text,text,text,uuid,text,text)",
+      "sha256": "4754b2b84c12f7a72120e474b77b62da25f9cec8e3cd88a943ac506096fc5da4",
+      "acl": "{neondb_owner=X/neondb_owner,novalure_tenant_app=X/neondb_owner}",
+      "owner": "neondb_owner"
+    },
+    {
+      "signature": "crm_claim_machine_request(uuid,text,uuid,text,text,uuid,text,text,uuid,timestamp with time zone)",
+      "sha256": "4290fdda239f25a18d701784a47ea3b5e73e43940573e2dd1119a4587362d331",
+      "acl": "{neondb_owner=X/neondb_owner,novalure_tenant_app=X/neondb_owner}",
+      "owner": "neondb_owner"
+    },
+    {
+      "signature": "crm_machine_action_allowed(uuid,text)",
+      "sha256": "312d5af7b916a965ed993bf19dfde25e23550b039fa074856ea9bfa1ee4c6d08",
+      "acl": "{neondb_owner=X/neondb_owner,novalure_tenant_app=X/neondb_owner}",
+      "owner": "neondb_owner"
+    },
+    {
+      "signature": "knowledge_lock_assistant_service_binding(uuid,text)",
+      "sha256": "b573890db4675ff4b39898a66d5dbcd7c68a5cd70a999aa4b81dc3b3501628c1",
+      "acl": "{neondb_owner=X/neondb_owner,novalure_tenant_app=X/neondb_owner}",
+      "owner": "neondb_owner"
+    }
+  ],
+  "finalNativeControl": {
+    "status": "PASS_COMMITTED",
+    "phase": "final-revoked",
+    "checkedAtUtc": "2026-10-20T07:47:26.769Z",
+    "state": "REVOKED",
+    "revokedAt": "2026-10-20T07:47:26.374Z",
+    "bindings": [
+      {
+        "principal_id": "36574422-8ce7-4fa9-a1f3-225f170377ad",
+        "workspace_id": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+        "bot_id": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+        "channel": "voice",
+        "enabled": false,
+        "revoked_at": "2026-10-20T07:47:26.262Z"
+      },
+      {
+        "principal_id": "36574422-8ce7-4fa9-a1f3-225f170377ad",
+        "workspace_id": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+        "bot_id": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+        "channel": "webchat",
+        "enabled": false,
+        "revoked_at": "2026-10-20T07:47:26.262Z"
+      }
+    ],
+    "allPoolsClosed": true
+  }
+}

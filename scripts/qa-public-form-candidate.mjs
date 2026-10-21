@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 
-import { createHmac, randomBytes, randomUUID, createHash } from "node:crypto";
+import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 import { listWebsiteForms, upsertWebsiteForm } from "../src/lib/db/form-repositories.ts";
 import { getRolePermissions } from "../src/lib/auth/permissions.ts";
 import { getProductRoleCapabilities } from "../src/lib/product-model.ts";
+import { studioEnquiryCandidateBinding } from "../src/lib/studio-enquiry-candidate.ts";
+import { attestStudioEnquiryCandidate, studioCandidateHttpDiagnostic } from "./lib/qa-studio-enquiry-candidate.mjs";
 
 const qa = await assertQaTarget();
 if (process.env.DATABASE_URL?.trim() !== qa.databaseUrl) {
   throw new Error("QA_FORM_RUNTIME_TARGET_INVALID");
 }
 const ownerUrl = process.env.NOVALURE_QA_MIGRATION_DATABASE_URL?.trim();
-const salesSecret = process.env.NOVALURE_STUDIO_INGESTION_SECRET?.trim();
+const salesSecret = process.env.STUDIO_ENQUIRY_SIGNING_SECRET;
 const base = process.env.NOVALURE_QA_BASE_URL?.trim();
 const productionHost = process.env.NOVALURE_PRODUCTION_DATABASE_HOST?.trim().toLowerCase();
 
@@ -34,6 +36,7 @@ function safeUrl(value, role, pooled) {
 }
 
 requireProof(Boolean(ownerUrl && base && productionHost && salesSecret?.length >= 32), "QA_INPUT_MISSING");
+requireProof(studioEnquiryCandidateBinding(process.env), "QA_STUDIO_CANDIDATE_BINDING_INVALID");
 const ownerTarget = safeUrl(ownerUrl, "neondb_owner", false);
 const appTarget = safeUrl(qa.databaseUrl, "novalure_app", true);
 requireProof(base === "http://127.0.0.1:3000", "QA_HTTP_TARGET_INVALID");
@@ -44,8 +47,6 @@ const marker = randomBytes(12).toString("hex");
 const own = { workspace: randomUUID(), actor: randomUUID(), viewer: randomUUID(), project: randomUUID(),
   form: randomUUID(), deniedForm: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
 const foreign = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), key: `qa-foreign-${marker}` };
-const salesForm = "0f98b9fd-d300-4a34-a14c-54a1a61b2415";
-const salesWorkspace = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const slug = `candidate-${marker}`;
 const draftSlug = `draft-${marker}`;
 const siteKey = `nov_pk_${own.form.replaceAll("-", "")}`;
@@ -97,15 +98,18 @@ async function attestDatabase() {
     current_setting('neon.branch_id',true) branch,current_database() database,current_user role`)).rows[0];
   requireProof(identity.project === qa.expectedProjectId && identity.branch === qa.expectedBranchId
     && identity.database === qa.expectedDatabase && identity.role === "neondb_owner", "QA_OWNER_FINGERPRINT_INVALID");
-  for (const number of ["094", "095", "096"]) {
+  for (const number of ["094", "095", "096", "100"]) {
     const name = number === "094" ? "website_sales_ingestion"
-      : number === "095" ? "form_tenant_isolation" : "public_integration_gateway";
+      : number === "095" ? "form_tenant_isolation" : number === "096" ? "public_integration_gateway" : "studio_enquiry_production";
     const version = `${number}_${name}`;
     const bytes = await readFile(new URL(`../migrations/${version}.sql`, import.meta.url));
     const checksum = createHash("sha256").update(bytes).digest("hex");
     const ledger = await owner.query("select checksum from novalure_schema_migrations where version=$1", [version]);
     requireProof(ledger.rows.length === 1 && ledger.rows[0].checksum === checksum, `QA_LEDGER_${number}_INVALID`);
   }
+  requireProof(await scalar(owner, `select count(*)::int as value from novalure_schema_migrations
+    where version in ('097_studio_sales_calendar_bridge','098_studio_enquiry_handoff','099_studio_enquiry_public_launch')`) === 0,
+  "QA_STUDIO_SCHEMA_ALTERNATIVE_INVALID");
   const flags = (await owner.query(`select relname,relrowsecurity,relforcerowsecurity from pg_class
     where oid in ('public.forms'::regclass,'public.form_submissions'::regclass,
       'public.external_integrations'::regclass,'public.external_integration_widget_configs'::regclass,
@@ -467,30 +471,8 @@ async function attestGateway() {
 }
 
 async function attestWebsiteSales() {
-  const idempotencyKey = randomBytes(24).toString("base64url");
-  const payload = { version: "website-sales-lead-v1", name: `SYNTHETIC Studio ${marker}`,
-    email: `studio-${marker}@example.invalid`, packageInterest: "BUSINESS",
-    message: "SYNTHETIC candidate Website Sales ingestion verification.", consent: true,
-    syntheticTest: true, idempotencyKey };
-  const body = JSON.stringify(payload);
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const signature = createHmac("sha256", salesSecret).update(`website-sales-lead-v1.${timestamp}.${body}`, "utf8").digest("base64url");
-  const headers = { "content-type": "application/json", "x-novalure-client-ip": "198.51.100.43",
-    "x-novalure-signature": signature, "x-novalure-timestamp": timestamp };
-  const before = await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [salesForm]);
-  const businessBefore = await scalar(owner, `select count(*)::int as value from leads where workspace_id=$1
-    and metadata->>'businessLine'='WEBSITE_SALES' and (metadata #>> '{websiteSales,syntheticTest}') is distinct from 'true'`, [salesWorkspace]);
-  const first = await fetch(`${base}/api/public/website-sales`, { method: "POST", headers, body });
-  const firstBody = await first.json().catch(() => ({}));
-  const replay = await fetch(`${base}/api/public/website-sales`, { method: "POST", headers, body });
-  const replayBody = await replay.json().catch(() => ({}));
-  const after = await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [salesForm]);
-  const businessAfter = await scalar(owner, `select count(*)::int as value from leads where workspace_id=$1
-    and metadata->>'businessLine'='WEBSITE_SALES' and (metadata #>> '{websiteSales,syntheticTest}') is distinct from 'true'`, [salesWorkspace]);
-  requireProof(first.status === 202 && replay.status === 202 && firstBody.reference === replayBody.reference
-    && after === before + 1 && businessAfter === businessBefore, "QA_WEBSITE_SALES_OR_KPI_FAILED");
-  const tampered = await fetch(`${base}/api/public/website-sales`, { method: "POST", headers: { ...headers, "x-novalure-signature": "invalid" }, body });
-  requireProof(tampered.status === 401, "QA_WEBSITE_SALES_SIGNATURE_BYPASS");
+  await attestStudioEnquiryCandidate({ owner, base, secret: salesSecret,
+    email: `studio-candidate-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}@example.invalid` });
 }
 
 try {
@@ -501,10 +483,12 @@ try {
   await attestHttp();
   await attestGateway();
   await attestWebsiteSales();
-  console.log(`CRM_CANDIDATE_QA_PASS project=${qa.expectedProjectId} branch=${qa.expectedBranchId} migration=094,095,096 forms=RLS_FORCE formSave=PASS gateway=PASS chat=TRAINING sales=PASS replay=PASS lookupRole=NOLOGIN`);
+  console.log(`CRM_CANDIDATE_QA_PASS project=${qa.expectedProjectId} branch=${qa.expectedBranchId} migration=094,095,096,100 forms=RLS_FORCE formSave=PASS gateway=PASS chat=TRAINING sales=STUDIO_ENQUIRY_TEXT_ONLY_PASS replay=PASS lookupRole=NOLOGIN`);
 } catch (error) {
   const code = error instanceof Error && /^QA_[A-Z0-9_]+$/u.test(error.message) ? error.message : "QA_UNEXPECTED_FAILURE";
   console.error(`CRM_CANDIDATE_QA_FAIL code=${code}`);
+  const diagnostic = studioCandidateHttpDiagnostic(error);
+  if (diagnostic) console.error(`CRM_CANDIDATE_STUDIO_HTTP_DIAG ${JSON.stringify(diagnostic)}`);
   process.exitCode = 1;
 } finally {
   await Promise.allSettled([owner.end(), app.end()]);

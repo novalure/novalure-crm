@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/public-submission-abuse-repository";
 import { persistWebsiteFormSubmission } from "@/lib/db/form-repositories";
 import { PublicSubmissionTransactionError, queryOne, withPublicSubmissionTransaction } from "@/lib/db/client";
+import { studioQaDatabaseMatches, studioQaRecipients } from "@/lib/studio-sales-qa-readiness";
 import {
   createWebsiteSalesReference,
   parseWebsiteSalesLeadPayload,
@@ -66,6 +67,12 @@ export async function POST(request: Request) {
   const clientIp = resolveWebsiteSalesClientIp(request.headers.get("x-novalure-client-ip"));
   if (!payload) return failure(400, "invalid_submission");
   if (!clientIp) return failure(400, "invalid_client_ip");
+  if (process.env.VERCEL_ENV === "preview" && process.env.STUDIO_BOOKING_REAL_MODE === "1") {
+    const recipients = studioQaRecipients();
+    if (!recipients || !recipients.includes(payload.email) || !await studioQaDatabaseMatches()) {
+      return failure(503, "studio_qa_target_unverified");
+    }
+  }
 
   const scope = buildPublicSubmissionScope({
     resourceId: websiteSalesFormId,
@@ -121,6 +128,17 @@ export async function POST(request: Request) {
   if (!actor) {
     return failure(503, "temporarily_unavailable");
   }
+  if (request.headers.get("x-novalure-status-only") === "1") {
+    try {
+      const snapshot = await withPublicSubmissionTransaction(
+        { actorId: actor.id, workspaceId: websiteSalesWorkspaceId },
+        () => readCompletedPublicSubmissionIdempotency(hashes),
+      );
+      return snapshot ? responseFromSnapshot(snapshot) : failure(404, "submission_not_confirmed");
+    } catch {
+      return failure(503, "temporarily_unavailable");
+    }
+  }
   try {
     const snapshot = await withPublicSubmissionTransaction(
       { actorId: actor.id, workspaceId: websiteSalesWorkspaceId },
@@ -154,8 +172,20 @@ export async function POST(request: Request) {
           requestUrl: String((payload.attribution ?? {}).pageUrl || "https://novalurestudio.ie/"),
         });
         if (!persistence.persisted) throw new Error("Website Sales form was not persisted");
+        if (!persistence.ids?.leadId || !persistence.ids.submissionId) {
+          throw new Error("Website Sales CRM identifiers were not persisted");
+        }
+        const reference = createWebsiteSalesReference();
+        await queryOne<{ reference: string }>(
+          `insert into studio_sales_handoffs
+             (workspace_id, reference, lead_id, submission_id, contact_email, idempotency_hash)
+           values ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6)
+           returning reference`,
+          [websiteSalesWorkspaceId, reference, persistence.ids.leadId,
+            persistence.ids.submissionId, payload.email, hashes.idempotencyHash],
+        );
         const accepted: PublicSubmissionResponseSnapshot = {
-          body: { accepted: true, reference: createWebsiteSalesReference() }, kind: "json", status: 202,
+          body: { accepted: true, reference, crmLeadId: persistence.ids.leadId }, kind: "json", status: 202,
         };
         await completePublicSubmissionIdempotency({
           idempotencyHash: hashes.idempotencyHash,

@@ -142,17 +142,22 @@ test("property modules stay visible across workspace/product configurations", ()
   }
 });
 
-test("every navigation preset exposes Immobilien", () => {
+test("property navigation presets expose Immobilien while Studio keeps its focused destinations", () => {
   const workspace = read("src/components/crm-workspace.tsx");
-  const presetBlock = workspace.slice(
-    workspace.indexOf("const navigationPresets"),
-    workspace.indexOf("const quickActionSections"),
-  );
-  const entryBlocks = [...presetBlock.matchAll(/navigationEntries:\s*\[([\s\S]*?)\]/g)];
+  const presetStart = workspace.indexOf("const navigationPresets");
+  const presetBlock = workspace.slice(presetStart, workspace.indexOf("\n};", presetStart) + 3);
+  const entryBlocks = [...presetBlock.matchAll(/^  (\w+): \{[\s\S]*?navigationEntries:\s*\[([\s\S]*?)\]/gm)];
 
   assert.ok(entryBlocks.length >= 15, "expected all navigation presets to be inspected");
-  for (const [, entries] of entryBlocks) {
-    assert.match(entries, /"properties"/);
+  assert.equal(entryBlocks.filter(([, preset]) => preset === "novalureStudio").length, 1);
+  for (const [, preset, entries] of entryBlocks) {
+    if (preset === "novalureStudio") {
+      assert.match(entries, /"studioWebsiteEnquiries"/);
+      assert.match(entries, /"studioKnowledgeAi"/);
+      assert.doesNotMatch(entries, /"properties"/);
+    } else {
+      assert.match(entries, /"properties"/, `${preset} keeps the property department reachable`);
+    }
   }
   assert.match(workspace, /properties: \{ id: "properties", section: "properties" \}/);
   assert.match(workspace, /visibleActiveSection === "properties"/);
@@ -376,7 +381,11 @@ test("phase 3 complete brokerage preset is additive and covers the full broker w
   assert.match(workspace, /getNavigationPresetOptionGroups/);
   assert.match(workspace, /<optgroup key=\{group\.id\} label=\{copy\.navigationPresets\.groups\[group\.id\]\}>/);
   assert.match(workspace, /setActivePresetId\(normalizedActivePresetId\)/);
-  assert.match(workspace, /window\.localStorage\.setItem\(navigationPresetStorageKey, normalizedActivePresetId\)/);
+  assert.match(workspace, /const navigationPreferenceKey = getStudioNavigationPreferenceKey\(\s*navigationPresetStorageKey, sessionUserId, activeWorkspace\.id,/);
+  assert.match(workspace, /window\.localStorage\.setItem\(navigationPreferenceKey, normalizedActivePresetId\)/);
+  const studioNavigation = read("src/lib/studio-navigation.ts");
+  assert.match(studioNavigation, /workspaceId === STUDIO_WORKSPACE_ID/);
+  assert.match(studioNavigation, /\$\{baseKey\}:\$\{encodeURIComponent\(userId\)\}:\$\{encodeURIComponent\(workspaceId\)\}/);
   assert.match(i18n, /standard: "Standard profiles"/);
   assert.match(i18n, /forTeams: "For teams"/);
   assert.match(i18n, /standard: "Standardprofile"/);

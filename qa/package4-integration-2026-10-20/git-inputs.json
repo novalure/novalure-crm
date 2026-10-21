@@ -1,0 +1,132 @@
+{
+  "note": "Read-only GitHub observations from this integration session; historical source CI is not final-candidate CI.",
+  "repository": "novalure/novalure-crm",
+  "main": "5741a591f186e766750ecb8977972ec9b37e133a",
+  "sources": [
+    {
+      "pr": 88,
+      "head": "codex/knowledge-center-completion-20261019",
+      "sha": "aa6b329942ab19c165bc610822f03ed5874af189",
+      "base": "codex/knowledge-center-package2-20261019",
+      "baseSha": "a04273f37fb3417b180626bd878920ab89f73609",
+      "draft": true,
+      "state": "open"
+    },
+    {
+      "pr": 89,
+      "head": "codex/knowledge-center-package3-20261019",
+      "sha": "b019a16811bd1d0d7c180ff013b76cea34c6e5bf",
+      "base": "codex/knowledge-center-completion-20261019",
+      "baseSha": "aa6b329942ab19c165bc610822f03ed5874af189",
+      "draft": true,
+      "state": "open"
+    },
+    {
+      "pr": 91,
+      "head": "codex/evelyn-crm-design-c-integration",
+      "sha": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "base": "codex/knowledge-center-completion-20261019",
+      "baseSha": "aa6b329942ab19c165bc610822f03ed5874af189",
+      "draft": true,
+      "state": "open"
+    }
+  ],
+  "sourceWorkflowRuns": [
+    {
+      "pr": 88,
+      "runs": [
+        {
+          "id": 39319946733,
+          "name": "Go-live quality gates",
+          "status": "completed",
+          "conclusion": "failure",
+          "run_number": 399,
+          "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39319946733/jobs",
+          "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39319946733/logs",
+          "workflow_id": 283027949
+        },
+        {
+          "id": 39319946762,
+          "name": "Secret scan",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 225,
+          "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39319946762/jobs",
+          "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39319946762/logs",
+          "workflow_id": 334935778
+        }
+      ]
+    },
+    {
+      "pr": 89,
+      "runs": [
+        {
+          "id": 39323015843,
+          "name": "Go-live quality gates",
+          "status": "completed",
+          "conclusion": "failure",
+          "run_number": 402,
+          "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39323015843/jobs",
+          "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39323015843/logs",
+          "workflow_id": 283027949
+        },
+        {
+          "id": 39323015910,
+          "name": "Secret scan",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 228,
+          "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39323015910/jobs",
+          "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39323015910/logs",
+          "workflow_id": 334935778
+        }
+      ]
+    },
+    {
+      "pr": 91,
+      "runs": [
+        {
+          "id": 39329943566,
+          "name": "Secret scan",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 233,
+          "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39329943566/jobs",
+          "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39329943566/logs",
+          "workflow_id": 334935778
+        },
+        {
+          "id": 39329943390,
+          "name": "Go-live quality gates",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 407,
+          "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39329943390/jobs",
+          "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39329943390/logs",
+          "workflow_id": 283027949
+        }
+      ]
+    }
+  ],
+  "integration": {
+    "branch": "codex/evelyn-crm-package4-integration",
+    "mergeCommit": "d3c1cbe625db61742ab08b07123aeff1e592bb77",
+    "parents": [
+      "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "b019a16811bd1d0d7c180ff013b76cea34c6e5bf"
+    ],
+    "commonBase": "aa6b329942ab19c165bc610822f03ed5874af189",
+    "alreadyIncluded": [
+      "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+      "a04273f37fb3417b180626bd878920ab89f73609",
+      "aa6b329942ab19c165bc610822f03ed5874af189"
+    ],
+    "excludedMfaBranch": "codex/evelyn-crm-mfa-update",
+    "conflicts": [
+      "package.json",
+      "vercel.json",
+      "scripts/crm-machine-auth-tests.ts",
+      "src/components/knowledge-command-center.tsx"
+    ]
+  }
+}

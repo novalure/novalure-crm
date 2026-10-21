@@ -1,0 +1,161 @@
+{
+  "format": "package4-final-source-availability-root-v1",
+  "status": "PASS",
+  "sourceVerifierReceiptSha256": "bdff852f0e13cb6639c6370d3df217333f72c2d06cbb98ff9c4c52adbaa9a69f",
+  "sourceVerifier": {
+    "format": "package4-source-availability-v1",
+    "status": "PASS",
+    "verifiedAt": "2026-10-20T09:05:28.498Z",
+    "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+    "deploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "previewOrigin": "https://novalure-5j7pionbs-novalure.vercel.app",
+    "source": {
+      "projectId": "green-thunder-49879900",
+      "branchId": "br-sweet-surf-ba6iahut",
+      "endpointId": "ep-crimson-forest-ba4kk6sb",
+      "databaseName": "neondb",
+      "runtimeRole": "novalure_app"
+    },
+    "continuationReceiptSha256": "7f956ff4fccba08c129feb2d69d02fb9164c72ba6d9c51bbd93b9cf3b22f6f63",
+    "sourceEnableReceiptSha256": "0fccf89dc27ef7630fac825717fc5d85c3df9a29f9cffb641180989a6e8bb8e2",
+    "sourceFullRecoveryPassPreviouslyVerified": true,
+    "allThreeDisabledAndIdleBeforeSeparateRootEnable": true,
+    "sourceRuntimeActuallyReached": true,
+    "sourceEnablePreSqlStateMayBeIdle": true,
+    "postSqlProviderActiveReadback": "Separate Root native readback required; verifier does not query provider state.",
+    "sourceApplication": {
+      "status": "PASS",
+      "databaseRole": "novalure_app",
+      "superuser": false,
+      "bypassRls": false,
+      "ownsPublicObjects": 0,
+      "authenticatedSessionVerified": true,
+      "sourceWrites": 0,
+      "checks": [
+        {
+          "name": "actual_browser_session_on_source_runtime",
+          "status": "PASS"
+        },
+        {
+          "name": "source_readonly_knowledge_and_106_readers",
+          "status": "PASS"
+        },
+        {
+          "name": "source_readonly_current_and_published_pdf_prerequisites",
+          "status": "PASS"
+        },
+        {
+          "name": "source_actual_viewer_approved_pdf_prerequisite",
+          "status": "PASS"
+        },
+        {
+          "name": "source_actual_foreign_session_isolation_prerequisite",
+          "status": "PASS"
+        }
+      ]
+    },
+    "hostingProtection": [
+      {
+        "path": "/login",
+        "status": 302,
+        "protectionOidcSent": false,
+        "applicationCookieSent": false,
+        "redirectsFollowed": 0
+      },
+      {
+        "path": "/login",
+        "status": 200,
+        "protectionOidcSent": true,
+        "applicationCookieSent": false,
+        "redirectsFollowed": 0
+      },
+      {
+        "path": "/api/crm/core",
+        "status": 401,
+        "protectionOidcSent": true,
+        "applicationCookieSent": false,
+        "redirectsFollowed": 0
+      }
+    ],
+    "runtimeQueryCount": 105,
+    "allRuntimePoolsClosed": true,
+    "topLevelSqlWriteStatementsAllowed": false,
+    "noLoginOrSessionMint": true,
+    "blobReads": 0,
+    "blobPuts": 0,
+    "providerRequests": 0,
+    "sourceProviderMutation": 0,
+    "operationalVerifierSha256": "c7f4cb31dcdb402d36e9de035c607141b745a6200bcc6c934c27915462be721c",
+    "applicationProbeSha256": "d62b27e47bd1aef3be85ca1b7df0f24528f20d06dc451dbfb217d39554b28ddb",
+    "codeBinding": {
+      "deployedApplicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+      "allowedToolingFiles": {
+        "scripts/package4-neon-hosted-recovery.mjs": "09296524b654b93204ac1483ab61263a1878f0ca0247ece5fe64144b4a219c8f",
+        "scripts/package4-neon-hosted-recovery-tests.mjs": "ed20aa27b839f9f16bbd8fe8f048b416e19197c023a024e517df6d1b5bd7ed50"
+      },
+      "frozenRecoveryFileSha256": {
+        "scripts/lib/neon-061-compat.mjs": "9a1733751f6ab88947c5c8609d4d9f779f92b10f9971aedcdf5783d672df3dda",
+        "scripts/lib/package4-hosted-target.mjs": "6a83ce98997864c1233a6fc36d3dd49d19c990a606abafdee22f4c34c9cf7a8a",
+        "scripts/lib/studio-stage3-qa-fingerprint.mjs": "34a5b66feed960aba6b4e558dfd3d95037c0637395667403d07c6867b2e5944b",
+        "scripts/package4-neon-bootstrap.mjs": "eafcc564e5e760323474cfb2ab175c835dcf3672451b37486dccfe3986cdbb98",
+        "scripts/package4-neon-branch-recovery.mjs": "7849e1b36d04777a95f8eb6687bde1ada11feb04fc493263361ef418db3364e6",
+        "scripts/package4-neon-database-recovery.mjs": "4456a180801a22f95ad4d216cf9544694758b51427236e7eb02889813ecc7d19",
+        "scripts/package4-neon-database-template-recovery.mjs": "5fcc15553ffa6049902356e0142bc89effd4130bcab5ebd4a2e971d93960e3e4",
+        "scripts/package4-neon-provider-baseline-recovery.mjs": "8c1934d9cb6e634bf5596f2b590a388a7fea7f034dfa49290dd619a200eb6bc1",
+        "scripts/package4-neon-provider-recovery-runner.mjs": "5aded5f7b2d7f712db2222f39325700d79e721e1c3facc76ca434e94b8a05b2c",
+        "scripts/package4-neon-recovery-runner.mjs": "25fc6e7bfe81b7d369f2b7056d6b8c92958f929d139dd24fc833dda166231f1f",
+        "scripts/package4-neon-restore.mjs": "76f7d563e88fac17fdfb8d00b796c4ff11720fcb5c3ce1f55300a938c3496827",
+        "scripts/package4-neon-seed.mjs": "a64336cf4898b43b5bc3c04b6b15f2390d06dfcaff03253fea1613653075ce09"
+      },
+      "applicationMigrationDependencyCommitBytesUnchanged": true,
+      "uncommittedExecutableChanges": false
+    },
+    "tokenValuesEmittedByThisVerifier": false,
+    "credentialHandling": "Existing private runtime credential, normal cookies, fresh auth secrets and same-project development OIDC consumed privately; no values in receipt/chat/Git."
+  },
+  "postSqlNativeProviderReadback": {
+    "observedAtUtc": "2026-10-20T09:06:04.574Z",
+    "endpoints": [
+      {
+        "id": "ep-crimson-forest-ba4kk6sb",
+        "branchId": "br-sweet-surf-ba6iahut",
+        "projectId": "green-thunder-49879900",
+        "disabled": false,
+        "state": "active",
+        "minCu": 0.25,
+        "maxCu": 0.25,
+        "suspendTimeoutSeconds": 0
+      },
+      {
+        "id": "ep-lively-dawn-ba2sskxd",
+        "branchId": "br-nameless-sun-bazc0qdt",
+        "projectId": "green-thunder-49879900",
+        "disabled": true,
+        "state": "idle",
+        "minCu": 0.25,
+        "maxCu": 0.25,
+        "suspendTimeoutSeconds": 0
+      },
+      {
+        "id": "ep-purple-truth-baye3wwh",
+        "branchId": "br-little-lake-bagp4n0i",
+        "projectId": "green-thunder-49879900",
+        "disabled": true,
+        "state": "idle",
+        "minCu": 0.25,
+        "maxCu": 0.25,
+        "suspendTimeoutSeconds": 0
+      }
+    ],
+    "sourceActive": true,
+    "workingAndRestoredDisabledIdle": true,
+    "productionAliasUnchanged": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "mainUnchanged": "5741a591f186e766750ecb8977972ec9b37e133a",
+    "productionChanges": 0
+  },
+  "sourceOnlyEnableWasSeparateAfterFullRestoreClosure": true,
+  "noSecondHostedSuiteOrNewDeployment": true,
+  "productionChanges": 0
+}

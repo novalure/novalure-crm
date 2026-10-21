@@ -1,0 +1,126 @@
+{
+  "format": "package4-provider-recovery-lifecycle-v1",
+  "projectId": "green-thunder-49879900",
+  "drillImplementationRevision": "02ce0386b7611c400723b5958ad8699a769923ba",
+  "databaseDrillStatus": "PASS",
+  "branchCount": 6,
+  "freeProjectCapacity": 10,
+  "expectedPostHostedMaximumBranches": 9,
+  "sourceProviderBranch": {
+    "id": "br-sweet-surf-ba6iahut",
+    "expirationRemovedBeforeDrill": true,
+    "expiresAt": null,
+    "manualCleanupRequired": true
+  },
+  "branches": [
+    {
+      "id": "br-dark-block-bakix0lx",
+      "parentId": "br-icy-boat-baaov5es",
+      "parentLsn": "0/2FFE638",
+      "name": "package4-db-recovery-20261020-provider-r2-restored",
+      "expiresAt": "2026-10-21T06:07:38Z"
+    },
+    {
+      "id": "br-mute-salad-babco1q7",
+      "parentId": "br-icy-boat-baaov5es",
+      "parentLsn": "0/2FFE638",
+      "name": "package4-db-recovery-20261020-provider-r2-working",
+      "expiresAt": "2026-10-21T06:07:38Z"
+    },
+    {
+      "id": "br-sweet-surf-ba6iahut",
+      "parentId": "br-flat-block-baycv1oa",
+      "parentLsn": "0/2F63518",
+      "name": "package4-db-recovery-20261020-r1-working",
+      "expiresAt": null
+    },
+    {
+      "id": "br-shiny-darkness-baz4524v",
+      "parentId": null,
+      "parentLsn": null,
+      "name": "package4-synthetic-qa",
+      "expiresAt": null
+    },
+    {
+      "id": "br-icy-boat-baaov5es",
+      "parentId": "br-sweet-surf-ba6iahut",
+      "parentLsn": "0/2FFE638",
+      "name": "package4-db-recovery-20261020-provider-r2-point",
+      "expiresAt": null
+    },
+    {
+      "id": "br-flat-block-baycv1oa",
+      "parentId": "br-shiny-darkness-baz4524v",
+      "parentLsn": "0/2F63518",
+      "name": "package4-db-recovery-20261020-r1-point",
+      "expiresAt": null
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "ep-crimson-forest-ba4kk6sb",
+      "branchId": "br-sweet-surf-ba6iahut",
+      "disabled": true,
+      "currentState": "idle",
+      "minCu": 0.25,
+      "maxCu": 0.25,
+      "suspendTimeoutSeconds": 0,
+      "suspendedAt": "2026-10-20T06:12:14Z"
+    },
+    {
+      "id": "ep-delicate-truth-bavb1twc",
+      "branchId": "br-mute-salad-babco1q7",
+      "disabled": true,
+      "currentState": "idle",
+      "minCu": 0.25,
+      "maxCu": 0.25,
+      "suspendTimeoutSeconds": 0,
+      "suspendedAt": "2026-10-20T06:12:22Z"
+    },
+    {
+      "id": "ep-odd-lake-bal0zots",
+      "branchId": "br-dark-block-bakix0lx",
+      "disabled": true,
+      "currentState": "idle",
+      "minCu": 0.25,
+      "maxCu": 0.25,
+      "suspendTimeoutSeconds": 0,
+      "suspendedAt": "2026-10-20T06:12:29Z"
+    },
+    {
+      "id": "ep-steep-shadow-bapfxomh",
+      "branchId": "br-shiny-darkness-baz4524v",
+      "disabled": false,
+      "currentState": "idle",
+      "minCu": 0.25,
+      "maxCu": 0.25,
+      "suspendTimeoutSeconds": 0,
+      "suspendedAt": "2026-10-20T06:05:46Z"
+    }
+  ],
+  "closedDrillEndpoints": [
+    "ep-crimson-forest-ba4kk6sb",
+    "ep-delicate-truth-bavb1twc",
+    "ep-odd-lake-bal0zots"
+  ],
+  "allDrillComputesDisabledAndIdle": true,
+  "originalRootEndpointModified": false,
+  "privateFileBytesRestored": 0,
+  "completeDatabaseAndPrivateFileRecovery": "NOT YET TESTED",
+  "automaticBranchDeletionPerformed": false,
+  "automaticSuspendClaimed": false,
+  "sourceReactivation": {
+    "authorizedByRoot": true,
+    "endpointId": "ep-crimson-forest-ba4kk6sb",
+    "operation": "update_postgres_endpoint disabled:false",
+    "purpose": "New separate Hosted Preview binding after DB-only drill completion",
+    "notYetPerformedByThisCaller": true
+  },
+  "limitations": [
+    "Point and provider baseline branches cannot expire while parenting children; they are retained for manual cleanup review.",
+    "Created compute leaves have actual24h expiration; no branch cleanup was claimed to have happened.",
+    "This records actual disabled/idle endpoints at drill closure. A subsequent separately authorized Hosted reactivation changes that later state."
+  ],
+  "recordedAt": "2026-10-20T06:13:01.569Z",
+  "endpointStateObservation": "Actual endpoint readback immediately after explicit drill disable calls and before separately authorized Hosted reactivation; this is a closure receipt, not a later live endpoint status"
+}

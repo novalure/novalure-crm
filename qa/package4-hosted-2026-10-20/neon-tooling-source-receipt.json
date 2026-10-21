@@ -1,0 +1,44 @@
+{
+  "format": "package4-neon-tooling-copy-v1",
+  "sourceWorktree": "/workspace/package4-neon-worktree",
+  "sourceRevision": "e669841e8e49af3908b18369f38c7f49489ed058",
+  "rootAppFilesModified": false,
+  "files": [
+    {
+      "path": "scripts/lib/neon-061-compat.mjs",
+      "sha256": "9a1733751f6ab88947c5c8609d4d9f779f92b10f9971aedcdf5783d672df3dda"
+    },
+    {
+      "path": "scripts/neon-061-compat-tests.mjs",
+      "sha256": "b02c0e0f54d7d6ec92cc500e30408955669b9ceeca5fa74d4d8ecbae128b06d7"
+    },
+    {
+      "path": "scripts/package4-neon-bootstrap.mjs",
+      "sha256": "eafcc564e5e760323474cfb2ab175c835dcf3672451b37486dccfe3986cdbb98"
+    },
+    {
+      "path": "scripts/package4-neon-branch-recovery.mjs",
+      "sha256": "7849e1b36d04777a95f8eb6687bde1ada11feb04fc493263361ef418db3364e6"
+    },
+    {
+      "path": "scripts/package4-neon-database-recovery.mjs",
+      "sha256": "4456a180801a22f95ad4d216cf9544694758b51427236e7eb02889813ecc7d19"
+    },
+    {
+      "path": "scripts/package4-neon-database-template-recovery.mjs",
+      "sha256": "5fcc15553ffa6049902356e0142bc89effd4130bcab5ebd4a2e971d93960e3e4"
+    },
+    {
+      "path": "scripts/package4-neon-recovery-runner.mjs",
+      "sha256": "25fc6e7bfe81b7d369f2b7056d6b8c92958f929d139dd24fc833dda166231f1f"
+    },
+    {
+      "path": "scripts/package4-neon-restore.mjs",
+      "sha256": "76f7d563e88fac17fdfb8d00b796c4ff11720fcb5c3ce1f55300a938c3496827"
+    },
+    {
+      "path": "scripts/package4-neon-seed.mjs",
+      "sha256": "a64336cf4898b43b5bc3c04b6b15f2390d06dfcaff03253fea1613653075ce09"
+    }
+  ]
+}

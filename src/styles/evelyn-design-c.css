@@ -1,0 +1,624 @@
+@import "../../design-c/styles/tokens.css";
+@import "../../design-c/styles/foundations.css" layer(base);
+@import "./evelyn-domain-panels.css";
+
+/*
+ * The actual authenticated CRM shares Design C's source palette and primitives.
+ * Only .crm-app.design-c opts in; the public Novalure token contract is intact.
+ * Foundations live in the base layer so existing spacing/layout utilities keep
+ * working. These scoped rules replace the previous CRM's important gold rules.
+ */
+.crm-app.design-c {
+  --crm-sidebar-width: 256px;
+  --crm-sidebar-collapsed-width: var(--dc-navigation-rail-width);
+  --crm-content-max: 1680px;
+  --nl-bg: var(--dc-canvas);
+  --nl-mist: var(--dc-canvas);
+  --nl-ink: var(--dc-text);
+  --nl-graphite: var(--dc-rail);
+  --nl-steel: var(--dc-rail-active);
+  --nl-surface: var(--dc-surface);
+  --nl-surface-soft: var(--dc-surface-soft);
+  --nl-muted: var(--dc-muted);
+  --nl-tertiary: var(--dc-muted);
+  --nl-disabled: var(--dc-muted);
+  --nl-gold: var(--dc-accent);
+  --nl-gold-strong: var(--dc-accent);
+  --nl-gold-hover: var(--dc-accent-hover);
+  --nl-gold-text: var(--dc-accent-text);
+  --nl-blue: var(--dc-accent);
+  --nl-blue-dark: var(--dc-accent-text);
+  --nl-blue-tint: var(--dc-accent-soft);
+  --nl-green: var(--dc-success-text);
+  --nl-amber: var(--dc-warning-text);
+  --nl-amber-tint: var(--dc-warning-bg);
+  --nl-border: var(--dc-border);
+  --nl-divider: var(--dc-line);
+  --nl-row-divider: var(--dc-line);
+  --nl-progress-track: var(--dc-neutral-bg);
+  --nl-radius-dialog: var(--dc-radius-lg);
+  --nl-focus-outline: var(--dc-focus);
+  --nl-focus-ring: 0 0 0 4px var(--dc-focus-shadow);
+  --nl-button-primary-text: var(--dc-on-accent);
+  --nl-button-primary-shadow: none;
+  --nl-info-border: var(--dc-info-border);
+  --nl-danger-hover: var(--dc-danger-hover);
+  --nl-shadow-menu: var(--dc-shadow-raised);
+  background: var(--dc-canvas) !important;
+  color: var(--dc-text) !important;
+  font-family: var(--dc-font);
+  font-size: var(--dc-type-body);
+}
+
+.crm-app.design-c [data-crm-shell],
+.crm-app.design-c [data-crm-stage] {
+  background: var(--dc-canvas);
+}
+
+.crm-app.design-c :is(h1, h2, h3, h4) {
+  color: var(--dc-text);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.crm-app.design-c :focus-visible {
+  border-radius: 4px;
+  outline: 3px solid var(--dc-focus);
+  outline-offset: 3px;
+}
+
+.crm-app.design-c :is(button, a, summary) {
+  touch-action: manipulation;
+}
+
+.crm-app.design-c button {
+  min-block-size: var(--dc-control-height-compact);
+  min-inline-size: var(--dc-control-height-compact);
+  font-family: inherit;
+  transition: background-color var(--dc-duration-fast) var(--dc-easing), border-color var(--dc-duration-fast) var(--dc-easing), color var(--dc-duration-fast) var(--dc-easing), box-shadow var(--dc-duration-fast) var(--dc-easing);
+}
+
+.crm-app.design-c button:not(:disabled):hover,
+.crm-app.design-c a[class*="rounded"]:hover {
+  transform: none;
+}
+
+/* Existing utility-based screens retain semantic states and their layout. */
+.crm-app.design-c [class~="bg-white"]:where(:not([style*="background-color"])),
+.crm-app.design-c [class~="bg-white/95"]:where(:not([style*="background-color"])),
+.crm-app.design-c [class~="bg-white/90"]:where(:not([style*="background-color"])),
+.crm-app.design-c [class~="bg-white/80"]:where(:not([style*="background-color"])),
+.crm-app.design-c [class~="bg-white/70"]:where(:not([style*="background-color"])),
+.crm-app.design-c [class~="bg-white/60"]:where(:not([style*="background-color"])) {
+  background: var(--dc-surface) !important;
+}
+
+.crm-app.design-c [class~="bg-stone-50"],
+.crm-app.design-c [class~="bg-slate-50"] {
+  background: var(--dc-surface-soft) !important;
+}
+
+.crm-app.design-c [class~="bg-violet-50"],
+.crm-app.design-c [class~="bg-violet-100"],
+.crm-app.design-c [class~="bg-purple-50"],
+.crm-app.design-c [class~="bg-indigo-50"] {
+  background: var(--dc-violet-bg) !important;
+}
+
+.crm-app.design-c [class~="text-violet-700"],
+.crm-app.design-c [class~="text-violet-800"],
+.crm-app.design-c [class~="text-violet-900"],
+.crm-app.design-c [class~="text-indigo-700"],
+.crm-app.design-c [class~="text-purple-700"] {
+  color: var(--dc-violet-text) !important;
+}
+
+.crm-app.design-c [class~="border-blue-100"],
+.crm-app.design-c [class~="border-blue-200"],
+.crm-app.design-c [class~="border-blue-300"],
+.crm-app.design-c [class~="border-cyan-100"],
+.crm-app.design-c [class~="border-cyan-200"],
+.crm-app.design-c [class~="border-cyan-300"],
+.crm-app.design-c [class~="border-sky-100"],
+.crm-app.design-c [class~="border-sky-200"],
+.crm-app.design-c [class~="border-sky-300"] {
+  border-color: var(--dc-info-border) !important;
+}
+
+.crm-app.design-c :is(article, section, aside, details, header, div, li)[class~="border"][class~="bg-white"] {
+  border-color: var(--dc-line) !important;
+  box-shadow: var(--dc-shadow);
+}
+
+.crm-app.design-c :is([class~="bg-slate-950"], [class~="bg-slate-900"]) {
+  background: var(--dc-intelligence) !important;
+  color: var(--dc-intelligence-text) !important;
+}
+
+.crm-app.design-c :is([class~="bg-slate-950"], [class~="bg-slate-900"]) :is(h1, h2, h3, h4) {
+  color: var(--dc-intelligence-text) !important;
+}
+
+.crm-app.design-c :is([class~="bg-slate-950"], [class~="bg-slate-900"]) :is([class~="text-slate-400"], [class~="text-slate-500"], [class~="text-stone-500"]) {
+  color: var(--dc-intelligence-muted) !important;
+}
+
+.crm-app.design-c button[class~="bg-slate-950"],
+.crm-app.design-c button[class~="bg-slate-900"],
+.crm-app.design-c button[class~="bg-slate-800"],
+.crm-app.design-c button[class~="bg-emerald-700"],
+.crm-app.design-c a[class~="bg-slate-950"],
+.crm-app.design-c [class~="bg-blue-300"],
+.crm-app.design-c [class~="bg-blue-500"],
+.crm-app.design-c [class~="bg-blue-600"],
+.crm-app.design-c [class~="bg-blue-700"] {
+  background: var(--dc-accent) !important;
+  border-color: var(--dc-accent) !important;
+  box-shadow: none;
+  color: var(--dc-on-accent) !important;
+}
+
+.crm-app.design-c button[class~="bg-slate-950"]:hover:not(:disabled),
+.crm-app.design-c button[class~="bg-slate-900"]:hover:not(:disabled),
+.crm-app.design-c button[class~="bg-slate-800"]:hover:not(:disabled),
+.crm-app.design-c button[class~="bg-emerald-700"]:hover:not(:disabled),
+.crm-app.design-c a[class~="bg-slate-950"]:hover,
+.crm-app.design-c [class~="hover:bg-blue-600"]:hover,
+.crm-app.design-c [class~="hover:bg-blue-700"]:hover {
+  background: var(--dc-accent-hover) !important;
+  border-color: var(--dc-accent-hover) !important;
+  box-shadow: none;
+  color: var(--dc-on-accent) !important;
+}
+
+.crm-app.design-c :is(button[class~="bg-white"], button[class~="bg-stone-50"], button[class~="hover:bg-stone-100"]):hover:not(:disabled) {
+  background: var(--dc-accent-soft) !important;
+  border-color: var(--dc-info-border) !important;
+  color: var(--dc-accent-text) !important;
+}
+
+.crm-app.design-c button:disabled {
+  background: var(--dc-neutral-bg) !important;
+  border-color: var(--dc-line) !important;
+  color: var(--dc-muted) !important;
+  box-shadow: none !important;
+}
+
+/* Selection metadata shares the primary foreground, independently of statuses. */
+.crm-app.design-c :is(button, a)[class~="bg-slate-950"] [class~="text-slate-300"] {
+  color: var(--dc-on-accent) !important;
+}
+
+/* Native controls keep page-specific widths and native selection behavior. */
+.crm-app.design-c input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+.crm-app.design-c select,
+.crm-app.design-c textarea {
+  min-height: var(--dc-control-height-compact);
+  border-color: var(--dc-border) !important;
+  border-radius: var(--dc-radius-sm) !important;
+  background-color: var(--dc-surface) !important;
+  color: var(--dc-text) !important;
+  font-size: var(--dc-type-body);
+  font-weight: 450;
+}
+
+.crm-app.design-c :is(input, select, textarea):focus-visible {
+  outline: 3px solid var(--dc-focus);
+  outline-offset: 2px;
+}
+
+.crm-app.design-c :is(input, select, textarea)[aria-invalid="true"] {
+  border-color: var(--dc-danger-text) !important;
+}
+
+.crm-app.design-c [data-nl-ui="surface"] {
+  border-color: var(--dc-line);
+}
+
+.crm-app.design-c [data-nl-ui="status-chip"] {
+  border-radius: 5px;
+  font-weight: 550;
+}
+
+.crm-app.design-c [data-nl-ui="notice"][data-tone="info"],
+.crm-app.design-c [data-nl-ui="status-chip"][data-tone="info"] {
+  background: var(--dc-info-bg);
+  border-color: var(--dc-info-border);
+  color: var(--dc-info-text);
+}
+
+/* Navy navigation uses its own foregrounds, separate from white workspaces. */
+.crm-app.design-c [data-crm-sidebar] {
+  padding: 24px 16px !important;
+  border-right-color: var(--dc-rail-active) !important;
+  background: var(--dc-rail) !important;
+  box-shadow: none;
+  color: var(--dc-rail-text);
+  backdrop-filter: none;
+}
+
+.crm-app.design-c [data-crm-sidebar][data-collapsed="true"] {
+  padding-inline: 8px !important;
+}
+
+.crm-app.design-c :is([data-crm-sidebar], [data-crm-mobile-drawer]) :focus-visible {
+  outline-color: var(--dc-rail-indicator);
+}
+
+.crm-app.design-c [data-crm-brand-row] {
+  margin-bottom: 24px !important;
+}
+
+.crm-app.design-c [data-crm-evelyn-brand] {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.crm-app.design-c [data-crm-evelyn-brand] [data-crm-brand] {
+  align-items: flex-start;
+  color: var(--dc-rail-strong);
+  display: flex;
+  flex-direction: column;
+  font-size: 27px;
+  font-weight: 550;
+  gap: 5px;
+  letter-spacing: -1.25px;
+  line-height: 1;
+}
+
+.crm-app.design-c [data-crm-evelyn-brand] [data-crm-brand] > small {
+  color: var(--dc-rail-text);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 1.1px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.crm-app.design-c [data-crm-evelyn-brand][data-compact="true"] {
+  justify-content: center;
+}
+
+.crm-app.design-c [data-crm-brandmark] {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1;
+  position: relative;
+  border-radius: var(--dc-radius);
+  background: var(--dc-rail-active);
+  box-shadow: none;
+  color: var(--dc-rail-strong);
+}
+
+.crm-app.design-c [data-crm-evelyn-brand] [data-crm-brandmark] > small {
+  color: var(--dc-rail-indicator);
+  font-size: 12px;
+  position: absolute;
+  right: 6px;
+  top: 4px;
+}
+
+.crm-app.design-c [data-crm-badge] {
+  border-radius: 5px;
+  background: var(--dc-rail-active);
+  color: var(--dc-rail-strong);
+  font-size: var(--dc-type-xs);
+  font-weight: 550;
+}
+
+.crm-app.design-c [data-crm-collapse] {
+  border-color: var(--dc-intelligence-border) !important;
+  background: transparent !important;
+  color: var(--dc-rail-text) !important;
+}
+
+.crm-app.design-c [data-crm-collapse]:hover {
+  border-color: var(--dc-rail-indicator) !important;
+  background: var(--dc-rail-active) !important;
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c :is([data-crm-profile-card], [data-crm-workspace-card], [data-crm-projects]) {
+  border-color: var(--dc-rail-active) !important;
+  background: transparent !important;
+  color: var(--dc-rail-strong);
+}
+
+.crm-app.design-c :is([data-crm-profile-card], [data-crm-workspace-card]) :is(label, p) {
+  color: var(--dc-rail-text) !important;
+}
+
+.crm-app.design-c :is([data-crm-profile-card], [data-crm-mobile-drawer]) select {
+  border-color: var(--dc-intelligence-border) !important;
+  background: var(--dc-rail-active) !important;
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-workspace-card] [class~="bg-white"],
+.crm-app.design-c [data-crm-projects] [class~="bg-white"] {
+  background: var(--dc-rail-active) !important;
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-workspace-card] [class~="bg-white"] p:first-child {
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-nav] {
+  gap: 6px;
+}
+
+.crm-app.design-c [data-crm-nav-item] {
+  border-radius: 9px !important;
+  color: var(--dc-rail-text) !important;
+  font-size: var(--dc-type-body-sm);
+  font-weight: 500;
+}
+
+.crm-app.design-c [data-crm-nav-item]:hover,
+.crm-app.design-c [data-crm-nav-item][data-active="true"] {
+  background: var(--dc-rail-active) !important;
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-nav-item][data-active="true"] {
+  box-shadow: inset 2px 0 var(--dc-rail-indicator) !important;
+}
+
+.crm-app.design-c [data-crm-nav-item][data-active="true"]::after {
+  background: var(--dc-rail-indicator);
+}
+
+.crm-app.design-c [data-crm-sidebar][data-collapsed="true"] [data-crm-nav-item] {
+  min-height: var(--dc-navigation-item-height);
+}
+
+.crm-app.design-c [data-crm-projects] summary {
+  min-height: var(--dc-control-height-compact);
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-projects] [data-crm-project-button] {
+  border-color: var(--dc-rail-active) !important;
+  background: transparent !important;
+  color: var(--dc-rail-text) !important;
+}
+
+.crm-app.design-c [data-crm-projects] [data-crm-project-button]:hover,
+.crm-app.design-c [data-crm-projects] [data-crm-project-button][data-active="true"] {
+  border-color: var(--dc-rail-indicator) !important;
+  background: var(--dc-rail-active) !important;
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-projects] [data-crm-project-button] :is(.text-slate-900, .text-stone-500, .text-stone-700) {
+  color: var(--dc-rail-text) !important;
+}
+
+.crm-app.design-c [data-crm-project-button][data-active="true"] [class~="bg-white/10"] {
+  background: var(--dc-intelligence-soft) !important;
+}
+
+/* White application header and a compact context strip match the C workspace. */
+.crm-app.design-c [data-crm-header] {
+  border-bottom-color: var(--dc-line) !important;
+  background: var(--dc-surface) !important;
+  padding: 22px clamp(20px, 2.4vw, 36px) 18px !important;
+  backdrop-filter: none;
+}
+
+.crm-app.design-c [data-crm-header-title] {
+  max-width: 36ch;
+  color: var(--dc-text) !important;
+  font-size: clamp(1.5rem, 2.2vw, 1.875rem) !important;
+  font-weight: 550 !important;
+  letter-spacing: -0.045em;
+  line-height: 1.3;
+}
+
+@media (min-width: 1024px) {
+  .crm-app.design-c [data-crm-header] > div:first-child {
+    flex-wrap: wrap;
+  }
+
+  .crm-app.design-c [data-crm-header] > div:first-child > div:first-child {
+    flex: 1 1 220px;
+    min-width: min(100%, 220px);
+  }
+
+  .crm-app.design-c [data-crm-header-actions] {
+    flex: 3 1 600px;
+    min-width: 0;
+  }
+}
+
+.crm-app.design-c [data-crm-eyebrow] {
+  color: var(--dc-muted) !important;
+  font-size: var(--dc-type-xs);
+  font-weight: 550;
+  letter-spacing: 0.14em;
+}
+
+.crm-app.design-c [data-crm-header-actions] label,
+.crm-app.design-c [data-crm-quickbar] :is(label, p) {
+  color: var(--dc-muted) !important;
+}
+
+.crm-app.design-c [data-crm-current-user] {
+  align-self: center;
+  color: var(--dc-text);
+  font-size: var(--dc-type-body-sm);
+  font-weight: 550;
+  line-height: 1.5;
+  max-width: 180px;
+}
+
+.crm-app.design-c [data-crm-current-user] > small {
+  color: var(--dc-muted);
+  display: block;
+  font-size: var(--dc-type-xs);
+  font-weight: 450;
+}
+
+.crm-app.design-c [data-crm-search-results] {
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.crm-app.design-c [data-crm-search-results] button {
+  justify-content: space-between;
+  text-align: left;
+  width: 100%;
+}
+
+.crm-app.design-c [data-crm-search-results] button > span {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.crm-app.design-c [data-crm-header-actions] select {
+  border-color: var(--dc-border) !important;
+  background: var(--dc-surface) !important;
+  color: var(--dc-text) !important;
+}
+
+.crm-app.design-c [data-crm-header-actions] button[class~="bg-white"],
+.crm-app.design-c [data-crm-header-actions] div > button[class~="bg-white"],
+.crm-app.design-c [data-crm-quick-actions] button {
+  min-height: var(--dc-control-height-compact);
+  border-color: var(--dc-line) !important;
+  background: var(--dc-surface) !important;
+  box-shadow: none;
+  color: var(--dc-text) !important;
+  font-weight: 550;
+}
+
+.crm-app.design-c [data-crm-header-actions] button[class~="bg-white"]:hover,
+.crm-app.design-c [data-crm-header-actions] div > button[class~="bg-white"]:hover,
+.crm-app.design-c [data-crm-quick-actions] button:hover {
+  border-color: var(--dc-info-border) !important;
+  background: var(--dc-accent-soft) !important;
+  color: var(--dc-accent-text) !important;
+}
+
+.crm-app.design-c [data-crm-quickbar] {
+  border-top-color: var(--dc-line) !important;
+}
+
+.crm-app.design-c [data-crm-content] {
+  padding: clamp(20px, 2.5vw, 36px) !important;
+}
+
+.crm-app.design-c [data-crm-context] {
+  border-color: var(--dc-line) !important;
+  background: var(--dc-surface) !important;
+  box-shadow: none !important;
+}
+
+.crm-app.design-c [data-crm-context]::before {
+  background: var(--dc-accent);
+}
+
+.crm-app.design-c [data-crm-context-chip] {
+  border-radius: 6px !important;
+  background: var(--dc-accent-soft) !important;
+  color: var(--dc-accent-text) !important;
+}
+
+/* Shared functional tables, filter bars and editor dialogs. */
+.crm-app.design-c table {
+  font-size: var(--dc-type-body-sm);
+}
+
+.crm-app.design-c thead {
+  background: var(--dc-surface-soft);
+}
+
+.crm-app.design-c th {
+  font-size: var(--dc-type-xs);
+  font-weight: 550;
+  letter-spacing: 0.04em;
+}
+
+.crm-app.design-c th,
+.crm-app.design-c td {
+  border-color: var(--dc-line) !important;
+}
+
+.crm-app.design-c tbody tr:hover {
+  background: var(--dc-accent-soft);
+}
+
+.crm-app.design-c :is([class~="bg-slate-950/35"], [class~="bg-slate-950/45"], [class~="bg-slate-950/55"], [class~="bg-black/30"]) {
+  background: var(--dc-overlay) !important;
+}
+
+.crm-app.design-c [role="dialog"]:where(:not([data-crm-mobile-drawer])) {
+  border-color: var(--dc-line) !important;
+  border-radius: var(--dc-radius-lg) !important;
+  background: var(--dc-surface);
+  color: var(--dc-text);
+  box-shadow: var(--dc-shadow-raised) !important;
+}
+
+/* Mobile navigation retains the existing drawer behavior and focus trap. */
+.crm-app.design-c [data-crm-mobile-bar] {
+  border-bottom-color: var(--dc-rail-active);
+  background: var(--dc-rail);
+  backdrop-filter: none;
+}
+
+.crm-app.design-c [data-crm-mobile-current] {
+  color: var(--dc-rail-text);
+}
+
+.crm-app.design-c [data-crm-mobile-trigger],
+.crm-app.design-c [data-crm-mobile-close] {
+  border-color: var(--dc-intelligence-border) !important;
+  background: var(--dc-rail-active) !important;
+  color: var(--dc-rail-strong) !important;
+}
+
+.crm-app.design-c [data-crm-mobile-overlay] {
+  background: var(--dc-overlay);
+}
+
+.crm-app.design-c [data-crm-mobile-drawer] {
+  border-color: var(--dc-rail-active);
+  border-radius: var(--dc-radius-lg) 0 0 var(--dc-radius-lg) !important;
+  background: var(--dc-rail);
+  box-shadow: var(--dc-shadow-raised);
+  color: var(--dc-rail-strong);
+}
+
+.crm-app.design-c [data-crm-mobile-drawer-header] {
+  border-bottom-color: var(--dc-rail-active);
+}
+
+.crm-app.design-c [data-crm-mobile-section-label],
+.crm-app.design-c [data-crm-mobile-drawer] :is(label, p) {
+  color: var(--dc-rail-text) !important;
+}
+
+@media (max-width: 900px) {
+  .crm-app.design-c [data-crm-header] { padding-inline: 20px !important; }
+}
+
+@media (max-width: 640px) {
+  .crm-app.design-c [data-crm-header] { padding: 20px 16px 16px !important; }
+  .crm-app.design-c [data-crm-header-title] { font-size: clamp(1.45rem, 6vw, 1.875rem) !important; }
+  .crm-app.design-c [data-crm-content] { padding: 20px 14px 28px !important; }
+  .crm-app.design-c [data-crm-context] { padding: 14px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-app.design-c *,
+  .crm-app.design-c *::before,
+  .crm-app.design-c *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

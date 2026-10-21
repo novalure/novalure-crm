@@ -1,0 +1,71 @@
+{
+  "format": "package4-neon-cow-fingerprint-incident-v1",
+  "reviewDate": "2026-10-20",
+  "independentReviewer": "/root/masterplan_context",
+  "scope": "Read-only comparison of captured source and initial working COW snapshots before any working-fixture mutation",
+  "originalVerdict": "FAIL",
+  "originalFailureCode": "DATABASE_CHECKPOINT_COW_COPY_MISMATCH",
+  "verdictPreserved": true,
+  "productionAccess": 0,
+  "reviewerDatabaseOrRepositoryWrites": 0,
+  "source": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v"
+  },
+  "working": {
+    "branchId": "br-sweet-surf-ba6iahut"
+  },
+  "artifactSha256": {
+    "database-before.private.json": "d81313b529fd0dc9270d6829f2a8c9d11b3fb9e6b2584685c6db9b3382a12b3c",
+    "database-working-initial.private.json": "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7"
+  },
+  "comparison": {
+    "catalogCategories": 20,
+    "identicalCatalogCategories": 19,
+    "changedCatalogCategory": "defaultGrants",
+    "sourceDefaultGrants": [],
+    "addedDefaults": {
+      "count": 9,
+      "owner": "cloud_admin",
+      "grantor": "cloud_admin",
+      "grantee": "neon_superuser",
+      "schema": "public",
+      "isGrantable": true,
+      "sequenceObjectTypeS": [
+        "SELECT",
+        "UPDATE",
+        "USAGE"
+      ],
+      "tableObjectTypeR": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "SELECT",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    "identicalLedgerRows": 60,
+    "identicalTableDataHashes": 167,
+    "capturedDataRows": 168,
+    "sequenceStateIdentical": true,
+    "rolesMembershipsExistingObjectAclAndRlsIdentical": true
+  },
+  "assessment": {
+    "capturedDataCorruptionObserved": false,
+    "exactCatalogIntegrityMatch": false,
+    "differenceSemantics": "Actual default privileges for future provider-owned objects; not a WAL or sequence-state discrepancy",
+    "providerAttribution": "Consistent with Neon compute initialization applying provider default grants; exact deployed provider code revision and execution logs were not verified",
+    "noNormalizationOrAclRewritePerformed": true,
+    "originalFailConvertedToPass": false
+  },
+  "upstreamReference": {
+    "repository": "https://github.com/neondatabase/neon",
+    "commit": "fa504217c61bbcaf5c512d75830564541f917f8f",
+    "defaultGrantsUrl": "https://github.com/neondatabase/neon/blob/fa504217c61bbcaf5c512d75830564541f917f8f/compute_tools/src/sql/default_grants.sql#L26",
+    "applicationUrl": "https://github.com/neondatabase/neon/blob/fa504217c61bbcaf5c512d75830564541f917f8f/compute_tools/src/spec_apply.rs#L1128",
+    "behavior": "Compute ChangeSchemaPerms loads default_grants.sql; lines26–27 grant ALL on public TABLES and SEQUENCES to neon_superuser WITH GRANT OPTION",
+    "versionLimit": "Public upstream source explains the category of provider transition; it does not attest the deployed provider revision or replace the exact observed nine-row delta"
+  },
+  "nextAttemptConstraint": "Use a separately evidenced new recovery attempt with strict equality preserved. SQL TEMPLATE copying may be tested without rewriting ACLs. Preserve this original FAIL and all raw snapshots. Private-object byte recovery remains a separate blocked gate."
+}

@@ -1,0 +1,1169 @@
+{
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "sessionInjection": false,
+  "ordinaryPasswordAndMfa": true,
+  "scope": "whole-integration",
+  "authenticationProofs": [
+    {
+      "userId": "96269fb3-2aa9-47a7-88e1-7133904d5fe3",
+      "ordinaryPassword": true,
+      "mfaRequired": true,
+      "totpFromEnrollmentUi": true,
+      "sessionInjected": false
+    },
+    {
+      "userId": "83d8d7d3-5d1f-4df4-b060-6b2c4c564670",
+      "ordinaryPassword": true,
+      "mfaRequired": true,
+      "totpFromEnrollmentUi": true,
+      "sessionInjected": false
+    },
+    {
+      "userId": "63366652-32eb-4b12-85c8-f0196b202efb",
+      "ordinaryPassword": true,
+      "mfaRequired": false,
+      "totpFromEnrollmentUi": false,
+      "sessionInjected": false
+    }
+  ],
+  "generatedAt": "2026-10-19T22:28:27.660Z",
+  "baseUrl": "http://127.0.0.1:42547/",
+  "summary": {
+    "passed": 50,
+    "failed": 0,
+    "axeScans": 4
+  },
+  "results": [
+    {
+      "name": "Anonymous CRM and Knowledge APIs deny access",
+      "status": "PASS"
+    },
+    {
+      "name": "Regular operator login rejects bad password/TOTP and completes real MFA",
+      "status": "PASS",
+      "detail": {
+        "ordinaryPassword": true,
+        "mfaRequired": true,
+        "totpFromEnrollmentUi": true,
+        "sessionInjected": false
+      }
+    },
+    {
+      "name": "Operator chooses its existing authorized internal navigation profile",
+      "status": "PASS"
+    },
+    {
+      "name": "Authorized database API supplies the dashboard without synthetic preview fallbacks",
+      "status": "PASS",
+      "detail": {
+        "source": "database",
+        "counts": {
+          "contacts": 2,
+          "leads": 0,
+          "deals": 0,
+          "tasks": 0,
+          "units": 0
+        },
+        "moduleSources": {
+          "brokerMandates": "database",
+          "calendarEvents": "database",
+          "contacts": "database",
+          "buyerSearchProfiles": "database",
+          "crmPipelineStages": "database",
+          "crmPipelines": "database",
+          "editorPreflightRuns": "database",
+          "crmBots": "database",
+          "leads": "database",
+          "deals": "database",
+          "funnelSteps": "database",
+          "funnels": "database",
+          "newsletterCampaigns": "database",
+          "newsletterSegments": "database",
+          "projectPipelinePermissions": "database",
+          "propertyBuildings": "database",
+          "propertyCostItems": "database",
+          "propertyDocuments": "database",
+          "propertyMedia": "database",
+          "propertyReservations": "database",
+          "propertyTextBlocks": "database",
+          "propertyUnits": "database",
+          "projects": "database",
+          "sellerListings": "database",
+          "tasks": "database"
+        }
+      }
+    },
+    {
+      "name": "Every visible operator navigation entry retains the live Design C shell",
+      "status": "PASS",
+      "detail": [
+        {
+          "label": "Startseite",
+          "hash": ""
+        },
+        {
+          "label": "Immobilien",
+          "hash": "#properties"
+        },
+        {
+          "label": "Arbeitsbereiche / Kunden",
+          "hash": "#workspaces"
+        },
+        {
+          "label": "Projekte",
+          "hash": "#projects"
+        },
+        {
+          "label": "Lead-Zentrale",
+          "hash": "#leadInbox"
+        },
+        {
+          "label": "Kontakte",
+          "hash": "#contacts"
+        },
+        {
+          "label": "Pipelines",
+          "hash": "#pipelines"
+        },
+        {
+          "label": "Aufgaben",
+          "hash": "#tasks"
+        },
+        {
+          "label": "Termine",
+          "hash": "#meetings"
+        },
+        {
+          "label": "Lead-Funnels",
+          "hash": "#funnels"
+        },
+        {
+          "label": "Newsletter",
+          "hash": "#newsletter"
+        },
+        {
+          "label": "KI-Bots",
+          "hash": "#bots"
+        },
+        {
+          "label": "Wissen",
+          "hash": "#knowledge"
+        },
+        {
+          "label": "Auswertungen",
+          "hash": "#analytics"
+        },
+        {
+          "label": "Datenhygiene",
+          "hash": "#data-hygiene"
+        },
+        {
+          "label": "Einstellungen",
+          "hash": "#settings"
+        }
+      ]
+    },
+    {
+      "name": "Authorized search uses a native modal and never reveals another tenant",
+      "status": "PASS"
+    },
+    {
+      "name": "A real empty Forms response never creates prepared business forms",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer access fallback state exposes no sample records or unknown zero counts",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer access network state exposes no sample records or unknown zero counts",
+      "status": "PASS"
+    },
+    {
+      "name": "Unlicensed Knowledge uses its actual entitlement state and rejects writes",
+      "status": "PASS"
+    },
+    {
+      "name": "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
+      "status": "PASS"
+    },
+    {
+      "name": "Project scope switch clears another project's contact records",
+      "status": "PASS"
+    },
+    {
+      "name": "Explicit operator membership authorizes customer and canonical Studio workspaces only",
+      "status": "PASS",
+      "detail": {
+        "authorizedWorkspaces": 3,
+        "studioUsesExistingProject": true
+      }
+    },
+    {
+      "name": "Customer owner signs in through separate password and real MFA",
+      "status": "PASS",
+      "detail": {
+        "ordinaryPassword": true,
+        "mfaRequired": true,
+        "totpFromEnrollmentUi": true,
+        "sessionInjected": false
+      }
+    },
+    {
+      "name": "Customer chooses its existing authorized real-estate workspace profile",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer workspace cannot read operator, foreign contacts, projects or Knowledge",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer property and assistant views show actual scoped database records",
+      "status": "PASS"
+    },
+    {
+      "name": "Unknown assistant approval and conversation data remains unavailable rather than zero",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer Knowledge area and draft are saved by the real self-service forms",
+      "status": "PASS"
+    },
+    {
+      "name": "Knowledge assignment and explicit publication gate real webchat retrieval",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer PDF upload extracts private text and requires explicit review",
+      "status": "PASS"
+    },
+    {
+      "name": "Read-only customer authenticates normally and cannot escalate Knowledge rights",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer dashboard: live theme and responsive layout at 1440px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 1440,
+        "document": 1440
+      }
+    },
+    {
+      "name": "Customer contacts: live theme and responsive layout at 1440px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 1440,
+        "document": 1440
+      }
+    },
+    {
+      "name": "Customer properties: live theme and responsive layout at 1440px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 1440,
+        "document": 1440
+      }
+    },
+    {
+      "name": "Customer bots: live theme and responsive layout at 1440px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 1440,
+        "document": 1440
+      }
+    },
+    {
+      "name": "Customer knowledge: live theme and responsive layout at 1440px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 1440,
+        "document": 1440
+      }
+    },
+    {
+      "name": "Customer settings: live theme and responsive layout at 1440px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 1440,
+        "document": 1440
+      }
+    },
+    {
+      "name": "Customer dashboard: live theme and responsive layout at 768px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 768,
+        "document": 768
+      }
+    },
+    {
+      "name": "Customer contacts: live theme and responsive layout at 768px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 768,
+        "document": 768
+      }
+    },
+    {
+      "name": "Customer properties: live theme and responsive layout at 768px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 768,
+        "document": 768
+      }
+    },
+    {
+      "name": "Customer bots: live theme and responsive layout at 768px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 768,
+        "document": 768
+      }
+    },
+    {
+      "name": "Customer knowledge: live theme and responsive layout at 768px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 768,
+        "document": 768
+      }
+    },
+    {
+      "name": "Customer settings: live theme and responsive layout at 768px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 768,
+        "document": 768
+      }
+    },
+    {
+      "name": "Customer dashboard: live theme and responsive layout at 390px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 390,
+        "document": 390
+      }
+    },
+    {
+      "name": "Customer contacts: live theme and responsive layout at 390px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 390,
+        "document": 390
+      }
+    },
+    {
+      "name": "Customer properties: live theme and responsive layout at 390px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 390,
+        "document": 390
+      }
+    },
+    {
+      "name": "Customer bots: live theme and responsive layout at 390px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 390,
+        "document": 390
+      }
+    },
+    {
+      "name": "Customer knowledge: live theme and responsive layout at 390px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 390,
+        "document": 390
+      }
+    },
+    {
+      "name": "Customer settings: live theme and responsive layout at 390px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 390,
+        "document": 390
+      }
+    },
+    {
+      "name": "Customer dashboard: live theme and responsive layout at 360px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 360,
+        "document": 360
+      }
+    },
+    {
+      "name": "Customer contacts: live theme and responsive layout at 360px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 360,
+        "document": 360
+      }
+    },
+    {
+      "name": "Customer properties: live theme and responsive layout at 360px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 360,
+        "document": 360
+      }
+    },
+    {
+      "name": "Customer bots: live theme and responsive layout at 360px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 360,
+        "document": 360
+      }
+    },
+    {
+      "name": "Customer knowledge: live theme and responsive layout at 360px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 360,
+        "document": 360
+      }
+    },
+    {
+      "name": "Customer settings: live theme and responsive layout at 360px",
+      "status": "PASS",
+      "detail": {
+        "theme": "c",
+        "background": "rgb(247, 248, 252)",
+        "accent": "#666ad1",
+        "sidebar": "rgb(23, 29, 48)",
+        "viewport": 360,
+        "document": 360
+      }
+    },
+    {
+      "name": "Customer mobile navigation traps focus, closes with Escape and restores trigger",
+      "status": "PASS"
+    },
+    {
+      "name": "Reduced motion preference disables integration shell movement",
+      "status": "PASS"
+    },
+    {
+      "name": "RLS remains forced and runtime role cannot bypass row security",
+      "status": "PASS",
+      "detail": [
+        {
+          "relname": "knowledge_area_grants",
+          "relrowsecurity": true,
+          "relforcerowsecurity": true
+        },
+        {
+          "relname": "knowledge_areas",
+          "relrowsecurity": true,
+          "relforcerowsecurity": true
+        },
+        {
+          "relname": "knowledge_center_entitlements",
+          "relrowsecurity": true,
+          "relforcerowsecurity": true
+        },
+        {
+          "relname": "knowledge_source_versions",
+          "relrowsecurity": true,
+          "relforcerowsecurity": true
+        },
+        {
+          "relname": "knowledge_sources",
+          "relrowsecurity": true,
+          "relforcerowsecurity": true
+        },
+        {
+          "relname": "media_assets",
+          "relrowsecurity": true,
+          "relforcerowsecurity": true
+        }
+      ]
+    },
+    {
+      "name": "No browser exceptions, server failures, browser outbound requests or preview UI",
+      "status": "PASS",
+      "detail": {
+        "uncaughtErrors": 0,
+        "serverErrors": 0,
+        "outboundRequests": 0,
+        "sessionInjection": false
+      }
+    }
+  ],
+  "axe": [
+    {
+      "name": "dashboard-1440",
+      "version": "4.11.4",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "button[aria-label=\"Aufgaben\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Termine\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Lead-Funnels\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Newsletter\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"KI-Bots\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Wissen\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Auswertungen\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Einstellungen\"] > .min-w-0.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".tracking-\\[0\\.16em\\].uppercase.text-stone-500"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".mt-8 > .mt-2.text-sm.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".mt-8 > .text-stone-600.mt-1.text-xs"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".select-none"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".min-w-0 > .block.text-slate-900.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".block.mt-1.text-stone-500"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(2) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(3) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(4) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(5) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            }
+          ]
+        }
+      ],
+      "passes": 27
+    },
+    {
+      "name": "knowledge-1440",
+      "version": "4.11.4",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "button[aria-label=\"Aufgaben\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Termine\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Lead-Funnels\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Newsletter\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"KI-Bots\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Auswertungen\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Einstellungen\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".tracking-\\[0\\.16em\\].uppercase.text-stone-500"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".mt-8 > .mt-2"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".mt-8 > .text-stone-600.mt-1.text-xs"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".select-none"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".min-w-0 > .text-slate-900.block.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".block.text-stone-500.mt-1"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".break-words[aria-current=\"page\"]"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(2) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(3) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(4) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(5) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            }
+          ]
+        }
+      ],
+      "passes": 32
+    },
+    {
+      "name": "settings-1440",
+      "version": "4.11.4",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "button[aria-label=\"Aufgaben\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Termine\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Lead-Funnels\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Newsletter\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"KI-Bots\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Wissen\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Auswertungen\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "button[aria-label=\"Einstellungen\"] > .break-words.min-w-0"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".tracking-\\[0\\.16em\\].uppercase.text-stone-500"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".mt-8 > .mt-2"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".mt-8 > .mt-1.text-stone-600"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".select-none"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".min-w-0 > .block.text-slate-900.break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".block.mt-1.text-stone-500"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(2) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(3) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(4) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".px-2\\.5.py-1\\.5[data-crm-context-chip=\"true\"]:nth-child(5) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            }
+          ]
+        }
+      ],
+      "passes": 30
+    },
+    {
+      "name": "customer-mobile-dashboard",
+      "version": "4.11.4",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "li:nth-child(2) > .break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                "li:nth-child(3) > .break-words"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".break-words[aria-current=\"page\"]"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(1) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(2) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(3) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(4) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            },
+            {
+              "target": [
+                ".text-stone-700.px-2\\.5[data-crm-context-chip=\"true\"]:nth-child(5) > .text-slate-950"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined due to a pseudo element"
+            }
+          ]
+        }
+      ],
+      "passes": 25
+    }
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "outbound": [],
+  "privateLeaks": [],
+  "responseInspectionErrors": [
+    {
+      "role": "operator",
+      "path": "/api/workspaces",
+      "error": "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+    },
+    {
+      "role": "operator",
+      "path": "/api/crm/core",
+      "error": "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+    },
+    {
+      "role": "operator",
+      "path": "/api/workspaces",
+      "error": "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+    },
+    {
+      "role": "customer_viewer",
+      "path": "/api/auth/csrf",
+      "error": "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+    },
+    {
+      "role": "customer_viewer",
+      "path": "/api/auth/onboarding",
+      "error": "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+    },
+    {
+      "role": "operator",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "operator",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "operator",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "operator",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "operator",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "customer_owner",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "customer_owner",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    },
+    {
+      "role": "customer_viewer",
+      "path": "/api/auth/session",
+      "error": "JSON response inspection timed out"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "operator",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "role": "customer_owner",
+      "message": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "role": "customer_viewer",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_viewer",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "role": "customer_viewer",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    }
+  ],
+  "limitations": [
+    "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
+    "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
+    "The isolated fixture applies unchanged pinned 091–096 and 100–106, including package-3 workflow/monitoring and operational readers; optional pgvector, historical manual media migration 062 and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
+    "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification."
+  ]
+}

@@ -1,0 +1,637 @@
+{
+  "schemaVersion": 2,
+  "observedAtUtc": "2026-10-20T09:49:25.075616Z",
+  "scope": "Sanitized current actual QA infrastructure and production planning metadata; no credentials or row payloads.",
+  "status": "BLOCKIERT",
+  "historicalInitialInventory": {
+    "observedAtUtc": "2026-10-19 22:23:26 UTC",
+    "sourceRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "path": "qa/package4-integration-2026-10-20/infrastructure.json",
+    "rawGitBlobSha256": "3a06958958eb1bb7e8f4bf2c7fea5ea68280719912eda57b773da66066fdff65",
+    "historicalConclusion": "Initial connector-only inventory could not verify a suitable CRM QA target; superseded by actual dedicated provisioning and hosted evidence.",
+    "earlierConstraintsApplyOnlyToThatObservation": true
+  },
+  "conclusion": {
+    "isolatedPreviewProvisioned": true,
+    "fullDatabaseAndPrivateFilesRestore": "PASS",
+    "securityGate": "BLOCKED",
+    "productionApproved": false,
+    "productionApprovalRequestIssued": false,
+    "currentSourceAvailability": "PASS",
+    "historicalBoundedUiCompatibilityAndQaMachineAccepted": true
+  },
+  "vercel": {
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "crmProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "gitBranch": "codex/evelyn-crm-package4-integration",
+    "implementationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "deploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "origin": "https://novalure-5j7pionbs-novalure.vercel.app",
+    "target": "preview",
+    "nativeReadyState": "READY",
+    "protection": {
+      "anonymousStatus": 302,
+      "oidcNormalLoginStatus": 200,
+      "normalCrmWithoutAppSession": 401,
+      "protectionDisabled": false
+    },
+    "receipt": "qa/package4-hosted-2026-10-20/deployment-c291e21.json",
+    "branchEnvironment": {
+      "entriesAtDeployment": 173,
+      "entriesAfterCleanup": 171,
+      "globalPreviewKeysShadowed": 65,
+      "productionEntriesUnchanged": 74,
+      "globalPreviewEntriesUnchanged": 65,
+      "ownRuntimeDatabaseAndFreshAuthPrivateStorageBindings": true,
+      "toolbarBranchFlag": "0; actual baseline browser proof retained",
+      "twoTemporaryMachineQaKeysRemovedForFutureDeployments": true,
+      "cleanupDoesNotRewriteExistingDeploymentEnvironment": true
+    },
+    "currentApplicationAvailability": {
+      "status": "PASS",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+        "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be"
+      },
+      "sourceOnlyEnableSeparateAfterFullRecoveryClosure": true,
+      "normalExistingCookiesNoLoginOrSessionMint": true,
+      "actualReadonlySourceApplicationChecks": 5,
+      "httpProtectionChecks": 3,
+      "sourceWrites": 0,
+      "sourceProviderState": "active; disabled=false",
+      "workingAndRestoredProviderState": "disabled=true; idle",
+      "providerReadbackAtUtc": "2026-10-20T09:06:04.574Z",
+      "sameApplicationRevisionDeploymentAndOrigin": true,
+      "secondHostedSuiteOrNewDeployment": false,
+      "productionChanges": 0
+    }
+  },
+  "qaNeon": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "database": "neondb",
+    "runtimeRole": "novalure_app",
+    "migrationOwner": "neondb_owner",
+    "syntheticOnlyFreshProvisioning": true,
+    "productionCopyUsed": false,
+    "ledgerRows": 60,
+    "canonicalMigrationSourceChecksums": 13,
+    "forcedRlsTables": 94,
+    "bootstrapReceipt": "qa/package4-hosted-2026-10-20/neon-migrations.json",
+    "originalCloneReceipt": "qa/package4-hosted-2026-10-20/neon-clone-attestation.json",
+    "originalBootstrapOrCloneRelabeled": false,
+    "nativeQaAugmentation": {
+      "status": "PASS",
+      "receipt": "qa/package4-hosted-2026-10-20/machine-qa-native-c291e21.json",
+      "existingPublicFunctionsPreserved": 233,
+      "allExistingPublicFunctionsBeforeSha256": "c55d79c71858ee39524ac3e2afe921a50ecaba3ba9e4ad87030d302195e87bba",
+      "allExistingPublicFunctionsAfterSha256": "c55d79c71858ee39524ac3e2afe921a50ecaba3ba9e4ad87030d302195e87bba",
+      "threeConstraintOldAlternativesRetained": true,
+      "newNarrowQaReader": 1,
+      "nativeAgentRole": "agent/project_sales_member",
+      "scopes": [
+        "crm.projects.read"
+      ],
+      "principalLifetimeSeconds": 3600,
+      "noPasswordMfaOrSessionMaterialCreated": true,
+      "canonicalSqlAndLedgerUnchanged": true,
+      "constraintSemantics": "All3 prior principal check predicates preserved verbatim; each adds only the same exact tightly bound QA tuple alternative. One separate narrow QA reader added."
+    }
+  },
+  "versionBoundary": {
+    "qaPostgres": "18.6",
+    "qaVector": "0.8.6",
+    "qaPgcrypto": "1.4",
+    "productionPostgres": "17.11",
+    "productionVector": "0.8.0",
+    "productionPgcrypto": "1.3",
+    "runtimeRoleInheritQa": true,
+    "runtimeRoleInheritProduction": false,
+    "dangerousRuntimeRoleFlagsFalse": true,
+    "staticCompatibilityReview": "qa/package4-hosted-2026-10-20/neon-postgres-version-review.json",
+    "actualVersionParityProven": false,
+    "productionUpgradePerformedOrPlanned": false
+  },
+  "privateStorage": {
+    "access": "private",
+    "qaSourceStoreId": "store_6i5sZDmCf4qX9J86",
+    "qaRestoreStoreId": "store_2FsqiotLlmJJ6toi",
+    "productionStoreId": "store_vCn7LiyRocYNC8pM",
+    "productionAssociationReceipt": "qa/package4-hosted-2026-10-20/production-storage-metadata.json",
+    "productionRuntimeTokenStoreBindingVerified": false,
+    "productionSecretsCopiedToQa": false
+  },
+  "evelynCaller": {
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "deploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+    "origin": "https://evelyn-g8lve1qmp-novalure.vercel.app",
+    "target": "preview",
+    "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+    "artifactReceipt": "qa/package4-hosted-2026-10-20/evelyn-caller-artifact-c291e21.json",
+    "deploymentReceipt": "qa/package4-hosted-2026-10-20/evelyn-caller-deployment-c291e21.json",
+    "realRuntimeInheritedKeysExplicitlyEmpty": 15,
+    "runtimeEvidence": "All5 real machine phases reported15/15 blank before OIDC/HTTP; provider env-name lists alone were not accepted as proof.",
+    "claimsScope": "Real signed Evelyn Preview project/owner/subject/environment/audience; exact caller artifact/deployment bound separately, no invented JWT branch/deployment claim.",
+    "acceptanceReceipt": "qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json",
+    "blankRuntimeKeyScope": "Exactly15 inherited project Preview application keys, not provider-managed system context.",
+    "providerManagedSystemEnvironmentFullyNeutralized": false,
+    "fixtureReadsOrForwardsProviderAutomationCredential": false,
+    "deploymentDeletion": {
+      "status": "PASS",
+      "receipt": "qa/package4-hosted-2026-10-20/evelyn-caller-retirement-c291e21.json",
+      "nativeState": "DELETED",
+      "independentAuthenticatedGetStatus": 404,
+      "publicUrlStatus": 404,
+      "productionUnchanged": true,
+      "deleteRetried": false,
+      "permanentImmediateByteErasureClaimed": false
+    }
+  },
+  "recovery": {
+    "originalCowCopy": "FAIL;9 extra provider default grants only, preserved without normalization",
+    "sqlTemplateAttempts": "2 FAIL55006; provider worker sessions not terminated",
+    "strictProviderBaselineDatabaseOnly": {
+      "status": "PASS",
+      "receipt": "qa/package4-hosted-2026-10-20/neon-provider-database-recovery.json",
+      "durationMs": 279608,
+      "normalRuntimeMutationCommitted": true,
+      "sourceUnchanged": true,
+      "allCatalogDatabaseMetadataLedgerAndDataEqual": true
+    },
+    "fullDatabaseAndPrivateFiles": {
+      "status": "PASS",
+      "scope": "Synthetic same-project Neon COW database recovery plus exhaustive private files in a separately bound private Blob store",
+      "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+      "resultSha256": "7f956ff4fccba08c129feb2d69d02fb9164c72ba6d9c51bbd93b9cf3b22f6f63",
+      "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+      "completedAtUtc": "2026-10-20T09:03:31.101Z",
+      "finalCompletionElapsedMs": 347199,
+      "singleUninterruptedRun": false,
+      "elapsedIsTotalRecoveryRto": false,
+      "catalogCategories": 20,
+      "databaseMetadataAndGlobalRoleSettingsIncluded": true,
+      "dataTables": 167,
+      "dataRows": 793,
+      "canonicalLedgerRows": 60,
+      "strictSourceAndRestoredCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+      "workingCombinedSha256": "74c8eea535435d1333aa173470b6977d408d4affbc7d63a34c91aca651acf4d1",
+      "originalNormalWorkingTaskCommits": 1,
+      "additionalWorkingCommitsDuringCompletion": 0,
+      "ignoredCategories": 0,
+      "aclNormalization": false,
+      "privateFiles": 17,
+      "privateBytes": 41950560,
+      "existingVerifiedFilesRetained": 8,
+      "missingFilesCreatedExactlyOnce": 9,
+      "allFileSizesAndSha256Match": true,
+      "allAnonymousFileReadsStatus": 403,
+      "historicalVersionsIncluded": true,
+      "sourceAndTargetPrivateInventoryExhaustive": true,
+      "overwritesOrDeletes": 0,
+      "actualRestoredApplicationChecks": {
+        "status": "PASS",
+        "count": 5,
+        "mode": "Actual candidate repository/route code in process, restored DB, normal browser cookies and real private target store",
+        "authenticatedSessionVerified": true,
+        "runtimeRole": "novalure_app",
+        "runtimeIsOwnerSuperuserOrBypassRls": false,
+        "secondRestoredHostedDeploymentVerified": false,
+        "intentionalRestoredFunctionalWritesOnlyAfterStrictInitialEquality": true
+      },
+      "sourceDatabaseAndFilesUnchanged": true,
+      "allFourPoolsClosed": true,
+      "allThreeSourceWorkingRestoredEndpointsDisabledIdleAtClosure": true,
+      "branchCount": 9,
+      "branchCap": 10,
+      "newBranchesDuringFinalCompletion": 0,
+      "checkpointBranch": "br-broad-mouse-baohb06c",
+      "workingBranch": "br-little-lake-bagp4n0i",
+      "restoredBranch": "br-nameless-sun-bazc0qdt",
+      "parentLsn": "0/32A4C10",
+      "nativePgDumpRestoreProven": false,
+      "crossProjectDisasterRecoveryProven": false,
+      "productionVersionParityProven": false,
+      "productionChanges": 0,
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+        "sha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3"
+      },
+      "lifecycleReceipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+        "sha256": "b4d18f9451a278ed5d503cbebc1c9f180badadf2c45116799f03f8967dc8eff0"
+      },
+      "rootReviewReceipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+        "sha256": "ad32043480127ab81aa83fe519cb3a08d1d81e56a230ede556b6dc9e1b9dc036"
+      },
+      "historicalFailuresPreserved": {
+        "firstCaptureTextUuid": {
+          "status": "FAIL",
+          "sqlstate": "42883",
+          "archiveBytes": 0,
+          "databaseOrStorageWrites": 0,
+          "newBranches": 0,
+          "correctedInTooling": "5f7bed6578d8c29631745f6627bbec1bf605f3c8"
+        },
+        "firstR2WebSocketProcessAbort": {
+          "status": "FAIL",
+          "attempt": "R2",
+          "observedProcessAbortAtUtc": "2026-10-20T08:22:00Z",
+          "error": "Unhandled Neon WebSocket: Connection terminated unexpectedly",
+          "actualRootClassification": "FAIL; restored database equality, private file copy and application verification did not complete",
+          "rawResultStatus": "RUNNING_STALE_AFTER_PROCESS_CRASH",
+          "rawResultSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+          "rawArtifactMustNeverBeTreatedAsPass": true,
+          "rootCauseProven": false,
+          "precisePoolOrPendingSqlCause": "UNKNOWN",
+          "idleOwnerHeldAcrossMetadataOrBlobPause": "Plausible hypothesis only; unconfirmed",
+          "checkpoint": {
+            "branchId": "br-broad-mouse-baohb06c",
+            "parentLsn": "0/32A4C10"
+          },
+          "working": {
+            "branchId": "br-little-lake-bagp4n0i",
+            "initialFullEqualityPassed": true,
+            "normalRuntimeTaskRowsCommitted": 1
+          },
+          "restored": {
+            "branchId": "br-nameless-sun-bazc0qdt",
+            "created": true,
+            "completeDatabaseEquality": "NOT TESTED",
+            "privateFilesCopiedComplete": 0,
+            "applicationChecksCompleted": false
+          },
+          "cleanup": {
+            "status": "PASS",
+            "verifiedAtUtc": "2026-10-20T08:23:11Z",
+            "sourceWorkingAndRestoredEndpointsDisabledAndIdle": true,
+            "sourceBranchId": "br-sweet-surf-ba6iahut",
+            "workingBranchId": "br-little-lake-bagp4n0i",
+            "restoredBranchId": "br-nameless-sun-bazc0qdt"
+          },
+          "targetStorageReadback": {
+            "verifiedAtUtc": "2026-10-20T08:25:17Z",
+            "files": 0,
+            "bytes": 0
+          },
+          "deletesOrBranchResetsOrRetriesPerformed": false,
+          "currentOperationActive": false,
+          "guardedSameBranchContinuation": "Historical state at first R2 failure; subsequently completed on the same branches with separately preserved receipts."
+        },
+        "firstSameBranchFileRead": {
+          "status": "FAIL",
+          "elapsedMs": 445876,
+          "receipt": {
+            "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+            "sha256": "0d4a5d395208968bd17b98a2311674b7531a4e27742df82aed504657ae1e8e8e"
+          },
+          "resultSha256": "347f2c212bdd46cce47b8dc6ff59dbdc055d2b1a5c2c13643d7058735e110d3f",
+          "strictDatabaseEqualityPassed": true,
+          "eighthObjectImmediateSdkBodyBytes": 0,
+          "expectedEighthObjectBytes": 10485760,
+          "rootCauseIsDatabaseTransportProven": false
+        },
+        "partialTargetReconciliation": {
+          "status": "PASS",
+          "receipt": {
+            "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+            "sha256": "5daaad8c4e086de6080a6a15b3c84a0758dfe87ac93492803768741b34259a20"
+          },
+          "resultSha256": "3bd2ca63d2f443ab44e8912fece59c149fe4df8f1dc828b6dbb693fa4e85da18",
+          "filesVerifiedWithShaAnd403": 8,
+          "missingFiles": 9,
+          "unexpectedFiles": 0
+        },
+        "originalProviderDefaultGrantMismatchAndBothTemplateFailuresRemainPreserved": true
+      }
+    },
+    "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+    "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "applicationNotRedeployedForToolingFix": true,
+    "toolingCi": {
+      "status": "PASS",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/ci-5f7bed6.json",
+        "sha256": "27ed20078b81605bb055827a891be66eb255c2e59e7f75c142d53f42d7b33dc1"
+      },
+      "targetedTypeRegressionLocalCases": 5,
+      "targetedTypeRegressionSeparatelyExecutedInRemoteCi": false
+    },
+    "sourceAvailability": {
+      "status": "PASS",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+        "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be"
+      },
+      "sourceOnlyEnableSeparateAfterFullRecoveryClosure": true,
+      "normalExistingCookiesNoLoginOrSessionMint": true,
+      "actualReadonlySourceApplicationChecks": 5,
+      "httpProtectionChecks": 3,
+      "sourceWrites": 0,
+      "sourceProviderState": "active; disabled=false",
+      "workingAndRestoredProviderState": "disabled=true; idle",
+      "providerReadbackAtUtc": "2026-10-20T09:06:04.574Z",
+      "sameApplicationRevisionDeploymentAndOrigin": true,
+      "secondHostedSuiteOrNewDeployment": false,
+      "productionChanges": 0
+    }
+  },
+  "cleanup": {
+    "status": "PASS",
+    "receipt": "qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json",
+    "nativePrincipalState": "REVOKED",
+    "bothSavedBindingsDisabledAndRevoked": true,
+    "finalGenuineAppDenials": 8,
+    "temporaryPreviewTrustPairRemoved": true,
+    "productionAndOtherTrustPairsUnchanged": true,
+    "newBranchKeysRemoved": 2,
+    "branchEntriesBefore": 173,
+    "branchEntriesAfter": 171,
+    "existingMetadataRowsPreserved": 405,
+    "productionEntriesUnchanged": 74,
+    "globalPreviewEntriesUnchanged": 65,
+    "freshDeploymentScopedAccessCredentialRevoked": true,
+    "projectWideExposedCredentialRotationStillOpen": true,
+    "existingDeploymentEnvironmentImmutable": true,
+    "noDeploymentOrBuildForCleanup": true,
+    "partialApplyPatchResponseFailurePreserved": true,
+    "acceptedApplyReconciledByGetOnlyNoRetry": true
+  },
+  "credentialOutputIncident": {
+    "status": "BLOCKED",
+    "incident": "qa/package4-hosted-2026-10-20/credential-output-incident.json",
+    "historicalCredentialToolOutputOccurred": true,
+    "credentialValueIncludedInThisReport": false,
+    "publicGitOrReceiptCredentialCopyObserved": false,
+    "rotationAuthorizedNow": true,
+    "projectWideProductionImpactPossible": true,
+    "requiredRemediation": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+    "codeReviewOpenFindings": 0,
+    "trustedAppAttestationClaimed": false,
+    "allNoSecretOutputClaimAllowed": false,
+    "consumerInventory": {
+      "status": "STATIC_REFERENCE_INVENTORY_COMPLETE_CONSUMER_CENSUS_INCOMPLETE",
+      "sourceInventoryFile": "package4-evelyn-credential-consumer-inventory.json",
+      "sourceInventorySha256": "dcf0b378cd10ec02c697f5bc00956a7e0cecbfc1b1fbd9d801e4fd33d5b323aa",
+      "independentReviewOpenFindings": 0,
+      "uniqueSourceVariants": 13,
+      "conditionalTransports": 5,
+      "exactEvelynProductionRevision": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+      "localEvelynHeadUnchanged": "14aecea14e3304bfc187480cd1158febab6ad2b9",
+      "exactProductionObjectFetchedOnly": true,
+      "allRecordedVariantAndWorkflowHashesVerifiedAgainstGit": true,
+      "threeNameDirectRuntimeAndCiReferences": 0,
+      "configuredConsumerCount": "UNKNOWN",
+      "absenceOfExternalOrIndirectConsumersProven": false,
+      "secretValuesQueriedOrIncluded": false,
+      "productionRotationAuthorizedAtHistoricalInventory": false,
+      "historicalInventoryActionsOnly": true,
+      "productionHttpProbesPerformedByHistoricalInventory": false,
+      "requiredBeforeOldRetirement": "Actual configured/private/external consumer census and owners, validated cutover and a new explicit retirement decision; user currently requires old credential active."
+    },
+    "rotationAuthorizationScope": "Only completed two Evelyn credential writes and three fixed bounded GETs; not CRM release or old-key revocation",
+    "oldCredentialRetainedByExplicitUserDecision": true,
+    "oldRevocationAuthorized": false,
+    "currentRotationProgress": {
+      "status": "BLOCKED",
+      "phase": "REPLACEMENT_VALIDATED_OLD_EXPOSED_CREDENTIAL_RETAINED_BY_USER",
+      "recordedAtUtc": "2026-10-20T09:49:25.075616Z",
+      "scope": "Explicit user-authorized Evelyn project-wide automation credential rotation only; no CRM Production release authorization",
+      "userDecision": "Alten Schlüssel vorerst aktiv lassen",
+      "replacementCreated": true,
+      "replacementSelectedForFutureBuilds": true,
+      "replacementPlatformAccessValidated": true,
+      "providerWrites": 2,
+      "providerWriteOperations": [
+        "GENERATE_ONE_REPLACEMENT",
+        "SELECT_REPLACEMENT_FOR_FUTURE_BUILDS"
+      ],
+      "productionHttpRequests": 3,
+      "requestResults": [
+        {
+          "ordinal": 1,
+          "httpStatus": 302,
+          "status": "FAIL",
+          "classification": "Initial classifier omitted legitimate Vercel SSO redirect; immutable original failure retained"
+        },
+        {
+          "ordinal": 2,
+          "httpStatus": 302,
+          "status": "PASS",
+          "classification": "Exact Vercel SSO protection denial baseline; redirect not followed"
+        },
+        {
+          "ordinal": 3,
+          "httpStatus": 403,
+          "status": "PASS",
+          "classification": "Replacement reached exact JSON application denial PRODUCTION_ACCESS_DENIED with no-store; no successful app authentication/health claim"
+        }
+      ],
+      "httpScope": "Exactly fixed Evelyn Production immutable /api/health, no app Bearer/Cookie, no redirects, no retries; runtime/access metadata logging possible",
+      "oldCredentialActive": true,
+      "oldCredentialRevoked": false,
+      "oldRevocationAuthorized": false,
+      "revocationHelperExecuted": false,
+      "revocationAuthorizationFileCreated": false,
+      "currentNativeCredentialMapKeys": 2,
+      "replacementIsFutureEnvironmentDefault": true,
+      "oldIsFutureEnvironmentDefault": false,
+      "preRotationOneKeyBaseline": "Historical baseline only; current native map has exactly old and replacement keys",
+      "configuredConsumerCount": "UNKNOWN",
+      "consumerCutoverProven": false,
+      "consumerAbsenceProven": false,
+      "immutableDeploymentEnvironmentCopiesUpdated": false,
+      "productionDeploymentUnchanged": true,
+      "protectionPolicyUnchanged": true,
+      "projectEnvironmentMetadataRows": 37,
+      "projectEnvironmentMetadataUnchanged": true,
+      "unrelatedProjectMetadataUnchanged": true,
+      "crmDeploymentDatabaseDomainMfaCronMutations": 0,
+      "nextStep": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+      "securityPassAllowed": false,
+      "credentialValuesIncluded": false,
+      "evidence": {
+        "credential-rotation-progress": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-progress.json",
+          "sha256": "90387e28466e4837811d41d4010ee0bcccee02252b50b9f8ebfb31a3d8ec1004"
+        },
+        "credential-retention-decision": {
+          "path": "qa/package4-hosted-2026-10-20/credential-retention-decision.json",
+          "sha256": "ce64bf5fed2c2bea9ff50802b1b72aac0bc6422207abd535313c5b9eb5ed4bc1"
+        },
+        "independent-rotation-native-state": {
+          "path": "qa/package4-hosted-2026-10-20/independent-rotation-native-state.json",
+          "sha256": "0da4b9faa879d641d20274eec79277bce9b46697efcba0443f6edb4a64658140"
+        },
+        "independent-rotation-helper-review": {
+          "path": "qa/package4-hosted-2026-10-20/independent-rotation-helper-review.json",
+          "sha256": "183da6f522d33af33c32f966ad9a4b657aeb6215fb7b258da0e2f38e2dfae40a"
+        },
+        "rotation-configured-consumer-selectors": {
+          "path": "qa/package4-hosted-2026-10-20/rotation-configured-consumer-selectors.json",
+          "sha256": "e525db421ec49361af66f75e982c33f08771ccb47779b54e88eaf974fc3e461f"
+        },
+        "credential-rotation-validation-prerequisite": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-validation-prerequisite.json",
+          "sha256": "aa3f31443358c714295676b2c7fcfc34fe21d543cae7d6fd30659623eed23da7"
+        },
+        "credential-rotation-baseline-redirect-failure": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+          "sha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa"
+        },
+        "credential-rotation-preflight": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-preflight.json",
+          "sha256": "24587c826fb459f3dba1c9f2a1c5a469551ccdb0154c5bdcd33d316408f1e09c"
+        }
+      }
+    }
+  },
+  "production": {
+    "currentDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "sourceSha": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "neonProjectId": "misty-cloud-70835427",
+    "neonBranchId": "br-snowy-fog-aldx77v8",
+    "database": "neondb",
+    "ledgerRows": 54,
+    "missingOriginalMigrations": [
+      101,
+      102,
+      103,
+      104,
+      105,
+      106
+    ],
+    "existingActiveCronJobs": 4,
+    "newKnowledgeCronInstalled": false,
+    "productionStagingMayAffectSchedulerBeforePromote": true,
+    "skipDomainOnlyGuaranteesNoAutomaticDomainAliasing": true,
+    "releasePlan": "qa/package4-hosted-2026-10-20/production-release-plan.json",
+    "runnerPlan": "qa/package4-hosted-2026-10-20/production-runner-plan.json",
+    "planStatus": "DRAFT_NOT_APPROVABLE_OLD_EXPOSED_CREDENTIAL_RETAINED",
+    "productionMutationPerformed": true,
+    "productionAuthorizationRequested": false,
+    "productionMutationScope": "Exactly two separately authorized Evelyn project-wide credential writes; CRM Production deployment/DB/domain/MFA/cron unchanged",
+    "crmProductionMutationPerformed": false
+  },
+  "credentialValuesIncluded": false,
+  "historicalCredentialOutputOccurred": true,
+  "overallStatus": "BLOCKIERT",
+  "credentialRotationProgress": {
+    "status": "BLOCKED",
+    "phase": "REPLACEMENT_VALIDATED_OLD_EXPOSED_CREDENTIAL_RETAINED_BY_USER",
+    "recordedAtUtc": "2026-10-20T09:49:25.075616Z",
+    "scope": "Explicit user-authorized Evelyn project-wide automation credential rotation only; no CRM Production release authorization",
+    "userDecision": "Alten Schlüssel vorerst aktiv lassen",
+    "replacementCreated": true,
+    "replacementSelectedForFutureBuilds": true,
+    "replacementPlatformAccessValidated": true,
+    "providerWrites": 2,
+    "providerWriteOperations": [
+      "GENERATE_ONE_REPLACEMENT",
+      "SELECT_REPLACEMENT_FOR_FUTURE_BUILDS"
+    ],
+    "productionHttpRequests": 3,
+    "requestResults": [
+      {
+        "ordinal": 1,
+        "httpStatus": 302,
+        "status": "FAIL",
+        "classification": "Initial classifier omitted legitimate Vercel SSO redirect; immutable original failure retained"
+      },
+      {
+        "ordinal": 2,
+        "httpStatus": 302,
+        "status": "PASS",
+        "classification": "Exact Vercel SSO protection denial baseline; redirect not followed"
+      },
+      {
+        "ordinal": 3,
+        "httpStatus": 403,
+        "status": "PASS",
+        "classification": "Replacement reached exact JSON application denial PRODUCTION_ACCESS_DENIED with no-store; no successful app authentication/health claim"
+      }
+    ],
+    "httpScope": "Exactly fixed Evelyn Production immutable /api/health, no app Bearer/Cookie, no redirects, no retries; runtime/access metadata logging possible",
+    "oldCredentialActive": true,
+    "oldCredentialRevoked": false,
+    "oldRevocationAuthorized": false,
+    "revocationHelperExecuted": false,
+    "revocationAuthorizationFileCreated": false,
+    "currentNativeCredentialMapKeys": 2,
+    "replacementIsFutureEnvironmentDefault": true,
+    "oldIsFutureEnvironmentDefault": false,
+    "preRotationOneKeyBaseline": "Historical baseline only; current native map has exactly old and replacement keys",
+    "configuredConsumerCount": "UNKNOWN",
+    "consumerCutoverProven": false,
+    "consumerAbsenceProven": false,
+    "immutableDeploymentEnvironmentCopiesUpdated": false,
+    "productionDeploymentUnchanged": true,
+    "protectionPolicyUnchanged": true,
+    "projectEnvironmentMetadataRows": 37,
+    "projectEnvironmentMetadataUnchanged": true,
+    "unrelatedProjectMetadataUnchanged": true,
+    "crmDeploymentDatabaseDomainMfaCronMutations": 0,
+    "nextStep": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+    "securityPassAllowed": false,
+    "credentialValuesIncluded": false,
+    "evidence": {
+      "credential-rotation-progress": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-progress.json",
+        "sha256": "90387e28466e4837811d41d4010ee0bcccee02252b50b9f8ebfb31a3d8ec1004"
+      },
+      "credential-retention-decision": {
+        "path": "qa/package4-hosted-2026-10-20/credential-retention-decision.json",
+        "sha256": "ce64bf5fed2c2bea9ff50802b1b72aac0bc6422207abd535313c5b9eb5ed4bc1"
+      },
+      "independent-rotation-native-state": {
+        "path": "qa/package4-hosted-2026-10-20/independent-rotation-native-state.json",
+        "sha256": "0da4b9faa879d641d20274eec79277bce9b46697efcba0443f6edb4a64658140"
+      },
+      "independent-rotation-helper-review": {
+        "path": "qa/package4-hosted-2026-10-20/independent-rotation-helper-review.json",
+        "sha256": "183da6f522d33af33c32f966ad9a4b657aeb6215fb7b258da0e2f38e2dfae40a"
+      },
+      "rotation-configured-consumer-selectors": {
+        "path": "qa/package4-hosted-2026-10-20/rotation-configured-consumer-selectors.json",
+        "sha256": "e525db421ec49361af66f75e982c33f08771ccb47779b54e88eaf974fc3e461f"
+      },
+      "credential-rotation-validation-prerequisite": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-validation-prerequisite.json",
+        "sha256": "aa3f31443358c714295676b2c7fcfc34fe21d543cae7d6fd30659623eed23da7"
+      },
+      "credential-rotation-baseline-redirect-failure": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+        "sha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa"
+      },
+      "credential-rotation-preflight": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-preflight.json",
+        "sha256": "24587c826fb459f3dba1c9f2a1c5a469551ccdb0154c5bdcd33d316408f1e09c"
+      }
+    },
+    "evidenceReview": {
+      "path": "qa/package4-hosted-2026-10-20/credential-rotation-evidence-review.json",
+      "binding": "Separate subsequent review; no self-referential report hash."
+    }
+  },
+  "reportingRevisionCi": {
+    "revision": "7dd97c879cb215cc780232d8b06e5f105d497829",
+    "status": "PASS",
+    "qualityRunId": 39401068223,
+    "qualityUrl": "https://github.com/novalure/novalure-crm/actions/runs/39401068223",
+    "secretRunId": 39401068290,
+    "secretUrl": "https://github.com/novalure/novalure-crm/actions/runs/39401068290",
+    "optionalManualJob": "SKIPPED",
+    "configuredRequiredVercelCheck": "MISSING",
+    "gitAutoDeploymentDisabled": true,
+    "newReportAmendmentCiClaimed": false,
+    "newApplicationDeploymentClaimed": false,
+    "receipt": {
+      "path": "qa/package4-hosted-2026-10-20/ci-7dd97c8.json",
+      "sha256": "cb5dcc7d73fbf5d8880a334e821c903736bd1e20ec755b9e6ecd2f1c93ba1343"
+    },
+    "allConfiguredRequiredMergeChecksPass": false,
+    "requiredManualQaJob": "SKIPPED",
+    "automaticQualityAndSecretsSuccess": true
+  }
+}

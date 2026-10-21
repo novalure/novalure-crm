@@ -1,0 +1,259 @@
+{
+  "format": "package4-qa-seed-role-contract-regression-v1",
+  "status": "LOCAL_REGRESSION_PASS_NATIVE_QA_REQUIRED",
+  "repository": "novalure/novalure-crm",
+  "branch": "codex/evelyn-crm-package4-integration",
+  "baseCommit": "56fb824c5e43f7af646421c7128ff07c766168e0",
+  "nativeFailure": {
+    "runId": 39423999545,
+    "attempt": 1,
+    "jobId": 118635067065,
+    "sourceSha": "56fb824c5e43f7af646421c7128ff07c766168e0",
+    "url": "https://github.com/novalure/novalure-crm/actions/runs/39423999545",
+    "step": "Seed two or more isolated QA workspaces",
+    "sqlstate": "42501",
+    "table": "workspaces",
+    "counts": {
+      "success": 28,
+      "failure": 1,
+      "skipped": 9
+    },
+    "skippedApplicationAndTenantChecksAreNotPass": true
+  },
+  "contract": {
+    "runtimeRole": "novalure_app",
+    "runtimeWorkspaceAndMembershipWritesRemainDenied": true,
+    "runtimeBusinessWritesUseTransactionLocalTenantAndActorContext": true,
+    "fixtureOwnerRole": "neondb_owner",
+    "fixtureOwnerWritesOnly": [
+      "run-scoped workspaces",
+      "run-scoped workspace_users with the existing central identity trigger",
+      "run-scoped project_pipeline_permissions"
+    ],
+    "fixtureOwnerConnectionsCloseBeforeRuntimePhases": true,
+    "knowledgeChunksUpdatePrivilegeNotRequired": true,
+    "canonicalMigrationsChanged": false,
+    "runtimePrivilegesChanged": false,
+    "rlsPoliciesChanged": false,
+    "identityOrMfaChecksWeakened": false,
+    "environmentProtectionChanged": false,
+    "newSecretsRequired": false
+  },
+  "localFullSchemaRegression": {
+    "status": "PASS",
+    "startedAtUtc": "2026-10-20T14:20:21.535Z",
+    "completedAtUtc": "2026-10-20T14:20:24.226Z",
+    "postgres": "17.11",
+    "vector": "0.8.0",
+    "originalChecksummedSchemaLedgerRows": 60,
+    "original091Through096Included": true,
+    "sourceBindings": [
+      {
+        "path": "scripts/qa-livegang-seed.mjs",
+        "sha256": "172166ae05e0a7aae8e6c537741968599ddd44f71574d209fe3542c45ce757b7"
+      },
+      {
+        "path": "scripts/lib/qa-livegang-seed-bootstrap.mjs",
+        "sha256": "3597a2884117cbc62638a2f5c0ad8fec5badf24b6a606c081505af3eee1ad434"
+      },
+      {
+        "path": "scripts/qa-target-guard.mjs",
+        "sha256": "4e72ee4ce00109c42ce2d5e1894c3b57c081ae69a4cf50602f851aa295b117c4"
+      },
+      {
+        "path": "scripts/package4-neon-bootstrap.mjs",
+        "sha256": "eafcc564e5e760323474cfb2ab175c835dcf3672451b37486dccfe3986cdbb98"
+      },
+      {
+        "path": "package.json",
+        "sha256": "d781f9a6ab9fbd6e20bdf7fd608b3b270ad2a2db3a86ccee49b34ab0ecf2bd53"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "f6a47237c3cf191d639dfb2b0acf5ad48752aac61c14fd58af6ec4ea7c1c009f"
+      }
+    ],
+    "scopeNote": "These exact source bytes passed the original-schema regression. Subsequent transport-error lifecycle changes have separate focused verification; this is not a native Neon or final GitHub QA PASS.",
+    "checks": [
+      {
+        "name": "original_runtime_workspace_and_user_writes_rejected_42501",
+        "status": "PASS",
+        "elapsedMs": 10
+      },
+      {
+        "name": "corrected_full_seed_first_run",
+        "status": "PASS",
+        "elapsedMs": 240
+      },
+      {
+        "name": "corrected_full_seed_second_run_idempotent",
+        "status": "PASS",
+        "elapsedMs": 322
+      },
+      {
+        "name": "real_056_trigger_auth_identity_links",
+        "status": "PASS",
+        "elapsedMs": 1
+      },
+      {
+        "name": "foreign_same_id_run_marker_collision_denied_without_mutation",
+        "status": "PASS",
+        "elapsedMs": 115
+      },
+      {
+        "name": "canonical_growth_nonqa_sentinels_acl_rls_ledger_unchanged",
+        "status": "PASS",
+        "elapsedMs": 161
+      }
+    ],
+    "syntheticNeonGucsAreNotProviderProof": true,
+    "poolsClosed": true,
+    "containerCleanup": {
+      "status": "STOPPED_AND_REMOVED",
+      "activeSessions": 0,
+      "idleTransactions": 0,
+      "otherContainersTouched": 0
+    }
+  },
+  "remoteDatabaseAccessDuringLocalRegression": 0,
+  "productionAccess": 0,
+  "secretValuesEmitted": false,
+  "remainingGate": "A new workflow_dispatch isolated-candidate run must pass at the published fix commit, including application tests and final cleanup. The previous failed run cannot be reused.",
+  "finalSourceLifecycleRegression": {
+    "status": "PASS",
+    "startedAtUtc": "2026-10-20T14:33:49.073Z",
+    "completedAtUtc": "2026-10-20T14:33:50.067Z",
+    "checks": [
+      {
+        "name": "existing_exact_local_pg17_vector_and_original_runtime_posture",
+        "status": "PASS",
+        "elapsedMs": 15
+      },
+      {
+        "name": "final_full_seed_first_run",
+        "status": "PASS",
+        "elapsedMs": 204
+      },
+      {
+        "name": "final_full_seed_second_run_preserves_entity_primary_keys_and_auth_links",
+        "status": "PASS",
+        "elapsedMs": 342
+      },
+      {
+        "name": "unchanged_056_auth_identity_links_after_both_runs",
+        "status": "PASS",
+        "elapsedMs": 0
+      },
+      {
+        "name": "original_growth_nonqa_sentinel_acl_rls_roles_and_ledger_preserved",
+        "status": "PASS",
+        "elapsedMs": 124
+      },
+      {
+        "name": "final_source_and_freezes_unchanged",
+        "status": "PASS",
+        "elapsedMs": 5
+      }
+    ],
+    "ledgerRows": 60,
+    "seedRuns": 2,
+    "entityIdSnapshotScope": "All tenant-table primary keys and linked auth identities; append-only audit row IDs excluded only from intentional-write idempotency",
+    "protectedWorkspaceCount": 2,
+    "poolsClosed": true,
+    "sourceBindings": [
+      {
+        "path": "scripts/qa-livegang-seed.mjs",
+        "sha256": "c20381850985e9dcd105d9e09c01ef5e0524069dedcc9b0b45c53d17b1c709b3"
+      },
+      {
+        "path": "scripts/lib/qa-livegang-seed-bootstrap.mjs",
+        "sha256": "f048e067bd48ad3dbdc066d5d65a392e6a70b5c1e73d1b4899cbf6cf9f2fc406"
+      },
+      {
+        "path": "scripts/qa-target-guard.mjs",
+        "sha256": "4e72ee4ce00109c42ce2d5e1894c3b57c081ae69a4cf50602f851aa295b117c4"
+      },
+      {
+        "path": "scripts/lib/studio-stage3-qa-fingerprint.mjs",
+        "sha256": "34a5b66feed960aba6b4e558dfd3d95037c0637395667403d07c6867b2e5944b"
+      },
+      {
+        "path": "package.json",
+        "sha256": "d781f9a6ab9fbd6e20bdf7fd608b3b270ad2a2db3a86ccee49b34ab0ecf2bd53"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "f6a47237c3cf191d639dfb2b0acf5ad48752aac61c14fd58af6ec4ea7c1c009f"
+      }
+    ],
+    "harnessSha256": "927bff2abab895facbf4b0527388616f5336382944086dabc36897149dd65e7f",
+    "schemaChanges": 0,
+    "remoteDatabaseAccess": 0,
+    "productionAccess": 0,
+    "syntheticNeonGucsAreNotProviderProof": true,
+    "containerCleanup": {
+      "status": "STOPPED_AND_REMOVED",
+      "containerId": "049166ebcfaa45233f695b07d7d511d90a8360ba76dce51393401c6e1ceaa2f2",
+      "activeSessionsBeforeStop": 0,
+      "idleTransactionsBeforeStop": 0,
+      "otherContainersTouched": 0,
+      "productionAccess": 0,
+      "completedAtUtc": "2026-10-20T14:34:20.577215+00:00"
+    }
+  },
+  "finalSourceBindings": [
+    {
+      "path": "scripts/qa-livegang-seed.mjs",
+      "sha256": "c20381850985e9dcd105d9e09c01ef5e0524069dedcc9b0b45c53d17b1c709b3"
+    },
+    {
+      "path": "scripts/lib/qa-livegang-seed-bootstrap.mjs",
+      "sha256": "f048e067bd48ad3dbdc066d5d65a392e6a70b5c1e73d1b4899cbf6cf9f2fc406"
+    },
+    {
+      "path": "scripts/qa-livegang-seed-tests.mjs",
+      "sha256": "b559f8f026c182a5da5d6cdcf27b1f6abd2643616534216b4bee111193fe9f3a"
+    },
+    {
+      "path": "scripts/phase8-acceptance-smoke-tests.mjs",
+      "sha256": "9fedddbc2b56ce23cced6fd8ceee57f72a64bf905695ebdd2d26188d3971e762"
+    },
+    {
+      "path": ".github/workflows/livegang-e2e.yml",
+      "sha256": "ca1decd79f10c3099ae90b62632d33f2bc37482f685b4afb80eb90c4486cf902"
+    },
+    {
+      "path": "package.json",
+      "sha256": "d781f9a6ab9fbd6e20bdf7fd608b3b270ad2a2db3a86ccee49b34ab0ecf2bd53"
+    }
+  ],
+  "focusedVerification": {
+    "integration": {
+      "command": "npm run test:integration",
+      "status": "PASS",
+      "tests": 28,
+      "skipped": 0
+    },
+    "seedDependentExistingTests": {
+      "files": [
+        "scripts/phase6-bot-grounding-smoke-tests.mjs",
+        "scripts/phase8-acceptance-smoke-tests.mjs",
+        "scripts/property-department-smoke-tests.mjs"
+      ],
+      "status": "PASS",
+      "tests": 29,
+      "phase8AssertionNowFollowsImportedTenantContextHelper": true
+    },
+    "eslint": {
+      "status": "PASS",
+      "warnings": 0
+    },
+    "workflowYamlParse": "PASS",
+    "diffCheck": "PASS"
+  },
+  "independentSourceReview": {
+    "reviewer": "/root/preview_inventory",
+    "openFindings": 0,
+    "runtimeConnectionErrorFinding": "Fixed; active-client error handling, no replay, bounded destruction confirmation and fault tests reviewed."
+  }
+}

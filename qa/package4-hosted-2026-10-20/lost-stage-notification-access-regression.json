@@ -1,0 +1,263 @@
+{
+  "format": "package4-lost-stage-notification-access-regression-v1",
+  "status": "LOCAL_REGRESSION_PASS_NATIVE_QA_REQUIRED",
+  "repository": "novalure/novalure-crm",
+  "branch": "codex/evelyn-crm-package4-integration",
+  "baseCommit": "f4ce9006c5984cff35e457b7d4e1c3440b00b1d3",
+  "priorNativeRun": {
+    "id": 39440848132,
+    "attempt": 1,
+    "sha": "f4ce9006c5984cff35e457b7d4e1c3440b00b1d3",
+    "jobId": 118693838622,
+    "conclusion": "failure",
+    "counts": {
+      "success": 33,
+      "failure": 1,
+      "skipped": 4
+    },
+    "seed": "success",
+    "growth": "success",
+    "failure": {
+      "step": "Run CRM API regression and role-negative tests",
+      "assertion": "lost stage with structured reason succeeds",
+      "nativeHttpStatus": "NOT_LOGGED",
+      "nativeResponseCode": "NOT_LOGGED"
+    },
+    "cleanup": "success",
+    "formMatrix": "skipped",
+    "tenantDiagnostics": "skipped"
+  },
+  "nativeQaReadOnlyPermissions": {
+    "remoteWrites": 0,
+    "rows": [
+      {
+        "role": "novalure_app",
+        "session_role": "novalure_app",
+        "database": "neondb",
+        "project": "green-thunder-49879900",
+        "branch": "br-sweet-surf-ba6iahut",
+        "table_name": "google_notification_jobs",
+        "can_select": false,
+        "can_insert": false,
+        "can_update": false
+      },
+      {
+        "role": "novalure_app",
+        "session_role": "novalure_app",
+        "database": "neondb",
+        "project": "green-thunder-49879900",
+        "branch": "br-sweet-surf-ba6iahut",
+        "table_name": "google_notification_targets",
+        "can_select": false,
+        "can_insert": false,
+        "can_update": false
+      },
+      {
+        "role": "novalure_app",
+        "session_role": "novalure_app",
+        "database": "neondb",
+        "project": "green-thunder-49879900",
+        "branch": "br-sweet-surf-ba6iahut",
+        "table_name": "teams_notification_jobs",
+        "can_select": false,
+        "can_insert": false,
+        "can_update": false
+      },
+      {
+        "role": "novalure_app",
+        "session_role": "novalure_app",
+        "database": "neondb",
+        "project": "green-thunder-49879900",
+        "branch": "br-sweet-surf-ba6iahut",
+        "table_name": "teams_notification_targets",
+        "can_select": false,
+        "can_insert": false,
+        "can_update": false
+      }
+    ]
+  },
+  "historicalLocalReproduction": {
+    "httpStatus": 403,
+    "responseCode": "FORBIDDEN",
+    "firstDriverFailure": {
+      "sqlstate": "42501",
+      "statementTable": "teams_notification_targets"
+    },
+    "dealAndHistoryUnchangedAfterRollback": true,
+    "nativeFailureHttpStatusWasNotLogged": true
+  },
+  "correction": {
+    "optionalQueueAccess": "Check targets SELECT and jobs SELECT/INSERT/UPDATE separately on current_user and the existing transaction before provider table queries. Missing access returns queued:false; no new privilege is granted.",
+    "authorizedQueueBehavior": "Existing pending_config, idempotency and persistent queue behavior retained.",
+    "unexpectedSqlFailureBehavior": "Existing tenant queryFailure poison and transaction rollback retained; no retry, split transaction, savepoint or error reset.",
+    "qaNegativeExpectation": "Require HTTP400/WRITE_REJECTED and unchanged stage/version through normal core GET.",
+    "qaFailureDiagnostics": "Only HTTP status plus one of sixteen fixed error-code literals; no raw body, error text, headers, cookies or credentials."
+  },
+  "finalLocalVerification": {
+    "command": "node --conditions=react-server --import tsx --test scripts/sales-route-integration-tests.ts",
+    "exitCode": 0,
+    "nodeReported": {
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "durationMs": 3724.24642
+    },
+    "exactStartAndEndTimestampsCaptured": false,
+    "missingReason": {
+      "status": 400,
+      "code": "WRITE_REJECTED",
+      "exactError": "WRITE_REJECTED: Structured lost reason is required",
+      "dealStageVersionReasonTimestampsAndHistoryUnchanged": true
+    },
+    "structuredTimingReason": {
+      "status": 200,
+      "code": null,
+      "sqlFailures": [],
+      "versionIncrement": 1,
+      "lostReasonCategory": "timing",
+      "reasonDetailPersisted": true,
+      "newLostHistoryRows": 1,
+      "historyCategoryAndDetailMatch": true,
+      "newDealLostAnalyticsRows": 1,
+      "totalStageChangedAnalyticsRowsForFixtureDeal": 2
+    },
+    "existingAuthorityAndReplayChecks": {
+      "csrfConsumptionAndReplay": "PASS",
+      "staleAndMissingVersionDenials": "PASS",
+      "casReplayAndNoOverwrite": "PASS",
+      "currentRoleDenial": "PASS",
+      "revokedSessionDenial": "PASS",
+      "tenantIsolation": "PASS"
+    },
+    "catalogAndApplicationPrivileges": {
+      "allPublicTableAclAndRlsRowsCompared": true,
+      "applicationSelectInsertUpdateDeletePrivilegeMatrixCompared": true,
+      "beforeAfterIdentical": true,
+      "applicationRoleGrantsAdded": 0
+    },
+    "optionalQueueProbe": {
+      "providers": [
+        "teams",
+        "google"
+      ],
+      "separateSyntheticRole": {
+        "login": false,
+        "inherit": true,
+        "superuser": false,
+        "bypassRls": false,
+        "createdb": false,
+        "createrole": false,
+        "replication": false
+      },
+      "eachProviderPrivilegeAssertions": {
+        "none": false,
+        "selectOnly": false,
+        "complete": true,
+        "missingJobsSelect": false,
+        "missingJobsInsert": false,
+        "missingJobsUpdate": false,
+        "missingTargetsSelect": false
+      },
+      "completePrivilegeQueueCalls": {
+        "teams": {
+          "queued": false,
+          "persistedStatus": "pending_config",
+          "targetId": null,
+          "workspaceAndProjectMatch": true
+        },
+        "google": {
+          "queued": false,
+          "persistedStatus": "pending_config",
+          "targetId": null,
+          "workspaceAndProjectMatch": true
+        }
+      },
+      "allProbeRoleMembershipAndAclChangesAndQueueRowsInsideRolledBackTransaction": true,
+      "queueRowCountsBeforeAfterIdentical": true,
+      "applicationRolePrivilegesChanged": false,
+      "identityLimit": "This isolated metadata/queue probe uses SET LOCAL ROLE to a separate non-owner, non-BYPASSRLS role on the fixture admin connection. The route tests separately run through the genuine non-owner runtime login.",
+      "outboundHttpCalls": 0
+    },
+    "cleanup": {
+      "status": "PASS",
+      "evidence": "Successful test completion includes awaited closeLocalTestPool() and db.stop() in finally; db.stop awaits both local fixture pools and successful pg_ctl fast stop.",
+      "globalWorkspacePostgresProcessCensusPerformed": false
+    },
+    "unexpectedSqlErrorRollbackAfterFix": "NOT_NEWLY_TESTED"
+  },
+  "fixtureLimits": {
+    "transport": "Disposable embedded PostgreSQL on loopback only; no provider credentials or remote target consumed.",
+    "runtime": "Actual non-owner, non-BYPASSRLS synthetic runtime login inherits canonical tenant group and executes original 080 ACL/FORCE-RLS policies.",
+    "optionalVector": "Portable fixture omits vector extension/index and substitutes embedding real[].",
+    "excludedManualCutovers": [
+      "062_private_media_contract_cutover",
+      "091_production_runtime_forced_rls_cutover",
+      "092_crm_production_machine_identity",
+      "093_crm_machine_internal_context",
+      "094_website_sales_ingestion",
+      "095_form_tenant_isolation",
+      "096_public_integration_gateway",
+      "097_studio_sales_calendar_bridge",
+      "098_studio_enquiry_handoff",
+      "099_studio_enquiry_public_launch",
+      "100_studio_enquiry_production"
+    ],
+    "additionalFixtureBootstrapReads": "Existing synthetic auth fixture grants bounded authentication/bootstrap reads and CSRF access.",
+    "notFullSixtyMigrationSchemaAttestation": true,
+    "notHostedOrProductionProof": true,
+    "notPasswordMfaUiProof": true
+  },
+  "otherValidation": {
+    "providerContractTests": {
+      "command": "node --test scripts/p2-11-provider-and-assignee-tests.mjs",
+      "pass": 6,
+      "fail": 0
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    "eslint": {
+      "exitCode": 0,
+      "warnings": 0
+    },
+    "diffCheck": "PASS"
+  },
+  "sourceBindings": [
+    {
+      "path": "src/lib/db/notification-queue-access.ts",
+      "sha256": "adde2de9bfbbadef4f577c0aba8a3ebe74be6cd868f1599787f5474ede31eed0"
+    },
+    {
+      "path": "src/lib/db/teams-notification-repositories.ts",
+      "sha256": "df54ea7b77bc0431fa40942a1afcc15cb7ee4b7bb2a54acb6d87cafacaf13244"
+    },
+    {
+      "path": "src/lib/db/google-notification-repositories.ts",
+      "sha256": "0663039e030f5004c34291e1ad8db2942e2c10f2ca4bc1be46c564eedd71b76c"
+    },
+    {
+      "path": "scripts/qa-livegang-api.mjs",
+      "sha256": "cd8f9d654e7e01d64f80afa57543e17f4796d8b9a45268cd80a369530d98c82d"
+    },
+    {
+      "path": "scripts/sales-route-integration-tests.ts",
+      "sha256": "da898e868f7e07e1c6ff073098e42899b29e9caa7c1b62c810b3586f3559f1ad"
+    }
+  ],
+  "independentSourceReview": {
+    "reviewer": "/root/masterplan_context",
+    "openFindings": 0
+  },
+  "schemaAndMigrationChanges": 0,
+  "runtimeGrantsChanged": 0,
+  "rlsOrIdentityOrMfaChecksWeakened": false,
+  "environmentOrBranchProtectionChanges": 0,
+  "remoteDatabaseWrites": 0,
+  "productionActions": 0,
+  "secretValuesEmitted": false,
+  "remainingGate": "A new isolated-candidate workflow_dispatch at the published fix commit must pass the real CRM API, Form/Website Sales and tenant diagnostics, plus final cleanup. Neither previous failed run is QA PASS."
+}

@@ -1,0 +1,24 @@
+{
+  "format": "package4-provider-tooling-source-v1",
+  "sourceRevision": "02ce0386b7611c400723b5958ad8699a769923ba",
+  "reviewedAppSourceRevision": "e9d80b908d9244722ee9b661002baf0cf30d8692",
+  "normalMergeRevision": "94da37968f7785d7c0d64c7a90f51103e1625f67",
+  "originalMigrationReceiptSourceRevision": "eb889bb826a5f5fed87d37781f5d0019fae509a6",
+  "allMigrationBytesUnchangedAgainst": "b3ffd934a99020d91dd8aee7562f5a5f211d9a9d",
+  "independentCodeReview": {
+    "reviewer": "/root/masterplan_context",
+    "openFindings": 0,
+    "liveSuccessClaimed": false
+  },
+  "rootAppFilesModified": false,
+  "files": [
+    {
+      "path": "scripts/package4-neon-provider-baseline-recovery.mjs",
+      "sha256": "8c1934d9cb6e634bf5596f2b590a388a7fea7f034dfa49290dd619a200eb6bc1"
+    },
+    {
+      "path": "scripts/package4-neon-provider-recovery-runner.mjs",
+      "sha256": "5aded5f7b2d7f712db2222f39325700d79e721e1c3facc76ca434e94b8a05b2c"
+    }
+  ]
+}

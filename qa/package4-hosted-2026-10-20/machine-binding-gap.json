@@ -1,0 +1,130 @@
+{
+  "format": "package4-machine-binding-gap-v1",
+  "frozenAtUtc": "2026-10-20T06:49:26.783204+00:00",
+  "positiveMachineAcceptance": "NOT TESTED",
+  "gate": "BLOCKED",
+  "bindingOnlyProvisioningSufficient": false,
+  "cause": "Unter dem unveränderten Vertrag kann kein Evelyn-Nonprod-Workload den positiven Machine-Test am CRM-Preview bestehen: empfangender Runtime muss production sein; verifizierte Identität, Umgebung, Subject, Audience, Projekt und Workspace sind zusätzlich exakt auf Evelyn Production gepinnt.",
+  "sourceRevisions": {
+    "crm": "53441fc69b2e85c6a5fce25d1fc963934265c094",
+    "evelyn": "14aecea14e3304bfc187480cd1158febab6ad2b9",
+    "relevantFilesUnmodifiedAtInspection": true,
+    "evelynCurrentSourceIsNotClaimedDeployedPreviewSource": true
+  },
+  "readOnlySources": [
+    {
+      "repository": "novalure-crm",
+      "path": "src/lib/crm-machine-auth.ts",
+      "line": 65,
+      "endLine": 67,
+      "sha256": "aa2cda131a4e384bbc20e50ddabc1ea553870c611c0ca06764eeca90181fc8f9",
+      "finding": "CRM_MACHINE_AUTH_ENABLED=1 und VERCEL_ENV=production erforderlich; assertRuntimeEnabled wird in Zeile87 vor JWT-Verifikation aufgerufen."
+    },
+    {
+      "repository": "novalure-crm",
+      "path": "src/lib/crm-machine-auth.ts",
+      "line": 131,
+      "endLine": 136,
+      "sha256": "aa2cda131a4e384bbc20e50ddabc1ea553870c611c0ca06764eeca90181fc8f9",
+      "finding": "Issuer/Audience/Subject/project_id/owner_id/environment werden exakt mit den Productionkonstanten aus Zeilen7–17 verglichen."
+    },
+    {
+      "repository": "novalure-crm",
+      "path": "migrations/103_knowledge_assistant_service.sql",
+      "line": 15,
+      "endLine": 24,
+      "sha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "finding": "Gespeicherte Principal/Bot/Kanalbindung ist same-tenant per FK; FORCE RLS; sämtliche direkten Tabellenrechte werden public/novalure_app/novalure_tenant_app entzogen. Provisionierung gehört zur vertrauenswürdigen Control Plane."
+    },
+    {
+      "repository": "novalure-crm",
+      "path": "migrations/103_knowledge_assistant_service.sql",
+      "line": 56,
+      "endLine": 57,
+      "sha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "finding": "Runtime erhält nur EXECUTE auf den schmalen Binding-Leser, keinen direkten Bindungsschreibpfad. Dies ist SQL-Quellbeleg, kein neuer Nachweis aktueller DB-Zeilen."
+    },
+    {
+      "repository": "novalure-crm",
+      "path": "src/lib/knowledge-center/assistant-http.ts",
+      "line": 50,
+      "endLine": 75,
+      "sha256": "4b40d2cca87b8dd9da2f0019415acbb6900a9460ef3309da47d11e5a7ea53cd5",
+      "finding": "Erst echte JWT-Prüfung, dann native Principal-Authentifizierung und gespeicherte exakte Kanalbindung; kein Cookie-/Testheader-Fallback."
+    },
+    {
+      "repository": "evelyn",
+      "path": "api/index.ts",
+      "line": 197,
+      "endLine": 203,
+      "sha256": "bd3e94bcbcc7b4a5e2617546d3b4756ea94da856ad6b6f2a65a1d602edcbb77c",
+      "finding": "Bestehender CRM-Machine-Caller liegt ausschließlich im Production-Runtime-Zweig."
+    },
+    {
+      "repository": "evelyn",
+      "path": "api/index.ts",
+      "line": 270,
+      "endLine": 283,
+      "sha256": "bd3e94bcbcc7b4a5e2617546d3b4756ea94da856ad6b6f2a65a1d602edcbb77c",
+      "finding": "Vorhandene Route /api/internal/crm-machine-proof wählt Task-Read oder vollständigen Task-Proof; kein Knowledge-Forwardingmodus."
+    },
+    {
+      "repository": "evelyn",
+      "path": "src/production/crm-machine-client.ts",
+      "line": 4,
+      "endLine": 7,
+      "sha256": "405ba1798e6c340b5ebc48e72460d25fba5da117c32c43083bbe375a88fe382d",
+      "finding": "Audience, CRM-Production-Endpoint /api/crm/contract/v1 und interner Canary-Workspace sind Konstanten; kein konfigurierbarer CRM-QA-BaseURL."
+    },
+    {
+      "repository": "evelyn",
+      "path": "src/production/crm-machine-client.ts",
+      "line": 89,
+      "endLine": 90,
+      "sha256": "405ba1798e6c340b5ebc48e72460d25fba5da117c32c43083bbe375a88fe382d",
+      "finding": "Echte getVercelOidcToken-Nutzung unterstützt Audience/JTI/skipCache; eine sichere QA-Anbindung müsste diese reale Workloadfähigkeit in einem neuen begrenzten Pfad verwenden."
+    }
+  ],
+  "actualPreviewMetadata": {
+    "crm": {
+      "target": "preview",
+      "origin": "https://novalure-ecubacjpp-novalure.vercel.app",
+      "deploymentId": "dpl_EvsZ3pzu4CqbJ8YfkwGi6UU6LKyZ",
+      "sourceSha": "53441fc69b2e85c6a5fce25d1fc963934265c094",
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+    },
+    "evelyn": {
+      "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+      "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "oidcEnabled": true,
+      "readyPreviewsObserved": 3,
+      "observedAtUtc": "2026-10-20T06:46:25.248531+00:00"
+    },
+    "limit": "Vorhandene READY-Previews und aktiviertes OIDC sind belegte Infrastruktur; kein ausgestellter/erfolgreich verifizierter Machine-Token und kein vorhandener QA-Knowledge-Caller sind dadurch bewiesen."
+  },
+  "nativeBindingEvidenceLimit": "Ein zusätzlicher direkter READ ONLY-Zugriffsversuch auf die exakte QA-Datenbank wurde vor Tabellenabfragen mit ECONNREFUSED beendet. Keine Behauptung über Vorhandensein/Fehlen aktueller Principal-/Bot-Bindingzeilen aus diesem Versuch. Selbst vollständige native Bindungen könnten den harten Runtime-/Identitätskonflikt nicht beheben.",
+  "notSubstitutableEvidence": "Normale MFA-Benutzerabfragen über den gemeinsamen Webchat-/Voice-Core und fail-closed Machine-Ablehnungen bleiben eigene Nachweise; sie ersetzen den verlangten positiven verifizierten Machine-/Native-Bindungsnachweis nicht.",
+  "minimalNextDecision": {
+    "type": "Begrenzte Scope-Erweiterung für die noch offene QA-Abnahme; keine Produktionsfreigabe",
+    "requiresExplicitException": "Ausnahme von CRM-only-Scope und bisheriger Vorgabe, das Evelyn-Repository nicht zu ändern.",
+    "proposal": "Separates strikt auf das exakte CRM-Preview und isolierte QA-Ziele begrenztes QA-Vertrauensprofil im CRM plus ausschließlich lesender, auf denselben HTTPS-Hostname und die festen Knowledge-Webchat-/Voice-Pfade gepinnter Caller in genau einem bestehenden Evelyn-Preview. Echte Vercel-signierte Nonprod-Workloadidentität mit eigener eng gepinnter Audience/Subject/Umgebung; anschließend passende native QA-Principal-/same-tenant Bot-/getrennte Kanalbindungen über die Control Plane provisionieren und positiv/negativ gehostet prüfen.",
+    "constraints": [
+      "Bestehender Production-Verifier unverändert; keine gelockerten OIDC-Checks oder beliebigen Subjects/Audiences.",
+      "Kein Production-Call, kein Production-target-QA-Deploy, kein VERCEL_ENV-Spoof, keine produktive Bindung oder Jobaktivierung.",
+      "Kein Tokenexport, keine Testheader-Autorisierungsumgehung und kein beliebiger URL-Proxy. Geschützter Preview-Zugang bleibt separat zu prüfen.",
+      "Keine neue allgemeine Evelyn-Orchestrierung, Telefonie/Vapi-Aktivierung, kostenpflichtige Integration oder neuer Providervertrag.",
+      "Erst Entscheidung nach Abschluss aller übrigen bereits autorisierten Tests; bis dahin diesen positiven Machine-Gate nicht als PASS oder geschlossen ausweisen."
+    ]
+  },
+  "safety": {
+    "repositoryEdits": 0,
+    "productionCalls": 0,
+    "providerMutations": 0,
+    "bindingMutations": 0,
+    "tokensMinted": 0,
+    "secretsEmitted": false,
+    "nativeBusinessRowsRead": false
+  }
+}

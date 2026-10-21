@@ -1,0 +1,84 @@
+{
+  "format": "package4-r2-continuation-safe-summary-v1",
+  "status": "FAIL",
+  "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+  "originalContinuationResultSha256": "347f2c212bdd46cce47b8dc6ff59dbdc055d2b1a5c2c13643d7058735e110d3f",
+  "scope": "Same existing R2 branches; no new branches, task commits or source writes",
+  "preflight": {
+    "status": "PASS",
+    "checkedAt": "2026-10-20T08:49:23.058Z",
+    "sourceCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+    "workingCombinedSha256": "74c8eea535435d1333aa173470b6977d408d4affbc7d63a34c91aca651acf4d1",
+    "restoredCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+    "catalogCategories": 20,
+    "dataTables": 167,
+    "rows": 793,
+    "ledgerRows": 60,
+    "versionBindingsSha256": "803ef82d65203e12bb7b839ceee1e6c88e91feb5b9f57c88a8c8acb6a53f51de",
+    "targetObjects": 0,
+    "archivesVerified": 17
+  },
+  "partialFilesVerifiedBeforeFailure": 7,
+  "verifiedBytesBeforeFailure": 10489446,
+  "failure": {
+    "code": "ERR_ASSERTION",
+    "message": "PRIVATE_OPERATION_FAILED",
+    "messageSha256": "fbe74481ba2a4cc98a5ec5827d736708227e4b791740614d4677f37cefccd6b6"
+  },
+  "failedPhase": "COPY_17_PRIVATE_FILES_ONCE",
+  "authenticatedRestoredApplicationExecuted": false,
+  "finalSourceComparisonCompleted": false,
+  "endpointCleanup": {
+    "status": "PASS",
+    "checkedAt": "2026-10-20T08:50:24.917Z",
+    "allThreeDisabledAndIdle": true,
+    "problems": [],
+    "endpoints": [
+      {
+        "id": "ep-crimson-forest-ba4kk6sb",
+        "branchId": "br-sweet-surf-ba6iahut",
+        "disabled": true,
+        "state": "idle"
+      },
+      {
+        "id": "ep-lively-dawn-ba2sskxd",
+        "branchId": "br-nameless-sun-bazc0qdt",
+        "disabled": true,
+        "state": "idle"
+      },
+      {
+        "id": "ep-purple-truth-baye3wwh",
+        "branchId": "br-little-lake-bagp4n0i",
+        "disabled": true,
+        "state": "idle"
+      }
+    ],
+    "sourceAvailabilityRequiresSeparateRootAction": true
+  },
+  "poolCleanup": [
+    {
+      "index": 0,
+      "status": "fulfilled"
+    },
+    {
+      "index": 1,
+      "status": "fulfilled"
+    },
+    {
+      "index": 2,
+      "status": "fulfilled"
+    },
+    {
+      "index": 3,
+      "status": "fulfilled"
+    },
+    {
+      "index": 4,
+      "status": "fulfilled"
+    }
+  ],
+  "elapsedMs": 445876,
+  "completedAt": "2026-10-20T08:50:24.917Z"
+}

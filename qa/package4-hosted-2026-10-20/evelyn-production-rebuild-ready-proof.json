@@ -1,0 +1,90 @@
+{
+  "format": "package4-evelyn-production-rebuild-ready-proof-v1",
+  "observedAtUtc": "2026-10-20T10:48:48.585Z",
+  "status": "READY_METADATA_PASS",
+  "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "newDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+  "newHostname": "evelyn-n9z0kksgj-novalure.vercel.app",
+  "sourceCommit": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+  "checks": {
+    "exactIdentity": true,
+    "ready": true,
+    "productionTarget": true,
+    "sourceExact": true,
+    "sourceMarker": true,
+    "freshDeployment": true,
+    "node24": true,
+    "exactSelectedKeyMap": true,
+    "soleReplacementDefault": true,
+    "environmentMetadataUnchanged": true,
+    "exactHistoricalStableBaseline": true,
+    "latestDeploymentWindowExact": true,
+    "allOtherProjectStableMetadataUnchanged": true,
+    "oldProductionTargetRetained": true,
+    "canonicalAliasOld": true,
+    "cronDefinitionsExact": true,
+    "cronOldAssociationUnchanged": true,
+    "cronEnableStateUnchanged": true
+  },
+  "storedBuild": {
+    "status": "PROVIDER_DENIED",
+    "httpStatus": 400,
+    "responseBytes": 97,
+    "buildFieldPresent": false,
+    "systemCredentialFieldPresent": false,
+    "replacementCredentialEquality": null,
+    "oldCredentialEquality": null,
+    "safeProviderErrorCode": "bad_request",
+    "rawEnvResponsePersisted": false,
+    "credentialValueOrDigestEmitted": false,
+    "runtimeByteIdentityProven": false,
+    "sourceEvidence": "Installed CLI64.7 pullEnvRecords(deploymentId,vercel-cli:pull), deployment pull consumes .buildEnv."
+  },
+  "metadataDelta": {
+    "onlyTopLevelLatestDeploymentsWindowChanged": true,
+    "windowBeforeIds": [
+      "dpl_F3bZR4RK1fWQr76rg3sQfrVcW5uH",
+      "dpl_5eSSDS4syDSPoYYYqV7yJHdSgmx5"
+    ],
+    "windowAfterIds": [
+      "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+      "dpl_F3bZR4RK1fWQr76rg3sQfrVcW5uH"
+    ],
+    "removedOnlyOldestPriorWindowEntry": "dpl_5eSSDS4syDSPoYYYqV7yJHdSgmx5",
+    "priorNewestEntryByteMetadataUnchanged": true,
+    "exactStableHashAfterValidatedWindowReconciliation": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+    "expectedStableHash": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be"
+  },
+  "environmentMetadataCount": 37,
+  "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+  "projectNodeVersion": "24.x",
+  "deploymentNodeVersion": "24.x",
+  "readyState": "READY",
+  "canonicalAliasDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+  "activeProductionTargetId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+  "crons": {
+    "deploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "disabledAt": null,
+    "enabledAt": 1791298548000,
+    "updatedAt": 1792401354740,
+    "definitions": [
+      {
+        "path": "/api/internal/reviewer/scan",
+        "schedule": "*/5 * * * *",
+        "host": "evelyn-22di2vnz6-novalure.vercel.app"
+      },
+      {
+        "path": "/api/internal/teams/a1-outbox/cron",
+        "schedule": "*/5 * * * *",
+        "host": "evelyn-22di2vnz6-novalure.vercel.app"
+      }
+    ]
+  },
+  "providerMutations": 0,
+  "applicationHttpRequests": 0,
+  "promotions": 0,
+  "revocations": 0,
+  "credentialsEmitted": false,
+  "scope": "Fresh remote Production source-build READY and exact native metadata; staged canonical alias and existing scheduler association still old. Stored build field, if available, is not runtime-byte attestation."
+}

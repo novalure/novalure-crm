@@ -1,0 +1,211 @@
+{
+  "schema": "package4-machine-qa-local-source-tests-v1",
+  "generatedAtUtc": "2026-10-20T07:24:45.137736+00:00",
+  "worktree": "/workspace/package4-machine-auth-worktree",
+  "branch": "codex/evelyn-crm-package4-machine-auth-qa-20261020",
+  "baseRevision": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+  "commitRevision": "c99ff86c666fd530544bdb39b703d4034cf3b6f6",
+  "status": "LOCAL_PASS_REVIEW_PASS_COMMITTED",
+  "files": [
+    {
+      "path": "config/vercel-environment-manifest.json",
+      "sha256": "e02a60ff39a5afb417c2b6b9fe50a048b4bb49ae19ca2b4e99ea00c60ddac11f",
+      "bytes": 7909
+    },
+    {
+      "path": "package.json",
+      "sha256": "ffe14f94deafda51a69118e70000f86ea66de2762029c1597f1d209287a92106",
+      "bytes": 12280
+    },
+    {
+      "path": "src/lib/auth/session.ts",
+      "sha256": "af40e1e8c3f3f8136fdbc5f244fc40bb792c0d631e993ece0016ae78951827dd",
+      "bytes": 30345
+    },
+    {
+      "path": "src/lib/knowledge-center/assistant-http.ts",
+      "sha256": "232485177bd094283da1ec16e459c28fd3425dbd8237568232120d45a2cc0048",
+      "bytes": 7100
+    },
+    {
+      "path": "docs/knowledge-machine-qa-profile.md",
+      "sha256": "b08ce48bde01fe63c8faca9dc610d015373274436eb3ec749104a5b6a24f961f",
+      "bytes": 4001
+    },
+    {
+      "path": "scripts/knowledge-machine-qa-auth-tests.ts",
+      "sha256": "b1e6278c04c234e03d5088de2540c2a42a602927da5cc96138eb308d899a045f",
+      "bytes": 7695
+    },
+    {
+      "path": "scripts/lib/package4-machine-qa-native.mjs",
+      "sha256": "25bc94447be9458e6230f80345991378887b0cc0912a392e32439282b30b6b17",
+      "bytes": 27568
+    },
+    {
+      "path": "scripts/package4-machine-qa-native-tests.ts",
+      "sha256": "236887f43e8e6da527224e0de802e073447d41a2678d821562f1527a0d15116d",
+      "bytes": 27507
+    },
+    {
+      "path": "src/lib/knowledge-center/qa-machine-auth.ts",
+      "sha256": "98c076805a89c7b692c41ce84a2fedfbe2f03bae0bfc73276e2cfd206a65d4e5",
+      "bytes": 6368
+    }
+  ],
+  "protectedSource": {
+    "productionVerifier": {
+      "path": "src/lib/crm-machine-auth.ts",
+      "sha256": "aa2cda131a4e384bbc20e50ddabc1ea553870c611c0ca06764eeca90181fc8f9",
+      "unchangedFromBase": true
+    },
+    "canonicalMigrationsUnchangedFromBase": true,
+    "package4MigrationHashes": [
+      {
+        "path": "migrations/091_production_runtime_forced_rls_cutover.sql",
+        "sha256": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155"
+      },
+      {
+        "path": "migrations/092_crm_production_machine_identity.sql",
+        "sha256": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104"
+      },
+      {
+        "path": "migrations/093_crm_machine_internal_context.sql",
+        "sha256": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a"
+      },
+      {
+        "path": "migrations/094_website_sales_ingestion.sql",
+        "sha256": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac"
+      },
+      {
+        "path": "migrations/095_form_tenant_isolation.sql",
+        "sha256": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219"
+      },
+      {
+        "path": "migrations/096_public_integration_gateway.sql",
+        "sha256": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000"
+      },
+      {
+        "path": "migrations/100_studio_enquiry_production.sql",
+        "sha256": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778"
+      },
+      {
+        "path": "migrations/101_knowledge_center.sql",
+        "sha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e"
+      },
+      {
+        "path": "migrations/102_knowledge_document_processing.sql",
+        "sha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd"
+      },
+      {
+        "path": "migrations/103_knowledge_assistant_service.sql",
+        "sha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98"
+      },
+      {
+        "path": "migrations/104_knowledge_publication_workflow.sql",
+        "sha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610"
+      },
+      {
+        "path": "migrations/105_knowledge_website_monitoring.sql",
+        "sha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30"
+      },
+      {
+        "path": "migrations/106_crm_operational_readers.sql",
+        "sha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "check": "TypeScript",
+      "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false --pretty false",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "check": "Targeted ESLint",
+      "command": "node node_modules/eslint/bin/eslint.js scripts/package4-machine-qa-native-tests.ts scripts/lib/package4-machine-qa-native.mjs src/lib/knowledge-center/qa-machine-auth.ts src/lib/knowledge-center/assistant-http.ts src/lib/auth/session.ts scripts/knowledge-machine-qa-auth-tests.ts",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "check": "Patch whitespace",
+      "command": "git diff --check",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "check": "Production verifier and canonical SQL untouched",
+      "command": "git diff --exit-code -- src/lib/crm-machine-auth.ts migrations",
+      "status": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "priorRuntimeEvidenceReused": [
+    {
+      "suite": "Production Machine + QA guards",
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "suite": "Knowledge Service/Gateway + QA guards",
+      "passed": 25,
+      "failed": 0
+    },
+    {
+      "suite": "QA guards + manifest classification",
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "suite": "Real disposable PostgreSQL QA native authentication + existing HTTP handler",
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "executedBy": "/root/preview_inventory/production_store_metadata",
+      "rawLogPath": null,
+      "signatureVerification": "Injected local verifier; not genuine hosted OIDC",
+      "command": "node --conditions=react-server --import tsx --test scripts/package4-machine-qa-native-tests.ts",
+      "exitCode": 0,
+      "durationMs": 3952.58358,
+      "completedAtUtcInterval": [
+        "2026-10-20T07:18:53.507Z",
+        "2026-10-20T07:19:41Z"
+      ],
+      "toolEvidence": {
+        "sessionId": 54787,
+        "completionChunk": "eee59c"
+      }
+    }
+  ],
+  "finalChangesSinceRuntimeTests": "Only TypeScript fixture annotations: explicit pg PoolClient and NODE_ENV production in the injected local test environment. No runtime or SQL changes.",
+  "reviews": {
+    "security": {
+      "reviewer": "/root/masterplan_context",
+      "status": "PASS_SOURCE_REVIEW",
+      "openFindings": 0,
+      "reviewedHelperSha256": "25bc94447be9458e6230f80345991378887b0cc0912a392e32439282b30b6b17",
+      "reviewedNativeTestSha256": "236887f43e8e6da527224e0de802e073447d41a2678d821562f1527a0d15116d",
+      "reviewedVerifierSha256": "98c076805a89c7b692c41ce84a2fedfbe2f03bae0bfc73276e2cfd206a65d4e5",
+      "reviewedHandlerSha256": "232485177bd094283da1ec16e459c28fd3425dbd8237568232120d45a2cc0048",
+      "testsRepeatedByReviewer": false
+    },
+    "recovery": {
+      "reviewer": "/root/migration_acceptance",
+      "status": "PASS_COVERAGE_ONLY",
+      "helperSha256": "25bc94447be9458e6230f80345991378887b0cc0912a392e32439282b30b6b17",
+      "finding": "Existing dynamic public-schema full recovery captures one new public reader, three public CHECK alternatives and native fixture rows; no recovery code change needed."
+    }
+  },
+  "remoteActionsInThisImplementation": {
+    "ddl": false,
+    "deploy": false,
+    "envMutation": false,
+    "tokenMint": false
+  },
+  "genuineHostedOidcPositive": "NOT_TESTED",
+  "productionOnlyAuthenticatorPositive": "NOT_TESTED; this distinct QA profile does not prove the existing Production-only contract.",
+  "credentialHandling": "No credential values used or emitted by this local implementation/test step.",
+  "completedAtUtc": "2026-10-20T07:26:51.707881+00:00",
+  "worktreeCleanAfterCommit": true
+}

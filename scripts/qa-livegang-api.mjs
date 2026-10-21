@@ -562,7 +562,14 @@ async function main() {
       method: "POST",
     },
   );
-  assert(!lostWithoutReason.response.ok, "lost stage without reason is rejected");
+  assert(
+    lostWithoutReason.response.status === 400 && lostWithoutReason.json?.code === "WRITE_REJECTED",
+    "lost stage without reason is rejected with HTTP 400 and WRITE_REJECTED",
+  );
+  const coreAfterRejectedLost = await getCore(admin, brokerWorkspace.id);
+  const dealAfterRejectedLost = (coreAfterRejectedLost.deals ?? []).find((item) => item.id === deal.id);
+  assert(dealAfterRejectedLost?.stage === secondStage, "rejected lost stage leaves the deal stage unchanged");
+  assert(dealAfterRejectedLost?.version === editedDeal.version, "rejected lost stage leaves the deal version unchanged");
 
   const lostWithReason = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
@@ -577,7 +584,19 @@ async function main() {
       method: "POST",
     },
   );
-  assert(lostWithReason.response.ok, "lost stage with structured reason succeeds");
+  const allowedLostErrorCodes = new Set([
+    "WRITE_REJECTED", "VERSION_CONFLICT", "VERSION_REQUIRED", "FORBIDDEN", "VALIDATION_ERROR",
+    "CONFLICT", "CRM_UNAVAILABLE", "CRM_NOT_ACCESSIBLE", "IDEMPOTENCY_CONFLICT", "IDEMPOTENCY_REQUIRED",
+    "SESSION_REVOKED", "UNAUTHENTICATED", "IDENTITY_MISMATCH", "INVALID_REQUEST", "INVALID_JSON",
+    "CANONICAL_OFFER_REQUIRED",
+  ]);
+  const lostErrorCode = allowedLostErrorCodes.has(lostWithReason.json?.code)
+    ? lostWithReason.json.code
+    : "UNRECOGNIZED";
+  assert(
+    lostWithReason.response.ok,
+    `lost stage with structured reason succeeds (HTTP ${lostWithReason.response.status}; code=${lostErrorCode})`,
+  );
   const lostDeal = lostWithReason.json?.deal;
   assert(lostDeal?.version > editedDeal.version, "lost stage advances the version");
 

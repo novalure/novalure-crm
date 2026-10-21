@@ -1,0 +1,508 @@
+.design-c .dc-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 304px;
+  gap: 24px;
+  align-items: start;
+}
+.design-c .dc-dashboard > .dc-stack,
+.design-c .dc-context {
+  align-content: start;
+}
+.design-c .dc-system-state {
+  display: grid;
+  grid-template-columns: 5px auto;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--dc-muted);
+  font-size: 11px;
+}
+.design-c .dc-system-state > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dc-accent);
+}
+.design-c .dc-system-state small {
+  grid-column: 2;
+  font-size: 9px;
+}
+.design-c .dc-intelligence {
+  --dc-focus: var(--dc-rail-indicator);
+  background: var(--dc-intelligence);
+  color: var(--dc-intelligence-text);
+  border: 1px solid var(--dc-intelligence-border);
+  border-radius: var(--dc-radius-lg);
+  padding: 27px 28px 21px;
+  position: relative;
+  overflow: hidden;
+}
+.design-c .dc-intelligence::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  width: 330px;
+  height: 330px;
+  border: 1px solid var(--dc-intelligence-ring);
+  box-shadow:
+    0 0 0 45px var(--dc-intelligence-ring-soft),
+    0 0 0 90px var(--dc-intelligence-ring-faint);
+  border-radius: 50%;
+  right: -200px;
+  top: -180px;
+}
+.design-c .dc-intelligence-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  position: relative;
+  z-index: 1;
+}
+.design-c .dc-orb {
+  display: grid;
+  place-items: center;
+  color: var(--dc-intelligence-orb);
+  width: 46px;
+  height: 46px;
+  background: var(--dc-intelligence-soft);
+  border: 1px solid var(--dc-intelligence-border);
+  border-radius: 50%;
+}
+.design-c .dc-intelligence-head > div {
+  display: flex;
+  flex-direction: column;
+}
+.design-c .dc-intelligence-head strong {
+  font-size: 17px;
+  font-weight: 550;
+}
+.design-c .dc-intelligence-head > div > span {
+  color: var(--dc-intelligence-muted);
+  font-size: 10px;
+}
+.design-c .dc-intelligence-head > .dc-badge {
+  margin-left: auto;
+}
+.design-c .dc-intelligence h2 {
+  font-size: clamp(24px, 2.2vw, 31px);
+  font-weight: 450;
+  letter-spacing: -0.9px;
+  line-height: 1.32;
+  margin: 25px 0 15px;
+}
+.design-c .dc-intelligence > p {
+  font-size: 12px;
+  color: var(--dc-intelligence-muted);
+  line-height: 1.8;
+  max-width: 580px;
+  margin-bottom: 22px;
+}
+.design-c .dc-intelligence > p strong {
+  color: var(--dc-intelligence-text);
+  font-weight: 500;
+}
+.design-c .dc-prompt-launch {
+  border: 1px solid var(--dc-prompt-border);
+  background: var(--dc-prompt-bg);
+  color: var(--dc-prompt-text);
+  padding: 10px 12px;
+  border-radius: var(--dc-radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+  width: 100%;
+  text-align: left;
+}
+.design-c .dc-prompt-launch > span {
+  color: var(--dc-prompt-placeholder);
+  font-size: 12px;
+}
+.design-c .dc-prompt-launch > svg:last-child {
+  margin-left: auto;
+  background: var(--dc-prompt-button);
+  color: var(--dc-prompt-button-text);
+  border-radius: 5px;
+  padding: 6px;
+  width: 30px;
+  height: 30px;
+}
+.design-c .dc-prompt-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 8px 0;
+}
+.design-c .dc-prompt-suggestions button {
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-intelligence-muted);
+  font-size: 10px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.design-c .dc-intelligence > small {
+  display: block;
+  font-size: 9px;
+  color: var(--dc-intelligence-muted);
+}
+.design-c .dc-department-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.design-c .dc-department-grid > button {
+  border: 1px solid var(--dc-line);
+  background: var(--dc-surface);
+  border-radius: var(--dc-radius);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  padding: 18px 14px;
+  gap: 11px;
+}
+.design-c .dc-department-grid > button:hover {
+  background: var(--dc-accent-soft);
+  border-color: var(--dc-accent);
+}
+.design-c .dc-icon-tile {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--dc-accent-soft);
+  color: var(--dc-accent-text);
+}
+.design-c .dc-department-grid strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+.design-c .dc-department-grid small {
+  font-size: 9px;
+  color: var(--dc-muted);
+}
+.design-c .dc-department-grid > button > svg {
+  color: var(--dc-muted);
+}
+.design-c .dc-future-note {
+  margin: 20px 0 0;
+  font-size: 10px;
+  color: var(--dc-muted);
+  padding-top: 16px;
+  border-top: 1px solid var(--dc-line);
+}
+.design-c .dc-revenue-chart {
+  margin: 0;
+}
+.design-c .dc-revenue-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.design-c .dc-chart-grid {
+  stroke: var(--dc-line);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+.design-c .dc-chart-area {
+  fill: var(--dc-accent-soft);
+}
+.design-c .dc-chart-line {
+  fill: none;
+  stroke: var(--dc-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.design-c .dc-revenue-chart text {
+  fill: var(--dc-muted);
+  font-size: 11px;
+}
+.design-c .dc-revenue-chart figcaption {
+  font-size: 10px;
+  color: var(--dc-muted);
+  margin-top: 12px;
+}
+.design-c .dc-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.design-c .dc-quick-actions .dc-button {
+  font-size: 11px;
+}
+.design-c .dc-context .dc-card {
+  padding: 21px;
+}
+.design-c .dc-context .dc-card h2 {
+  font-size: 16px;
+}
+.design-c .dc-decision {
+  padding: 17px;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--dc-accent-soft);
+  border: 1px solid var(--dc-info-border);
+  border-radius: var(--dc-radius);
+  color: var(--dc-text);
+}
+.design-c .dc-decision + .dc-decision {
+  margin-top: 14px;
+}
+.design-c .dc-decision > span {
+  color: var(--dc-accent-text);
+  font-size: 8px;
+  letter-spacing: 0.8px;
+  display: block;
+  margin-bottom: 9px;
+}
+.design-c .dc-decision > strong {
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.6;
+  display: block;
+}
+.design-c .dc-decision p {
+  font-size: 10px;
+  color: var(--dc-muted);
+  margin: 10px 0 13px;
+}
+.design-c .dc-decision b {
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--dc-accent-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.design-c .dc-decision-soft {
+  background: var(--dc-surface);
+  border-color: var(--dc-line);
+}
+.design-c .dc-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.design-c .dc-feed li {
+  display: flex;
+  align-items: start;
+  gap: 11px;
+  padding: 0 0 20px;
+}
+.design-c .dc-feed li:last-child {
+  padding-bottom: 0;
+}
+.design-c .dc-feed li > div {
+  min-width: 0;
+}
+.design-c .dc-feed-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+.design-c .dc-feed-warning {
+  background: var(--dc-warning-bg);
+  color: var(--dc-warning-text);
+}
+.design-c .dc-feed-info {
+  background: var(--dc-info-bg);
+  color: var(--dc-info-text);
+}
+.design-c .dc-feed-success {
+  background: var(--dc-success-bg);
+  color: var(--dc-success-text);
+}
+.design-c .dc-feed-violet {
+  background: var(--dc-violet-bg);
+  color: var(--dc-violet-text);
+}
+.design-c .dc-feed strong {
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 550;
+  display: block;
+}
+.design-c .dc-feed p {
+  font-size: 10px;
+  color: var(--dc-muted);
+  line-height: 1.6;
+  margin: 5px 0;
+}
+.design-c .dc-feed time {
+  font-size: 9px;
+  color: var(--dc-muted);
+}
+.design-c .dc-meeting {
+  background: var(--dc-accent-soft);
+  border: 1px solid var(--dc-line);
+  border-radius: var(--dc-radius);
+  padding: 18px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: var(--dc-accent-text);
+}
+.design-c .dc-meeting > div {
+  min-width: 0;
+}
+.design-c .dc-meeting span {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+}
+.design-c .dc-meeting strong {
+  display: block;
+  font-size: 11px;
+  color: var(--dc-text);
+  margin-top: 4px;
+}
+.design-c .dc-meeting p {
+  font-size: 10px;
+  color: var(--dc-muted);
+  margin: 4px 0 0;
+}
+.design-c .dc-meeting .dc-button {
+  margin-left: auto;
+  padding: 5px;
+}
+.design-c .dc-approval-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.design-c .dc-approval-row strong {
+  font-size: 12px;
+}
+.design-c .dc-approval-row p {
+  font-size: 11px;
+  color: var(--dc-muted);
+  margin-bottom: 0;
+}
+.design-c .dc-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+.design-c .dc-task-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--dc-line);
+  padding: 14px 0;
+  font-size: 12px;
+}
+.design-c .dc-chat-messages {
+  display: grid;
+  gap: 14px;
+  max-height: 300px;
+  overflow: auto;
+  margin-bottom: 20px;
+  padding: 4px;
+}
+.design-c .dc-chat-messages p {
+  padding: 14px;
+  border-radius: var(--dc-radius);
+  font-size: 12px;
+  margin: 0;
+}
+.design-c .dc-chat-messages strong {
+  display: block;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+.design-c .dc-chat-assistant {
+  background: var(--dc-accent-soft);
+}
+.design-c .dc-chat-user {
+  background: var(--dc-surface-soft);
+  margin-left: 30px !important;
+}
+.design-c .dc-chat-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+@media (min-width: 1450px) {
+  .design-c .dc-dashboard .dc-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1250px) {
+  .design-c .dc-dashboard {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 20px;
+  }
+  .design-c .dc-dashboard .dc-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .design-c .dc-department-grid {
+    gap: 8px;
+  }
+  .design-c .dc-department-grid > button {
+    padding: 14px 10px;
+  }
+}
+@media (max-width: 1000px) {
+  .design-c .dc-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .design-c .dc-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .design-c .dc-system-state {
+    display: none;
+  }
+  .design-c .dc-context {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .design-c .dc-intelligence {
+    padding: 22px 20px;
+  }
+  .design-c .dc-intelligence-head > .dc-badge {
+    display: none;
+  }
+  .design-c .dc-intelligence h2 {
+    font-size: 25px;
+  }
+  .design-c .dc-prompt-launch > span {
+    font-size: 11px;
+  }
+  .design-c .dc-department-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .design-c .dc-department-grid > button {
+    display: grid;
+    grid-template-columns: 38px 1fr 16px;
+    gap: 5px 12px;
+    align-items: center;
+  }
+  .design-c .dc-icon-tile {
+    grid-row: span 2;
+  }
+  .design-c .dc-department-grid strong {
+    grid-column: 2;
+  }
+  .design-c .dc-department-grid small {
+    grid-row: 2;
+    grid-column: 2;
+  }
+  .design-c .dc-department-grid > button > svg {
+    grid-row: 1/3;
+    grid-column: 3;
+  }
+}

@@ -1,0 +1,296 @@
+{
+  "format": "package4-current-production-plan-v2",
+  "status": "DRAFT_AUTHORIZED_TECHNICAL_GATES_OPEN",
+  "preparedAtUtc": "2026-10-20T11:00:05.818343+00:00",
+  "overallStatus": "BLOCKIERT",
+  "authority": {
+    "sourceInstructionSha256": "c6402bd098a245580b7b106781fa1d5096a8bbad9d7e8f558a50989054b62054",
+    "scope": "Explicit user full Production closure authorization sections1\u201314; prior KEEPOLD/noProduction instructions superseded for this exact task",
+    "furtherBlanketApprovalRequired": false,
+    "platformPermissionsAndActualGatePassStillRequired": true,
+    "rootOwnsAllProviderDatabaseMergeDeployMutations": true
+  },
+  "sourceBinding": {
+    "repository": "novalure/novalure-crm",
+    "pullRequest": 92,
+    "branch": "codex/evelyn-crm-package4-integration",
+    "observedHead": "6774478b29ab9e5f813618b6483b9a0ea190a78f",
+    "deployedQaApplication": "c291e21288903e2807b108bba852a597f77b777a",
+    "recoveryTooling": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+    "finalCandidateSha": null,
+    "mergeSha": null,
+    "uncommittedDelta": "This candidate source commit adds only the integration-branch Git deployment flag and current release evidence/report updates; application and original migration bytes remain unchanged.",
+    "mainObserved": "5741a591f186e766750ecb8977972ec9b37e133a",
+    "mainAutomaticGitDeployMustRemainDisabled": true,
+    "reportCommitsAreNotNewAppDeployments": true,
+    "selfReferenceRule": "Resolve this plan through its enclosing Git commit; no invented future SHA and no self-referential reporting commit loop.",
+    "observedHeadAutomaticCi": {
+      "status": "PASS",
+      "revision": "6774478b29ab9e5f813618b6483b9a0ea190a78f",
+      "manualRequiredQa": "SKIPPED",
+      "nativeRequiredVercel": "MISSING",
+      "currentOneLineVercelFlagStillUncommitted": false,
+      "newCandidateCiNotRun": true,
+      "automaticRequiredJobs": 3
+    }
+  },
+  "gates": {
+    "A": "PASS",
+    "B": "BLOCKED",
+    "C": "BLOCKED",
+    "D": "BLOCKED",
+    "E": "PASS",
+    "F": "PASS",
+    "G": "BLOCKED"
+  },
+  "gateScopes": {
+    "A": "Existing integration/source and original SQL retained; final candidate/merge binding pending",
+    "B": "Automatic required checks at baseline6774478 passed. This candidate source commit enables the native Vercel trigger only for the integration branch; its actual provider/automatic results must be read from PR92 Checks. Manual trusted QA remains SKIPPED pending real GitHub secrets/administration access (HTTP403); no check bypass or spoofed status.",
+    "C": "QA full DB/private-file recovery and actual PG17.11/vector0.8.0 compatibility PASS; fresh Production recoverypoint and101\u2013106 apply NOT TESTED",
+    "D": "Exposed Evelynkey remediation COMPLETE. Production sensitive DATABASE_URL/privateBlobtoken exist; exportedblank meansredacted, notmissing orownerfallback. Actual consumed artifactruntime/DBrole/store bindings UNKNOWN untilobserved. Originaladditional5tableheuristicFAIL kept separate fromleastPrivilegePASS andlegacyAPIclassification; not a new exploitfinding.",
+    "E": "Unchanged-component Hosted18 reuse +actualCompat5+Machine40/5 retain scopedPASS; Production functional acceptance NOT TESTED",
+    "F": "Protected QA source evidence retained and fresh4SELECT preflightPASS; no claim that pending native/manual candidate checks passed",
+    "G": "User authorized release; CRM merge/migrations/own Production artifact/promotion/smoke/0-5-15-30 observation not executed"
+  },
+  "credentialIncident": {
+    "status": "COMPLETE",
+    "completedAtUtc": "2026-10-20T10:55:44.470Z",
+    "oldCredentialRevoked": true,
+    "nativeOldAbsentAndOldHostingDenied": true,
+    "replacementPositivePkce200": true,
+    "evelynCurrentDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+    "evelynSource": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "originalTwoCronSchedulesPreservedSingleNewAssociation": true,
+    "historicalKeepOldDecision": "Preserved only as superseded history, not current instruction or blocker",
+    "limits": "Bounded known-consumer cutover. Inaccessible GitHub secret metadata/external consumers UNKNOWN; no consumer-absence/no-misuse claim. Stored env400 and runtime credential-byte equality UNKNOWN; PKCE200 is not authenticated health/provider business proof."
+  },
+  "productionTarget": {
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "crmProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "crmDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "crmSource": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "domains": [
+      "www.novalure-crm.app",
+      "novalure-crm.vercel.app"
+    ],
+    "apexRedirect": {
+      "from": "novalure-crm.app",
+      "to": "www.novalure-crm.app"
+    },
+    "domainFreshness": "Historical native association; Root must freshly rebind before stage/promote",
+    "neonProjectId": "misty-cloud-70835427",
+    "neonBranchId": "br-snowy-fog-aldx77v8",
+    "endpointPrefix": "ep-wandering-union",
+    "database": "neondb",
+    "postgres": "17.11",
+    "vector": "0.8.0",
+    "ledgerRows": 54,
+    "onlyMissingOriginalVersions": [
+      101,
+      102,
+      103,
+      104,
+      105,
+      106
+    ],
+    "freshIdentityAndLedgerRequiredBeforeWrites": true
+  },
+  "runtimeAndStorage": {
+    "ownerRole": "neondb_owner; existing elevated native owner flags recorded, never use as application runtime",
+    "intendedRuntimeRole": "novalure_app",
+    "actualRuntimeCatalogLeastPrivilege": true,
+    "productionRuntimeInherit": false,
+    "tenantGroupUsage": true,
+    "roleOrGrantChangesPerformed": false,
+    "currentCrmEnvFinding": "DATABASE_URL IS PRESENT as sensitive nativeProduction metadata; projectEnv export blank is redaction, notunset. Readableownerfallback URLs do NOT prove the running app uses them. No config was changed. Actual artifact-consumed DBrole/URI remains UNKNOWN; separate explicit novalure_app URI preflightPASS.",
+    "privateTableMetadataTest": "Originaladditional5-tableheuristic FAIL preserved:4expectedprivate tables denied; legacy provider_connections is runtimeSELECT/mutation-readable withoutRLS. Existing contract/API-boundary classification is separate; no new grant/no all5deniedPASS/no demonstrated exploit claim.",
+    "privateStoreMetadataId": "store_vCn7LiyRocYNC8pM",
+    "privateStoreBinding": "NativeProduction metadata confirms privateStoreID store_vCn7LiyRocYNC8pM and sensitive privateBlobtoken PRESENT. Sensitive exportblank is notmissing-config proof. Actual artifact-consumed privateStore/token binding still UNKNOWN; no value in plan."
+  },
+  "alreadyExecutedVsPending": {
+    "evelynCredentialSameSourceRebuildPromotionRevocation": "COMPLETE",
+    "productionOwnerRuntimeCatalogAnd54ChecksumParity": "READONLY completed; original runtime5table FAIL preserved",
+    "qaNativeFourCatalogSelects": "PASS; no grants/DBwrites/GitHub writes/dispatch",
+    "pg17SyntheticCompatibility": "PASS15;17.11/vector0.8.0/pgcrypto1.3;201existingSQLdefs/owners/ACLs preserved",
+    "productionBackup": "NOT TESTED",
+    "crmMerge": "NOT TESTED",
+    "production101to106Apply": "NOT TESTED",
+    "newCrmProductionBuildPromote": "NOT TESTED",
+    "productionSmokeAndObservation": "NOT TESTED"
+  },
+  "evidence": {
+    "credentialCompletion": {
+      "file": "package4-evelyn-credential-remediation-completion.json",
+      "sha256": "cc9d830f98e6d9efe4ea55b70f3eebc1d70afed6099f2249d6080aea91411287",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "credentialSummary": {
+      "file": "package4-evelyn-credential-remediation-summary.json",
+      "sha256": "761e3bfff1c5b8b631591e219cba2245188b48513ed6cb4368057b4dc614c5e4",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "ownerIdentityAndOriginal54Ledger": {
+      "file": "package4-production-release-private/root-owner-binding.private.json",
+      "sha256": "067f90c431d35422e6a7bd65a88ea36692e31699b92a2f26bfe2499e6b183cee",
+      "visibility": "PRIVATE_METADATA_ONLY_NOT_FOR_PUBLIC_COPY"
+    },
+    "runtimeCatalogOriginalFail": {
+      "file": "package4-production-release-private/runtime-native-catalog.private.json",
+      "sha256": "e10f1db2e09897f7911c73ea8899fa5068a967441e19962c33bddf138540dc15",
+      "visibility": "PRIVATE_METADATA_ONLY_NOT_FOR_PUBLIC_COPY"
+    },
+    "original54SqlSourceParity": {
+      "file": "package4-production-release-private/ledger-original-source-parity.private.json",
+      "sha256": "a77a0571be144509d896dc7559a68af30fd858444819f2700bfc9d6670cd3fb4",
+      "visibility": "PRIVATE_METADATA_ONLY_NOT_FOR_PUBLIC_COPY"
+    },
+    "actualPg17Compatibility": {
+      "file": "package4-production-version-compatibility.json",
+      "sha256": "524fa5a473cd519edbb8ee3fd0214331bc6fb5dd84ef752e93d337f27dfab5eb",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "knowledgeAwareRollbackSource": {
+      "file": "package4-knowledge-aware-rollback-source-binding.json",
+      "sha256": "4e1df90816fe5321dd06ee92807e17a1f84df40e2da9a7866858158e4d482766",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "qaNativeFourSelectPreflight": {
+      "file": "package4-candidate-ci-native-preflight-proof.json",
+      "sha256": "fe750581762a12dc2019f74e02b594e6062f01f2a4764d0bdac66cc1cb551a3f",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "qaFullDbFilesRecovery": {
+      "file": "novalure-crm/qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+      "sha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "qaFinalSourceAvailability": {
+      "file": "novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+      "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "nativeSensitiveBindingPresence": {
+      "file": "package4-production-sensitive-binding-presence.json",
+      "sha256": "90a146532c1c218248c85bf107aee021ee9f1ca20a017211eb1d3ca4580884c8",
+      "visibility": "SANITIZED_EVIDENCE"
+    },
+    "oldEa668ExtendedSchemaLimits": {
+      "file": "package4-old-app-schema-compatibility.json",
+      "sha256": "ec92690942d39d4697c88f01d1b9f22a0ecefc452197e3831b005a6b28a1450a",
+      "visibility": "SANITIZED_SYNTHETIC_REHEARSAL"
+    }
+  },
+  "containsCredentialValuesOrBusinessRows": false,
+  "historicalPlanVersions": "Retain previous published plans and FAIL receipts through Git history; this draft replaces contradictory active KEEPOLD/missing-authorization prose, not immutable evidence.",
+  "kind": "RELEASE_AND_OPERATIONS",
+  "orderedExecution": [
+    {
+      "step": 1,
+      "action": "Close actual GitHub permissions, protected-candidate/nativeVercel/manualQA/final automatic CI gates; bind exact finalsource. Keep main Git autodeploy disabled. No check removal, spoofed status or skipped-as-PASS."
+    },
+    {
+      "step": 2,
+      "action": "Fresh native CRM domain/project/currentdeployment/DB/ledger/auth/MFA/4cron baseline. Verify ACTUALLY CONSUMED artifactruntime novalure_app andprivateStore; sensitiveDATABASE_URL/blobtoken alreadyexist andblankexport isredaction, neveroverwritebecauseblank. Prepare actualKnowledge-aware196f rollbackartifact beforemigration."
+    },
+    {
+      "step": 3,
+      "action": "Root accepts reviewed concrete backup and migration pause mode. Announce only immediately before a real short pause; all actual pause/lock/ingress effects must intrinsically cease within15min, including crash. Do not start prepared helper with missing live ports."
+    },
+    {
+      "step": 4,
+      "action": "Create fresh consistent Production COW recoverypoint plus all private bytes/version bindings in designated protected recovery storage; independently verify native retainedpoint and exact catalog/DBmetadata/ledger/data/file hashes. No production data in QA/Git/public artifacts."
+    },
+    {
+      "step": 5,
+      "action": "After required reviews/checks and backup, remove Draft and merge under repository rules; order merge versus migration/build with pipeline so no domain/autodeploy occurs early. Bind merge/releaseSHA; if merge precedes backup, keep all Production deployment disabled until required prerequisites."
+    },
+    {
+      "step": 6,
+      "action": "Run exact current missing original101\u2192106 through preserved bound migration runner; each SQL+ledger transaction, verify results after each commit; no manual097\u2013099/replayed091\u2013096/100 or QA DDL/principals."
+    },
+    {
+      "step": 7,
+      "action": "Build own CRM Production artifact from approved merge/releaseSHA with actual runtime/private-store/auth bindings using verifiedCLI --prod --skip-domain. This already may affect4existing crons; diagnose exact artifact before domain switch, no QA-preview promotion."
+    },
+    {
+      "step": 8,
+      "action": "Native verified same4cron paths/schedules/single expectedassociation; then promote exact diagnosed artifact to existingdomains. Restore ordinary writes only through reviewed release control; no lingering pause."
+    },
+    {
+      "step": 9,
+      "action": "Actual normal login/existingMFA, own dashboard/CRM/Studio/property/Knowledge/contracts/privatefiles/calendar-readers and anonymous/foreign denials; only marked new internal synthetic release areas for necessary writes. No provider/mail/phone/payment/booking/cron calls."
+    },
+    {
+      "step": 10,
+      "action": "Observe actual0/5/15/30min; record errors/latency/auth/privatefiles/DB/publications/existingjob metadata. Keep audit; retire only exact temporary internal test sessions/grants by scoped cleanup. Final reports after actual outcomes, without new App-release loop."
+    }
+  ],
+  "backupAndPause": {
+    "status": "PREPARED_OPTIONS_ONLY_NOT_EXECUTED",
+    "protectedDirectory": "/workspace/.evelyn-production-release-20261020;0700dir/0600files;encrypted private archives and durable private key",
+    "preparedAdapter": {
+      "file": "/workspace/.evelyn-production-release-20261020/production-recovery-adapter.mjs",
+      "sha256": "1aeb10d85d7c57968110a2ac1a80e98e6950af7959786abb0773679f6af0546f",
+      "state": "SOURCE_REVIEWED_PREPARED_ONLY; real ingress/nativeAPI/DB/Blobports not supplied, localSQL/runtest not performed"
+    },
+    "fullIngressProfile": "Absolute trusted request-entry<=15min before ALLAPI/GETcron/mutatingmethods plus real request/signed-upload drain, SESSION_USER DBtriggerTTL covers normal definer calls; newtables protected inside same migrationTX. No such ingress deployed.",
+    "observedReadonlyBackupAlternative": "Only under Root separate operational acceptance: I0all-pages pathname/size/uploadedAt/etag inventory\u2192origin bytes archive\u2192I1equal\u2192exactLSN COW/fullDBequality\u2192I2equal+fullorigin reread/SHA\u2192I3equal+sourceDBunchanged. Any delete/overwrite/add/etag/size/SHA/FK/timeout drift FAIL; not yet implemented/executed and not a fullwritepause.",
+    "confirmedHazard": "DMLtrigger-only freeze without ingress can let legacy media DELETE remove Blob before its later DBDELETE is rejected. Do not start that partial freeze and call it safe. Vercel mitigate.actionDuration is clientduration, not intrinsic ruleexpiry.",
+    "retention": "Freshpoint only; actual approved capacity/retention/native disabledidle endpoint confirmation required. Do not renew oldbackupbranches; no native pg_dump/crossprojectDR claim.",
+    "rollbackArtifactCurrentStatus": "SOURCE_VALIDATED_ONLY:196f0da Knowledge-aware; actualProduction rollbackartifact NOT BUILT/TESTED"
+  },
+  "rollback": {
+    "A": "Only current uncommitted SQL+ledger transaction rollback; earlier commits retained and actual state reconstructed before any new action.",
+    "B": "Build anddiagnose Knowledge-aware196f0daa71e0d9b1eaeb51584388b27d7673dd3e or equivalent compatibleProductionartifact, preservingextendedschema/newdata; sourcebinding4e1df908\u2026 isPASS, actualbuild/env/store/smoke NOTTESTED. ea668 notunconditionalrollback afternewKCwrites: oldunscopedRAGgrant leak/media-delete limitation recorded in old-appcompatibility ec926\u2026; keep originalFAIL. Native domains/4cronassociation mustfollow actualrollback.",
+    "C": "Use fresh exact DB+privatefile recoverypoint only with proof no intervening legitimate businesswrites lost (effectivepause or verifiedlosslessreplay). Otherwise prepare non-destructive recovery and present concrete new data-loss decision; never reinstate old exposed credential."
+  },
+  "existingCrons": {
+    "count": 4,
+    "definitions": [
+      {
+        "path": "/api/cron/meeting-reminders",
+        "schedule": "2 * * * *"
+      },
+      {
+        "path": "/api/cron/teams-alerts",
+        "schedule": "4,19,34,49 * * * *"
+      },
+      {
+        "path": "/api/cron/google-alerts",
+        "schedule": "9,24,39,54 * * * *"
+      },
+      {
+        "path": "/api/cron/property-reservations",
+        "schedule": "7 * * * *"
+      }
+    ],
+    "beforeAfterStagePromoteRollback": "Fresh native enabled/paths/schedules/deployment/hosts; no duplicateactivation or manualinvocation. Stagingactivation timing undocumented; --skip-domain only avoids automatic domain alias."
+  },
+  "operations": {
+    "owner": "Novalure user is authorization owner; Root/Codex coordinates exact release operations",
+    "observationsMinutes": [
+      0,
+      5,
+      15,
+      30
+    ],
+    "stopFor": [
+      "tenant/project/privatefile exposure",
+      "wrong role/DB/store/commit/ledger/hash",
+      "unexpected5xx or substantial corefailure",
+      "ambiguous accepted mutation",
+      "missed pause deadline"
+    ],
+    "exclusions": [
+      "newKnowledgecron",
+      "Vapi/phone",
+      "externalStudiochatcutover",
+      "Stripe/subscriptions",
+      "UniversalBookingEngine",
+      "OCR",
+      "newbookingproviders",
+      "separateMFAfeaturepackage"
+    ]
+  },
+  "planSourceRevision": "SOURCE_COMMIT_OF_THIS_FILE"
+}

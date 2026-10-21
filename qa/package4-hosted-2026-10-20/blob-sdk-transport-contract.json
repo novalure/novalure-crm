@@ -1,0 +1,47 @@
+{
+  "format": "package4-blob-sdk-browser-transport-contract-v1",
+  "recordedAt": "2026-10-20T06:28:16.360Z",
+  "sdkVersion": "2.8.0",
+  "sourceHashes": {
+    "node_modules/@vercel/blob/package.json": "e404b75c795547cd9627164df418f578cb64b377230d8ff8dc3283b3b7de5e05",
+    "node_modules/@vercel/blob/dist/client.js": "e9f8a37edb6f4aee5950435f01f11d0602d47a6455bb552303d1815fced2f777",
+    "node_modules/@vercel/blob/dist/chunk-YYMLUMXS.js": "26f2117c463494a728fe664a071db6106cde4f85d5226dd33b215909cc838047"
+  },
+  "actualHostedChunk": {
+    "path": "/_next/static/immutable/chunks/0bbcsn314ra0a.js",
+    "httpStatus": 200,
+    "bytes": 119463,
+    "sha256": "b754854e00c093afb8f07214cb44e1a285421438614f6ba8bb8dd80c45ca7865",
+    "apiBasePresent": true
+  },
+  "defaultBrowserPut": {
+    "origin": "https://vercel.com",
+    "pathname": "/api/blob/",
+    "method": "PUT",
+    "queryKeys": [
+      "pathname"
+    ],
+    "credential": "server-generated 5-minute pathname/MIME/size-scoped client token; never project OIDC",
+    "source": "SDK createPutMethod -> requestApi(`/?${params.toString()}`) -> getApiUrl using default https://vercel.com/api/blob"
+  },
+  "networkBoundaryRequirement": {
+    "actualTraceRequiredBeforePolicyChange": true,
+    "neverGeneralVercelOriginAccess": true,
+    "narrowMethods": [
+      "OPTIONS",
+      "PUT"
+    ],
+    "exactApiPathOnly": true,
+    "oidcAndToolbarHeadersOnlyOnCrmOrigin": true,
+    "redirectToOtherOriginDenied": true
+  },
+  "actualHostedPutObserved": false,
+  "privateReadOnlyAudit": {
+    "checkedAt": "2026-10-20T06:26:52.856Z",
+    "uploadReservations": 1,
+    "mediaAssets": 0,
+    "activeRuntimeLocksObserved": 0
+  },
+  "mutationsPerformed": 0,
+  "secretValuesEmitted": false
+}

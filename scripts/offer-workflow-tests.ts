@@ -239,7 +239,10 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
 });
 
 test("print isolation: real browser document contains only the approved offer, never CRM or another customer", async () => {
-  const browser = await chromium.launch({ channel: process.env.CRM_QA_BROWSER_CHANNEL || "chrome", headless: true });
+  const browser = await chromium.launch({
+    ...(process.env.CRM_QA_CHROMIUM_PATH ? { executablePath: process.env.CRM_QA_CHROMIUM_PATH } : { channel: process.env.CRM_QA_BROWSER_CHANNEL || "chrome" }),
+    headless: true,
+  });
   try {
     const context = await browser.newContext();
     await context.route("**/*", route => route.abort());

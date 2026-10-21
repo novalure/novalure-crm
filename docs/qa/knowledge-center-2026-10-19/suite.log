@@ -1,0 +1,108 @@
+
+> novalure-crm@0.1.0 test:knowledge-center
+> node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts
+
+▶ Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft publication and private documents
+  ✔ no cookie, preview headers, duplicate cookies and missing CSRF cannot access handlers (43.783577ms)
+  ✔ contracts are disabled by default and runtime API cannot provision them (76.2444ms)
+  ✔ drafts are isolated from channel retrieval until current-version admin publication (443.893937ms)
+  ✔ streamed byte limits, malformed JSON and client-selected tenants fail without writes (141.343484ms)
+  ✔ workspace selection requires explicit membership and preserves the target role (38.128839ms)
+  ✔ documents use private upload and source authorization; generic media delivery denies (111.565682ms)
+  ✔ website URL comes from authorized source and unsafe hosts never become draft content (83.877805ms)
+  ✔ current role restricts publication and session revocation ends all knowledge access (48.049696ms)
+✔ Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft publication and private documents (9360.259873ms)
+▶ Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retained quotas and atomic audit
+  ✔ default commercial state is disabled and client role fields cannot enable it (40.549207ms)
+  ✔ staff draft foundation and inaccessible project/source/tenant denial (39.034974ms)
+  ✔ bot/channel grants are explicit and project grants remain required (66.47006ms)
+  ✔ chat history forces saved bot/project/channel scope for messages and tools (32.455877ms)
+  ✔ edits stay immutable drafts while previous approved content remains grounded (73.529092ms)
+  ✔ exact tenant quota includes hidden projects and permits only one concurrent last slot (156.41706ms)
+  ✔ unbound or public media is refused and reserved private documents stay tenant scoped (183.098919ms)
+  ✔ website scan quota reserves before network; module deactivation dominates contract (41.762555ms)
+  ✔ audit rejection rolls back source/version/usage; archive removes retrieval (83.542722ms)
+✔ Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retained quotas and atomic audit (5054.199468ms)
+✔ missing required fields produce version-bound review proposals; zero and false count as present (6.7637ms)
+✔ critical facts require administrator review even if a rule says general (9.978533ms)
+✔ missing verification metadata permits only an internal review marker, never public content (0.446976ms)
+✔ staleness and validity use the explicit clock and retain provenance basis (1.204516ms)
+✔ normalization ignores text presentation and equal decimal notation while retaining exact decimal differences (0.79826ms)
+✔ facts conflict only across explicitly visible sources for the same subject and project (0.546164ms)
+✔ cross-tenant, unconfirmed visibility, duplicate identity and mismatched versions fail closed (0.389991ms)
+✔ website proposals bind to the exact baseline version; unknown and critical changes require administrator review (1.183033ms)
+✔ unchanged website scans create no content proposal (0.35597ms)
+✔ analysis is deterministic, does not mutate its snapshot and omits raw values and personal details (0.615317ms)
+✔ archived and missing-version sources are explicitly skipped without invented version references (0.237634ms)
+✔ source data cannot grant permissions, invoke getters or configure review rules (0.337483ms)
+✔ generic lists and direct object lookup hide current and archived knowledge attachments (1981.940194ms)
+✔ generic publication, renewal and deletion cannot expose knowledge attachments (36.945298ms)
+✔ a stale public token cannot serve a marked knowledge attachment (43.704211ms)
+✔ only the authorized source path obtains an opaque private byte-read capability (27.068155ms)
+✔ generic uploads cannot forge a protected folder and Knowledge uploads bind the authenticated actor (5.141744ms)
+✔ Knowledge uploads support validated UTF-8 documents without broadening generic media uploads (25.690272ms)
+✔ the deletion protocol checks inaccessible historical Knowledge references before touching bytes (55.514661ms)
+✔ ordinary private media deletion remains usable with the additive Knowledge foreign key (25.23331ms)
+▶ unchanged 101 upgrades the actual 091–096 → standalone100 predecessor with rollback and media compatibility
+  ✔ actual identity guards and machine-chain verification passed without Preview097–099 (9.715968ms)
+  ✔ 101 DDL and checksum ledger roll back together on a failed transaction (47.754369ms)
+  ✔ 101 commits its exact normalized checksum while preserving both existing media contracts (7.569357ms)
+  ✔ real non-owner runtime cannot self-provision a contract (12.727801ms)
+  ✔ source binding and immutable private-media guards work after the real100 schema (37.00658ms)
+  ✔ ordinary private deletion still succeeds through actual100+101 definer counters (17.471341ms)
+  ✔ Studio-confirmed media retains its independent protection after101 (10.342136ms)
+✔ unchanged 101 upgrades the actual 091–096 → standalone100 predecessor with rollback and media compatibility (3799.262567ms)
+✔ runtime delegates to exact approved version and bot/channel assignment (2654.30859ms)
+✔ missing persisted bot, unknown channel and unauthenticated identity fail closed (18.337612ms)
+✔ legacy approved metadata never grants retrieval (31.5415ms)
+✔ disabled module and quota exhaustion yield no sources; security errors propagate (24.280453ms)
+✔ price and availability requests require current CRM truth across languages (0.890607ms)
+✔ current price requests hand off without model call even with strict knowledge disabled (78.026677ms)
+✔ disabled Knowledge module keeps an ordinary bot conversation in a safe handoff (47.226998ms)
+✔ saved conversation reuse rejects cross-bot, project, channel and forged project before runtime effects (42.955281ms)
+✔ conversation create and direct history read bind saved bot project instead of client project (38.30783ms)
+✔ revoked bot project grants deny history, listing and runtime before new messages (15.326643ms)
+✔ prior assistant knowledge is omitted from provider payload after assignment revoke or module disable (182.004755ms)
+✔ evaluation uses explicit webchat or saved active channel and persists its channel identity (261.440498ms)
+✔ real cookie bot handlers bind transactions and reauthorize selected workspace membership and role (943.490998ms)
+✔ public address policy rejects IPv4 and IPv6 private, mapped, transition and reserved forms (6.275564ms)
+✔ URL policy blocks schemes, credentials, alternate ports, local aliases and obfuscated loopback (1.366697ms)
+✔ mixed public/private DNS answers fail before any connection (0.776557ms)
+✔ request receives the validated address and never resolves the hostname a second time (1.508698ms)
+✔ redirects validate both URLs and fresh DNS on every hop (1.461017ms)
+✔ relative redirects are supported while redirect loops remain bounded (0.823007ms)
+✔ same-host DNS rebinding after a redirect is rejected before the second connection (0.506074ms)
+✔ DNS stalls and body stalls share a hard deadline and abort their port (20.35014ms)
+✔ content types, encodings, status, byte and text limits fail closed (1.948965ms)
+✔ HTML extraction is inert, excludes executable regions and handles malformed markup linearly (1.258776ms)
+✔ change detection yields approval proposals and never changes a published source (0.796097ms)
+✔ network failures expose only a safe error code (0.4229ms)
+✔ Stripe signature requires the raw bytes, valid HMAC and a bounded timestamp (1.065608ms)
+✔ verified billing adapter maps the tenant from stored customer identity and delegates atomic idempotency (1.627386ms)
+ℹ tests 74
+ℹ suites 0
+ℹ pass 74
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 28050.15056
+✔ Knowledge Center response names and publication references replace removed legacy chunk fields (0.768596ms)
+✔ a pending draft is labelled for review while the existing published source remains counted (0.181811ms)
+✔ empty, disabled and unavailable persisted knowledge snapshots remain empty (0.545333ms)
+✔ evaluation channel selection uses active saved channels and never invents an internal grant (0.447687ms)
+✔ workspace-scoped bot URLs carry the selected workspace for new knowledge, evaluation and history (0.146368ms)
+✔ changing selected workspace remounts the bot center with fresh local state (1.668907ms)
+✔ Knowledge Center initial rendering waits for authorized data and never shows legacy source fixtures (11.73495ms)
+✔ the loading view provides a named section, visible context labels and announced status in both supported CRM languages (2.567387ms)
+✔ knowledge copy has complete German, English and Spanish customer-facing states (0.284204ms)
+✔ blank industry templates preserve existing structured values, types and nested data across edits (7.328121ms)
+✔ structured edits require explicit removal and reject collisions with preserved values or unsafe keys (1.115182ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 261.902451

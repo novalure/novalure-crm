@@ -1,0 +1,44 @@
+{
+  "format": "package4-qa-usage-preflight-v1",
+  "status": "PASS",
+  "checkedAt": "2026-10-20T06:58:12.443Z",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "databaseName": "neondb"
+  },
+  "method": "one repeatable-read READ ONLY transaction plus bounded knowledge workspace advisory lock; aggregate counts only",
+  "sourceSha": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+  "deploymentId": "dpl_5mBs8F79zEijbAYbJxFEYowLW4ru",
+  "workspaceId": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+  "aggregate": {
+    "sources": 9,
+    "storageBytes": "20975800",
+    "queriesThisMonth": 18,
+    "areas": 5,
+    "websites": 1,
+    "scansThisMonth": 2,
+    "maxSources": 20,
+    "maxStorageBytes": "67108864",
+    "maxQueriesPerMonth": 200,
+    "limits": {
+      "maxAreas": 10,
+      "maxUsers": 10,
+      "maxWebsites": 5,
+      "maxAssistants": 5,
+      "maxScansPerMonth": 10
+    },
+    "enabled": true
+  },
+  "remaining": {
+    "sources": 11,
+    "storageBytes": 46133064,
+    "queries": 182,
+    "areas": 5,
+    "websites": 4,
+    "scans": 8
+  },
+  "sourceWrites": 0,
+  "businessContentRead": 0,
+  "limitsChanged": false
+}

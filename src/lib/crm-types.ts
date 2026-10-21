@@ -292,6 +292,7 @@ export type ContactTimelineItem = {
 };
 
 export type Lead = {
+  hasStudioEnquiry?: boolean;
   division?: CrmDivision;
   version?: number;
   syntheticTest?: boolean;
@@ -1272,6 +1273,7 @@ export type BotEvaluationCaseResult = {
 
 export type BotEvaluationRun = {
   id: ID;
+  evaluationChannel?: string;
   workspaceId: ID;
   projectId?: ID;
   botId?: ID;

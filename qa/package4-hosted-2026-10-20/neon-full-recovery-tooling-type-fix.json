@@ -1,0 +1,79 @@
+{
+  "schema": "package4-hosted-recovery-tenant-type-fix-v1",
+  "recordedAtUtc": "2026-10-20T08:05:08.782221+00:00",
+  "status": "LOCAL_PASS_REVIEW_PASS_COMMITTED",
+  "baseRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "worktree": "/workspace/package4-recovery-type-fix-worktree",
+  "files": [
+    {
+      "path": "scripts/package4-neon-hosted-recovery.mjs",
+      "sha256": "09296524b654b93204ac1483ab61263a1878f0ca0247ece5fe64144b4a219c8f"
+    },
+    {
+      "path": "scripts/package4-neon-hosted-recovery-tests.mjs",
+      "sha256": "ed20aa27b839f9f16bbd8fe8f048b416e19197c023a024e517df6d1b5bd7ed50"
+    }
+  ],
+  "change": "Only SQL semantic delta is casting knowledge_source_versions.workspace_id UUID to text for comparison with canonical media_assets.workspace_id text. The exact exported query is reused by the inventory.",
+  "checks": [
+    {
+      "command": "node --test scripts/package4-neon-hosted-recovery-tests.mjs",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 1104.770598,
+      "testScope": "Real disposable loopback PostgreSQL, minimal canonical003 TEXT/canonical101 UUID type fixture; matching tenant, cross-tenant same asset ID, legacy non-UUID text, public exclusion; exact production-used query."
+    },
+    {
+      "command": "node node_modules/eslint/bin/eslint.js scripts/package4-neon-hosted-recovery.mjs scripts/package4-neon-hosted-recovery-tests.mjs",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --exit-code -- migrations src config package.json",
+      "status": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "/root/masterplan_context",
+      "status": "PASS_SOURCE_REVIEW",
+      "openFindings": 0
+    },
+    {
+      "reviewer": "/root/migration_acceptance",
+      "status": "PASS_COVERAGE_AND_SQL_REVIEW",
+      "openFindings": 0
+    }
+  ],
+  "guardsUnchanged": [
+    "Exact provider identity",
+    "READ ONLY transaction",
+    "Private storage filter",
+    "Asset count bound100",
+    "Same media ID AND exact tenant comparison",
+    "All-private-assets ownership/archive coverage"
+  ],
+  "canonicalSqlUnchanged": true,
+  "appSourceUnchanged": true,
+  "dependencyManifestUnchanged": true,
+  "worktreeCleanAfterCommit": true,
+  "localPostgresStopped": true,
+  "remoteActions": {
+    "capture": 0,
+    "provider": 0,
+    "push": 0,
+    "deploy": 0
+  },
+  "priorFailedCapture": "R1 SQLSTATE42883 retained; this local proof is not a subsequent remote capture/recovery PASS."
+}

@@ -1,0 +1,71 @@
+
+> novalure-crm@0.1.0 test:knowledge-package3
+> node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-workflow-tests.ts scripts/knowledge-monitoring-tests.ts scripts/knowledge-package3-acceptance-tests.ts && node --import tsx --test scripts/knowledge-lifecycle-ui-tests.ts scripts/knowledge-design-c-integration-tests.ts
+
+✔ monitoring intervals fail closed without an explicit periodic entitlement (1.217822ms)
+▶ persisted website scan retries, stale leases, changes of authority and atomic events
+  ✔ one persisted retry budget reserves usage once and creates one final proposal (202.702499ms)
+  ✔ three failed attempts terminate a scheduled run without extra reservations (164.118068ms)
+  ✔ source revision changing during external fetch discards the response (100.494417ms)
+  ✔ module revocation during fetch blocks commit and leaves no proposal (74.218262ms)
+  ✔ a configuration changed during scheduled fetch invalidates its lease result (96.998364ms)
+  ✔ scheduler rejects substituted actor scope and performs no network request (44.775415ms)
+✔ persisted website scan retries, stale leases, changes of authority and atomic events (4351.910949ms)
+▶ Package 3 synthetic acceptance: one engine, approved publication, monitored proposals and immediate revocation
+  ✔ 01 new immutable knowledge version is a draft, absent from assistant retrieval (148.441001ms)
+  ✔ 02 employee and client-spoofed administrator approval are rejected server-side (228.129845ms)
+  ✔ 03 administrator review, approval and atomic publication select the exact version (355.318459ms)
+  ✔ 04 safe scanner detects a website change and persists a proposal without publishing (312.360892ms)
+  ✔ 05 unchanged website scan preserves content and creates no content proposal (330.580194ms)
+  ✔ 06 repeated identical website changes deduplicate the persisted proposal (82.324346ms)
+  ✔ 07 accepting a proposal creates a new draft while the old publication stays active (74.737205ms)
+  ✔ 08 publishing the accepted proposal exposes the new version to the real webchat adapter (159.269113ms)
+  ✔ 09 voice uses the same published version with independent channel permissions (63.032546ms)
+  ✔ 10 restoring historical content creates a new reviewed draft and retains full history (77.922403ms)
+  ✔ 11 rejecting a proposal records the decision without creating a draft or publication (334.09254ms)
+  ✔ 12 a proposal based on an older source revision cannot be accepted (294.743574ms)
+  ✔ 13 monitoring intervals and scoped due jobs use persisted tenant identity (439.664654ms)
+  ✔ 14 parallel scans acquire one lease and permit only one external request (238.916392ms)
+  ✔ 15 quota and disabled entitlements stop scanning before any network request (160.914886ms)
+  ✔ 16 foreign tenants, project scopes and direct SQL cannot forge proposals or approvals (55.862275ms)
+  ✔ 17 source revocation is immediately enforced by both provider-neutral adapters (90.924448ms)
+  ✔ 18 knowledge automation preserves authoritative live CRM inventory and project data (155.270801ms)
+✔ Package 3 synthetic acceptance: one engine, approved publication, monitored proposals and immediate revocation (6956.201242ms)
+▶ Knowledge workflow PostgreSQL: publication, restored drafts, revoked retrieval and persistent proposals
+  ✔ tenant, project and read-only actor boundaries apply to workflow access (63.875205ms)
+  ✔ review and approval are separate from publication; stale writes and empty reasons are rejected (170.975504ms)
+  ✔ legacy administrator publication completes approved workflows and records its publication event (249.522723ms)
+  ✔ restoring the current version creates a fresh draft and preserves approved grounding (64.755542ms)
+  ✔ revocation works with an existing draft and immediately removes current retrieval (85.969347ms)
+  ✔ revocation without a pending draft retains editable history without a live publication (301.797064ms)
+  ✔ historical document restoration copies parser evidence and creates the next version (282.262375ms)
+  ✔ persistent proposals deduplicate, accept once into a draft and preserve published content (392.654844ms)
+  ✔ proposal revisions, changed source references and defer/reject decisions remain durable (219.293379ms)
+  ✔ secondary reference staleness blocks proposal acceptance in both the service and raw database paths (212.112657ms)
+  ✔ analyze all skips readable projects without edit permission and still processes editable sources (287.730881ms)
+  ✔ configured maintenance persists review proposals without changing content and respects the feature gate (228.334317ms)
+  ✔ only enabled due configurations run, persist the next day and stop after disabling (97.750069ms)
+  ✔ audit failure atomically rolls back proposal acceptance, content and the internal event (108.935572ms)
+  ✔ workflow tables force RLS and internal events cannot be changed (94.57434ms)
+✔ Knowledge workflow PostgreSQL: publication, restored drafts, revoked retrieval and persistent proposals (5617.97752ms)
+ℹ tests 43
+ℹ suites 0
+ℹ pass 43
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18077.470208
+✔ maintenance filter names exclude their option values and point to unique controls in every CRM language (10.196101ms)
+✔ source review renders saved content safely and waits for workflow data before offering transitions (1.293314ms)
+✔ version comparison identifies changed and removed content without confusing structured names (1.663075ms)
+✔ version comparison ignores object key order while preserving array order and numeric types (6.315928ms)
+✔ lifecycle copy distinguishes approval from publication and supplies restoration and monitoring states in all languages (0.378092ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 200.18537

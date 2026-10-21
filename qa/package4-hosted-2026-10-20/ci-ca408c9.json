@@ -1,0 +1,58 @@
+{
+  "format": "package4-ci-evidence-v1",
+  "recordedAt": "2026-10-20T06:32:54.106Z",
+  "repository": "novalure/novalure-crm",
+  "pullRequest": 92,
+  "sourceSha": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+  "status": "PASS",
+  "requiredWorkflows": [
+    {
+      "id": 39379647057,
+      "name": "Secret scan",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 236,
+      "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39379647057/jobs",
+      "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39379647057/logs",
+      "workflow_id": 334935778
+    },
+    {
+      "id": 39379646987,
+      "name": "Go-live quality gates",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 410,
+      "jobs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39379646987/jobs",
+      "logs_url": "https://api.github.com/repos/novalure/novalure-crm/actions/runs/39379646987/logs",
+      "workflow_id": 283027949
+    }
+  ],
+  "jobs": [
+    {
+      "id": 118485572541,
+      "name": "Production dependency audit and SBOM",
+      "status": "completed",
+      "conclusion": "success",
+      "skippedSteps": []
+    },
+    {
+      "id": 118485572630,
+      "name": "Lockfile, lint, typecheck, tests and build",
+      "status": "completed",
+      "conclusion": "success",
+      "skippedSteps": []
+    },
+    {
+      "id": 118487673407,
+      "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "optionalManualSkippedNotPass": true,
+  "hostedAcceptanceIndependent": true,
+  "urls": [
+    "https://github.com/novalure/novalure-crm/actions/runs/39379647057",
+    "https://github.com/novalure/novalure-crm/actions/runs/39379646987"
+  ]
+}

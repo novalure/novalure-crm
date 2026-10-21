@@ -61,6 +61,21 @@ jobs:
       - name: Unit and component smoke tests
         run: npm run test:unit
 
+      - name: Design C data provenance and customer self-service regression
+        run: npm run test:design-c-integration
+
+      - name: Design C operational reader permissions and source availability
+        run: npm run test:crm-operational-readers
+
+      - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
+        run: npm run test:knowledge-center
+
+      - name: Knowledge publication, monitoring, scheduler and two-tenant acceptance
+        run: npm run test:knowledge-package3
+
+      - name: Combined package 4 migration ledger, runtime roles and rollback
+        run: npm run test:package4-migrations
+
       - name: Security and scope integration tests
         run: npm run test:integration
 
@@ -111,6 +126,12 @@ jobs:
       - name: Signed and anonymous website form ingestion
         run: npm run test:website-sales-ingestion
 
+      - name: Confirmed Studio enquiry and private attachment handoff
+        run: npm run test:studio-enquiry
+
+      - name: Tenant scoped Studio enquiry detail display
+        run: npm run test:studio-enquiry-view
+
       - name: External integration gateway, public forms and training chat
         # This test owns only disposable local PostgreSQL and starts no server.
         # The later sales E2E process owns and closes its children in finally.
@@ -121,6 +142,24 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Integrated Design C and Knowledge customer acceptance on isolated PostgreSQL
+        run: npm run qa:package4:e2e
+
+      - name: Retain bounded synthetic integration results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crm-package4-synthetic-results
+          # Exact result-file allowlist; never upload fixture-private/context files.
+          include-hidden-files: true
+          path: |
+            .npm-cache/qa/package4-migrations.json
+            .npm-cache/qa/package4-e2e-result.json
+            .npm-cache/qa/design-c-integration/result.json
+            .npm-cache/qa/knowledge-browser-result.json
+            .npm-cache/qa/package4-integration/result.json
+          if-no-files-found: warn
 
       - name: Reject whitespace errors
         shell: bash
@@ -194,6 +233,10 @@ jobs:
       NOVALURE_PUBLIC_SUBMISSION_QA_MODE: "1"
       NOVALURE_QA_BASE_URL: http://127.0.0.1:3000
       NOVALURE_TRUSTED_CLIENT_IP_HEADER: x-forwarded-for
+      NOVALURE_QA_PROFILE: ${{ inputs.qa_profile }}
+      STUDIO_ENQUIRY_CANDIDATE_ENABLED: ${{ inputs.qa_profile == 'isolated-candidate' && '1' || '0' }}
+      STUDIO_ENQUIRY_QA_EMAILS_JSON: '["studio-candidate-${{ github.run_id }}-${{ github.run_attempt }}@example.invalid"]'
+      STUDIO_ENQUIRY_QA_PHONES_JSON: '[]'
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -460,14 +503,21 @@ jobs:
         run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Seed two or more isolated QA workspaces
+        # Provision only run-scoped QA workspaces, memberships and permissions
+        # through the separate owner connection. Application fixtures still use
+        # novalure_app with a transaction-local tenant/actor context.
         env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
           NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
           NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
           NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
           NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
           NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           NOVALURE_QA_SEED_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
         run: npm run qa:livegang:seed
 
@@ -494,6 +544,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
           NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          STUDIO_ENQUIRY_SIGNING_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
           NOVALURE_ABUSE_SECRET: ${{ secrets.NOVALURE_QA_ABUSE_SECRET }}
           NOVALURE_AUTH_ENCRYPTION_KEY: ${{ secrets.NOVALURE_QA_AUTH_ENCRYPTION_KEY }}
@@ -501,6 +560,9 @@ jobs:
           NOVALURE_SESSION_SECRET: ${{ secrets.NOVALURE_QA_SESSION_SECRET }}
           OAUTH_STATE_SECRET: ${{ secrets.NOVALURE_QA_OAUTH_STATE_SECRET }}
         run: |
+          if [ "$STUDIO_ENQUIRY_CANDIDATE_ENABLED" = "1" ]; then
+            node --import tsx --input-type=module -e 'import { studioEnquiryCandidateBinding } from "./src/lib/studio-enquiry-candidate.ts"; if (!studioEnquiryCandidateBinding()) { console.error("QA_STUDIO_CANDIDATE_BINDING_INVALID"); process.exitCode=1; }' || exit 1
+          fi
           npm run start -- --hostname 127.0.0.1 > /tmp/novalure-livegang.log 2>&1 &
           echo $! > /tmp/novalure-livegang.pid
 
@@ -540,7 +602,8 @@ jobs:
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-          NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          STUDIO_ENQUIRY_SIGNING_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
         run: node --conditions=react-server --import tsx scripts/qa-public-form-candidate.mjs
 
       - name: Stop production server before RLS diagnostic

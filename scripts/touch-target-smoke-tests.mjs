@@ -11,11 +11,16 @@ const [knowledge, sequences, workspace, password] = await Promise.all([
   readFile(new URL("../src/components/password-visibility-input.tsx", import.meta.url), "utf8"),
 ]);
 
-test("audited icon controls use at least 44 by 44 CSS pixel target boxes", () => {
+test("audited icon controls and Knowledge text controls preserve accessible touch sizing", () => {
   assert.doesNotMatch(sequences, /grid h-9 w-9/);
   assert.doesNotMatch(knowledge, /grid h-9 w-9/);
   assert.ok((sequences.match(/grid h-11 w-11/g)?.length ?? 0) >= 4);
-  assert.match(knowledge, /grid h-11 w-11/);
+  // Knowledge now uses labeled text buttons sharing a 44px minimum height.
+  // Rendered target geometry is covered by the browser accessibility check.
+  assert.match(knowledge, /const buttonClass\s*=\s*"[^"\n]*\bmin-h-11\b/);
+  assert.match(knowledge, /const primaryClass = `\$\{buttonClass\}/);
+  assert.match(knowledge, /<button[\s\S]*?className=\{buttonClass\}/);
+  assert.doesNotMatch(knowledge, /<Icon\b/);
   assert.match(workspace, /className="grid h-11 w-11/);
   assert.match(password, /h-11 w-11/);
 });

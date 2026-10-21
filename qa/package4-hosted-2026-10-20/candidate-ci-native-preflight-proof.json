@@ -1,0 +1,66 @@
+{
+  "format": "package4-candidate-ci-native-preflight-proof-v1",
+  "observedAtUtc": "2026-10-20T10:55:30.683570Z",
+  "status": "PASS_READONLY_NATIVE_QA_CATALOG_PREFLIGHT_ONLY",
+  "binderSha256": "d166dbeee91c60263145eb34d373ac804f1725d0f6ccf87151ab5b9c8562d389",
+  "sourceReceiptSha256": "735684ba54a4af9a9398bff775a490d8fac50dc36351208dd7ed7b446276ed3a",
+  "candidateSha": "6774478b29ab9e5f813618b6483b9a0ea190a78f",
+  "mainSha": "5741a591f186e766750ecb8977972ec9b37e133a",
+  "completedAtUtc": "2026-10-20T10:55:08.512Z",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "database": "neondb",
+    "runtimeRole": "novalure_app",
+    "ownerRole": "neondb_owner"
+  },
+  "runtimePosture": {
+    "safe": true,
+    "runtimeInherit": true,
+    "membershipSafe": true
+  },
+  "canonicalLedgerRows": 60,
+  "canonicalLedgerSha256": "db847a3d01a407b2446db81b2da1ffbdf52aa0f0a8e00e18d57308b38468dc41",
+  "queries": [
+    {
+      "label": "runtime-identity",
+      "querySha256": "1c02d884b2bb35c6d0be5f5abf71a2ef2866e85f46f96014f8f1167eff1c8ff6"
+    },
+    {
+      "label": "runtime-posture",
+      "querySha256": "489574a7611cb6178de3692271583f88776b0e30ba1aa5ee32944f48c1fad5da"
+    },
+    {
+      "label": "owner-identity",
+      "querySha256": "1c02d884b2bb35c6d0be5f5abf71a2ef2866e85f46f96014f8f1167eff1c8ff6"
+    },
+    {
+      "label": "owner-ledger",
+      "querySha256": "b75104023ea8cb36d61eb5172913f4278cfe4fffde489b546137172bd49080a2"
+    }
+  ],
+  "actualCatalogQueries": 4,
+  "actualDatabaseWrites": 0,
+  "actualGrants": 0,
+  "retries": 0,
+  "ownerLeasesHeldAcrossGithub": false,
+  "inputCorrection": {
+    "createdQaOnlyStudioIngestionSecrets": 1,
+    "randomBytes": 32,
+    "secretMode": "0600",
+    "parentDirectoryMode": "0700",
+    "productionOrProviderSecretWrites": 0,
+    "evelynAutomationCredentialsCreated": 0,
+    "previousPrepareFailurePreserved": true,
+    "previousFailureReceiptSha256": "f7baa1e0528967b811e60e1f38e62db19ae99f73492c7dcf12570b2987de2ed2"
+  },
+  "limits": [
+    "This is the actual source QA catalog identity/posture/canonical60 read, not a mocked query result.",
+    "No CI secret/variable apply, branch/environment policy write or workflow dispatch was executed.",
+    "This does not satisfy the required manual QA workflow or native Vercel check; both remain separate pending gates.",
+    "Prepared private material includes15secrets/3vars; no actual secret bytes appear in this report."
+  ],
+  "secretValuesEmitted": false,
+  "newProductionConnections": 0,
+  "githubWrites": 0
+}

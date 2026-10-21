@@ -1,0 +1,105 @@
+{
+  "format": "package4-provider-baseline-preflight-v1",
+  "scope": "RECOVERY_BASELINE_PREFLIGHT_ONLY",
+  "status": "PASS",
+  "recordedAt": "2026-10-20T06:07:40.669Z",
+  "implementationRevision": "02ce0386b7611c400723b5958ad8699a769923ba",
+  "appSourceRevision": "e9d80b908d9244722ee9b661002baf0cf30d8692",
+  "source": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "parentBranchId": "br-flat-block-baycv1oa",
+    "originalRootBranchId": "br-shiny-darkness-baz4524v",
+    "databaseName": "neondb"
+  },
+  "recordedInitialSnapshotBytesSha256": "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7",
+  "allRecordedCatalogLedgerDataExactlyEqual": true,
+  "combinedStateSha256": "e73a8c2b45015c3c9a4278bdc93a4a3c7dea054ef543149282409010cfe72677",
+  "publicStateSha256": "57b982522f79b536b383b589de059c8a301ed1d282c3443dbc493319e5fc5550",
+  "originalStrictRootVerdict": "FAIL",
+  "catalogCategories": 20,
+  "providerDefaultGrantRows": 9,
+  "ledgerRows": 60,
+  "dataTables": 167,
+  "dataRows": 168,
+  "databaseMetadata": {
+    "format": "studio-stage3-database-metadata-v2",
+    "properties": {
+      "owner": "neondb_owner",
+      "encoding": "UTF8",
+      "collation": "C.UTF-8",
+      "ctype": "C.UTF-8",
+      "locale_provider": "b",
+      "locale": "C.UTF-8",
+      "icu_rules": null,
+      "collation_version": "1",
+      "allow_connections": true,
+      "is_template": false,
+      "connection_limit": -1
+    },
+    "acl": [
+      {
+        "grantee": "PUBLIC",
+        "grantor": "neondb_owner",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      },
+      {
+        "grantee": "PUBLIC",
+        "grantor": "neondb_owner",
+        "privilege_type": "TEMPORARY",
+        "is_grantable": false
+      },
+      {
+        "grantee": "neondb_owner",
+        "grantor": "neondb_owner",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      },
+      {
+        "grantee": "neondb_owner",
+        "grantor": "neondb_owner",
+        "privilege_type": "CREATE",
+        "is_grantable": false
+      },
+      {
+        "grantee": "neondb_owner",
+        "grantor": "neondb_owner",
+        "privilege_type": "TEMPORARY",
+        "is_grantable": false
+      }
+    ],
+    "settings": [],
+    "owner": "neondb_owner",
+    "sha256": "c44118eae43133c199b6468dc98daddb7adabbc7bbdfa13de2e7d8ff247ac98c",
+    "globalRoleSettings": {
+      "count": 0,
+      "settings": [],
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "ordinaryRuntime": {
+    "checkedAt": "2026-10-20T06:06:27.066Z",
+    "project": "green-thunder-49879900",
+    "branch": "br-sweet-surf-ba6iahut",
+    "database": "neondb",
+    "role": "novalure_app",
+    "rolsuper": false,
+    "rolbypassrls": false,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolreplication": false,
+    "rolinherit": true,
+    "create_public": false,
+    "ownsPublicObjects": 0,
+    "ordinaryScopedTaskRead": "PASS"
+  },
+  "branchesCreatedAtThisPreflight": 0,
+  "sourceSqlOrGrantWrites": 0,
+  "limitations": [
+    "This is a baseline preflight receipt, not a completed recovery result.",
+    "Original strict root-to-first-COW recovery remains FAIL; no ACL category was ignored or rewritten.",
+    "QA runtime INHERIT=true is original and differs from observed production NOINHERIT. Dangerous privilege flags remain false.",
+    "Private-file bytes and hosted login/MFA are not covered."
+  ]
+}

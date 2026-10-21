@@ -1,0 +1,325 @@
+{
+  "format": "studio-stage3-prepare-target-plan-v1",
+  "headCommit": "778ed0c8b609bc1a4b1d47d1532e9a594758ccdb",
+  "capturedAt": "2026-10-18T19:53:28.656Z",
+  "preflight": {
+    "format": "studio-stage3-prepare-target-preflight-v1",
+    "projectId": "super-block-59791927",
+    "branchId": "br-ancient-term-awip1q3q",
+    "databaseName": "neondb",
+    "databaseOid": 16396,
+    "database": {
+      "format": "studio-stage3-database-metadata-v2",
+      "properties": {
+        "owner": "neondb_owner",
+        "encoding": "UTF8",
+        "collation": "C.UTF-8",
+        "ctype": "C.UTF-8",
+        "locale_provider": "b",
+        "locale": "C.UTF-8",
+        "icu_rules": null,
+        "collation_version": "1",
+        "allow_connections": true,
+        "is_template": false,
+        "connection_limit": -1
+      },
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantor": "neondb_owner",
+          "privilege_type": "CONNECT",
+          "is_grantable": false
+        },
+        {
+          "grantee": "PUBLIC",
+          "grantor": "neondb_owner",
+          "privilege_type": "TEMPORARY",
+          "is_grantable": false
+        },
+        {
+          "grantee": "neon_superuser",
+          "grantor": "neondb_owner",
+          "privilege_type": "CONNECT",
+          "is_grantable": false
+        },
+        {
+          "grantee": "neon_superuser",
+          "grantor": "neondb_owner",
+          "privilege_type": "CREATE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "neon_superuser",
+          "grantor": "neondb_owner",
+          "privilege_type": "TEMPORARY",
+          "is_grantable": false
+        },
+        {
+          "grantee": "neondb_owner",
+          "grantor": "neondb_owner",
+          "privilege_type": "CONNECT",
+          "is_grantable": false
+        },
+        {
+          "grantee": "neondb_owner",
+          "grantor": "neondb_owner",
+          "privilege_type": "CREATE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "neondb_owner",
+          "grantor": "neondb_owner",
+          "privilege_type": "TEMPORARY",
+          "is_grantable": false
+        }
+      ],
+      "settings": [],
+      "owner": "neondb_owner",
+      "sha256": "0e6d312a3dda0a7970015261fea62a84f7cbe4c6e05e08707865b1c509c9578b",
+      "globalRoleSettings": {
+        "count": 0,
+        "settings": [],
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      }
+    },
+    "extensionProfile": {
+      "format": "studio-stage3-source-extension-profile-v2",
+      "server": {
+        "version": "18.6 (653b019)",
+        "version_num": 180006
+      },
+      "extensions": [
+        {
+          "name": "plpgsql",
+          "version": "1.0",
+          "schema": "pg_catalog",
+          "owner": "cloud_admin"
+        }
+      ],
+      "memberCount": 0,
+      "structureSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "memberIdentitiesSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "privileges": [],
+      "namespaces": [
+        {
+          "nspname": "public",
+          "owner": "pg_database_owner"
+        }
+      ],
+      "schemaGrants": [
+        {
+          "nspname": "public",
+          "owner": "pg_database_owner",
+          "grantee": "PUBLIC",
+          "grantor": "pg_database_owner",
+          "privilege_type": "USAGE",
+          "is_grantable": false
+        },
+        {
+          "nspname": "public",
+          "owner": "pg_database_owner",
+          "grantee": "pg_database_owner",
+          "grantor": "pg_database_owner",
+          "privilege_type": "CREATE",
+          "is_grantable": false
+        },
+        {
+          "nspname": "public",
+          "owner": "pg_database_owner",
+          "grantee": "pg_database_owner",
+          "grantor": "pg_database_owner",
+          "privilege_type": "USAGE",
+          "is_grantable": false
+        }
+      ],
+      "defaultGrants": [
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "S",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "SELECT",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "S",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "UPDATE",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "S",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "USAGE",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "DELETE",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "INSERT",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "MAINTAIN",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "REFERENCES",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "SELECT",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "TRIGGER",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "TRUNCATE",
+          "is_grantable": true
+        },
+        {
+          "owner": "cloud_admin",
+          "schema": "public",
+          "defaclobjtype": "r",
+          "grantee": "neon_superuser",
+          "grantor": "cloud_admin",
+          "privilege_type": "UPDATE",
+          "is_grantable": true
+        }
+      ],
+      "sha256": "275fc9d31817c338148e51dcb1d3e8ea0a711d71cc29f3021b2168bca1396194"
+    },
+    "databases": [
+      {
+        "name": "neondb",
+        "is_template": false,
+        "owner": "neondb_owner"
+      },
+      {
+        "name": "postgres",
+        "is_template": false,
+        "owner": "cloud_admin"
+      },
+      {
+        "name": "template0",
+        "is_template": true,
+        "owner": "cloud_admin"
+      },
+      {
+        "name": "template1",
+        "is_template": true,
+        "owner": "cloud_admin"
+      }
+    ],
+    "providerRoles": [
+      {
+        "name": "cloud_admin",
+        "login": true,
+        "superuser": true,
+        "bypassrls": true,
+        "create_database": true,
+        "create_role": true
+      },
+      {
+        "name": "neon_service",
+        "login": true,
+        "superuser": false,
+        "bypassrls": true,
+        "create_database": true,
+        "create_role": true
+      },
+      {
+        "name": "neon_superuser",
+        "login": false,
+        "superuser": false,
+        "bypassrls": true,
+        "create_database": true,
+        "create_role": true
+      },
+      {
+        "name": "neondb_owner",
+        "login": true,
+        "superuser": false,
+        "bypassrls": true,
+        "create_database": true,
+        "create_role": true
+      }
+    ],
+    "providerBackgroundSessions": {
+      "count": 3,
+      "inventory": [
+        {
+          "database": "postgres",
+          "role": "cloud_admin",
+          "state": "idle"
+        },
+        {
+          "database": "postgres",
+          "role": "cloud_admin",
+          "state": "idle"
+        },
+        {
+          "database": "postgres",
+          "role": "cloud_admin",
+          "state": "idle"
+        }
+      ]
+    },
+    "managementDatabase": "st1_stage3_management",
+    "providerBaselineDatabase": "st1_stage3_provider_baseline",
+    "sourceDatabaseSha256": "c44118eae43133c199b6468dc98daddb7adabbc7bbdfa13de2e7d8ff247ac98c",
+    "sourceExtensionProfileSha256": "1d2a3bbe9a0460319190eda08588b754dd49e2a3814086ee49d781ebf20576f1",
+    "sourceGlobalRoleSettingsSha256": "40f4709d8cdbc251eec1e3766669d627feaf5e1d848845906d013c7dcae217e5",
+    "foreignSessions": 0,
+    "applicationRoles": 0,
+    "preparedTransactions": 0,
+    "databaseWrites": 0,
+    "sha256": "17784722dcebd0e8d213e2b040ce5c9d5c5cc392ac48fb42f7aed3e44cbeedf9"
+  }
+}

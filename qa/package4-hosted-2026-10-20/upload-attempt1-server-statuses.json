@@ -1,0 +1,75 @@
+{
+  "source": "native Vercel requests typed JSONL, exact QA deployment only",
+  "deploymentId": "dpl_4BD3dwh4bVj7Pbn3bJiBKzYTGniz",
+  "sourceSha": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+  "window": {
+    "since": "2026-10-20T06:23:00Z",
+    "until": "2026-10-20T06:25:20Z"
+  },
+  "rows": 46,
+  "paths": [
+    {
+      "path": "/api/knowledge-center/documents",
+      "method": "POST",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:33.315Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:33.135Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:29.080Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:25.053Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:22.798Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:17.707Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:15.690Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:12.119Z"
+    },
+    {
+      "path": "/api/auth/csrf",
+      "method": "GET",
+      "status": 200,
+      "timestamp": "2026-10-20T06:23:08.659Z"
+    }
+  ],
+  "staticRequests": [
+    {
+      "path": "/_next/static/immutable/chunks/0bbcsn314ra0a.js",
+      "httpStatus": 200,
+      "timestamp": "2026-10-20T06:23:38.365Z",
+      "method": "GET"
+    }
+  ],
+  "secretValuesEmitted": false
+}

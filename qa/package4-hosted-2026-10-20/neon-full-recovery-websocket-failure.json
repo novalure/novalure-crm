@@ -1,0 +1,181 @@
+{
+  "format": "package4-full-recovery-websocket-failure-v1",
+  "classifiedStatus": "FAIL",
+  "originalRawStatus": "RUNNING_STALE_INTERMEDIATE_NOT_PASS",
+  "originalReceiptSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+  "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+  "failure": "Unhandled Neon client connection terminated unexpectedly; process exited1 before finally cleanup. Exact absolute crash time, client identity and pending SQL were not logged.",
+  "rootCause": "UNKNOWN; a checked-out owner socket was held over metadata/blob waits and no error listener handled the disconnect. Idle timeout as causal trigger is not proven.",
+  "workingChange": {
+    "branchId": "br-little-lake-bagp4n0i",
+    "committedRows": 1,
+    "combinedSha256": "74c8eea535435d1333aa173470b6977d408d4affbc7d63a34c91aca651acf4d1"
+  },
+  "createdBranches": [
+    {
+      "id": "br-broad-mouse-baohb06c",
+      "name": "package4-hosted-recovery-20261020-r2-point",
+      "parentId": "br-sweet-surf-ba6iahut",
+      "parentLsn": "0/32A4C10",
+      "noCompute": true,
+      "expiresAt": null,
+      "requestedExpiresAt": null,
+      "expirationApplied": false
+    },
+    {
+      "id": "br-little-lake-bagp4n0i",
+      "name": "package4-hosted-recovery-20261020-r2-working",
+      "parentId": "br-broad-mouse-baohb06c",
+      "parentLsn": "0/32A4C10",
+      "noCompute": false,
+      "expiresAt": "2026-10-21T08:15:22.192Z",
+      "requestedExpiresAt": "2026-10-21T08:15:22.192Z",
+      "expirationApplied": true
+    },
+    {
+      "id": "br-nameless-sun-bazc0qdt",
+      "name": "package4-hosted-recovery-20261020-r2-restored",
+      "parentId": "br-broad-mouse-baohb06c",
+      "parentLsn": "0/32A4C10",
+      "noCompute": false,
+      "expiresAt": "2026-10-21T08:15:22.192Z",
+      "requestedExpiresAt": "2026-10-21T08:15:22.192Z",
+      "expirationApplied": true
+    }
+  ],
+  "restoredDatabaseEqualityCompleted": false,
+  "restoredApplicationCompleted": false,
+  "targetObjectsAfterFailure": 0,
+  "targetInventoryObservedAtUtc": "2026-10-20T08:25:17Z",
+  "manualAllThreeDisabledIdleCleanupObservedAtUtc": "2026-10-20T08:23:11Z",
+  "independentProviderReadback": {
+    "format": "package4-root-readonly-post-failure-provider-state-v1",
+    "observedAtUtc": "2026-10-20T08:29:30.593Z",
+    "status": "FAILURE_CLEANUP_INDEPENDENTLY_CONFIRMED",
+    "endpoints": [
+      {
+        "id": "ep-crimson-forest-ba4kk6sb",
+        "branchId": "br-sweet-surf-ba6iahut",
+        "disabled": true,
+        "currentState": "idle",
+        "minCu": 0.25,
+        "maxCu": 0.25,
+        "updatedAt": "2026-10-20T08:22:52Z"
+      },
+      {
+        "id": "ep-purple-truth-baye3wwh",
+        "branchId": "br-little-lake-bagp4n0i",
+        "disabled": true,
+        "currentState": "idle",
+        "minCu": 0.25,
+        "maxCu": 0.25,
+        "updatedAt": "2026-10-20T08:22:45Z"
+      },
+      {
+        "id": "ep-lively-dawn-ba2sskxd",
+        "branchId": "br-nameless-sun-bazc0qdt",
+        "disabled": true,
+        "currentState": "idle",
+        "minCu": 0.25,
+        "maxCu": 0.25,
+        "updatedAt": "2026-10-20T08:22:59Z"
+      }
+    ],
+    "recentOperations": [
+      {
+        "id": "60d59b3d-05dc-4d13-9b40-6fa3162e0141",
+        "action": "suspend_compute",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:22:59Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "bb384a5b-24e9-4660-833c-6cc4c92128a0",
+        "action": "suspend_compute",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:22:45Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "84639f2c-51f1-4422-a783-481f06b94665",
+        "action": "suspend_compute",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:22:00Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "241b72c6-945b-4c12-a592-2d041bc6b9ec",
+        "action": "epc_sync",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:20:47Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "23716d04-cc5d-4218-b5af-32ee2f8646a4",
+        "action": "epc_sync",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:19:57Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "db6a60a8-7f64-44ec-9f67-cec0c10d9dc9",
+        "action": "start_compute",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:19:57Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "805b38f7-4868-4637-b6f1-5291305ad839",
+        "action": "timeline_update_protected_config",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:19:57Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "7d615073-63b1-43a3-a1a5-a4fa9458d785",
+        "action": "create_branch",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:19:57Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "1194195b-dec5-4b90-9091-484a19c071d6",
+        "action": "epc_sync",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:18:00Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "d9945750-884f-48b6-9c51-0cda60e9a1c6",
+        "action": "epc_sync",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:17:01Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "7f1f20d3-2e57-44f8-9b29-7d5c93bb76fc",
+        "action": "start_compute",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:17:01Z",
+        "failuresCount": 0
+      },
+      {
+        "id": "6eed6fdb-4e3d-4867-8e3c-6c722a9a3d47",
+        "action": "timeline_update_protected_config",
+        "status": "finished",
+        "createdAt": "2026-10-20T08:17:01Z",
+        "failuresCount": 0
+      }
+    ],
+    "branchDeletes": 0,
+    "storageDeletes": 0,
+    "productionChanges": 0
+  },
+  "branchDeletes": 0,
+  "storageDeletes": 0,
+  "sourceWrites": 0,
+  "productionChanges": 0,
+  "originalEvidencePreserved": true
+}

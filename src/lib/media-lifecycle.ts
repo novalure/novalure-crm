@@ -51,9 +51,14 @@ const knownReferences = [
   { table_name: "media_asset_shares", columns: ["asset_id", "workspace_id"], target_columns: ["id", "workspace_id"], delete_action: "c" },
   { table_name: "property_documents", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "n" },
   { table_name: "property_media", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "n" },
+  { table_name: "studio_enquiry_assets", columns: ["media_asset_id", "workspace_id", "operation_id"], target_columns: ["id", "workspace_id", "studio_enquiry_operation_id"], delete_action: "a" },
 ];
 export function hasCompleteMediaReferenceVisibility(rows: Record<string, unknown>[]) {
-  return rows.length === knownReferences.length && knownReferences.every(expected => rows.filter(row =>
+  const knowledge = rows.some(row => row.knowledge_center_enabled === true || row.table_name === "knowledge_source_versions");
+  const expectedReferences = knowledge ? [...knownReferences,
+    { table_name: "knowledge_source_versions", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "a" },
+  ] : knownReferences;
+  return rows.length === expectedReferences.length && expectedReferences.every(expected => rows.filter(row =>
     row.schema_name === "public" && row.table_name === expected.table_name && row.validated === true &&
     row.deferrable === false && row.delete_action === expected.delete_action &&
     JSON.stringify(row.columns) === JSON.stringify(expected.columns) &&
@@ -61,6 +66,7 @@ export function hasCompleteMediaReferenceVisibility(rows: Record<string, unknown
 }
 
 const referenceCatalogSql = `select n.nspname as schema_name,t.relname as table_name,
+  to_regclass('public.knowledge_source_versions') is not null as knowledge_center_enabled,
   c.convalidated as validated,c.condeferrable as deferrable,c.confdeltype as delete_action,
   row_security_active(c.conrelid) as rls_active,
   array(select a.attname::text from unnest(c.conkey) with ordinality key(attnum,position)
@@ -69,7 +75,8 @@ const referenceCatalogSql = `select n.nspname as schema_name,t.relname as table_
     join pg_attribute a on a.attrelid=c.confrelid and a.attnum=key.attnum order by key.position) as target_columns
   from pg_constraint c join pg_class t on t.oid=c.conrelid join pg_namespace n on n.oid=t.relnamespace
   where c.contype='f' and c.confrelid='public.media_assets'::regclass`;
-const referenceCountsSql = `select * from public.crm_media_reference_counts($1::uuid)`;
+const referenceCountsSql = `select * from public.crm_studio_media_reference_counts($1::uuid)`;
+const knowledgeReferenceCountsSql = `select * from public.crm_knowledge_media_reference_counts($1::uuid)`;
 
 /**
  * The parent lock serializes normal gallery and deletion writes for the same property.
@@ -102,18 +109,27 @@ export async function deleteDatabaseMedia(input: {
           throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This is the active Exposé. Explicitly remove or replace the active selection before deleting the file.");
         }
       }
-      const row = await transaction.queryOne(`select ${input.assetSelect} from public.media_assets ma
+      const row = await transaction.queryOne(`select ${input.assetSelect},ma.studio_enquiry_operation_id as "studioEnquiryOperationId" from public.media_assets ma
         where ma.id = $1 and ma.workspace_id = $2 for update of ma`, [input.assetId, input.workspaceId]);
       if (!row) return null;
+      // The locked row itself proves protection, even when a SECURITY DEFINER
+      // owner cannot see the separate Studio reference table under FORCE RLS.
+      if (row.studioEnquiryOperationId != null) {
+        throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This file has a protected lifecycle and cannot be deleted here.");
+      }
       const asset = input.normalizeAsset(row);
-      if (!hasCompleteMediaReferenceVisibility(await transaction.query(referenceCatalogSql))) {
+      const referenceCatalog = await transaction.query(referenceCatalogSql);
+      if (!hasCompleteMediaReferenceVisibility(referenceCatalog)) {
         throw new MediaLifecycleError("MEDIA_DELETE_VISIBILITY_UNCONFIRMED", "All media references could not be verified. Nothing was deleted.");
       }
-      const references = await transaction.queryOne(referenceCountsSql, [input.assetId]);
+      const knowledgeSchema = referenceCatalog.some(row => row.knowledge_center_enabled === true);
+      const scopedReferenceCountsSql = knowledgeSchema ? knowledgeReferenceCountsSql : referenceCountsSql;
+      const references = await transaction.queryOne(scopedReferenceCountsSql, [input.assetId]);
       const expectedMedia = input.target?.attachmentKind === "media" ? 1 : 0;
       const expectedDocuments = input.target?.attachmentKind === "document" ? 1 : 0;
       if (!references || references.media_count !== expectedMedia || references.document_count !== expectedDocuments ||
-        references.send_count !== 0 || references.share_count !== 0 ||
+        references.send_count !== 0 || references.share_count !== 0 || references.studio_count !== 0 ||
+        (knowledgeSchema && references.knowledge_count !== 0) ||
         asset.storageAccess !== "private" || asset.isPublic || row.publicToken != null) {
         throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This file has another use, sharing history or a protected lifecycle and cannot be deleted here.");
       }
@@ -146,7 +162,7 @@ export async function deleteDatabaseMedia(input: {
       // The scoped SECURITY DEFINER counter deliberately returns no row when the
       // asset is absent. Verify that all references are gone while the locked,
       // tenant-owned asset still exists, then let the FKs guard the final delete.
-      const remainingReferences = await transaction.queryOne(referenceCountsSql, [input.assetId]);
+      const remainingReferences = await transaction.queryOne(scopedReferenceCountsSql, [input.assetId]);
       if (!remainingReferences || Object.values(remainingReferences).some(count => count !== 0)) throw new Error("Asset references remain");
       const removed = await transaction.queryOne(`delete from public.media_assets where id=$1::uuid and workspace_id=$2 returning id`,
         [input.assetId, input.workspaceId]);

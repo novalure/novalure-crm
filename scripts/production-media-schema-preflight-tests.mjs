@@ -7,6 +7,7 @@ const referenceRows=()=>[
   ['media_asset_shares',['asset_id','workspace_id'],['id','workspace_id'],'c'],
   ['property_documents',['media_asset_id'],['id'],'n'],
   ['property_media',['media_asset_id'],['id'],'n'],
+  ['studio_enquiry_assets',['media_asset_id','workspace_id','operation_id'],['id','workspace_id','studio_enquiry_operation_id'],'a'],
 ].map(([table_name,columns,target_columns,delete_action])=>({schema_name:'public',table_name,columns,target_columns,delete_action,validated:true,deferrable:false,rls_active:false}));
 function client(rows=referenceRows(),readOnly='on') {
   const queries=[];
@@ -24,12 +25,25 @@ test('production requires a configured provider URL before IO',async()=>{
 });
 test('production gate uses exact application contract and a read-only catalog transaction',async()=>{
   const c=client();const result=await runProductionMediaPreflight({env,makeSql:c.makeSql});
-  assert.equal(result.status,'PASS_PRODUCTION_READ_ONLY_MEDIA_SCHEMA');assert.equal(result.referenceCount,4);assert.equal(c.queries.length,2);
+  assert.equal(result.status,'PASS_PRODUCTION_READ_ONLY_MEDIA_SCHEMA');assert.equal(result.referenceCount,5);assert.equal(c.queries.length,2);
   assert.match(c.queries[1],/pg_constraint/);assert.doesNotMatch(JSON.stringify(result),/fixture|postgres:\/\//);
 });
-test('unknown references or active RLS fail closed without storage or DDL',async()=>{
-  for(const rows of [[...referenceRows(),{table_name:'unknown'}], referenceRows().map((r,i)=>i===0?{...r,rls_active:true}:r)]) {
+test('unknown, missing or changed reference contracts fail closed without storage or DDL',async()=>{
+  for(const rows of [[...referenceRows(),{table_name:'unknown'}],
+    referenceRows().map((r,i)=>i===0?{...r,validated:false}:r),
+    referenceRows().map((r,i)=>i===0?{...r,deferrable:true}:r),
+    referenceRows().map(r=>({...r,knowledge_center_enabled:true}))]) {
     const c=client(rows);await assert.rejects(runProductionMediaPreflight({env,makeSql:c.makeSql}),/contract not satisfied/);assert.equal(c.queries.length,2);
+  }
+});
+test('Knowledge schema requires its exact additional media foreign key',async()=>{
+  const rows=[...referenceRows(),{schema_name:'public',table_name:'knowledge_source_versions',columns:['media_asset_id'],target_columns:['id'],delete_action:'a',validated:true,deferrable:false}]
+    .map(row=>({...row,knowledge_center_enabled:true}));
+  const c=client(rows);const result=await runProductionMediaPreflight({env,makeSql:c.makeSql});
+  assert.equal(result.referenceCount,6);
+  for(const changed of [rows.filter(row=>row.table_name!=='knowledge_source_versions'),
+    rows.map(row=>row.table_name==='knowledge_source_versions'?{...row,delete_action:'c'}:row)]) {
+    await assert.rejects(runProductionMediaPreflight({env,makeSql:client(changed).makeSql}),/contract not satisfied/);
   }
 });
 test('a read-write database response never passes the build gate',async()=>{
