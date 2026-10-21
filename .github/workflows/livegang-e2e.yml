@@ -64,6 +64,9 @@ jobs:
       - name: Design C data provenance and customer self-service regression
         run: npm run test:design-c-integration
 
+      - name: Personal UI language, geo fallback and account isolation
+        run: npm run test:ux-language
+
       - name: Design C operational reader permissions and source availability
         run: npm run test:crm-operational-readers
 

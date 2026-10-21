@@ -525,6 +525,11 @@ export function PropertyCommandCenter({
     await onPropertyChanged();
   }
 
+  async function refreshConfirmedChange() {
+    try { await onPropertyChanged?.(); }
+    catch { setNotice({ kind: "success", message: language === "de" ? "Die Änderung wurde gespeichert. Die Ansicht konnte nicht aktualisiert werden. Bitte neu laden und nicht erneut speichern." : "The change was saved, but the view could not refresh. Please reload without saving again." }); }
+  }
+
   async function saveSelectedPriceVisibility() {
     if (!selectedAsset?.sellerListingId || saving) return;
     setSaving(true);
@@ -539,9 +544,9 @@ export function PropertyCommandCenter({
         publicPrice: selectedAsset.publicPrice ?? selectedAsset.price,
       });
       setNotice({ kind: "success", message: copy.notices.priceVisibilitySaved });
-      await onPropertyChanged?.();
-    } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.priceVisibilitySaveFailed });
+      await refreshConfirmedChange();
+    } catch {
+      setNotice({ kind: "error", message: copy.notices.priceVisibilitySaveFailed });
     } finally {
       setSaving(false);
     }
@@ -592,9 +597,9 @@ export function PropertyCommandCenter({
         propertyId: selectedAsset.sellerListingId,
       });
       setNotice({ kind: "success", message: kind === "media" ? copy.notices.mediaAttached : copy.notices.documentAttached });
-      await onPropertyChanged?.();
-    } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.uploadSaveFailed });
+      await refreshConfirmedChange();
+    } catch {
+      setNotice({ kind: "error", message: copy.notices.uploadSaveFailed });
     } finally {
       setUploading(false);
     }
@@ -645,9 +650,9 @@ export function PropertyCommandCenter({
         textBlocks: createTextDrafts(),
         title: "",
       }));
-      await onPropertyChanged?.();
-    } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.propertySaveFailed });
+      await refreshConfirmedChange();
+    } catch {
+      setNotice({ kind: "error", message: copy.notices.propertySaveFailed });
     } finally {
       setSaving(false);
     }

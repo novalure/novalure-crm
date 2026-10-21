@@ -267,7 +267,11 @@ test("print isolation: real browser document contains only the approved offer, n
       const doc = frame.contentDocument!;
       const printed = { text: doc.body.textContent, bodyChildren: doc.body.childElementCount, articleCount: doc.querySelectorAll("article").length, unsafeNodes: doc.querySelectorAll("script,img,iframe,aside,form,input,button").length, title: doc.title, sandbox: frame.getAttribute("sandbox"), draftBlocked, framesAfterDraft };
       frame.remove();
-      return printed;
+      article.lang = "en";
+      const englishFrame = printFrame(article, "APPROVED");
+      const english = { title: englishFrame.contentDocument!.title, language: englishFrame.contentDocument!.documentElement.lang, text: englishFrame.contentDocument!.body.textContent };
+      englishFrame.remove();
+      return { ...printed, english };
     });
     assert.equal(result.draftBlocked, true);
     assert.equal(result.framesAfterDraft, 0);
@@ -275,6 +279,9 @@ test("print isolation: real browser document contains only the approved offer, n
     assert.equal(result.articleCount, 1);
     assert.equal(result.unsafeNodes, 0);
     assert.equal(result.title, "Angebotsfassung");
+    assert.equal(result.english.title, "Offer version");
+    assert.equal(result.english.language, "en");
+    assert.equal(result.english.text, result.text, "UI language must not translate saved offer content");
     assert.equal(result.sandbox, "allow-same-origin allow-modals");
     assert.match(result.text!, /approved offer revision 3/);
     assert.match(result.text!, /<img src=x onerror=alert\(1\)>/);

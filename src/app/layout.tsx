@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { cookies, headers } from "next/headers";
 import { LanguageHtmlSync } from "@/components/language-html-sync";
+import { getCrmRequestLanguage } from "@/lib/auth/request-language";
+import { crmEntryRequestHeaderName } from "@/lib/crm-language";
 import {
   defaultLanguage,
   languageCookieName,
@@ -30,6 +33,10 @@ export const viewport: Viewport = {
 
 async function getInitialLanguage(): Promise<PublicLanguageCode> {
   const requestHeaders = await headers();
+  if (requestHeaders.get(crmEntryRequestHeaderName) === "1") {
+    const crmLanguage = await getCrmRequestLanguage();
+    if (crmLanguage.session) return crmLanguage.language;
+  }
   const publicHeaderLanguage = requestHeaders.get(publicLanguageRequestHeaderName);
   if (isPublicLanguageCode(publicHeaderLanguage)) return publicHeaderLanguage;
 
@@ -50,7 +57,7 @@ export default async function RootLayout({
   return (
     <html lang={language} className={`${figtree.variable} h-full`} suppressHydrationWarning>
       <body className="flex min-h-full flex-col antialiased">
-        <LanguageHtmlSync />
+        <Suspense fallback={null}><LanguageHtmlSync /></Suspense>
         {children}
       </body>
     </html>

@@ -15,6 +15,7 @@ if (!fixture.syntheticOnly || new URL(fixture.baseUrl).hostname !== "127.0.0.1" 
 }
 const admin = new pg.Pool({ ...fixture.database, user: "qa_admin" });
 Object.assign(fixture, await seedSalesBrowser({ admin, role: fixture.database.user }));
+await admin.query("insert into account_ui_preferences(auth_identity_id,language_preference) values($1,'de') on conflict(auth_identity_id) do update set language_preference=excluded.language_preference", [fixture.authIdentityId]);
 const browser = await chromium.launch({ executablePath: process.env.CRM_QA_CHROMIUM_PATH || "/usr/bin/chromium", headless: true, args: ["--no-sandbox"] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: "de-AT", timezoneId: "Europe/Vienna" });
 await context.route("**/*", route => {
@@ -84,7 +85,7 @@ try {
     assert.equal((await page.request.get(fixture.baseUrl + "/api/knowledge-center", { timeout: 120000 })).status(), 401);
   });
   await step("ordinary password and real TOTP enrollment create the session", async () => {
-    await page.goto(fixture.baseUrl + "/login?lang=de");
+    await page.goto(fixture.baseUrl + "/login?languagePreference=de&lang=de");
     await page.locator("#login-email").fill(fixture.email);
     await page.locator("#login-password").fill(fixture.password);
     await Promise.all([page.waitForNavigation(), page.locator("form:has(#login-password) button[type=submit]").click({ timeout: 120000 })]);

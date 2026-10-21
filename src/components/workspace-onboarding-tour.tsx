@@ -56,6 +56,14 @@ type ChecklistCopy = {
 
 const fallbackStoragePrefix = "novalure_onboarding_progress";
 
+function readLocalProgress(key: string) {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+
+function writeLocalProgress(key: string, value: string) {
+  try { window.localStorage.setItem(key, value); } catch { /* The current checklist remains usable without browser storage. */ }
+}
+
 const roleFocusCopy: Record<ReturnType<typeof getOnboardingAudience>, Record<LanguageCode, string>> = {
   admin: {
     de: "Du siehst Setup-Schritte für Workspace, Pipeline, Team, Rechte und operative Starts. Prüfe Rechte bewusst, bevor echte Nutzer eingeladen werden.",
@@ -258,7 +266,7 @@ export function WorkspaceOnboardingTour({
 
         if (!response.ok) {
           setPayload((current) => ({ ...current, source: "fallback" }));
-          setIsOpen(localStorage.getItem(fallbackStorageKey) !== "1");
+          setIsOpen(readLocalProgress(fallbackStorageKey) !== "1");
           return;
         }
 
@@ -275,12 +283,12 @@ export function WorkspaceOnboardingTour({
         setIsOpen(
           !nextPayload.completedAt &&
           !nextPayload.dismissedAt &&
-          localStorage.getItem(fallbackStorageKey) !== "1",
+          readLocalProgress(fallbackStorageKey) !== "1",
         );
       } catch {
         if (!active) return;
         setPayload((current) => ({ ...current, source: "fallback" }));
-        setIsOpen(localStorage.getItem(fallbackStorageKey) !== "1");
+        setIsOpen(readLocalProgress(fallbackStorageKey) !== "1");
       }
     }
 
@@ -301,7 +309,7 @@ export function WorkspaceOnboardingTour({
       if (!isPersisted) {
         const nextPayload = nextLocalPayload(action, step?.id, payload, steps);
         setPayload(nextPayload);
-        localStorage.setItem(fallbackStorageKey, nextPayload.completedAt ? "1" : "0");
+        writeLocalProgress(fallbackStorageKey, nextPayload.completedAt ? "1" : "0");
         if (action === "dismiss" || action === "complete_all" || step?.id === "finish") setIsOpen(false);
         return;
       }
@@ -331,7 +339,7 @@ export function WorkspaceOnboardingTour({
     } catch {
       const nextPayload = nextLocalPayload(action, step?.id, payload, steps);
       setPayload(nextPayload);
-      localStorage.setItem(fallbackStorageKey, nextPayload.completedAt ? "1" : "0");
+      writeLocalProgress(fallbackStorageKey, nextPayload.completedAt ? "1" : "0");
       if (action === "dismiss" || action === "complete_all" || step?.id === "finish") setIsOpen(false);
     } finally {
       setIsSaving(false);

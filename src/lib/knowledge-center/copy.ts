@@ -40,8 +40,8 @@ const de = {
   allProjects: "Alle zugänglichen Projekte",
   sources: "Wissensquellen",
   areas: "Wissensbereiche",
-  assistants: "KI-Zuordnungen",
-  usage: "Modul & Nutzung",
+  assistants: "Assistenten",
+  usage: "Zugang & Nutzung",
   loading: "Wissensverwaltung wird geladen …",
   loadError: "Die Wissensverwaltung konnte nicht geladen werden.",
   retry: "Erneut versuchen",
@@ -50,7 +50,7 @@ const de = {
     "Die Wissensverwaltung ist für dieses Unternehmen noch nicht verfügbar.",
   unavailableHint:
     "Die technische Einrichtung muss zuerst abgeschlossen werden.",
-  disabled: "Das Knowledge-Modul ist nicht freigeschaltet.",
+  disabled: "Die Wissensverwaltung ist nicht freigeschaltet.",
   disabledHint:
     "Ein Unternehmensadministrator kann den gebuchten Modulzugang prüfen lassen.",
   readOnly:
@@ -172,7 +172,7 @@ const de = {
   voice: "Telefonassistent",
   phonePrepared:
     "Webchat und Telefonassistent erhalten eigene Zuordnungen. Änderungen für einen Kanal ändern die Freigaben des anderen nicht. Nur für Assistenten veröffentlichte Inhalte werden verwendet.",
-  module: "Knowledge-Modul",
+  module: "Wissensverwaltung",
   enabled: "Freigeschaltet",
   notEnabled: "Nicht freigeschaltet",
   contract: "Vertragsreferenz",
@@ -594,4 +594,30 @@ const es: Copy = {
 
 export function getKnowledgeCenterCopy(language: LanguageCode | "es"): Copy {
   return language === "de" ? de : language === "es" ? es : en;
+}
+
+/** Translate known service failures without displaying internal response details. */
+export function getKnowledgeErrorMessage(language: LanguageCode | "es", cause: unknown, fallback: string): string {
+  const code = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+  const text = language === "de" ? {
+    conflict: "Der Inhalt wurde inzwischen geändert. Aktualisieren Sie die Ansicht und prüfen Sie den aktuellen Stand.",
+    access: "Diese Aktion ist mit Ihren Berechtigungen oder Ihrem gebuchten Zugang nicht verfügbar.",
+    session: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    required: "Bitte prüfen Sie die Pflichtangaben und versuchen Sie es erneut.",
+  } : language === "es" ? {
+    conflict: "El contenido ha cambiado. Actualice la vista y revise la versión actual.",
+    access: "Esta acción no está disponible con sus permisos o su acceso contratado.",
+    session: "Su sesión ha caducado. Vuelva a iniciar sesión.",
+    required: "Compruebe los campos obligatorios e inténtelo de nuevo.",
+  } : {
+    conflict: "The content has changed. Refresh the view and review the current version.",
+    access: "This action is unavailable with your permissions or plan.",
+    session: "Your session has expired. Please sign in again.",
+    required: "Check the required details and try again.",
+  };
+  if (["CONFLICT", "VERSION_CONFLICT", "MONITORING_CONFIG_CHANGED", "SCAN_CONTEXT_CHANGED", "PROPOSAL_CONFLICT", "SOURCE_VERSION_CHANGED"].includes(code)) return text.conflict;
+  if (["FORBIDDEN", "PROJECT_FORBIDDEN", "ENTITLEMENT_REQUIRED", "LIMIT_EXCEEDED", "KNOWLEDGE_DISABLED"].includes(code)) return text.access;
+  if (["UNAUTHENTICATED", "UNAUTHORIZED", "AUTH_REQUIRED", "SESSION_EXPIRED"].includes(code)) return text.session;
+  if (["VALIDATION_ERROR", "INVALID_INPUT", "REASON_REQUIRED"].includes(code)) return text.required;
+  return fallback;
 }

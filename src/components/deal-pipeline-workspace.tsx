@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type {
   CalendarEvent,
   Contact,
@@ -31,6 +31,7 @@ import {
   getCrmSourceLabel,
   getCrmSystemTextLabel,
   getCrmTaskDueLabel,
+  getCrmTaskPriorityLabel,
   getDealPipelineCommandCopy,
   getLocale,
   displayTimeZone,
@@ -457,6 +458,15 @@ function getRelevantEvent(deal: Deal, calendarEvents: CalendarEvent[], contact?:
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0];
 }
 
+export function formatLeadBudgetRange(from: number | undefined, to: number | undefined, locale: string, language: LanguageCode) {
+  const hasFrom = typeof from === "number" && Number.isFinite(from) && from > 0;
+  const hasTo = typeof to === "number" && Number.isFinite(to) && to > 0;
+  if (hasFrom && hasTo) return from === to ? formatEuro(from, locale) : `${formatEuro(from, locale)} - ${formatEuro(to, locale)}`;
+  if (hasFrom) return `${language === "de" ? "ab" : "from"} ${formatEuro(from, locale)}`;
+  if (hasTo) return `${language === "de" ? "bis" : "up to"} ${formatEuro(to, locale)}`;
+  return "";
+}
+
 function getLeadBudget(lead: Lead | undefined, locale: string, language: LanguageCode) {
   if (!lead) {
     return "";
@@ -467,11 +477,11 @@ function getLeadBudget(lead: Lead | undefined, locale: string, language: Languag
   }
 
   if (lead.buyerProfile) {
-    return `${formatEuro(lead.buyerProfile.budgetFrom, locale)} - ${formatEuro(lead.buyerProfile.budgetTo, locale)}`;
+    return formatLeadBudgetRange(lead.buyerProfile.budgetFrom, lead.buyerProfile.budgetTo, locale, language);
   }
 
   if (lead.investorProfile) {
-    return `${formatEuro(lead.investorProfile.investmentVolumeFrom, locale)} - ${formatEuro(lead.investorProfile.investmentVolumeTo, locale)}`;
+    return formatLeadBudgetRange(lead.investorProfile.investmentVolumeFrom, lead.investorProfile.investmentVolumeTo, locale, language);
   }
 
   if (lead.sellerProfile) {
@@ -1294,20 +1304,47 @@ export function DealPipelineWorkspace({
 
   const stageReviewDealView = stageReview ? dealViews.find((item) => item.deal.id === stageReview.dealId) : undefined;
   const stageReviewDeal = stageReviewDealView?.deal;
+  const reviewDialogRef = useRef<HTMLElement>(null);
+  const reviewTitleId = useId();
+  const reviewDescriptionId = useId();
+  const reviewOpen = Boolean(stageReview && stageReviewDeal);
+  useEffect(() => {
+    if (!reviewOpen || !reviewDialogRef.current) return;
+    const dialog = reviewDialogRef.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])"));
+    (focusable()[0] ?? dialog).focus();
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setStageReview(null); return; }
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first || !last) { event.preventDefault(); dialog.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => { document.removeEventListener("keydown", handleKeyDown); previousFocus?.focus(); };
+  }, [reviewOpen]);
   const canConfirmReview = Boolean(
     !stageReview?.reasonRequired ||
       (stageReview.reasonCategory && stageReview.reason.trim().length >= 3),
   );
+  const selectedProjectPipeline = crmPipelines.find((item) => item.id === selectedDealView?.project?.defaultPipelineId);
   const dealFieldRows = selectedDeal
     ? [
-        ["deal_name", selectedDeal.name],
-        ["amount", selectedDeal.value],
-        ["pipeline_stage", stageLabel(selectedDeal.stage)],
-        ["project_pipeline", selectedDealView.project?.defaultPipelineId],
-        ["expected_close_date", selectedDeal.expectedCloseDate],
-        ["owner_email", selectedDealView.owner?.email],
-        ["linked_contact", selectedDealView.contact?.name],
-        ["linked_organization", selectedDealView.organization?.name],
+        { field: "deal_name", label: text.newDealName, value: selectedDeal.name },
+        { field: "amount", label: text.amount, value: selectedDeal.value },
+        { field: "pipeline_stage", label: text.stage, value: stageLabel(selectedDeal.stage) },
+        { field: "project_pipeline", label: text.projectPipeline, value: selectedProjectPipeline?.name },
+        { field: "expected_close_date", label: text.expectedClose, value: selectedDeal.expectedCloseDate },
+        { field: "owner_email", label: text.ownerEmail, value: selectedDealView.owner?.email },
+        { field: "linked_contact", label: text.contact, value: selectedDealView.contact?.name },
+        { field: "linked_organization", label: text.organization, value: selectedDealView.organization?.name },
       ]
     : [];
 
@@ -1441,7 +1478,10 @@ export function DealPipelineWorkspace({
         </div>
 
         {savedMessage ? (
-          <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+          <div
+            role={[text.saveFailed, text.createFailed, text.stageMoveFailed].some((message) => message === savedMessage) ? "alert" : "status"}
+            className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${[text.saveFailed, text.createFailed, text.stageMoveFailed].some((message) => message === savedMessage) ? "border-red-200 bg-red-50 text-red-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}
+          >
             {savedMessage}
           </div>
         ) : null}
@@ -1631,7 +1671,7 @@ export function DealPipelineWorkspace({
             <select className="min-w-24 rounded-md border border-stone-300 bg-white px-2 py-1 text-sm" onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} value={priorityFilter}>
               <option value="all">{text.all}</option>
               {PRIORITY_OPTIONS.map((priority) => (
-                <option key={priority} value={priority}>{priority}</option>
+                <option key={priority} value={priority}>{getCrmTaskPriorityLabel(priority, language)}</option>
               ))}
             </select>
           </label>
@@ -1799,7 +1839,7 @@ export function DealPipelineWorkspace({
 
           {selectedDeal ? (
             <>
-              <OfferWorkflow key={selectedDeal.id} deal={selectedDeal} contact={selectedDealView.contact} leads={leads} workspaceQuery={workspaceQuery} onChanged={onDealsChanged} />
+              <OfferWorkflow key={selectedDeal.id} deal={selectedDeal} contact={selectedDealView.contact} leads={leads} language={language} workspaceQuery={workspaceQuery} onChanged={onDealsChanged} />
               <div className="mt-4 grid gap-3 text-sm">
                 {[
                   [text.stage, stageLabel(selectedDeal.stage)],
@@ -2048,34 +2088,24 @@ export function DealPipelineWorkspace({
                 {selectedDeal?.name ?? text.noDeals}
               </p>
             </div>
-            <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-              {text.importReady}
-            </span>
           </div>
-          <div className="mt-4 max-w-full overflow-x-auto">
-            <table className="w-full min-w-[680px] border-collapse text-left text-sm">
-              <thead className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
-                <tr>
-                  <th className="py-2 pr-3 font-semibold">{text.fieldColumn}</th>
-                  <th className="py-2 pr-3 font-semibold">{text.valueColumn}</th>
-                  <th className="py-2 font-semibold">{text.statusColumn}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {dealFieldRows.map(([field, value]) => (
-                  <tr key={field}>
-                    <td className="py-3 pr-3 font-semibold text-slate-900">{field}</td>
-                    <td className="py-3 pr-3 text-stone-600">{value ?? "-"}</td>
-                    <td className="py-3">
-                      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${value ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-                        {value ? text.importReady : text.missing}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
+            {dealFieldRows.map(({ field, label, value }) => (
+              <div className="min-w-0 rounded-md bg-stone-50 p-3" key={field}>
+                <dt className="break-words text-xs font-semibold text-stone-500">{label}</dt>
+                <dd className="mt-1 grid min-w-0 gap-2 text-sm text-slate-900">
+                  <span className="break-words [overflow-wrap:anywhere]">{value || "—"}</span>
+                  <span className={`w-fit rounded-md px-2 py-1 text-xs font-semibold ${value ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{value ? text.importReady : text.missing}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <details className="mt-4 min-w-0 rounded-md border border-stone-200 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">{text.mappingDetails}</summary>
+            <dl className="mt-3 grid min-w-0 gap-2 text-xs">
+              {dealFieldRows.map(({ field, label }) => <div className="grid min-w-0 gap-1 sm:grid-cols-2" key={field}><dt className="break-words font-medium text-stone-600">{label}</dt><dd className="min-w-0"><code className="break-all text-slate-700">{field}</code></dd></div>)}
+            </dl>
+          </details>
         </article>
 
         <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
@@ -2158,10 +2188,10 @@ export function DealPipelineWorkspace({
 
       {stageReview && stageReviewDeal ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 py-6">
-          <section aria-modal="true" className="w-full max-w-xl rounded-lg border border-stone-200 bg-white p-5 shadow-2xl" role="dialog">
+          <section aria-modal="true" aria-labelledby={reviewTitleId} aria-describedby={reviewDescriptionId} className="max-h-[calc(100dvh-3rem)] w-full max-w-xl overflow-y-auto rounded-lg border border-stone-200 bg-white p-5 shadow-2xl" ref={reviewDialogRef} role="dialog" tabIndex={-1}>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{stageLabel(stageReview.targetStage)}</p>
-            <h3 className="mt-1 text-xl font-semibold text-slate-950">{text.reviewTitle}</h3>
-            <p className="mt-2 text-sm text-stone-600">{text.reviewDescription}</p>
+            <h3 className="mt-1 text-xl font-semibold text-slate-950" id={reviewTitleId}>{text.reviewTitle}</h3>
+            <p className="mt-2 text-sm text-stone-600" id={reviewDescriptionId}>{text.reviewDescription}</p>
             <div className="mt-4 rounded-md bg-stone-50 p-3">
               <p className="text-sm font-semibold text-slate-950">{stageReviewDeal.name}</p>
               <p className="mt-1 text-xs text-stone-500">{stageLabel(stageReviewDeal.stage)} → {stageLabel(stageReview.targetStage)}</p>

@@ -42,7 +42,9 @@ test("admin navigation restores browser history and gates restricted roles", () 
 
 test("active navigation controls the browser title and semantic breadcrumb", () => {
   assert.match(workspace, /document\.title = `\$\{activeAreaLabel\} \| Novalure CRM`/);
-  assert.match(workspace, /\[activeAreaLabel, language, languageHydrated\]/);
+  assert.match(workspace, /\[activeAreaLabel, language\]/);
+  assert.match(workspace, /useState<LanguageCode>\(initialLanguage\)/);
+  assert.doesNotMatch(workspace, /languageHydrated|navigator\.language/);
   assert.match(workspace, /<nav aria-label=\{contextCopy\.label\}[^>]+data-crm-breadcrumb>/);
   assert.match(workspace, /aria-current=\{index === breadcrumbItems\.length - 1 \? "page" : undefined\}/);
 });

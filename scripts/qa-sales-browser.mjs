@@ -12,6 +12,7 @@ try {
  const fresh = await seedSalesBrowser({admin,role:fixture.database.user});
  // Discard a legacy manually seeded cookie from older ignored QA contexts.
  fixture = {...fixture,...fresh};
+ await admin.query("insert into account_ui_preferences(auth_identity_id,language_preference) values($1,'de') on conflict(auth_identity_id) do update set language_preference=excluded.language_preference", [fixture.authIdentityId]);
  delete fixture.cookie;
  const sessions = await admin.query("select count(*)::int as count from auth_sessions where auth_identity_id=$1", [fixture.authIdentityId]);
  assert.equal(sessions.rows[0].count, 0, "The login fixture must start without a session");
@@ -77,7 +78,7 @@ let enrollmentVerified=false,loginCredentialExchangeVerified=false;
 
 let contact,lead,deal,buyer,buyerLead,unit;
 try{
- await step('anonymous login renders and protected CRM denies anonymous access',async()=>{await page.goto(fixture.baseUrl+'/login?lang=de');await expect(page.locator('body')).toContainText(/anmelden|login/i);const r=await page.request.get(fixture.baseUrl+'/api/crm/core');assert.ok([401,403].includes(r.status()));});
+ await step('anonymous login renders and protected CRM denies anonymous access',async()=>{await page.goto(fixture.baseUrl+'/login?languagePreference=de&lang=de');await expect(page.locator('body')).toContainText(/anmelden|login/i);const r=await page.request.get(fixture.baseUrl+'/api/crm/core');assert.ok([401,403].includes(r.status()));});
  await step('actual login rejects an incorrect password without granting a session',async()=>{
   await passwordLogin(fixture.password+'-incorrect');
   await expect(page.getByRole('alert')).toBeVisible();

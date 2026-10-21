@@ -14,7 +14,7 @@ import {
 } from "react";
 import type { KnowledgeItem, Project } from "@/lib/crm-types";
 import type { LanguageCode } from "@/lib/i18n";
-import { getKnowledgeCenterCopy } from "@/lib/knowledge-center/copy";
+import { getKnowledgeCenterCopy, getKnowledgeErrorMessage } from "@/lib/knowledge-center/copy";
 import { getKnowledgeLifecycleCopy } from "@/lib/knowledge-center/lifecycle-copy";
 import { KnowledgeLifecyclePanel } from "@/components/knowledge-lifecycle-panel";
 import { KnowledgeMonitoringPanel } from "@/components/knowledge-monitoring-panel";
@@ -104,9 +104,9 @@ async function readResponse<T>(
   fallback: string,
 ): Promise<T> {
   const payload = (await response.json().catch(() => null)) as
-    | (T & { error?: string })
+    | (T & { code?: string })
     | null;
-  if (!response.ok || !payload) throw new Error(payload?.error || fallback);
+  if (!response.ok || !payload) throw new Error(payload?.code || fallback);
   return payload;
 }
 
@@ -294,13 +294,13 @@ function KnowledgeCenterContent({
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted)
-          setLoadError(cause instanceof Error ? cause.message : text.loadError);
+          setLoadError(getKnowledgeErrorMessage(language, cause, text.loadError));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [loadSnapshot, text.loadError]);
+  }, [language, loadSnapshot, text.loadError]);
 
   async function refresh() {
     setLoadError("");
@@ -308,7 +308,7 @@ function KnowledgeCenterContent({
     try {
       setSnapshot(await loadSnapshot());
     } catch (cause) {
-      setLoadError(cause instanceof Error ? cause.message : text.loadError);
+      setLoadError(getKnowledgeErrorMessage(language, cause, text.loadError));
     } finally {
       setLoading(false);
     }
@@ -336,7 +336,7 @@ function KnowledgeCenterContent({
       setSnapshot(await loadSnapshot());
       setNotice(success);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : text.saveError);
+      setError(getKnowledgeErrorMessage(language, cause, text.saveError));
     } finally {
       setBusy("");
     }
@@ -581,7 +581,7 @@ function KnowledgeCenterContent({
       setNotice(text.uploadSuccess);
       setSnapshot(await loadSnapshot());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : text.uploadError);
+      setError(getKnowledgeErrorMessage(language, cause, text.uploadError));
     } finally {
       setBusy("");
     }
@@ -1292,7 +1292,7 @@ function KnowledgeCenterContent({
                     {!activeAreas.length ? (
                       <div className="grid gap-3">
                         <EmptyState
-                          description={text.noAreasHint}
+                          description={canWrite ? text.noAreasHint : text.readOnly}
                           title={text.noAreas}
                         />
                         {canWrite ? (
@@ -1722,7 +1722,7 @@ function KnowledgeCenterContent({
                       </ul>
                     ) : (
                       <EmptyState
-                        description={text.noAreasHint}
+                        description={canWrite ? text.noAreasHint : text.readOnly}
                         title={text.noAreas}
                       />
                     )}

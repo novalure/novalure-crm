@@ -22,6 +22,7 @@ import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/prop
 import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
+import { getUnitBoardErrorMessage, getUnitBoardFeedbackCopy } from "@/lib/unit-board-feedback";
 
 type UnitBoardProps = {
   workspaceId: string;
@@ -82,6 +83,7 @@ type WorkflowNotice = {
   kind: "success" | "error";
   message: string;
 };
+
 
 type InventoryMode = "building" | "unit" | null;
 
@@ -509,11 +511,12 @@ export function UnitBoard({
 
       setInventoryNotice({ kind: "success", message: text.inventorySaved });
       setInventoryMode(null);
-      await onReservationChanged?.();
+      try { await onReservationChanged?.(); }
+      catch { setInventoryNotice({ kind: "success", message: getUnitBoardFeedbackCopy(language).refreshFailed }); }
     } catch (error) {
       setInventoryNotice({
         kind: "error",
-        message: error instanceof Error ? error.message : text.inventorySaveFailed,
+        message: getUnitBoardErrorMessage(language, error),
       });
     } finally {
       setInventorySaving(false);
@@ -540,12 +543,13 @@ export function UnitBoard({
         throw new Error(typeof data.error === "string" ? data.error : text.workflowFailed);
       }
 
-      await onReservationChanged?.();
       setRuntimeNotice({ kind: "success", message: successMessage });
+      try { await onReservationChanged?.(); }
+      catch { setRuntimeNotice({ kind: "success", message: getUnitBoardFeedbackCopy(language).refreshFailed }); }
     } catch (error) {
       setRuntimeNotice({
         kind: "error",
-        message: error instanceof Error ? error.message : text.workflowFailed,
+        message: getUnitBoardErrorMessage(language, error),
       });
     } finally {
       setRuntimeBusyKey("");
@@ -661,13 +665,14 @@ export function UnitBoard({
         }).catch(() => undefined);
       }
 
-      await onReservationChanged?.();
       setWorkflowDraft(null);
       setWorkflowNotice({ kind: "success", message: text.workflowSaved });
+      try { await onReservationChanged?.(); }
+      catch { setWorkflowNotice({ kind: "success", message: getUnitBoardFeedbackCopy(language).refreshFailed }); }
     } catch (error) {
       setWorkflowNotice({
         kind: "error",
-        message: error instanceof Error ? error.message : text.workflowFailed,
+        message: getUnitBoardErrorMessage(language, error),
       });
     } finally {
       setWorkflowSaving(false);
@@ -676,7 +681,7 @@ export function UnitBoard({
 
   return (
     <section className="space-y-4">
-      <PropertySalesWorkflow key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={initialProjectId} onChanged={onReservationChanged} />
+      <PropertySalesWorkflow language={language} key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={initialProjectId} onChanged={onReservationChanged} />
       <div className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -892,7 +897,7 @@ export function UnitBoard({
                   <input
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
                     readOnly
-                    aria-label="Preis wird nach autorisierter Bestätigung übernommen"
+                    aria-label={getUnitBoardFeedbackCopy(language).priceConfirmation}
                     type="number"
                     value="0"
                   />

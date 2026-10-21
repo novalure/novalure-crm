@@ -1414,7 +1414,7 @@ export function FunnelCommandCenter({
               <div className={mutedCardClass}>
                 <p className="text-sm font-semibold">{text.privacy.title}</p>
                 <div className="mt-3 grid min-w-0 gap-3">
-                  <label className={fieldLabelClass}>{text.privacy.cookieConsent}<select className={selectClass} value={selected.funnel.cookieConsent} onChange={(event) => updateSelectedFunnel({ cookieConsent: event.target.value as EditableFunnel["cookieConsent"] })}><option>Standalone Banner</option><option>Website Consent</option><option>Openli</option><option>Custom Code</option></select></label>
+                  <label className={fieldLabelClass}>{text.privacy.cookieConsent}<select className={selectClass} value={selected.funnel.cookieConsent} onChange={(event) => updateSelectedFunnel({ cookieConsent: event.target.value as EditableFunnel["cookieConsent"] })}>{(["Standalone Banner", "Website Consent", "Openli", "Custom Code"] as const).map(value => <option key={value} value={value}>{text.privacy.cookieConsentOptions[value]}</option>)}</select></label>
                   <label className={fieldLabelClass}>{text.privacy.retention}<input className={inputClass} value={selected.funnel.dataRetention} onChange={(event) => updateSelectedFunnel({ dataRetention: event.target.value })} /></label>
                   <label className={fieldLabelClass}>{text.privacy.sensitiveFields}<input className={inputClass} value={selected.funnel.sensitiveMode} onChange={(event) => updateSelectedFunnel({ sensitiveMode: event.target.value })} /></label>
                 </div>

@@ -79,7 +79,21 @@ function readCookieConsent() {
     .find((entry) => entry.startsWith(`${cookieName}=`))
     ?.slice(cookieName.length + 1);
 
-  return parseConsent(value ? decodeURIComponent(value) : null);
+  try {
+    return parseConsent(value ? decodeURIComponent(value) : null);
+  } catch {
+    return null;
+  }
+}
+
+function readStoredConsent() {
+  try {
+    const consent = parseConsent(localStorage.getItem(storageKey));
+    if (consent) return consent;
+  } catch {
+    // Cookie consent remains available when browser storage is blocked.
+  }
+  return readCookieConsent();
 }
 
 function createConsentRecord(
@@ -100,7 +114,11 @@ function createConsentRecord(
 }
 
 function persistConsent(record: CookieConsentRecord) {
-  localStorage.setItem(storageKey, JSON.stringify(record));
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(record));
+  } catch {
+    // Preserve the existing cookie and event path for the user's choice.
+  }
 
   const secureFlag = window.location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${cookieName}=${encodeURIComponent(JSON.stringify(record))}; Max-Age=${consentMaxAgeSeconds}; Path=/; SameSite=Lax${secureFlag}`;
@@ -122,7 +140,7 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
     queueMicrotask(() => {
       if (!isActive) return;
 
-      const storedConsent = parseConsent(localStorage.getItem(storageKey)) ?? readCookieConsent();
+      const storedConsent = readStoredConsent();
       setConsent(storedConsent);
       setAnalyticsSelected(storedConsent?.analytics ?? false);
       setMarketingSelected(storedConsent?.marketing ?? false);

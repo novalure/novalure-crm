@@ -32,6 +32,7 @@ const text = {
     project: "Projekt",
     title: "Reservierungen",
     unit: "Einheit",
+    unitUnavailable: "Einheit nicht verfügbar",
     metrics: {
       active: "Aktiv",
       warnings: "Fristwarnungen",
@@ -70,6 +71,7 @@ const text = {
     project: "Project",
     title: "Reservations",
     unit: "Unit",
+    unitUnavailable: "Unit unavailable",
     metrics: {
       active: "Active",
       warnings: "Deadline warnings",
@@ -222,7 +224,7 @@ export function ReservationBoard({
                     <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusStyles[view.reservation.status]}`}>{copy.status[view.reservation.status]}</span>
                     <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${urgencyStyles[level]}`}>{urgencyLabel}</span>
                   </div>
-                  <p className="mt-3 break-words text-base font-semibold text-slate-950">{copy.unit} {view.unit?.unitNumber ?? view.reservation.unitId}</p>
+                  <p className="mt-3 break-words text-base font-semibold text-slate-950">{view.unit?.unitNumber ? `${copy.unit} ${view.unit.unitNumber}` : copy.unitUnavailable}</p>
                   <p className="mt-1 break-words text-sm text-stone-600">{view.project?.name ?? copy.project}</p>
                 </div>
                 <div className="rounded-md bg-white p-3 text-sm">

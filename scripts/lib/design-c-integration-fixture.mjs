@@ -68,6 +68,7 @@ export async function startDesignCIntegrationDatabase() {
       "104_knowledge_publication_workflow.sql",
       "105_knowledge_website_monitoring.sql",
       "106_crm_operational_readers.sql",
+      "107_account_ui_language_preference.sql",
     ]) {
       const sql = await readFile(path.resolve("migrations", filename), "utf8");
       const client = await owner.connect();
@@ -151,7 +152,8 @@ export async function startDesignCIntegrationDatabase() {
 
 // Called only after the browser runner has verified the disposable loopback DB.
 // No session, MFA secret, provider binding or authentication bypass is seeded.
-export async function seedDesignCIntegration({ admin, role }) {
+export async function seedDesignCIntegration({ admin, role, languagePreference = "de" }) {
+  assert.ok(["de", "en", "auto"].includes(languagePreference), "Synthetic UI language preference must be explicit");
   const operator = await seedSalesBrowser({ admin, role });
   operator.name = "SYNTHETIC DESIGN C INTERNAL";
   operator.requiresMfa = true;
@@ -273,6 +275,7 @@ export async function seedDesignCIntegration({ admin, role }) {
     [randomUUID(), STUDIO_WORKSPACE_ID, STUDIO_PROJECT_ID],
   );
   const viewer = {
+    authIdentityId: "",
     requiresMfa: false,
     workspaceId: customer.workspaceId,
     userId: randomUUID(),
@@ -296,6 +299,12 @@ export async function seedDesignCIntegration({ admin, role }) {
     sessions.rows[0].count,
     0,
     "All integration accounts must begin without a session",
+  );
+  // An explicit personal preference keeps existing German UI assertions
+  // intentional, without a geo or URL override in the real product path.
+  await admin.query(
+    "insert into account_ui_preferences(auth_identity_id,language_preference) select unnest($1::uuid[]),$2 on conflict(auth_identity_id) do update set language_preference=excluded.language_preference",
+    [[operator.authIdentityId, customer.authIdentityId, viewer.authIdentityId], languagePreference],
   );
   return {
     operator,

@@ -85,7 +85,7 @@ function getTaskWriteErrorMessage(reason: string | undefined, text: TaskCommandC
   if (reason === "Valid owner is required" || reason === "Owner is not available in this workspace") {
     return text.ownerInvalid;
   }
-  return reason ?? text.taskCreateFailed;
+  return text.taskCreateFailed;
 }
 
 function parseTaskDueDate(due: string, now = new Date()) {
@@ -200,6 +200,7 @@ export function TaskCommandCenter({
     createDefaultTaskDraft(projects, sessionUserId, activeProjectId),
   );
   const [notice, setNotice] = useState("");
+  const [noticeIsError, setNoticeIsError] = useState(false);
   const effectiveTasks = useMemo(() => {
     const overlayIds = new Set(taskOverlays.map((task) => task.id));
     return [...taskOverlays, ...tasks.filter((task) => !overlayIds.has(task.id))];
@@ -293,15 +294,18 @@ export function TaskCommandCenter({
 
   const createTask = async () => {
     if (!taskDraft.title.trim()) {
+      setNoticeIsError(true);
       setNotice(text.titleRequired);
       return;
     }
     if (!draftProjects.some((project) => project.id === taskDraft.projectId)) {
+      setNoticeIsError(true);
       setNotice(language === "de" ? "Projekt ist erforderlich." : "Project is required.");
       return;
     }
 
     setTaskSaving(true);
+    setNoticeIsError(false);
     setNotice("");
     try {
       const response = await csrfFetch("/api/crm/tasks", {
@@ -334,7 +338,8 @@ export function TaskCommandCenter({
       setNotice(text.taskCreated);
       void onTasksChanged?.();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : text.taskCreateFailed);
+      setNoticeIsError(true);
+      setNotice(error instanceof Error && error.message === text.ownerInvalid ? text.ownerInvalid : text.taskCreateFailed);
     } finally {
       setTaskSaving(false);
     }
@@ -344,6 +349,8 @@ export function TaskCommandCenter({
     const currentTask = decoratedTasks.find((item) => item.task.id === taskId);
     if (!currentTask || savingTaskIds.includes(taskId)) return;
     const nextStatus = currentTask.isCompleted ? "open" : "done";
+    setNotice("");
+    setNoticeIsError(false);
     setSavingTaskIds((current) => [...current, taskId]);
     void csrfFetch("/api/crm/tasks", {
       body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus }, expectedVersion: currentTask.task.version }),
@@ -352,11 +359,11 @@ export function TaskCommandCenter({
     })
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as { task?: Task; error?: string };
-        if (!response.ok || !payload.task) throw new Error(payload.error || text.taskCreateFailed);
+        if (!response.ok || !payload.task) throw new Error(text.taskCreateFailed);
         setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
         void onTasksChanged?.();
       })
-      .catch((error: unknown) => setNotice(error instanceof Error ? error.message : text.taskCreateFailed))
+      .catch(() => { setNoticeIsError(true); setNotice(text.taskCreateFailed); })
       .finally(() => setSavingTaskIds((current) => current.filter((id) => id !== taskId)));
   };
 
@@ -364,6 +371,8 @@ export function TaskCommandCenter({
     if (!selectedTask) return;
 
     setFollowUpSaving(true);
+    setNotice("");
+    setNoticeIsError(false);
     try {
       const response = await csrfFetch("/api/crm/recommendation-runtime", {
         body: JSON.stringify({
@@ -385,12 +394,14 @@ export function TaskCommandCenter({
       const payload = (await response.json().catch(() => ({}))) as { data?: { allowed?: boolean; delivery?: { status?: string } } };
       if (!response.ok) throw new Error(text.followUpFailed);
 
+      setNoticeIsError(payload.data?.allowed === false);
       setNotice(
         payload.data?.allowed === false
           ? text.followUpBlocked
-          : text.followUpQueued(payload.data?.delivery?.status ?? "queued"),
+          : text.followUpQueued(),
       );
     } catch {
+      setNoticeIsError(true);
       setNotice(text.followUpFailed);
     } finally {
       setFollowUpSaving(false);
@@ -450,6 +461,7 @@ export function TaskCommandCenter({
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateTaskDraft("title", event.target.value)}
+                  required
                   value={taskDraft.title}
                 />
               </label>
@@ -612,6 +624,7 @@ export function TaskCommandCenter({
           <div className="mt-4 flex flex-wrap gap-2">
             {views.map((view) => (
               <button
+                aria-pressed={activeView === view.id}
                 className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                   activeView === view.id ? viewStyles.active : viewStyles.idle
                 }`}
@@ -732,8 +745,8 @@ export function TaskCommandCenter({
           </div>
 
           <button
-            className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
-            disabled={!selectedTask}
+            className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!selectedTask || savingTaskIds.includes(selectedTask.task.id)}
             onClick={() => {
               if (selectedTask) {
                 toggleTask(selectedTask.task.id);
@@ -741,7 +754,7 @@ export function TaskCommandCenter({
             }}
             type="button"
           >
-            {selectedTask?.isCompleted ? text.reopen : text.markDone}
+            {selectedTask && savingTaskIds.includes(selectedTask.task.id) ? text.savingTask : selectedTask?.isCompleted ? text.reopen : text.markDone}
           </button>
 
           <button
@@ -756,7 +769,11 @@ export function TaskCommandCenter({
           </button>
 
           {notice ? (
-            <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+            <p
+              role={noticeIsError ? "alert" : "status"}
+              aria-live={noticeIsError ? "assertive" : "polite"}
+              className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold ${noticeIsError ? "border-red-200 bg-red-50 text-red-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}
+            >
               {notice}
             </p>
           ) : null}

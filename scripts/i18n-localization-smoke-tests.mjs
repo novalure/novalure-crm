@@ -384,7 +384,9 @@ test("system language persists to document html lang", () => {
   assert.match(htmlSyncSource, /\[data-public-language\]/);
   assert.match(htmlSyncSource, /document\.documentElement\.lang = language/);
   assert.match(htmlSyncSource, /document\.cookie = `\$\{languageCookieName\}=\$\{language\}/);
-  assert.match(workspaceSource, /window\.localStorage\.setItem\(languageStorageKeys\.system, language\)/);
+  assert.doesNotMatch(workspaceSource, /languageStorageKeys\.system|navigator\.language|readUrlLanguage/);
+  assert.match(workspaceSource, /csrfFetch\("\/api\/settings\/language"/);
+  assert.match(workspaceSource, /initialLanguagePreference/);
   assert.match(workspaceSource, /document\.documentElement\.lang = language/);
 });
 

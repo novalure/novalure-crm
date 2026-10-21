@@ -227,32 +227,101 @@ const copy = {
   },
 } as const;
 
-const roleLabels: Record<ProductRole, string> = {
-  assistant_backoffice: "Backoffice",
-  broker_agent: "Makler / Agent",
-  customer_owner: "Owner",
-  developer_sales: "Projektvertrieb Lead",
-  external_partner: "Externer Partner",
-  novalureAdmin: "Novalure Admin",
-  novalureGrowth: "Novalure Growth",
-  novalureServiceOps: "Novalure Service Ops",
-  novalure_customer_success: "Novalure Customer Success",
-  novalure_onboarding: "Novalure Onboarding",
-  novalure_operator: "Novalure Operator",
-  novalure_sales: "Novalure Sales",
-  platform_admin: "Platform Admin",
-  project_sales_member: "Projektvertrieb",
-  team_member: "Teammitglied",
-  viewer: "Viewer",
-  workspace_admin: "Workspace Admin",
-};
+const detailCopy = {
+  de: {
+    name: "Name", role: "Rolle", productRole: "Produktrolle", workspaceRole: "Unternehmensrolle", action: "Aktion", fields: "Geänderte Angaben", date: "Datum",
+    realEstateLicense: "Maklerlizenz / Gewerbeberechtigung", supervisoryAuthority: "Aufsichtsbehörde", tradeAuthority: "Gewerbebehörde", psraLicense: "PSRA-Lizenz",
+    brandName: "Markenname", logoUrl: "Logo-Adresse", primaryColor: "Hauptfarbe", unavailable: "Nicht verfügbar", otherFields: "Weitere Unternehmensangaben",
+    saved: "Änderungen gespeichert.", loadFailed: "Die Angaben konnten nicht geladen werden. Bitte laden Sie die Ansicht erneut.",
+    actionFailed: "Die Änderung wurde nicht bestätigt. Prüfen Sie den gespeicherten Stand, bevor Sie es erneut versuchen.",
+    forbidden: "Für diese Aktion fehlt Ihnen die Berechtigung. Wenden Sie sich an Ihre Unternehmensadministration.", sessionExpired: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    lockedProfile: "Dieses Unternehmensprofil ist gesperrt. Eine berechtigte Person muss es zur Bearbeitung freigeben.",
+    requiredInput: "Bitte prüfen Sie die Pflichtangaben und versuchen Sie es erneut.", passwordRequired: "Bitte geben Sie das neue Passwort zweimal ein.",
+    passwordTooShort: "Das neue Passwort muss mindestens 15 Zeichen enthalten.", passwordMismatch: "Die neuen Passwörter stimmen nicht überein.", currentPasswordInvalid: "Das aktuelle Passwort ist nicht korrekt.",
+    passwordUnavailable: "Das Passwort konnte nicht geändert werden. Bitte versuchen Sie es erneut.", signInAfterPassword: "Das Passwort wurde geändert. Bitte melden Sie sich erneut an.",
+    countryIssue: "Landesspezifische Pflichtangaben sind für Österreich, Deutschland und Irland verfügbar.", emailIssue: "Prüfen Sie die öffentliche E-Mail-Adresse.", vatIssue: "Die UID-/Umsatzsteuer-ID passt nicht zum ausgewählten Land.", reviewIssue: "Bitte prüfen Sie diese Unternehmensangabe.", missing: "fehlt.", approvalMissing: "Freigabe erforderlich für",
+    licenseAtMissing: "Gewerbeberechtigung für Immobilientreuhänder fehlt.", licenseDeMissing: "Erlaubnis nach § 34c GewO fehlt.", licenseIeMissing: "PSRA-Lizenzangaben fehlen.",
+    statuses: { draft: "Entwurf", needs_review: "Prüfung erforderlich", approved: "Freigegeben", locked: "Gesperrt" },
+    workspaceRoles: { owner: "Inhaber", admin: "Administration", agent: "Vertrieb", assistant: "Assistenz" },
+    usageLabels: { exposes: "Exposés", emails: "E-Mails", forms: "Formulare", invoices: "Rechnungen", imprint: "Impressum", privacy: "Datenschutzhinweise", openImmo: "OpenImmo", portalExport: "Portalexport", customerApprovals: "Kundenfreigaben", legalFooter: "Rechtliche Fußzeile", botDisclosures: "Hinweise für KI-Assistenten" },
+    actions: { "company_profile.created": "Unternehmensprofil erstellt", "company_profile.updated": "Unternehmensprofil geändert" },
+    roles: { assistant_backoffice: "Backoffice", broker_agent: "Makler / Agent", customer_owner: "Unternehmensinhaber", developer_sales: "Leitung Projektvertrieb", external_partner: "Externer Partner", novalureAdmin: "Novalure Administration", novalureGrowth: "Novalure Wachstum", novalureServiceOps: "Novalure Servicebetrieb", novalure_customer_success: "Novalure Kundenbetreuung", novalure_onboarding: "Novalure Einrichtung", novalure_operator: "Novalure Betrieb", novalure_sales: "Novalure Vertrieb", platform_admin: "Plattformadministration", project_sales_member: "Projektvertrieb", team_member: "Teammitglied", viewer: "Lesezugriff", workspace_admin: "Unternehmensadministration" },
+  },
+  en: {
+    name: "Name", role: "Role", productRole: "Product role", workspaceRole: "Company role", action: "Action", fields: "Changed details", date: "Date",
+    realEstateLicense: "Real estate licence", supervisoryAuthority: "Supervisory authority", tradeAuthority: "Trade authority", psraLicense: "PSRA licence",
+    brandName: "Brand name", logoUrl: "Logo address", primaryColor: "Primary colour", unavailable: "Unavailable", otherFields: "Other company details",
+    saved: "Changes saved.", loadFailed: "The details could not be loaded. Please reload the view.",
+    actionFailed: "The change was not confirmed. Check the saved record before trying again.",
+    forbidden: "You do not have permission for this action. Contact your company administrator.", sessionExpired: "Your session has expired. Please sign in again.",
+    lockedProfile: "This company profile is locked. An authorised person must unlock it for editing.",
+    requiredInput: "Check the required details and try again.", passwordRequired: "Enter the new password twice.",
+    passwordTooShort: "The new password must contain at least 15 characters.", passwordMismatch: "The new passwords do not match.", currentPasswordInvalid: "The current password is incorrect.",
+    passwordUnavailable: "The password could not be changed. Please try again.", signInAfterPassword: "The password was changed. Please sign in again.",
+    countryIssue: "Country-specific requirements are available for Austria, Germany and Ireland.", emailIssue: "Check the public email address.", vatIssue: "The VAT ID does not match the selected country.", reviewIssue: "Please review this company detail.", missing: "is required.", approvalMissing: "Approval required for",
+    licenseAtMissing: "The Austrian real estate trade licence is required.", licenseDeMissing: "A licence under section 34c GewO is required.", licenseIeMissing: "PSRA licence information is required.",
+    statuses: { draft: "Draft", needs_review: "Review required", approved: "Approved", locked: "Locked" },
+    workspaceRoles: { owner: "Owner", admin: "Administrator", agent: "Sales", assistant: "Assistant" },
+    usageLabels: { exposes: "Brochures", emails: "Emails", forms: "Forms", invoices: "Invoices", imprint: "Legal notice", privacy: "Privacy notices", openImmo: "OpenImmo", portalExport: "Portal export", customerApprovals: "Customer approvals", legalFooter: "Legal footer", botDisclosures: "AI assistant disclosures" },
+    actions: { "company_profile.created": "Company profile created", "company_profile.updated": "Company profile updated" },
+    roles: { assistant_backoffice: "Back office", broker_agent: "Broker / agent", customer_owner: "Company owner", developer_sales: "Project sales lead", external_partner: "External partner", novalureAdmin: "Novalure administration", novalureGrowth: "Novalure growth", novalureServiceOps: "Novalure service operations", novalure_customer_success: "Novalure customer success", novalure_onboarding: "Novalure onboarding", novalure_operator: "Novalure operations", novalure_sales: "Novalure sales", platform_admin: "Platform administrator", project_sales_member: "Project sales", team_member: "Team member", viewer: "Read only", workspace_admin: "Company administrator" },
+  },
+} as const;
+
+export function getCompanyProfileSettingsCopy(language: LanguageCode) {
+  return { ...copy[language], ...detailCopy[language] };
+}
+
+export function getCompanyProfileFieldLabel(field: string, language: LanguageCode): string {
+  const text = getCompanyProfileSettingsCopy(language);
+  const labels: Record<string, string> = {
+    displayName: text.displayName, legalName: text.legalName, legalForm: text.legalForm, countryCode: text.countryCode,
+    jurisdiction: text.jurisdiction, registrationNumber: text.registrationNumber, registrationAuthority: text.registrationAuthority,
+    registerCourt: text.registerCourt, vatId: text.vatId, taxNumber: text.taxNumber, businessAddress: text.businessAddress,
+    registeredOfficeAddress: text.registeredOfficeAddress, billingAddress: text.billingAddress, publicEmail: text.publicEmail,
+    publicPhone: text.publicPhone, website: text.website, representatives: text.representation, privacyContact: text.privacyContact,
+    dpoContact: text.dpoContact, status: text.status, licenses: text.licenses, "licenses.realEstate": text.realEstateLicense,
+    brand: text.branding, usageSettings: text.usage,
+  };
+  return labels[field] ?? text.otherFields;
+}
+
+export function getCompanyProfileIssueLabel(issue: CompanyProfilePreflightIssue, language: LanguageCode): string {
+  const text = getCompanyProfileSettingsCopy(language);
+  if (issue.usage && Object.hasOwn(text.usageLabels, issue.usage)) return `${text.approvalMissing}: ${text.usageLabels[issue.usage]}.`;
+  if (issue.message === "Landesspezifische Pflichtfelder sind nur für AT, DE und IE vorbereitet.") return text.countryIssue;
+  if (issue.message === "Öffentliche E-Mail ist formal ungültig.") return text.emailIssue;
+  if (issue.message === "VAT/UID passt nicht zum ausgewählten Land.") return text.vatIssue;
+  if (issue.field === "licenses.realEstate") {
+    if (issue.message.includes("Paragraph 34c GewO")) return text.licenseDeMissing;
+    if (issue.message.includes("PSRA")) return text.licenseIeMissing;
+    if (issue.message.includes("Immobilientreuhänder")) return text.licenseAtMissing;
+  }
+  if (issue.message.endsWith(" fehlt.")) return `${getCompanyProfileFieldLabel(issue.field, language)} ${text.missing}`;
+  return text.reviewIssue;
+}
+
+export function getCompanySettingsFeedback(code: string, language: LanguageCode) {
+  const text = getCompanyProfileSettingsCopy(language);
+  const messages: Record<string, string> = {
+    saved: text.saved, setup_sent: text.setupSent, password_updated: text.passwordUpdated,
+    load_failed: text.loadFailed, access_load_failed: text.loadFailed,
+    forbidden: text.forbidden, operator_profile_forbidden: text.forbidden, Unauthorized: text.sessionExpired,
+    "Company profile access is not allowed for this role": text.forbidden, "Company profile is locked": text.lockedProfile,
+    "organizationId is required for CRM account profiles": text.requiredInput, "User input is incomplete": text.requiredInput,
+    password_required: text.passwordRequired, password_too_short: text.passwordTooShort, password_mismatch: text.passwordMismatch,
+    current_password_invalid: text.currentPasswordInvalid, password_change_unavailable: text.passwordUnavailable,
+    "Password changed; sign in again": text.signInAfterPassword,
+  };
+  return { message: messages[code] ?? text.actionFailed, error: !["saved", "setup_sent", "password_updated", "Password changed; sign in again"].includes(code) };
+}
 
 function isOperatorAdmin(context: WorkspaceProductContext) {
   return context.productRole === "platform_admin" || context.productRole === "novalureAdmin";
 }
 
 function profileScopeLabel(scope: CompanyProfileScope, language: LanguageCode) {
-  const text = copy[language];
+  const text = getCompanyProfileSettingsCopy(language);
   if (scope === "platform_operator") return text.operator;
   if (scope === "crm_account") return text.account;
   return text.workspace;
@@ -360,14 +429,14 @@ function Field({
   );
 }
 
-function IssueList({
+export function CompanyProfileIssueList({
   issues,
   language,
 }: {
   issues: CompanyProfilePreflightIssue[];
   language: LanguageCode;
 }) {
-  const text = copy[language];
+  const text = getCompanyProfileSettingsCopy(language);
   if (!issues.length) {
     return (
       <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
@@ -385,9 +454,9 @@ function IssueList({
               ? "border-amber-200 bg-amber-50 text-amber-950"
               : "border-blue-200 bg-blue-50 text-blue-950"
           }`}
-          key={`${issue.field}-${issue.message}`}
+          key={`${issue.field}-${getCompanyProfileIssueLabel(issue, language)}`}
         >
-          {issue.message}
+          {getCompanyProfileIssueLabel(issue, language)}
         </p>
       ))}
     </div>
@@ -401,7 +470,7 @@ export function CompanyProfileSettings({
   context: WorkspaceProductContext;
   language: LanguageCode;
 }) {
-  const text = copy[language];
+  const text = getCompanyProfileSettingsCopy(language);
   const [profileScope, setProfileScope] = useState<CompanyProfileScope>("workspace_owner");
   const [activeTab, setActiveTab] = useState<ProfileTab>("master");
   const [organizationId, setOrganizationId] = useState("");
@@ -412,6 +481,7 @@ export function CompanyProfileSettings({
   const [profileBusy, setProfileBusy] = useState(false);
   const [accessPayload, setAccessPayload] = useState<WorkspaceAccessSettingsPayload | null>(null);
   const [accessMessage, setAccessMessage] = useState("");
+  const [accessSetupUrl, setAccessSetupUrl] = useState("");
   const [accessBusy, setAccessBusy] = useState("");
   const [inviteDraft, setInviteDraft] = useState({
     email: "",
@@ -442,28 +512,39 @@ export function CompanyProfileSettings({
 
     setProfileBusy(true);
     setProfileMessage("");
-    const response = await csrfFetch(getProfileUrl(profileScope, organizationId.trim()));
-    const nextPayload = response.ok ? await readJsonResponse<CompanyProfilePayload>(response) : null;
-    if (!nextPayload) {
+    try {
+      const response = await csrfFetch(getProfileUrl(profileScope, organizationId.trim()));
+      const nextPayload = response.ok ? await readJsonResponse<CompanyProfilePayload>(response) : null;
+      if (!nextPayload) {
+        setPayload(null);
+        setDraft(null);
+        setProfileMessage(response.status === 403 ? "forbidden" : response.status === 401 ? "Unauthorized" : "load_failed");
+        return;
+      }
+
+      setPayload(nextPayload);
+      setDraft(nextPayload.profile);
+      setRepresentativesText(formatRepresentatives(nextPayload.profile.representatives));
+    } catch {
       setPayload(null);
       setDraft(null);
-      setProfileMessage(response.status === 403 ? "forbidden" : "load_failed");
+      setProfileMessage("load_failed");
+    } finally {
       setProfileBusy(false);
-      return;
     }
-
-    setPayload(nextPayload);
-    setDraft(nextPayload.profile);
-    setRepresentativesText(formatRepresentatives(nextPayload.profile.representatives));
-    setProfileBusy(false);
   }, [canLoadCurrentProfile, organizationId, profileScope]);
 
   const loadAccess = useCallback(async () => {
     await Promise.resolve();
 
-    const response = await csrfFetch("/api/settings/access/users");
-    const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload>(response) : null;
-    if (nextPayload) setAccessPayload(nextPayload);
+    try {
+      const response = await csrfFetch("/api/settings/access/users");
+      const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload>(response) : null;
+      if (nextPayload) setAccessPayload(nextPayload);
+      else setAccessMessage(response.status === 403 ? "forbidden" : response.status === 401 ? "Unauthorized" : "access_load_failed");
+    } catch {
+      setAccessMessage("access_load_failed");
+    }
   }, []);
 
   useEffect(() => {
@@ -513,7 +594,8 @@ export function CompanyProfileSettings({
     if (!draft) return;
     setProfileBusy(true);
     setProfileMessage("");
-    const response = await csrfFetch("/api/settings/company-profile", {
+    try {
+      const response = await csrfFetch("/api/settings/company-profile", {
       body: JSON.stringify({
         ...draft,
         organizationId: profileScope === "crm_account" ? organizationId.trim() : undefined,
@@ -523,18 +605,21 @@ export function CompanyProfileSettings({
       headers: { "Content-Type": "application/json" },
       method: "PATCH",
     });
-    const nextPayload = response.ok ? await readJsonResponse<CompanyProfilePayload>(response) : null;
-    if (!nextPayload) {
-      const failure = await readJsonResponse<{ error?: string }>(response);
-      setProfileMessage(failure?.error ?? "save_failed");
+      const nextPayload = response.ok ? await readJsonResponse<CompanyProfilePayload>(response) : null;
+      if (!nextPayload) {
+        const failure = await readJsonResponse<{ error?: string }>(response);
+        setProfileMessage(failure?.error ?? "save_failed");
+        return;
+      }
+      setPayload(nextPayload);
+      setDraft(nextPayload.profile);
+      setRepresentativesText(formatRepresentatives(nextPayload.profile.representatives));
+      setProfileMessage("saved");
+    } catch {
+      setProfileMessage("save_failed");
+    } finally {
       setProfileBusy(false);
-      return;
     }
-    setPayload(nextPayload);
-    setDraft(nextPayload.profile);
-    setRepresentativesText(formatRepresentatives(nextPayload.profile.representatives));
-    setProfileMessage("saved");
-    setProfileBusy(false);
   }
 
   function patchAccessUser(userId: string, patch: Partial<WorkspaceUser>) {
@@ -549,15 +634,25 @@ export function CompanyProfileSettings({
     if (!nextPayload) {
       const failure = await readJsonResponse<{ error?: string }>(response);
       setAccessMessage(failure?.error ?? "access_failed");
+      setAccessSetupUrl("");
       return;
     }
     setAccessPayload(nextPayload);
-    setAccessMessage(nextPayload.lastAction?.setupUrl ? `${text.setupSent} ${nextPayload.lastAction.setupUrl}` : "saved");
+    setAccessMessage(nextPayload.lastAction?.setupUrl ? "setup_sent" : "saved");
+    setAccessSetupUrl(nextPayload.lastAction?.setupUrl ?? "");
+  }
+
+  async function withAccessFeedback(action: () => Promise<void>) {
+    setAccessSetupUrl("");
+    try { await action(); }
+    catch { setAccessMessage("access_failed"); }
+    finally { setAccessBusy(""); }
   }
 
   async function inviteUser() {
     setAccessBusy("invite");
     setAccessMessage("");
+    await withAccessFeedback(async () => {
     const role = mapProductRoleToTechnicalRole(inviteDraft.productRole);
     const response = await csrfFetch("/api/settings/access/users", {
       body: JSON.stringify({ ...inviteDraft, role }),
@@ -566,12 +661,13 @@ export function CompanyProfileSettings({
     });
     await refreshAccessFromResponse(response);
     if (response.ok) setInviteDraft({ email: "", name: "", productRole: "team_member" });
-    setAccessBusy("");
+    });
   }
 
   async function updateUser(user: WorkspaceUser) {
     setAccessBusy(user.id);
     setAccessMessage("");
+    await withAccessFeedback(async () => {
     const response = await csrfFetch("/api/settings/access/users", {
       body: JSON.stringify({
         productRole: user.productRole,
@@ -583,24 +679,26 @@ export function CompanyProfileSettings({
       method: "PATCH",
     });
     await refreshAccessFromResponse(response);
-    setAccessBusy("");
+    });
   }
 
   async function runAccessAction(action: AccessAction, userId: string) {
     setAccessBusy(`${action}:${userId}`);
     setAccessMessage("");
+    await withAccessFeedback(async () => {
     const response = await csrfFetch("/api/settings/access/users", {
       body: JSON.stringify({ operation: action, userId }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
     await refreshAccessFromResponse(response);
-    setAccessBusy("");
+    });
   }
 
   async function changePassword() {
     setAccessBusy("password");
     setAccessMessage("");
+    await withAccessFeedback(async () => {
     const response = await csrfFetch("/api/settings/access/password", {
       body: JSON.stringify(passwordDraft),
       headers: { "Content-Type": "application/json" },
@@ -608,17 +706,19 @@ export function CompanyProfileSettings({
     });
     if (response.ok) {
       setPasswordDraft({ confirmation: "", currentPassword: "", password: "" });
-      setAccessMessage(text.passwordUpdated);
+      setAccessMessage("password_updated");
     } else {
       const failure = await readJsonResponse<{ error?: string }>(response);
       setAccessMessage(failure?.error ?? "password_failed");
     }
-    setAccessBusy("");
+    });
   }
 
   const statusOptions: CompanyProfileStatus[] = payload?.canApprove
     ? ["draft", "needs_review", "approved", "locked"]
     : ["draft", "needs_review"];
+  const profileFeedback = getCompanySettingsFeedback(profileMessage, language);
+  const accessFeedback = getCompanySettingsFeedback(accessMessage, language);
 
   return (
     <section className="grid min-w-0 gap-4">
@@ -633,6 +733,7 @@ export function CompanyProfileSettings({
           <div className="flex flex-wrap gap-2">
             {profileScopes.map((scope) => (
               <button
+                aria-pressed={profileScope === scope}
                 className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                   profileScope === scope
                     ? "border-slate-950 bg-slate-950 text-white"
@@ -667,6 +768,7 @@ export function CompanyProfileSettings({
         <div className="mt-4 flex flex-wrap gap-2">
           {profileTabs.map((tab) => (
             <button
+              aria-pressed={activeTab === tab}
               className={`rounded-md border px-3 py-2 text-xs font-semibold ${
                 activeTab === tab
                   ? "border-emerald-700 bg-emerald-50 text-emerald-900"
@@ -746,10 +848,10 @@ export function CompanyProfileSettings({
 
             {activeTab === "licenses" ? (
               <div className="grid gap-3 md:grid-cols-2">
-                <Field disabled={!payload?.canEdit} label="Real Estate / Maklerlizenz" onChange={(value) => updateRecordField("licenses", "realEstate", value)} value={getRecordText(draft.licenses, "realEstate")} />
-                <Field disabled={!payload?.canEdit} label="Aufsichtsbehoerde" onChange={(value) => updateRecordField("licenses", "supervisoryAuthority", value)} value={getRecordText(draft.licenses, "supervisoryAuthority")} />
-                <Field disabled={!payload?.canEdit} label="Gewerbebehoerde" onChange={(value) => updateRecordField("licenses", "tradeAuthority", value)} value={getRecordText(draft.licenses, "tradeAuthority")} />
-                <Field disabled={!payload?.canEdit} label="PSRA Licence" onChange={(value) => updateRecordField("licenses", "psraLicence", value)} value={getRecordText(draft.licenses, "psraLicence")} />
+                <Field disabled={!payload?.canEdit} label={text.realEstateLicense} onChange={(value) => updateRecordField("licenses", "realEstate", value)} value={getRecordText(draft.licenses, "realEstate")} />
+                <Field disabled={!payload?.canEdit} label={text.supervisoryAuthority} onChange={(value) => updateRecordField("licenses", "supervisoryAuthority", value)} value={getRecordText(draft.licenses, "supervisoryAuthority")} />
+                <Field disabled={!payload?.canEdit} label={text.tradeAuthority} onChange={(value) => updateRecordField("licenses", "tradeAuthority", value)} value={getRecordText(draft.licenses, "tradeAuthority")} />
+                <Field disabled={!payload?.canEdit} label={text.psraLicense} onChange={(value) => updateRecordField("licenses", "psraLicence", value)} value={getRecordText(draft.licenses, "psraLicence")} />
               </div>
             ) : null}
 
@@ -762,9 +864,9 @@ export function CompanyProfileSettings({
 
             {activeTab === "branding" ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <Field disabled={!payload?.canEdit} label="Brand Name" onChange={(value) => updateRecordField("brand", "businessName", value)} value={getRecordText(draft.brand, "businessName")} />
-                <Field disabled={!payload?.canEdit} label="Logo URL" onChange={(value) => updateRecordField("brand", "logoUrl", value)} value={getRecordText(draft.brand, "logoUrl")} />
-                <Field disabled={!payload?.canEdit} label="Primary Color" onChange={(value) => updateRecordField("brand", "primaryColor", value)} value={getRecordText(draft.brand, "primaryColor")} />
+                <Field disabled={!payload?.canEdit} label={text.brandName} onChange={(value) => updateRecordField("brand", "businessName", value)} value={getRecordText(draft.brand, "businessName")} />
+                <Field disabled={!payload?.canEdit} label={text.logoUrl} onChange={(value) => updateRecordField("brand", "logoUrl", value)} value={getRecordText(draft.brand, "logoUrl")} />
+                <Field disabled={!payload?.canEdit} label={text.primaryColor} onChange={(value) => updateRecordField("brand", "primaryColor", value)} value={getRecordText(draft.brand, "primaryColor")} />
               </div>
             ) : null}
 
@@ -778,7 +880,7 @@ export function CompanyProfileSettings({
                       onChange={(event) => updateUsage(key, event.target.checked)}
                       type="checkbox"
                     />
-                    {key}
+                    {text.usageLabels[key]}
                   </label>
                 ))}
               </div>
@@ -795,27 +897,27 @@ export function CompanyProfileSettings({
                     value={draft.status}
                   >
                     {statusOptions.map((status) => (
-                      <option key={status} value={status}>{status}</option>
+                      <option key={status} value={status}>{text.statuses[status] ?? text.unavailable}</option>
                     ))}
                   </select>
                 </label>
                 <div className="grid gap-3">
-                  <IssueList issues={payload?.preflight.issues ?? []} language={language} />
+                  <CompanyProfileIssueList issues={payload?.preflight.issues ?? []} language={language} />
                   {payload?.versions.length ? (
                     <div className="max-h-56 overflow-auto rounded-md border border-stone-200">
                       <table className="w-full min-w-[540px] text-left text-sm">
                         <thead className="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-500">
                           <tr>
-                            <th className="px-3 py-2 font-semibold">Action</th>
-                            <th className="px-3 py-2 font-semibold">Fields</th>
-                            <th className="px-3 py-2 font-semibold">Date</th>
+                            <th className="px-3 py-2 font-semibold">{text.action}</th>
+                            <th className="px-3 py-2 font-semibold">{text.fields}</th>
+                            <th className="px-3 py-2 font-semibold">{text.date}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {payload.versions.map((version) => (
                             <tr className="border-t border-stone-200" key={version.id}>
-                              <td className="px-3 py-2 font-semibold text-slate-950">{version.action}</td>
-                              <td className="px-3 py-2 text-stone-700">{version.changedFields.join(", ")}</td>
+                              <td className="px-3 py-2 font-semibold text-slate-950">{(text.actions as Record<string, string>)[version.action] ?? text.unavailable}</td>
+                              <td className="px-3 py-2 text-stone-700">{version.changedFields.map((field) => getCompanyProfileFieldLabel(field, language)).join(", ")}</td>
                               <td className="px-3 py-2 text-stone-700">{version.createdAt.slice(0, 16).replace("T", " ")}</td>
                             </tr>
                           ))}
@@ -845,10 +947,10 @@ export function CompanyProfileSettings({
                 {profileBusy ? "..." : text.save}
               </SmallButton>
             </div>
-            {profileMessage ? (
-              <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">{profileMessage}</p>
-            ) : null}
           </div>
+        ) : null}
+        {profileMessage ? (
+          <p role={profileFeedback.error ? "alert" : "status"} className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${profileFeedback.error ? "border-red-200 bg-red-50 text-red-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}>{profileFeedback.message}</p>
         ) : null}
       </article>
 
@@ -862,17 +964,17 @@ export function CompanyProfileSettings({
           <div className="min-w-0">
             {accessPayload?.canManage ? (
               <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
-                <Field label="Name" onChange={(value) => setInviteDraft((current) => ({ ...current, name: value }))} value={inviteDraft.name} />
+                <Field label={text.name} onChange={(value) => setInviteDraft((current) => ({ ...current, name: value }))} value={inviteDraft.name} />
                 <Field label={text.email} onChange={(value) => setInviteDraft((current) => ({ ...current, email: value }))} type="email" value={inviteDraft.email} />
                 <label className={labelClass()}>
-                  Rolle
+                  {text.role}
                   <select
                     className={inputClass()}
                     onChange={(event) => setInviteDraft((current) => ({ ...current, productRole: event.target.value as ProductRole }))}
                     value={inviteDraft.productRole}
                   >
                     {productRoleOptions.map((role) => (
-                      <option key={role} value={role}>{roleLabels[role]}</option>
+                      <option key={role} value={role}>{text.roles[role] ?? text.unavailable}</option>
                     ))}
                   </select>
                 </label>
@@ -886,12 +988,12 @@ export function CompanyProfileSettings({
               <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-500">
                   <tr>
-                    <th className="px-3 py-2 font-semibold">Name</th>
+                    <th className="px-3 py-2 font-semibold">{text.name}</th>
                     <th className="px-3 py-2 font-semibold">{text.email}</th>
-                    <th className="px-3 py-2 font-semibold">Produktrolle</th>
-                    <th className="px-3 py-2 font-semibold">Workspace Rolle</th>
+                    <th className="px-3 py-2 font-semibold">{text.productRole}</th>
+                    <th className="px-3 py-2 font-semibold">{text.workspaceRole}</th>
                     <th className="px-3 py-2 font-semibold">{text.status}</th>
-                    <th className="px-3 py-2 font-semibold">Aktion</th>
+                    <th className="px-3 py-2 font-semibold">{text.action}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -914,7 +1016,7 @@ export function CompanyProfileSettings({
                           value={user.productRole ?? "viewer"}
                         >
                           {productRoleOptions.map((role) => (
-                            <option key={role} value={role}>{roleLabels[role]}</option>
+                            <option key={role} value={role}>{text.roles[role] ?? text.unavailable}</option>
                           ))}
                         </select>
                       </td>
@@ -927,7 +1029,7 @@ export function CompanyProfileSettings({
                           value={user.role}
                         >
                           {workspaceRoleOptions.map((role) => (
-                            <option key={role} value={role}>{role}</option>
+                            <option key={role} value={role}>{text.workspaceRoles[role] ?? text.unavailable}</option>
                           ))}
                         </select>
                       </td>
@@ -977,8 +1079,9 @@ export function CompanyProfileSettings({
               <SmallButton disabled={accessBusy === "password"} onClick={changePassword}>{text.save}</SmallButton>
             </div>
             {accessMessage ? (
-              <p className="mt-4 break-words rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700">
-                {accessMessage}
+              <p role={accessFeedback.error ? "alert" : "status"} className={`mt-4 break-words rounded-md border bg-white px-3 py-2 text-sm font-semibold ${accessFeedback.error ? "border-red-200 text-red-900" : "border-emerald-200 text-emerald-900"}`}>
+                {accessFeedback.message}
+                {accessSetupUrl ? <span className="mt-2 block">{accessSetupUrl}</span> : null}
               </p>
             ) : null}
           </div>

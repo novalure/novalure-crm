@@ -9,15 +9,24 @@
   font-size: 0.875rem;
   font-weight: 700;
   gap: 0.5rem;
+  hyphens: auto;
   justify-content: center;
   line-height: 1.2;
   min-block-size: var(--nl-control-height-compact);
   min-inline-size: var(--nl-control-height-compact);
+  max-inline-size: 100%;
+  overflow-wrap: normal;
   padding: 0.625rem 1rem;
   text-align: center;
   text-decoration: none;
   transition: background-color 160ms ease, box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
   user-select: none;
+  white-space: normal;
+  word-break: normal;
+}
+
+.button > svg {
+  flex-shrink: 0;
 }
 
 .button:hover:not(:disabled) {
@@ -191,6 +200,11 @@
   gap: 0.625rem;
   min-block-size: var(--nl-control-height-compact);
   min-inline-size: var(--nl-control-height-compact);
+  max-inline-size: 100%;
+}
+
+.checkboxTarget > span {
+  min-inline-size: 0;
 }
 
 .checkboxTarget:has(.checkbox:disabled) {
@@ -342,6 +356,11 @@
   min-block-size: 1.25rem;
 }
 
+.notice > :last-child {
+  min-inline-size: 0;
+  overflow-wrap: break-word;
+}
+
 .noticeInfo {
   background: var(--nl-blue-tint);
   border-color: var(--nl-info-border, #ead36a);
@@ -443,6 +462,13 @@
   50% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@media (max-width: 390px) {
+  /* A word enlarged beyond the full control width must still reflow. */
+  .button {
+    overflow-wrap: anywhere;
   }
 }
 

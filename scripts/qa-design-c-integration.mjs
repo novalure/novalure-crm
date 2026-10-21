@@ -846,7 +846,7 @@ async function api(
 }
 
 async function login(page, account, negatives = false) {
-  await page.goto(new URL("/login?lang=de", base).href);
+  await page.goto(new URL("/login?languagePreference=de&lang=de", base).href);
   const consent = page.getByRole("button", {
     name: "Nur essentielle",
     exact: true,
@@ -1192,7 +1192,7 @@ async function runIntegration() {
       ? "Anonymous operational readers deny access"
       : "Anonymous CRM and Knowledge APIs deny access",
     async () => {
-      await operatorPage.goto(new URL("/login?lang=de", base).href);
+      await operatorPage.goto(new URL("/login?languagePreference=de&lang=de", base).href);
       for (const endpoint of [
         "/api/crm/core",
         "/api/knowledge-center",

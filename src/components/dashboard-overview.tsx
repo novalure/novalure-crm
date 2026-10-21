@@ -373,6 +373,23 @@ function loadStoredViews() {
   }
 }
 
+function readLastDashboardView() {
+  if (typeof window === "undefined") return "default";
+  try {
+    return window.localStorage.getItem(LAST_VIEW_STORAGE_KEY) ?? "default";
+  } catch {
+    return "default";
+  }
+}
+
+function rememberDashboardView(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // The current view remains usable when browser storage is unavailable.
+  }
+}
+
 function formatEuro(value: number, locale: string) {
   return new Intl.NumberFormat(locale, { currency: "EUR", maximumFractionDigits: 0, style: "currency" }).format(value);
 }
@@ -473,7 +490,7 @@ export function DashboardOverview({
       : viewportWidth - (viewportWidth >= 1280 ? 400 : 48);
   const gridWidth = Math.max(320, Math.min(width, viewportGridLimit));
   const [views, setViews] = useState<DashboardView[]>(loadStoredViews);
-  const [activeViewId, setActiveViewId] = useState(() => (typeof window === "undefined" ? "default" : window.localStorage.getItem(LAST_VIEW_STORAGE_KEY) ?? "default"));
+  const [activeViewId, setActiveViewId] = useState(readLastDashboardView);
   const initialView = normalizeView(views.find((view) => view.id === activeViewId) ?? presetViews[0]);
   const [filters, setFilters] = useState<DashboardFilters>(initialView.filters);
   const [widgets, setWidgets] = useState<WidgetId[]>(initialView.widgets);
@@ -631,7 +648,7 @@ export function DashboardOverview({
     setFilters(view.filters);
     setWidgets(view.widgets);
     setLayout(view.layout);
-    if (typeof window !== "undefined") window.localStorage.setItem(LAST_VIEW_STORAGE_KEY, view.id);
+    rememberDashboardView(LAST_VIEW_STORAGE_KEY, view.id);
   };
 
   const saveCurrentView = async () => {
@@ -666,10 +683,10 @@ export function DashboardOverview({
       // Persisted API is primary; local storage keeps the private demo usable when it is unavailable.
     }
     const customViews = [...views.filter((view) => !presetViews.some((preset) => preset.id === view.id)), nextView];
-    window.localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(customViews));
+    rememberDashboardView(VIEW_STORAGE_KEY, JSON.stringify(customViews));
     setViews([...presetViews, ...customViews]);
     setActiveViewId(nextView.id);
-    window.localStorage.setItem(LAST_VIEW_STORAGE_KEY, nextView.id);
+    rememberDashboardView(LAST_VIEW_STORAGE_KEY, nextView.id);
   };
 
   const toggleLeadType = (type: LeadTypeFilter) => {
@@ -800,9 +817,9 @@ export function DashboardOverview({
     <article className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm" key={widget}>
       <div className={`${draggable ? "widget-drag-handle cursor-move" : ""} border-b border-stone-100 px-4 py-3`}>
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-          <div className="min-w-32 flex-1">
-            <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950" style={{ overflowWrap: "normal", wordBreak: "normal" }}>{copy.widgets[widget].title}</p>
-            <p className="mt-1 line-clamp-2 text-xs leading-4 text-stone-500" style={{ overflowWrap: "normal", wordBreak: "normal" }}>{copy.widgets[widget].description}</p>
+          <div className="min-w-0 flex-[1_1_14rem]">
+            <p className="text-sm font-semibold leading-5 text-slate-950" style={{ overflowWrap: "normal", wordBreak: "normal" }}>{copy.widgets[widget].title}</p>
+            <p className="mt-1 text-xs leading-4 text-stone-500" style={{ overflowWrap: "normal", wordBreak: "normal" }}>{copy.widgets[widget].description}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -852,7 +869,7 @@ export function DashboardOverview({
             <p className="mt-1 max-w-4xl break-words text-sm text-stone-600">{copy.header.description}</p>
           </div>
           <div className="flex min-w-0 flex-wrap gap-2">
-            <select className="max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold sm:w-auto" onChange={(event) => applyView(event.target.value)} value={activeViewId}>{views.map((view) => <option key={view.id} value={view.id}>{getViewName(view)}</option>)}</select>
+            <select aria-label={copy.header.viewLabel} className="max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold sm:w-auto" onChange={(event) => applyView(event.target.value)} value={activeViewId}>{views.map((view) => <option key={view.id} value={view.id}>{getViewName(view)}</option>)}</select>
             <button className="max-w-full whitespace-normal rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold" onClick={() => void saveCurrentView()} type="button">{copy.header.saveView}</button>
             <button className="max-w-full whitespace-normal rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold" onClick={() => applyView("default")} type="button">{copy.header.resetView}</button>
             <button className="max-w-full whitespace-normal rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:bg-stone-400" disabled={exporting} onClick={exportPdf} type="button">{exporting ? copy.header.exportingPdf : copy.header.exportPdf}</button>

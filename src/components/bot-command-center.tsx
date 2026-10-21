@@ -407,16 +407,16 @@ function formatFileSize(bytes: number) {
   return `${value.toFixed(unitIndex >= 2 ? 1 : 0)} ${units[unitIndex]}`;
 }
 
-function formatBotSetupSaveError(
+export function formatBotSetupSaveError(
   data: BotSetupMutationResponse,
   text: ReturnType<typeof getBotCommandCenterCopy>,
 ) {
   if (data.error?.startsWith("bot_publish_blocked")) {
     const labels = (data.blockers ?? []).map((blocker) => {
       const key = blocker as keyof typeof text.publishBlockerLabels;
-      return text.publishBlockerLabels[key] ?? blocker;
+      return text.publishBlockerLabels[key];
     });
-
+    if (!labels.length || labels.some(label => !label)) return text.botPublishBlockedUnknown;
     return text.botPublishBlocked.replace("{{items}}", labels.join(", "));
   }
 
@@ -909,12 +909,14 @@ export function BotCommandCenter({
       const data = await response.json().catch(() => ({})) as BotSetupMutationResponse;
 
       if (!response.ok) {
-        throw new Error(formatBotSetupSaveError(data, text));
+        setBotSetupSaveMessage(formatBotSetupSaveError(data, text));
+        setBotSetupSaveStatus("error");
+        return;
       }
 
       setBotSetupSaveStatus("ready");
-    } catch (error) {
-      setBotSetupSaveMessage(error instanceof Error && error.message ? error.message : text.botSetupSaveError);
+    } catch {
+      setBotSetupSaveMessage(text.botSetupSaveError);
       setBotSetupSaveStatus("error");
     } finally {
       setBotSetupSavingId(null);
@@ -1003,10 +1005,10 @@ export function BotCommandCenter({
       setBotActionResult((text as { botActionSaved?: string }).botActionSaved ?? "Bot action updated.");
       setBotActionStatus("ready");
       return true;
-    } catch (error) {
+    } catch {
       setDocumentUploadErrors((current) => ({
         ...current,
-        [documentSendId]: error instanceof Error ? error.message : text.actionOutboxLoadError,
+        [documentSendId]: text.documentAttachFailed,
       }));
       return false;
     } finally {
@@ -1051,16 +1053,16 @@ export function BotCommandCenter({
       };
 
       if (!response.ok || !payload.asset) {
-        throw new Error(payload.error || text.documentUploadFailed);
+        throw new Error(text.documentUploadFailed);
       }
 
       setDocumentAssets((current) => [payload.asset as BotDocumentAsset, ...current.filter((asset) => asset.id !== payload.asset?.id)]);
       if (payload.quota) setDocumentQuota(payload.quota);
       await attachDocumentAsset(documentSend.id, payload.asset.id);
-    } catch (error) {
+    } catch {
       setDocumentUploadErrors((current) => ({
         ...current,
-        [documentSend.id]: error instanceof Error ? error.message : text.documentUploadFailed,
+        [documentSend.id]: text.documentUploadFailed,
       }));
     } finally {
       setDocumentUploadingId(null);
@@ -1746,7 +1748,7 @@ export function BotCommandCenter({
                           </div>
                           {deliveryError ? (
                             <p className="mt-3 rounded-md bg-rose-50 p-3 text-xs font-semibold text-rose-800">
-                              {deliveryError}
+                              {text.documentDeliveryFailed}
                             </p>
                           ) : null}
                           {!canSendDocument && documentSend.status !== "sent" ? (

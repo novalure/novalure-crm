@@ -553,11 +553,13 @@ export function Dialog({
   open,
   title,
   onClose,
+  closeLabel = "Dialog schließen",
   children,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
+  closeLabel?: string;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -587,7 +589,7 @@ export function Dialog({
     >
       <div className="dc-dialog-heading">
         <h2 id={titleId}>{title}</h2>
-        <IconButton aria-label="Dialog schließen" onClick={onClose}>
+        <IconButton aria-label={closeLabel} onClick={onClose}>
           <Icon name="close" />
         </IconButton>
       </div>

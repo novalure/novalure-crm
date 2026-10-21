@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import { displayTimeZone, type LanguageCode } from "@/lib/i18n";
+import { getKnowledgeErrorMessage } from "@/lib/knowledge-center/copy";
 import { getKnowledgeLifecycleCopy, knowledgeMonitoringError } from "@/lib/knowledge-center/lifecycle-copy";
 import type { KnowledgeCenterSnapshot, KnowledgeSource } from "@/lib/knowledge-center/types";
 import { csrfFetch } from "@/lib/security/csrf-client";
@@ -14,7 +15,7 @@ type Details = { config: { interval: Interval; enabled: boolean; revision: numbe
 type Props = { source: KnowledgeSource; snapshot: KnowledgeCenterSnapshot; language: LanguageCode; scopedPath: (path: string) => string; onChanged: () => Promise<void> };
 async function readResponse<T>(response: Response, fallback: string): Promise<T> {
   const body = await response.json().catch(() => null);
-  if (!response.ok || !body) throw new Error(body?.error || fallback);
+  if (!response.ok || !body) throw new Error(typeof body?.code === "string" ? body.code : fallback);
   return body as T;
 }
 
@@ -38,9 +39,9 @@ export function KnowledgeMonitoringPanel({ source, snapshot, language, scopedPat
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal).then((payload) => { if (!controller.signal.aborted) { setLoaded(payload); setError(""); } }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : text.loadError); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    load(controller.signal).then((payload) => { if (!controller.signal.aborted) { setLoaded(payload); setError(""); } }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(getKnowledgeErrorMessage(language, cause, text.loadError)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [load, setLoaded, source.revision, text.loadError]);
+  }, [language, load, setLoaded, source.revision, text.loadError]);
   const date = (value?: string | null, fallback = text.never) => value && !Number.isNaN(new Date(value).getTime()) ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short", timeZone: displayTimeZone }).format(new Date(value)) : fallback;
   const canWrite = snapshot.entitlement.enabled && snapshot.permissions.canWrite && snapshot.entitlement.features.websiteImport && !source.archivedAt;
   const allowedIntervals = details?.allowedIntervals ?? ["manual"];
@@ -56,14 +57,14 @@ export function KnowledgeMonitoringPanel({ source, snapshot, language, scopedPat
       await onChanged();
       setLoaded(await load());
       setNotice(action === "scan" ? text.scanSaved : text.saved);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : text.saveError); }
+    } catch (cause) { setError(getKnowledgeErrorMessage(language, cause, text.saveError)); }
     finally { setBusy(""); }
   }
   return <section aria-labelledby={`${id}-heading`} className="evelyn-knowledge-review mt-4 grid min-w-0 gap-4 rounded-xl border border-stone-200 bg-stone-50 p-4" data-testid="knowledge-monitoring">
     <h6 className="font-semibold text-slate-950" id={`${id}-heading`}>{text.monitoring}</h6>
     <p className="text-xs leading-5 text-stone-600">{text.monitoringHint}</p>
     {loading ? <p role="status" className="text-sm text-stone-600">{text.loading}</p> : null}
-    {error ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"><p>{error}</p><button type="button" className={`${buttonClass} mt-2`} disabled={Boolean(busy)} onClick={() => { setLoading(true); void load().then((payload) => { setLoaded(payload); setError(""); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : text.loadError)).finally(() => setLoading(false)); }}>{text.retry}</button></div> : null}
+    {error ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"><p>{error}</p><button type="button" className={`${buttonClass} mt-2`} disabled={Boolean(busy)} onClick={() => { setLoading(true); void load().then((payload) => { setLoaded(payload); setError(""); }).catch((cause: unknown) => setError(getKnowledgeErrorMessage(language, cause, text.loadError))).finally(() => setLoading(false)); }}>{text.retry}</button></div> : null}
     {notice ? <p role="status" aria-live="polite" className="text-sm font-medium text-emerald-900">{notice}</p> : null}
     {details ? <>
       <dl className="grid gap-3 text-xs sm:grid-cols-2"><div><dt className="font-semibold text-slate-900">{text.nextDue}</dt><dd className="mt-1 text-stone-600">{date(details.config?.nextDueAt, text.notScheduled)}</dd></div><div><dt className="font-semibold text-slate-900">{text.lastScan}</dt><dd className="mt-1 text-stone-600">{date(details.config?.lastScanAt)}{details.config?.lastRunStatus ? ` · ${stateLabel(details.config.lastRunStatus)}` : ""}</dd></div><div><dt className="font-semibold text-slate-900">{text.lastSuccess}</dt><dd className="mt-1 text-stone-600">{date(details.config?.lastSuccessAt)}</dd></div><div><dt className="font-semibold text-slate-900">{text.consumption}</dt><dd className="mt-1 text-stone-600">{new Intl.NumberFormat(language).format(details.scansThisMonth)} / {new Intl.NumberFormat(language).format(snapshot.entitlement.limits.maxScansPerMonth)}</dd></div>{details.config?.lastErrorCode ? <div className="rounded-lg bg-amber-50 p-2 text-amber-950"><dt className="font-semibold">{text.lastError}</dt><dd className="mt-1">{knowledgeMonitoringError(language, details.config.lastErrorCode)}</dd></div> : null}</dl>

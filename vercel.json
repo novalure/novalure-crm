@@ -2,6 +2,7 @@
   "git": {
     "deploymentEnabled": {
       "main": false,
+      "codex/crm-ux-i18n-polish": false,
       "codex/studio-preview-crm-handoff": false,
       "codex/knowledge-center-package2-20261019": false,
       "codex/knowledge-center-completion-20261019": false,

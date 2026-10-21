@@ -23,7 +23,7 @@ const emojiGroups = [
   { label: "Immobilien", emojis: ["🏡", "🏠", "🏢", "🏘️", "🏗️", "📍", "🗺️", "🔑", "🚪", "🛋️", "🌳", "☀️", "🏙️", "🧱", "📐", "📏"] },
   { label: "Kontakt", emojis: ["📞", "☎️", "📱", "💬", "💌", "📧", "📨", "📅", "⏰", "🕒", "👤", "👥", "📝", "📎", "📤", "📥"] },
   { label: "Conversion", emojis: ["🎉", "🏆", "💎", "💰", "📊", "📌", "🔔", "⚡", "✨", "🎁", "🔍", "🧭", "➡️", "⬇️", "❗", "❓"] },
-];
+] as const;
 const elementTypes: FunnelElementType[] = ["headline", "text", "button", "image", "video", "form", "choice", "calendar", "html", "spacer", "countdown", "testimonial"];
 
 function cloneBlueprint(blueprint: FunnelBlueprint): FunnelBlueprint {
@@ -683,10 +683,10 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
                 <div className="grid gap-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.richText}</p>
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<strong>Text</strong>") })} type="button">B</button>
-                    <button className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold italic" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<em>Text</em>") })} type="button">I</button>
-                    <button className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold underline" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<u>Text</u>") })} type="button">U</button>
-                    <button className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<a href='#'>Link</a>") })} type="button">Link</button>
+                    <button aria-label={text.formatBold} title={text.formatBold} className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<strong>Text</strong>") })} type="button">B</button>
+                    <button aria-label={text.formatItalic} title={text.formatItalic} className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold italic" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<em>Text</em>") })} type="button">I</button>
+                    <button aria-label={text.formatUnderline} title={text.formatUnderline} className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold underline" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<u>Text</u>") })} type="button">U</button>
+                    <button aria-label={text.formatLink} title={text.formatLink} className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<a href='#'>Link</a>") })} type="button">Link</button>
                     <button className="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold text-emerald-700" onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, "<span style='color:#047857'>Text</span>") })} type="button">{text.color}</button>
                   </div>
                   <details className="rounded-md border border-stone-200 bg-white p-3">
@@ -694,7 +694,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
                     <div className="mt-3 grid gap-3">
                       {emojiGroups.map((group) => (
                         <div className="grid gap-2" key={group.label}>
-                          <p className="text-xs font-semibold text-stone-600">{group.label}</p>
+                          <p className="text-xs font-semibold text-stone-600">{text.emojiGroupLabels[group.label]}</p>
                           <div className="flex flex-wrap gap-1">
                             {group.emojis.map((emoji) => (
                               <button className="rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-sm hover:border-slate-400 hover:bg-white" key={`${group.label}_${emoji}`} onClick={() => updateSelectedElement({ content: insertToken(selectedElement.content, emoji) })} type="button">{emoji}</button>
@@ -803,7 +803,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
             {abRows.map((row) => (
               <div className="grid gap-1 rounded-md bg-stone-50 p-3" key={row.id}>
                 <div className="flex justify-between gap-3"><span className="font-semibold">{row.name}</span><span>{(row.conversionRate * 100).toFixed(1)}%</span></div>
-                <p className="break-words text-xs text-stone-600">{row.visits} {text.visits} / {row.conversions} {text.leads} / {text.lift} {row.liftAgainstControl.toFixed(1)}% / {row.confidenceLabel}{row.isWinner ? ` / ${text.winner}` : ""}</p>
+                <p className="break-words text-xs text-stone-600">{row.visits} {text.visits} / {row.conversions} {text.leads} / {text.lift} {row.liftAgainstControl.toFixed(1)}% / {text.confidenceLabels[row.confidenceLabel]}{row.isWinner ? ` / ${text.winner}` : ""}</p>
               </div>
             ))}
           </div>
@@ -811,7 +811,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
         <div className="rounded-lg border border-stone-200 bg-white p-4">
           <p className="text-sm font-semibold">{text.trackingInjection}</p>
           <div className="mt-3 grid gap-2">
-            {trackingSnippet.warnings.map((warning) => <p className="rounded-md bg-amber-50 p-2 text-xs font-semibold text-amber-900" key={warning}>{warning}</p>)}
+            {trackingSnippet.warnings.map((warning) => <p className="rounded-md bg-amber-50 p-2 text-xs font-semibold text-amber-900" key={warning}>{warning === "Tracking ist im Funnel noch nicht aktiv. Events dürfen erst nach Consent gesendet werden." ? text.trackingConsentWarning : warning}</p>)}
             <pre className="max-h-44 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{trackingSnippet.head}</pre>
             <pre className="max-h-44 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{trackingSnippet.body}</pre>
           </div>

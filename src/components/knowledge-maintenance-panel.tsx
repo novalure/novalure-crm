@@ -2,6 +2,7 @@
 
 import { Children, cloneElement, isValidElement, useCallback, useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { LanguageCode } from "@/lib/i18n";
+import { getKnowledgeErrorMessage } from "@/lib/knowledge-center/copy";
 import { getKnowledgeMaintenanceCopy } from "@/lib/knowledge-center/maintenance-copy";
 import { compareKnowledgeVersions } from "@/lib/knowledge-center/version-comparison";
 import { createStructuredKnowledgeRows, knowledgeFieldLabel, serializeStructuredKnowledge, structuredKnowledgeSummary, type StructuredKnowledgeRow } from "@/lib/knowledge-center/templates";
@@ -230,31 +231,31 @@ export function KnowledgeMaintenancePanel({ snapshot, language, scopedPath, onCh
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await csrfFetch(scopedPath("/api/knowledge-center/workflow"), { cache: "no-store", signal });
-    const payload = await response.json().catch(() => null) as (Workflow & { error?: string }) | null;
-    if (!response.ok || !payload || !Array.isArray(payload.proposals) || !Array.isArray(payload.events) || !Array.isArray(payload.configurations)) throw new Error(payload?.error || text.loadError);
+    const payload = await response.json().catch(() => null) as (Workflow & { code?: string }) | null;
+    if (!response.ok || !payload || !Array.isArray(payload.proposals) || !Array.isArray(payload.events) || !Array.isArray(payload.configurations)) throw new Error(payload?.code || text.loadError);
     return payload;
   }, [scopedPath, text.loadError]);
 
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal).then((payload) => { if (!controller.signal.aborted) setData(payload); }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : text.loadError); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    load(controller.signal).then((payload) => { if (!controller.signal.aborted) setData(payload); }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(getKnowledgeErrorMessage(language, cause, text.loadError)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [load, text.loadError]);
+  }, [language, load, text.loadError]);
 
   async function refresh() {
     setLoading(true); setError("");
-    try { setData(await load()); } catch (cause) { setError(cause instanceof Error ? cause.message : text.loadError); } finally { setLoading(false); }
+    try { setData(await load()); } catch (cause) { setError(getKnowledgeErrorMessage(language, cause, text.loadError)); } finally { setLoading(false); }
   }
 
   const runAction: Action = async (body, success) => {
     setBusy(true); setError(""); setNotice("");
     try {
       const response = await csrfFetch(scopedPath("/api/knowledge-center/workflow"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const result = await response.json().catch(() => null) as { error?: string } | null;
-      if (!response.ok || !result) throw new Error(result?.error || text.saveError);
+      const result = await response.json().catch(() => null) as { code?: string } | null;
+      if (!response.ok || !result) throw new Error(result?.code || text.saveError);
       const [payload] = await Promise.all([load(), onChanged()]);
       setData(payload); setNotice(success); return true;
-    } catch (cause) { setError(cause instanceof Error ? cause.message : text.saveError); return false; } finally { setBusy(false); }
+    } catch (cause) { setError(getKnowledgeErrorMessage(language, cause, text.saveError)); return false; } finally { setBusy(false); }
   };
 
   const proposals = useMemo(() => (data?.proposals ?? []).filter((proposal) => (!status || proposal.status === status) && (!areaId || proposal.areaId === areaId)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)), [data, status, areaId]);

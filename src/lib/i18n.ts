@@ -51,6 +51,33 @@ export const languageOptionsByCode = Object.fromEntries(
   supportedLanguages.map((language) => [language.code, language]),
 ) as Record<LanguageCode, LanguageOption>;
 
+export const languagePreferenceCopy = {
+  de: {
+    label: "Sprache",
+    automatic: "Automatisch (Standort)",
+    description: "Gilt für Ihr Konto in allen Arbeitsbereichen.",
+    saving: "Sprache wird gespeichert …",
+    saved: "Sprache gespeichert.",
+    error: "Sprache konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+    retry: "Erneut speichern",
+    unavailable: "Ihre gespeicherte Sprache ist derzeit nicht verfügbar. Änderungen werden erst nach erfolgreichem Speichern übernommen.",
+  },
+  en: {
+    label: "Language",
+    automatic: "Automatic (location)",
+    description: "Applies to your account across all workspaces.",
+    saving: "Saving language…",
+    saved: "Language saved.",
+    error: "Could not save your language. Please try again.",
+    retry: "Try saving again",
+    unavailable: "Your saved language is currently unavailable. Changes take effect after they are saved.",
+  },
+} as const;
+
+export function getLanguagePreferenceCopy(language: LanguageCode) {
+  return languagePreferenceCopy[language] ?? languagePreferenceCopy[fallbackLanguage];
+}
+
 export const loginLegalFooterCopy = {
   en: {
     ariaLabel: "Legal information",
@@ -1221,7 +1248,7 @@ export const dashboardCopy = {
     },
     navigationPresets: {
       label: "Navigation preset",
-      helper: "Focuses navigation only. Server permissions still decide what can be changed.",
+      helper: "Changes your view. Your permissions stay the same.",
       mobileNavigationLabel: "Area",
       quickActionsLabel: "Quick actions",
       groups: {
@@ -1348,7 +1375,7 @@ export const dashboardCopy = {
       testEnquiries: "Test enquiries",
       testEnquiriesNotice: "Synthetic test enquiries. This separate test view is excluded from the Studio overview's business metrics.",
       openDeals: "Open sales opportunities",
-      marketingDescription: "Use the available funnels, forms and newsletter tools. Publishing and sending depend on server permissions, consent and configured providers.",
+      marketingDescription: "Manage funnels, forms and newsletters. Publishing and sending require permission, consent and a connected service.",
       projectUnavailable: "The Studio project is not in your authorized project list. This profile adds no access; your current project selection is retained.",
       knowledgeTitle: "Studio knowledge and AI setup",
       knowledgeDescription: "The analysis assistant and bot administration are available in navigation when your permissions and workspace modules allow them. Their availability does not confirm that a Studio chatbot is configured or connected.",
@@ -1576,7 +1603,7 @@ export const dashboardCopy = {
     commandCenters: {
       projects: {
         title: "Project overview",
-        description: "Projects are separated from the dashboard and show leads, deals, open tasks and the assigned default pipeline.",
+        description: "Enquiries, deals, tasks and pipelines by project.",
         leads: "Leads",
         deals: "Deals",
         tasks: "Open tasks",
@@ -1865,7 +1892,7 @@ export const dashboardCopy = {
     leadInbox: {
       title: "Handle new leads first",
       description:
-        "Inbox for website, WhatsApp, Instagram and newsletter before a lead moves into the deal pipeline.",
+        "Review new enquiries and choose the next step before moving them to the pipeline.",
       open: "open",
       hot: "hot",
       accepted: "accepted",
@@ -2032,7 +2059,7 @@ export const dashboardCopy = {
     navigationPresets: {
       label: "Navigationsprofil",
       helper:
-        "Fokussiert nur die Navigation. Serverrechte entscheiden weiterhin, was geändert werden darf.",
+        "Passt Ihre Ansicht an. Ihre Berechtigungen bleiben gleich.",
       mobileNavigationLabel: "Bereich",
       quickActionsLabel: "Schnellaktionen",
       groups: {
@@ -2149,7 +2176,7 @@ export const dashboardCopy = {
       testEnquiries: "Testanfragen",
       testEnquiriesNotice: "Synthetische Testanfragen. Diese separate Testansicht zählt nicht in die Geschäftskennzahlen der Studio-Übersicht.",
       openDeals: "Offene Verkaufschancen",
-      marketingDescription: "Die verfügbaren Funnels, Formulare und Newsletter-Werkzeuge nutzen. Veröffentlichen und Versand setzen Serverrechte, Einwilligungen und konfigurierte Anbieter voraus.",
+      marketingDescription: "Funnels, Formulare und Newsletter verwalten. Veröffentlichen und Versand erfordern eine Berechtigung, Einwilligung und einen verbundenen Dienst.",
       projectUnavailable: "Das Studio-Projekt ist nicht in Ihrer autorisierten Projektliste. Dieses Profil erteilt keinen Zugriff; Ihre aktuelle Projektauswahl bleibt erhalten.",
       knowledgeTitle: "Studio-Wissen und KI-Einrichtung",
       knowledgeDescription: "Analyse-Assistent und Bot-Verwaltung stehen in der Navigation zur Verfügung, wenn Ihre Rechte und Workspace-Module dies erlauben. Ihre Verfügbarkeit bestätigt keine eingerichtete oder verbundene Studio-Chatbot-Anbindung.",
@@ -2387,7 +2414,7 @@ export const dashboardCopy = {
     commandCenters: {
       projects: {
         title: "Projektübersicht",
-        description: "Projekte sind vom Dashboard getrennt und zeigen Leads, Deals, offene Aufgaben und die zugeordnete Default-Pipeline.",
+        description: "Anfragen, Deals, Aufgaben und Pipelines je Projekt.",
         leads: "Leads",
         deals: "Deals",
         tasks: "Offene Aufgaben",
@@ -2676,7 +2703,7 @@ export const dashboardCopy = {
     leadInbox: {
       title: "Neue Leads zuerst bearbeiten",
       description:
-        "Eingang für Website, WhatsApp, Instagram und Newsletter, bevor ein Lead in die Dealpipeline übernommen wird.",
+        "Neue Anfragen prüfen und den nächsten Schritt festlegen, bevor sie in die Pipeline übernommen werden.",
       open: "offen",
       hot: "heiß",
       accepted: "übernommen",
@@ -5798,6 +5825,7 @@ export const dashboardOverviewCopy = {
       title: "Novalure CLG",
       description:
         "A central view for buyer, seller and investor leads with global filters, saved views, match suggestions and an exportable working view.",
+      viewLabel: "Dashboard view",
       saveView: "Save view",
       resetView: "Default view",
       exportPdf: "Export PDF",
@@ -5821,7 +5849,7 @@ export const dashboardOverviewCopy = {
       addWidget: "+ Add widget",
       collapsed: "Widget is collapsed.",
       settings:
-        "Widget setting: this widget currently follows the global filters. A widget-specific period is prepared as a later extension.",
+        "This widget uses the filters selected above.",
       expand: "Expand widget",
       collapse: "Collapse widget",
       settingsButton: "Settings",
@@ -5932,6 +5960,7 @@ export const dashboardOverviewCopy = {
       title: "Novalure CLG",
       description:
         "Eine zentrale Ansicht für Käufer-, Verkäufer- und Investoren-Leads mit globalen Filtern, speicherbaren Ansichten, Match-Vorschlägen und exportierbarer Arbeitsansicht.",
+      viewLabel: "Dashboard-Ansicht",
       saveView: "Ansicht speichern",
       resetView: "Standardansicht",
       exportPdf: "PDF exportieren",
@@ -5955,7 +5984,7 @@ export const dashboardOverviewCopy = {
       addWidget: "+ Baustein hinzufügen",
       collapsed: "Baustein ist zugeklappt.",
       settings:
-        "Baustein-Einstellung: Dieser Baustein folgt aktuell den globalen Filtern. Ein eigener Zeitraum je Baustein ist als nächster Ausbaupunkt vorbereitet.",
+        "Dieser Baustein verwendet die oben gewählten Filter.",
       expand: "Baustein aufklappen",
       collapse: "Baustein zuklappen",
       settingsButton: "Einstellungen",
@@ -6225,7 +6254,7 @@ export const dealPipelineCommandCopy = {
   en: {
     title: "Deal pipeline",
     description:
-      "Work real estate deals by stage, lead type, owner, risk and next action. Stage moves are persisted with history, reasons and audit records.",
+      "Track deals by stage, assignee and next action. Stage changes are saved in the history.",
     forecast: "Weighted forecast",
     openPipelineValue: "Open pipeline value",
     openDeals: "Open deals",
@@ -6272,7 +6301,10 @@ export const dealPipelineCommandCopy = {
     discardDraft: "Discard draft",
     draftDiscarded: "Unsaved draft changes discarded.",
     createdDeal: (projectName: string) => `Deal created for ${projectName}.`,
-    fieldMapping: "Sales data field mapping",
+    fieldMapping: "Sales details",
+    mappingDetails: "Technical field mapping",
+    projectPipeline: "Project pipeline",
+    ownerEmail: "Assignee email",
     fieldColumn: "CRM field",
     valueColumn: "Value",
     statusColumn: "Status",
@@ -6396,7 +6428,7 @@ export const dealPipelineCommandCopy = {
   de: {
     title: "Dealpipeline",
     description:
-      "Bearbeite Immobilien-Deals nach Phase, Lead-Typ, Zuständige(r), Risiko und nächster Aktion. Phasenwechsel werden mit Historie, Gründen und Audit-Log persistiert.",
+      "Deals nach Phase, Zuständigkeit und nächstem Schritt bearbeiten. Phasenwechsel werden im Verlauf gespeichert.",
     forecast: "Gewichteter Forecast",
     openPipelineValue: "Offener Pipelinewert",
     openDeals: "Offene Deals",
@@ -6443,7 +6475,10 @@ export const dealPipelineCommandCopy = {
     discardDraft: "Entwurf verwerfen",
     draftDiscarded: "Nicht gespeicherte Entwurfsänderungen wurden verworfen.",
     createdDeal: (projectName: string) => `Deal für ${projectName} angelegt.`,
-    fieldMapping: "Vertriebsdaten-Feldmapping",
+    fieldMapping: "Vertriebsangaben",
+    mappingDetails: "Technische Feldzuordnung",
+    projectPipeline: "Projektpipeline",
+    ownerEmail: "E-Mail der zuständigen Person",
     fieldColumn: "CRM-Feld",
     valueColumn: "Wert",
     statusColumn: "Status",
@@ -6568,9 +6603,9 @@ export const dealPipelineCommandCopy = {
 
 export const taskCommandCenterCopy = {
   en: {
-    title: "Task cockpit",
+    title: "Tasks",
     description:
-      "Daily focus for follow-ups, speed to lead, project work and data hygiene. Every task stays linked to a contact, lead or project.",
+      "Plan follow-ups and project work. Link tasks to the relevant contact, enquiry or project.",
     focus: "Focus",
     today: "Today",
     high: "High priority",
@@ -6612,7 +6647,7 @@ export const taskCommandCenterCopy = {
     reopen: "Reopen",
     prepareFollowUp: "Prepare follow-up",
     savingFollowUp: "Preparing...",
-    followUpQueued: (status: string) => `Follow-up delivery recorded as ${status}.`,
+    followUpQueued: () => "Follow-up prepared.",
     followUpBlocked: "Follow-up recorded, but outreach is blocked by consent policy.",
     followUpFailed: "Follow-up delivery could not be recorded.",
     recommendedQueue: "Recommended order",
@@ -6628,9 +6663,9 @@ export const taskCommandCenterCopy = {
     taskReliability: "Task logic check",
   },
   de: {
-    title: "Aufgaben-Cockpit",
+    title: "Aufgaben",
     description:
-      "Tagesfokus für Follow-ups, Speed-to-Lead, Projektarbeit und Datenpflege. Jede Aufgabe bleibt mit Kontakt, Lead oder Projekt verbunden.",
+      "Nachfassen und Projektarbeit planen. Aufgaben mit dem passenden Kontakt, der Anfrage oder dem Projekt verknüpfen.",
     focus: "Fokus",
     today: "Heute",
     high: "Hohe Priorität",
@@ -6672,7 +6707,7 @@ export const taskCommandCenterCopy = {
     reopen: "Wieder öffnen",
     prepareFollowUp: "Follow-up vorbereiten",
     savingFollowUp: "Vorbereiten...",
-    followUpQueued: (status: string) => `Follow-up-Delivery als ${status} gespeichert.`,
+    followUpQueued: () => "Folgeaktion vorbereitet.",
     followUpBlocked: "Follow-up gespeichert, Ansprache ist durch Consent-Policy blockiert.",
     followUpFailed: "Follow-up-Delivery konnte nicht gespeichert werden.",
     recommendedQueue: "Empfohlene Reihenfolge",
@@ -6691,10 +6726,10 @@ export const taskCommandCenterCopy = {
 
 export const contactCommandCenterCopy = {
   en: {
-    moduleLabel: "Contact data model",
+    moduleLabel: "Contacts",
     title: "Contacts, organizations and relationships",
     description:
-      "Built around proven contact data models: person, organization, deal context, consent and timeline stay separate but visibly connected.",
+      "Contact details, companies and relationships in one place, with consent and activity history.",
     people: "People",
     organizations: "Organizations",
     primaryRoles: "Primary roles",
@@ -6714,7 +6749,7 @@ export const contactCommandCenterCopy = {
     personRecord: "Person record",
     organizationRecord: "Organization",
     relationshipMap: "Relationships",
-    timeline: "Timeline",
+    timeline: "Activity",
     openTasks: "Open tasks",
     consent: "Consent",
     project: "Project",
@@ -6787,7 +6822,7 @@ export const contactCommandCenterCopy = {
       crm: "CRM",
       consent: "Consent",
       relationships: "Relationships",
-      timeline: "Timeline",
+      timeline: "Activity",
       admin: "Admin / technical details",
     },
     salutation: "Salutation",
@@ -6812,7 +6847,7 @@ export const contactCommandCenterCopy = {
     adminFieldIds: "Internal IDs",
     adminImportSource: "Import source",
     adminMapping: "Field mapping",
-    dataPrincipleTitle: "Data model principle",
+    dataPrincipleTitle: "Data relationships",
     dataPrinciples: [
       "People contain communication data.",
       "Organizations group households, companies or developers.",
@@ -6856,10 +6891,10 @@ export const contactCommandCenterCopy = {
     },
   },
   de: {
-    moduleLabel: "Kontakt-Datenmodell",
+    moduleLabel: "Kontakte",
     title: "Kontakte, Organisationen und Beziehungen",
     description:
-      "Aufbau wie in führenden CRM-Systemen: Person, Organisation, Deal-Kontext, Consent und Timeline bleiben getrennt, aber sichtbar verbunden.",
+      "Kontaktdaten, Unternehmen und Beziehungen an einem Ort, mit Einwilligungen und Aktivitäten.",
     people: "Personen",
     organizations: "Organisationen",
     primaryRoles: "Primäre Rollen",
@@ -6879,9 +6914,9 @@ export const contactCommandCenterCopy = {
     personRecord: "Personendatensatz",
     organizationRecord: "Organisation",
     relationshipMap: "Beziehungen",
-    timeline: "Timeline",
+    timeline: "Aktivitäten",
     openTasks: "Offene Aufgaben",
-    consent: "Consent",
+    consent: "Einwilligungen",
     project: "Projekt",
     owner: "Zuständig",
     leadScore: "Lead-Score",
@@ -6950,9 +6985,9 @@ export const contactCommandCenterCopy = {
       company: "Unternehmen",
       realEstate: "Immobilienprofil",
       crm: "CRM",
-      consent: "Consent",
+      consent: "Einwilligungen",
       relationships: "Beziehungen",
-      timeline: "Timeline",
+      timeline: "Aktivitäten",
       admin: "Admin / Technikdetails",
     },
     salutation: "Anrede",
@@ -6977,12 +7012,12 @@ export const contactCommandCenterCopy = {
     adminFieldIds: "Interne IDs",
     adminImportSource: "Importquelle",
     adminMapping: "Feldzuordnung",
-    dataPrincipleTitle: "Datenmodell-Prinzip",
+    dataPrincipleTitle: "Datenzuordnung",
     dataPrinciples: [
       "Personen enthalten Kommunikationsdaten.",
       "Organisationen bündeln Haushalt, Firma oder Bauträger.",
       "Beziehungen erklären Rolle und Einfluss im Deal.",
-      "Aktivitäten bilden die Timeline und nächste Aktion.",
+      "Aktivitäten zeigen den Verlauf und den nächsten Schritt.",
     ],
     tableNovalure: "Novalure",
     tableValue: "Wert",
@@ -7187,6 +7222,7 @@ export const funnelCommandCenterCopy = {
     privacy: {
       title: "Consent, privacy and data retention",
       cookieConsent: "Cookie consent",
+      cookieConsentOptions: { "Standalone Banner": "Separate banner", "Website Consent": "Website consent", Openli: "Openli", "Custom Code": "Custom code" },
       retention: "Data retention",
       sensitiveFields: "Sensitive fields",
       checklist: "Compliance checklist",
@@ -7474,7 +7510,8 @@ export const funnelCommandCenterCopy = {
     },
     privacy: {
       title: "Consent, Datenschutz und Datenhaltung",
-      cookieConsent: "Cookie Consent",
+      cookieConsent: "Cookie-Einwilligung",
+      cookieConsentOptions: { "Standalone Banner": "Separates Banner", "Website Consent": "Einwilligung auf der Website", Openli: "Openli", "Custom Code": "Eigener Code" },
       retention: "Datenaufbewahrung",
       sensitiveFields: "Sensitive Fields",
       checklist: "Compliance-Checkliste",
@@ -7727,6 +7764,13 @@ export const funnelDesignerCopy = {
     type: "Type",
     name: "Name",
     richText: "Rich text",
+    formatBold: "Bold",
+    formatItalic: "Italic",
+    formatUnderline: "Underline",
+    formatLink: "Insert link",
+    emojiGroupLabels: { Leads: "Leads", Immobilien: "Real estate", Kontakt: "Contact", Conversion: "Conversion" },
+    confidenceLabels: { "zu wenig Daten": "Not enough data", Tendenz: "Trend", stark: "Strong signal" },
+    trackingConsentWarning: "Tracking is not active yet. Send events only after consent.",
     color: "Color",
     emojiToggle: "Open emoji picker",
     content: "Content",
@@ -7786,10 +7830,10 @@ export const funnelDesignerCopy = {
     },
   },
   de: {
-    title: "Blueprint Designer",
-    description: "Canvas, Inspector, Medien, Versionen und Tracking arbeiten auf dem neuen FunnelBlueprint.",
-    undo: "Undo",
-    redo: "Redo",
+    title: "Funnel gestalten",
+    description: "Seiten, Inhalte und Medien bearbeiten.",
+    undo: "Rückgängig",
+    redo: "Wiederholen",
     saving: "Speichert...",
     save: "Blueprint speichern",
     assistantTitle: "Funnel adaptieren",
@@ -7811,10 +7855,10 @@ export const funnelDesignerCopy = {
     thankYouPage: "Danke",
     defaultThankYou: "Danke. Wir melden uns in Kürze.",
     pageAddedEvent: "Seite hinzugefügt",
-    openPreview: "Preview öffnen",
+    openPreview: "Vorschau öffnen",
     mobileQr: "Mobile QR",
     advanced: "Erweiterte Auswertung, Tracking und Versionen",
-    stylePanel: "Style",
+    stylePanel: "Gestaltung",
     background: "Hintergrund",
     textColor: "Text",
     borderColor: "Rahmen",
@@ -7831,20 +7875,27 @@ export const funnelDesignerCopy = {
     videoPlaceholder: "Video-URL eintragen",
     calendarPlaceholder: "Termin buchen",
     countdownPlaceholder: "Countdown",
-    inspector: "Inspector",
+    inspector: "Element bearbeiten",
     type: "Typ",
     name: "Name",
-    richText: "Rich Text",
+    richText: "Textformatierung",
+    formatBold: "Fett",
+    formatItalic: "Kursiv",
+    formatUnderline: "Unterstrichen",
+    formatLink: "Link einfügen",
+    emojiGroupLabels: { Leads: "Leads", Immobilien: "Immobilien", Kontakt: "Kontakt", Conversion: "Abschluss" },
+    confidenceLabels: { "zu wenig Daten": "Zu wenig Daten", Tendenz: "Tendenz", stark: "Starkes Signal" },
+    trackingConsentWarning: "Tracking ist im Funnel noch nicht aktiv. Events dürfen erst nach Consent gesendet werden.",
     color: "Farbe",
     emojiToggle: "Emoji-Auswahl aufklappen",
     content: "Inhalt",
-    buttonText: "Button Text",
-    mediaUrl: "Medien URL",
+    buttonText: "Schaltflächentext",
+    mediaUrl: "Medien-URL",
     duplicate: "Duplizieren",
     remove: "Löschen",
     formFields: "Formularfelder",
     addField: "Feld hinzufügen",
-    placeholder: "Placeholder",
+    placeholder: "Platzhalter",
     requiredField: "Pflichtfeld",
     mediaLibrary: "Medienbibliothek",
     saveMedia: "Medium speichern",
@@ -7853,12 +7904,12 @@ export const funnelDesignerCopy = {
     leads: "Leads",
     lift: "Lift",
     winner: "Gewinner",
-    trackingInjection: "Tracking-Injection",
+    trackingInjection: "Tracking-Code",
     versions: "Versionen",
     noVersions: "Noch keine gespeicherte Version.",
     defaultElement: "Neues Element",
-    defaultHeadline: "Neue Headline",
-    defaultButton: "Neuer Button",
+    defaultHeadline: "Neue Überschrift",
+    defaultButton: "Neue Schaltfläche",
     defaultForm: "Kontaktformular",
     defaultContent: "Inhalt bearbeiten",
     defaultCta: "Weiter",
@@ -7874,14 +7925,14 @@ export const funnelDesignerCopy = {
     removedEvent: "Element gelöscht",
     movedEvent: "Element verschoben",
     savedEvent: "Funnel gespeichert",
-    savedDetail: "Blueprint, Medien und Version wurden persistiert.",
+    savedDetail: "Funnel, Medien und Version gespeichert.",
     mediaAddedEvent: "Medium hinzugefügt",
     fieldEditedEvent: "Feld bearbeitet",
     fieldAddedEvent: "Feld hinzugefügt",
     elementTypes: {
-      headline: "Headline",
+      headline: "Überschrift",
       text: "Text",
-      button: "Button",
+      button: "Schaltfläche",
       image: "Bild",
       video: "Video",
       form: "Formular",
@@ -7890,7 +7941,7 @@ export const funnelDesignerCopy = {
       html: "HTML",
       spacer: "Abstand",
       countdown: "Countdown",
-      testimonial: "Testimonial",
+      testimonial: "Kundenstimme",
     },
   },
 } as const;
@@ -8120,6 +8171,7 @@ export const botCommandCenterCopy = {
     savingBotSetup: "Saving setup",
     botSetupSaved: "Bot setup saved.",
     botSetupSaveError: "Bot setup could not be saved.",
+    botPublishBlockedUnknown: "Live activation is blocked. Review the setup and try again.",
     botPublishBlocked: "Live activation is blocked. Missing: {{items}}.",
     publishBlockerLabels: {
       approvedKnowledge: "approved knowledge",
@@ -8138,6 +8190,8 @@ export const botCommandCenterCopy = {
     noDocumentAssets: "No sendable documents in the media library yet.",
     documentFileTooLarge: "This file is too large. Maximum: {{size}}.",
     documentUploadFailed: "Document upload failed.",
+    documentAttachFailed: "The document could not be attached.",
+    documentDeliveryFailed: "The document could not be sent. Please try again.",
     markDocumentSent: "Send now",
     meetingOutbox: "Meeting proposals",
     noDocumentActions: "No document sends waiting.",
@@ -8506,6 +8560,7 @@ export const botCommandCenterCopy = {
     savingBotSetup: "Setup wird gespeichert",
     botSetupSaved: "Bot-Setup gespeichert.",
     botSetupSaveError: "Bot-Setup konnte nicht gespeichert werden.",
+    botPublishBlockedUnknown: "Die Live-Schaltung ist blockiert. Prüfen Sie die Einrichtung und versuchen Sie es erneut.",
     botPublishBlocked: "Live-Schaltung blockiert. Es fehlt: {{items}}.",
     publishBlockerLabels: {
       approvedKnowledge: "freigegebenes Wissen",
@@ -8524,6 +8579,8 @@ export const botCommandCenterCopy = {
     noDocumentAssets: "Noch keine sendbaren Dokumente in der Medienbibliothek.",
     documentFileTooLarge: "Diese Datei ist zu groß. Maximum: {{size}}.",
     documentUploadFailed: "Dokument-Upload fehlgeschlagen.",
+    documentAttachFailed: "Das Dokument konnte nicht angehängt werden.",
+    documentDeliveryFailed: "Das Dokument konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
     markDocumentSent: "Jetzt senden",
     meetingOutbox: "Terminvorschläge",
     noDocumentActions: "Keine wartenden Dokumentversande.",
@@ -8851,7 +8908,7 @@ export const newsletterCommandCenterCopy = {
   de: {
     title: "Newsletter & Versand",
     description:
-      "Vollständiger Newsletter-Arbeitsbereich mit Segmenten, Editor, Vorlagen, A/B-Test, Automationen, Auswertungen, Consent, Unterdrückungsliste und Zustellbarkeit.",
+      "Newsletter erstellen und Empfängergruppen verwalten. Vor dem Versand Einwilligungen, Sperrliste und Verbindung zum Versanddienst prüfen.",
     campaigns: "Kampagnen",
     builder: "Editor",
     backToNewsletter: "Zurück zu Newslettern",
@@ -9041,7 +9098,7 @@ export const newsletterCommandCenterCopy = {
   en: {
     title: "Newsletter & sending",
     description:
-      "Complete newsletter workspace with segments, editor, templates, A/B test, automations, analytics, consent, suppression list and deliverability.",
+      "Create newsletters and manage recipient groups. Check consent, the suppression list and your email service connection before sending.",
     campaigns: "Campaigns",
     builder: "Builder",
     backToNewsletter: "Back to newsletters",
@@ -9737,11 +9794,11 @@ export const formCommandCenterCopy = {
       openLink: "Open link",
       cannotSave: "Cannot save. Check database connection and migration.",
       variant: "Choose variant",
-      betterTitle: "Why this is stronger than HubSpot",
+      betterTitle: "Before publishing",
       betterItems: [
-        "1. Form, variant, CRM target and website install sit in one flow.",
-        "2. Privacy, spam protection and double opt-in are visible instead of hidden.",
-        "3. Every form can connect directly to funnel and meeting booking.",
+        "Check required fields, the CRM destination and the project.",
+        "Set privacy, spam protection and required consent options.",
+        "Check the preview and the form embedded on your website.",
       ],
       livePreview: "Live preview",
       noLastSubmission: "No submissions yet",
@@ -10028,11 +10085,11 @@ export const formCommandCenterCopy = {
       openLink: "Link öffnen",
       cannotSave: "Speichern nicht möglich. Prüfe Datenbankverbindung und Migration.",
       variant: "Variante wählen",
-      betterTitle: "Warum besser als HubSpot",
+      betterTitle: "Vor der Veröffentlichung",
       betterItems: [
-        "1. Formular, Variante, CRM-Ziel und Website-Einbau liegen in einem Ablauf.",
-        "2. Datenschutz, Spam-Schutz und Double-Opt-in sind sichtbar statt versteckt.",
-        "3. Jedes Formular kann direkt mit Funnel und Meeting verbunden werden.",
+        "Pflichtfelder, Ziel im CRM und Projekt prüfen.",
+        "Datenschutz, Spam-Schutz und erforderliche Einwilligungen festlegen.",
+        "Vorschau und Einbindung auf der Website prüfen.",
       ],
       livePreview: "Live-Vorschau",
       noLastSubmission: "Noch keine Einsendung",
@@ -10343,7 +10400,7 @@ export const calendarCommandCenterCopy = {
   de: {
     title: "Termine und Kalender",
     description:
-      "Termine werden mit Projekt, Kontakt, Lead, Aufgabe, Kalenderanbieter und Terminlink verbunden. So wird der Kalender später nicht nur Anzeige, sondern CRM-Arbeitsfläche.",
+      "Termine planen und mit Kontakten, Anfragen und Projekten verknüpfen.",
     today: "Heute",
     upcoming: "Nächste Termine",
     prepare: "Vorbereiten",
@@ -10628,7 +10685,7 @@ export const calendarCommandCenterCopy = {
       eyebrow: "Terminseite erstellen",
       title: "Nachrichten, Erinnerungen und Self-Service bearbeiten",
       description:
-        "Öffnet einen großen Arbeitsmodus wie bei Funnels. Dort definiert der Kunde Bestätigungs-Mail, Erinnerungs-Timeline, Vorlagen sowie Verschieben- und Absage-Buttons.",
+        "Bestätigungen, Erinnerungen sowie Optionen zum Verschieben und Absagen bearbeiten.",
       editLarge: "Terminseite groß bearbeiten",
       editReminders: "Erinnerungen bearbeiten",
       savePage: "Terminseite speichern",
@@ -10818,7 +10875,7 @@ export const calendarCommandCenterCopy = {
   en: {
     title: "Meetings and calendar",
     description:
-      "Appointments are linked with project, contact, lead, task, calendar provider and meeting link. The calendar becomes a CRM workspace, not just a schedule.",
+      "Plan appointments and link them to contacts, enquiries and projects.",
     today: "Today",
     upcoming: "Upcoming",
     prepare: "Prepare",
@@ -11894,7 +11951,7 @@ export const mobileDailyWorkCopy = {
       overdueSla: "Overdue SLAs",
       tasks: "Open tasks",
     },
-    subtitle: "Hot leads, overdue SLAs, appointments and tasks in one mobile queue.",
+    subtitle: "Today's priority enquiries, appointments and tasks.",
     title: "Today",
   },
   de: {
@@ -11938,7 +11995,7 @@ export const mobileDailyWorkCopy = {
       overdueSla: "Überfällige SLAs",
       tasks: "Offene Aufgaben",
     },
-    subtitle: "Hot Leads, überfällige SLAs, Termine und Aufgaben in einer mobilen Queue.",
+    subtitle: "Wichtige Anfragen, Termine und Aufgaben für heute.",
     title: "Heute",
   },
 } as const;
@@ -12559,6 +12616,131 @@ export function getCrmEnumLabel(value: string, language: LanguageCode) {
 export function getCrmSystemTextLabel(value: string, language: LanguageCode) {
   const trimmedValue = value.trim();
   return crmSystemTextLabels[trimmedValue]?.[language] ?? value;
+}
+
+// Offer and property workflow copy shares the CRM language and formatting helpers.
+// Only fixed interface text is passed here; saved offer/customer content is untouched.
+const salesWorkflowEnglish: Record<string, string> = {
+  "Keine Rabatte": "No discounts",
+  "Keine Sonderbedingungen": "No special terms",
+  "Keine bekannten Risiko- oder Compliance-Hinweise": "No known risk or compliance notes",
+  "Bitte Zahlungsplan ergänzen": "Please add a payment plan",
+  "Angebotsablauf": "Offer workflow",
+  "Angebot und Kundenabschluss": "Offer and customer outcome",
+  "Versionierte Angebotsakte. Vertrags- und Zahlungsversand sind nicht aktiviert.": "Offers are versioned. Contract and payment delivery are not enabled.",
+  "Angebotsakte nicht verfügbar": "Could not load this offer. Please try again.",
+  "Angebotsakte wird geladen. Bei einem Fehler bitte die Seite neu laden.": "Loading offer…",
+  "Keine freigabeberechtigte Person konfiguriert. Entwürfe sind möglich; Freigabe und Versand bleiben gesperrt.": "No approver is configured. You can create drafts; approval and delivery remain unavailable.",
+  "Gespeichert. Kein automatischer E-Mail- oder Vertragsversand.": "Saved. No email or contract was sent automatically.",
+  "Vorgang fehlgeschlagen": "Could not save this change. Check your entries and try again.",
+  "Ungültiger Entwurf": "Check the draft and try again.",
+  "Bitte Nettoeinzelpreise mit höchstens zwei Nachkommastellen eingeben.": "Enter net unit prices with no more than two decimal places.",
+  "Bitte ein gültiges Datum und eine Uhrzeit eingeben.": "Enter a valid date and time.",
+  "Druckausgabe nicht verfügbar": "Could not prepare the print view. Please try again.",
+  "Bitte erneut anmelden und die Freigabe wiederholen.": "Sign in again, then try approving this revision.",
+  "Der Stand wurde inzwischen geändert. Bitte neu laden und Ihre Eingaben prüfen.": "This record has changed. Reload it and check your entries.",
+  "Entwurf": "Draft", "Freigegeben": "Approved",
+  "Versand vorbereitet – nicht gesendet": "Prepared for delivery – not sent",
+  "Versand manuell belegt": "Delivery manually recorded",
+  "Angenommen · Deal gewonnen · Kunde": "Accepted · deal won · customer",
+  "Abgelehnt · Deal verloren": "Rejected · deal lost", "Abgebrochen": "Cancelled",
+  "Nachfassen:": "Follow-up:", "Antwortbeleg:": "Response reference:", "netto": "net",
+  "Zugehöriger Lead": "Related lead", "Lead auswählen": "Select a lead",
+  "Unternehmen des Kunden": "Customer company", "Betreff": "Subject",
+  "Empfängername": "Recipient name", "Empfänger-E-Mail": "Recipient email",
+  "Positionen · EUR netto · gesamte Verpflichtung": "Line items · EUR net · full commitment",
+  "Leistung": "Service", "Anzahl": "Quantity", "Einzelpreis (€)": "Unit price (€)",
+  "Position entfernen": "Remove item", "Position ergänzen": "Add item",
+  "Leistungsumfang": "Scope", "Zahlungsplan": "Payment plan", "Rabatte": "Discounts",
+  "Sonderbedingungen": "Special terms", "Risiko- und Compliance-Hinweise": "Risk and compliance notes",
+  "Weitere Konditionen": "Other terms", "Gültig bis (lokale Zeit)": "Valid until (local time)",
+  "Wiederkehrende Leistungen mit allen verpflichtenden Perioden als Anzahl aufnehmen. Jede Änderung erfordert eine neue Freigabe.": "Include every committed period in the quantity for recurring services. Every change requires a new approval.",
+  "Neue Revision speichern": "Save new revision", "Angebotsentwurf anlegen": "Create offer draft",
+  "Abbrechen": "Cancel", "Exakte Fassung · Revision": "Exact version · revision", "An": "To",
+  "Gesamtverpflichtung:": "Total commitment:", "Risiko/Compliance:": "Risk/compliance:",
+  "Gültig bis": "Valid until", "Inhaltsnachweis:": "Content reference:",
+  "Entwurf – Druck erst nach Freigabe": "Approve the draft before printing",
+  "Fassung drucken": "Print version", "Neue Revision bearbeiten": "Edit new revision",
+  "Freigabe gültig bis (lokale Zeit)": "Approval valid until (local time)",
+  "Diese Revision freigeben": "Approve this revision",
+  "Nur die konfigurierte Owner-Person (A3) mit höchstens 15 Minuten alter Anmeldung. Bei FRESH_AUTHENTICATION_REQUIRED erneut anmelden.": "Only the designated owner can approve. Sign-in must be no more than 15 minutes old. Sign in again if requested.",
+  "Manuellen Versand vorbereiten": "Prepare manual delivery",
+  "Manueller Versandbeleg (z. B. Referenz des gesendeten E-Mails)": "Delivery reference (for example, the sent email)",
+  "Kundenantwort / Annahme- oder Ablehnungsbeleg": "Customer response / acceptance or rejection reference",
+  "Die freigegebene Fassung selbst an den ausgewiesenen Empfänger senden. Erst danach den Versand belegen. Das CRM bestätigt keine Providerzustellung.": "Send the approved version to the named recipient yourself, then record delivery. The CRM does not verify provider delivery.",
+  "Manuellen Versand bestätigen": "Record manual delivery", "Versandausgang unklar": "Delivery outcome unknown",
+  "Begründung / Gesprächsnotiz": "Reason / conversation note", "Freigabe widerrufen": "Revoke approval",
+  "Kundenannahme belegen": "Record customer acceptance", "Kundenablehnung belegen": "Record customer rejection",
+  "Nächstes Nachfassen (lokale Zeit)": "Next follow-up (local time)",
+  "Nachfassaufgabe planen": "Schedule follow-up", "Nachfassen stoppen": "Stop follow-up",
+  "Nachfassen dokumentieren": "Record follow-up",
+  "Aufgabe für manuelle Kontaktaufnahme. Annahme und Ablehnung stoppen offene Nachfassaufgaben atomar.": "This creates a task for manual contact. Acceptance or rejection also stops open follow-up tasks.",
+  "Manuell belegt – Providerzustellung nicht geprüft": "Manually recorded – provider delivery not verified",
+  "Vorbereitet – nicht gesendet": "Prepared – not sent",
+  "Projektverkauf: Qualifizierung bis Abschluss": "Project sales: qualification to completion",
+  "Reservierungsanfragen sind unverbindlich. Verbindliche Reservierungen, Verkauf und Preise erfordern eine dokumentierte Bestätigung durch einen ausdrücklich für dieses Projekt befugten Ansprechpartner.": "Reservation requests are non-binding. Binding reservations, sales and prices require documented confirmation from a person explicitly authorized for this project.",
+  "Projekt": "Project", "Bitte wählen": "Please select", "Prozess laden / aktualisieren": "Load / refresh workflow",
+  "Laden fehlgeschlagen": "Could not load this workflow. Please try again.",
+  "Projekt konnte nicht geladen werden.": "Could not load this project. Please try again.",
+  "Speichern fehlgeschlagen.": "Could not save this change. Check your entries and try again.",
+  "Aktion wurde abgelehnt.": "This action could not be completed. Check your entries and permission.",
+  "Gespeichert. Ein Teil der Übersicht konnte nicht aktualisiert werden; bitte Prozess und CRM neu laden.": "Saved. Part of the overview could not be refreshed. Reload the workflow and CRM.",
+  "Gespeichert. Der Verlauf und alle Statuswerte wurden aktualisiert.": "Saved. History and statuses are up to date.",
+  "Nächster Schritt": "Next step", "Käuferanfrage": "Buyer enquiry", "Einheit": "Unit",
+  "Empfänger der Übergabe": "Handover recipient", "Befugter Benutzer": "Authorized user",
+  "Verantwortlicher für Besichtigung": "Viewing owner", "Budget ab EUR": "Budget from EUR",
+  "Budget bis EUR": "Budget up to EUR", "Finanzierungsstatus": "Financing status",
+  "Kaufzeitraum": "Purchase timeframe", "Nutzung": "Intended use", "Priorität": "Priority",
+  "offen": "Open", "vorqualifiziert": "Prequalified", "Eigenmittel": "Own funds",
+  "Finanzierungszusage": "Financing confirmed", "Eigennutzung": "Own use", "Anlage": "Investment",
+  "Hoch": "High", "Mittel": "Medium", "Niedrig": "Low",
+  "Vollständigkeit wird beim Speichern aus Budget, Finanzierung, Kaufzeitraum, Nutzung, gewünschter Einheit und erreichbarem Kontakt geprüft.": "Saving checks the budget, financing, purchase timeframe, intended use, preferred unit and contact details for completeness.",
+  "Vorhandene Besichtigung": "Existing viewing", "Neue Besichtigung": "New viewing",
+  "Besichtigungsstatus": "Viewing status", "Geplant": "Planned", "Bestätigt": "Confirmed",
+  "Durchgeführt": "Completed", "Abgesagt": "Cancelled", "Nicht erschienen": "No show",
+  "Beginn (lokale Browserzeit)": "Start (local browser time)", "Ende (lokale Browserzeit)": "End (local browser time)",
+  "Zeitzone:": "Time zone:", "Gewünschte Reservierungsfrist": "Requested reservation expiry",
+  "Reservierung": "Reservation", "Käufer": "Buyer", "Bestätigter Verkaufspreis EUR": "Confirmed sale price EUR",
+  "Bauträger": "Property developer", "Autorisierter Ansprechpartner": "Authorized contact",
+  "Preise bestätigen": "Confirm prices", "Reservierungen bestätigen": "Confirm reservations",
+  "Verkäufe bestätigen": "Confirm sales", "Befugnis aktiv": "Authorization active", "Nein": "No", "Ja": "Yes",
+  "Nur die Projektverwaltung darf Befugnisse zuweisen. Die dokumentierte Beauftragung des Bauträgers ist erforderlich; eine technische Rolle allein genügt nicht.": "Only project administration can assign authority. Documented authorization from the developer is required; a technical role alone is insufficient.",
+  "Beleg der Projektbeauftragung": "Project authorization reference", "Quellbeleg / dokumentierte Bestätigung": "Source reference / documented confirmation",
+  "Wird gespeichert…": "Saving…", "Qualifiziert:": "Qualified:", "Übergaben:": "Handovers:",
+  "Reservierungsanfragen:": "Reservation requests:", "Bestätigte Verkäufe:": "Confirmed sales:",
+  "verfügbar": "Available", "reserviert": "Reserved", "verkauft": "Sold", "gesperrt": "Blocked",
+  "Übergaben und bestätigte Abschlüsse nachvollziehen": "View handovers and confirmed sales",
+  "Übergabe:": "Handover:", "Empfänger": "Recipient", "Verkauf:": "Sale:",
+  "bestätigt durch": "confirmed by", "Projektbevollmächtigten": "Project representative",
+  "Käufer qualifizieren": "Qualify buyer", "Qualifizierten Käufer übergeben": "Hand over qualified buyer",
+  "Besichtigung planen / dokumentieren": "Plan / record viewing", "Reservierung anfragen": "Request reservation",
+  "Reservierung verbindlich bestätigen": "Confirm binding reservation", "Bestätigte Reservierung verlängern": "Extend confirmed reservation",
+  "Abgelaufene Reservierung freigeben": "Release expired reservation", "Verkauf bestätigen": "Confirm sale",
+  "Bestätigten Verkaufspreis übernehmen": "Apply confirmed sale price", "Bauträger und Projektbefugnisse verwalten": "Manage developer and project authority",
+};
+
+export function getSalesWorkflowText(value: string, language: LanguageCode): string {
+  if (language === "en") return salesWorkflowEnglish[value] ?? value;
+  const plainGerman: Record<string, string> = {
+    "Angebotsakte wird geladen. Bei einem Fehler bitte die Seite neu laden.": "Angebot wird geladen …",
+    "Nur die konfigurierte Owner-Person (A3) mit höchstens 15 Minuten alter Anmeldung. Bei FRESH_AUTHENTICATION_REQUIRED erneut anmelden.": "Nur der festgelegte Inhaber kann freigeben. Die Anmeldung darf höchstens 15 Minuten zurückliegen. Melden Sie sich bei Aufforderung erneut an.",
+    "Aufgabe für manuelle Kontaktaufnahme. Annahme und Ablehnung stoppen offene Nachfassaufgaben atomar.": "Erstellt eine Aufgabe für die persönliche Kontaktaufnahme. Annahme oder Ablehnung stoppen zugleich offene Nachfassaufgaben.",
+    "Angebotsakte nicht verfügbar": "Das Angebot konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
+    "Vorgang fehlgeschlagen": "Die Änderung konnte nicht gespeichert werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
+  };
+  return plainGerman[value] ?? value;
+}
+
+export function getSalesWorkflowStatusLabel(value: string, language: LanguageCode): string {
+  const statuses: Record<string, { de: string; en: string }> = {
+    NONE: { de: "Nicht geplant", en: "Not scheduled" },
+    NOT_SCHEDULED: { de: "Nicht geplant", en: "Not scheduled" },
+    SCHEDULED: { de: "Geplant", en: "Scheduled" },
+    STOPPED: { de: "Gestoppt", en: "Stopped" },
+    COMPLETED: { de: "Erledigt", en: "Completed" },
+    UNKNOWN: { de: "Unklar", en: "Unknown" },
+  };
+  return statuses[value]?.[language] ?? (language === "de" ? "Nicht verfügbar" : "Unavailable");
 }
 
 export function getCrmDealStageLabel(stage: string, language: LanguageCode) {

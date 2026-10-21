@@ -382,7 +382,8 @@ test("phase 3 complete brokerage preset is additive and covers the full broker w
   assert.match(workspace, /<optgroup key=\{group\.id\} label=\{copy\.navigationPresets\.groups\[group\.id\]\}>/);
   assert.match(workspace, /setActivePresetId\(normalizedActivePresetId\)/);
   assert.match(workspace, /const navigationPreferenceKey = getStudioNavigationPreferenceKey\(\s*navigationPresetStorageKey, sessionUserId, activeWorkspace\.id,/);
-  assert.match(workspace, /window\.localStorage\.setItem\(navigationPreferenceKey, normalizedActivePresetId\)/);
+  assert.match(workspace, /try \{ getBrowserCrmScopeStorage\(\)\?\.setItem\(navigationPreferenceKey, normalizedActivePresetId\); \} catch/);
+  assert.match(workspace, /function getBrowserCrmScopeStorage\(\): Storage \| null \{[\s\S]*?try \{\s*return window\.localStorage;\s*\} catch \{\s*return null;/);
   const studioNavigation = read("src/lib/studio-navigation.ts");
   assert.match(studioNavigation, /workspaceId === STUDIO_WORKSPACE_ID/);
   assert.match(studioNavigation, /\$\{baseKey\}:\$\{encodeURIComponent\(userId\)\}:\$\{encodeURIComponent\(workspaceId\)\}/);

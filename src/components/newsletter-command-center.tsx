@@ -762,21 +762,16 @@ export function NewsletterCommandCenter({
   };
 
   const sendSelectedNewsletterCampaign = async () => {
+    const validationMessage = !relatedDataAvailable ? relatedDataText.detail
+      : !selectedCampaign ? text.noCampaigns
+        : !campaignRecipientEmails.length ? text.liveSendNoRecipients : null;
+    if (validationMessage) {
+      setLiveNewsletterAction({ detail: validationMessage, status: "error" });
+      return;
+    }
     setLiveNewsletterAction({ status: "running" });
 
     try {
-      if (!relatedDataAvailable) {
-        throw new Error(relatedDataText.detail);
-      }
-
-      if (!selectedCampaign) {
-        throw new Error(text.noCampaigns);
-      }
-
-      if (!campaignRecipientEmails.length) {
-        throw new Error(text.liveSendNoRecipients);
-      }
-
       const response = await csrfFetch("/api/newsletter/send", {
         body: JSON.stringify({
           campaignId: selectedCampaign?.campaign.id,
@@ -797,7 +792,7 @@ export function NewsletterCommandCenter({
       const sentCount = data.sends?.filter((send) => send.status === "sent").length ?? 0;
 
       if (!response.ok || !data.ok || failedSend) {
-        throw new Error(failedSend?.error || text.liveSendError);
+        throw new Error(text.liveSendError);
       }
 
       setLiveNewsletterAction({
@@ -810,9 +805,9 @@ export function NewsletterCommandCenter({
             )}`,
         status: "success",
       });
-    } catch (error) {
+    } catch {
       setLiveNewsletterAction({
-        detail: error instanceof Error ? error.message : text.liveSendError,
+        detail: text.liveSendError,
         status: "error",
       });
     }

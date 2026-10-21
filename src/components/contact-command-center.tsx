@@ -578,7 +578,7 @@ export function ContactCommandCenter({
       });
       const payload = await response.json().catch(() => null) as { contact?: Contact; error?: string } | null;
 
-      if (!response.ok) return { error: payload?.error ?? copy.saveFailed };
+      if (!response.ok) return { error: copy.saveFailed };
 
       return payload?.contact ? { contact: payload.contact } : { error: copy.saveFailed };
     } catch {
@@ -676,15 +676,15 @@ export function ContactCommandCenter({
         method: "POST",
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string; task?: Task };
-      if (!response.ok || !payload.task) throw new Error(payload.error ?? copy.saveFailed);
+      if (!response.ok || !payload.task) throw new Error(copy.saveFailed);
 
       setPostCreateAction(null);
       setPostCreateContact(null);
       setPostCreateTaskDraft(null);
       showFeedback("success", copy.linkedTaskCreated);
       void onContactsChanged?.();
-    } catch (error) {
-      showFeedback("error", error instanceof Error ? error.message : copy.saveFailed);
+    } catch {
+      showFeedback("error", copy.saveFailed);
     } finally {
       setPostCreateSaving(false);
     }
@@ -716,15 +716,15 @@ export function ContactCommandCenter({
         method: "POST",
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string; lead?: Lead };
-      if (!response.ok || !payload.lead) throw new Error(payload.error ?? copy.saveFailed);
+      if (!response.ok || !payload.lead) throw new Error(copy.saveFailed);
 
       setPostCreateAction(null);
       setPostCreateContact(null);
       setPostCreateLeadDraft(null);
       showFeedback("success", copy.linkedLeadCreated);
       void onContactsChanged?.();
-    } catch (error) {
-      showFeedback("error", error instanceof Error ? error.message : copy.saveFailed);
+    } catch {
+      showFeedback("error", copy.saveFailed);
     } finally {
       setPostCreateSaving(false);
     }
@@ -763,10 +763,8 @@ export function ContactCommandCenter({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expectedVersion: selectedContact.version }),
       });
-      const payload = await response.json().catch(() => null) as { error?: string } | null;
-
       if (!response.ok) {
-        showFeedback("error", payload?.error ?? copy.archiveFailed);
+        showFeedback("error", copy.archiveFailed);
         return;
       }
 
@@ -831,6 +829,8 @@ export function ContactCommandCenter({
         </div>
         {feedback ? (
           <div
+            role={feedback.tone === "error" ? "alert" : "status"}
+            aria-live={feedback.tone === "error" ? "assertive" : "polite"}
             className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${
               feedback.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-900"
@@ -1232,6 +1232,7 @@ export function ContactCommandCenter({
             <div className="mt-2 flex flex-wrap gap-2">
               {contactViews.map((view) => (
                 <button
+                  aria-pressed={activeView === view.id}
                   className={`rounded-md border px-2 py-1 text-xs font-semibold ${
                     activeView === view.id
                       ? "border-slate-950 bg-slate-950 text-white"
@@ -1350,6 +1351,7 @@ export function ContactCommandCenter({
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {contactDetailTabs.map((tab) => (
                     <button
+                      aria-pressed={activeDetailTab === tab.id}
                       className={`shrink-0 rounded-md border px-3 py-2 text-xs font-semibold ${
                         activeDetailTab === tab.id
                           ? "border-slate-950 bg-slate-950 text-white"

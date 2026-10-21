@@ -85,13 +85,13 @@ export function PublicSiteShell({
               {language === "de" ? (
                 <span aria-current="page">DE</span>
               ) : (
-                <Link aria-label={pageCopy.switchToGerman} href={resolvedLanguageHrefs.de}>DE</Link>
+                <Link aria-label={pageCopy.switchToGerman} href={resolvedLanguageHrefs.de} prefetch={false}>DE</Link>
               )}
               <i aria-hidden="true">/</i>
               {language === "en" ? (
                 <span aria-current="page">EN</span>
               ) : (
-                <Link aria-label={pageCopy.switchToEnglish} href={resolvedLanguageHrefs.en}>EN</Link>
+                <Link aria-label={pageCopy.switchToEnglish} href={resolvedLanguageHrefs.en} prefetch={false}>EN</Link>
               )}
             </nav>
             <Link className={styles.headerButton} href={actionHref}>{actionLabel}</Link>

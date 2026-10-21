@@ -70,7 +70,7 @@ function getCalendarEventWriteErrorMessage(reason: string | undefined, text: Cal
   if (reason === "Valid owner is required" || reason === "Owner is not available in this workspace") {
     return text.ownerInvalid;
   }
-  return reason ?? text.eventCreateFailed;
+  return text.eventCreateFailed;
 }
 
 type CalendarView = "today" | "upcoming" | "prepare" | "teams" | "followUp" | "bookings";
@@ -576,7 +576,7 @@ function getMeetingActionErrorMessage(
     return text.messages.resendTesting;
   }
 
-  return error || fallback;
+  return fallback;
 }
 
 function getTemplateById(id: MeetingTemplateKey, text: CalendarCommandCenterCopy) {
@@ -1216,7 +1216,7 @@ export function CalendarCommandCenter({
       setEventCreateNotice(text.eventCreated);
       void onEventsChanged?.();
     } catch (error) {
-      setEventCreateNotice(error instanceof Error ? error.message : text.eventCreateFailed);
+      setEventCreateNotice(error instanceof Error && error.message === text.ownerInvalid ? text.ownerInvalid : text.eventCreateFailed);
     } finally {
       setEventSaving(false);
     }
@@ -1349,11 +1349,7 @@ export function CalendarCommandCenter({
 
       if (!response.ok || !result.persisted) {
         setMeetingSettingsStatus("error");
-        setMeetingStatusMessage(
-          result.error
-            ? text.messages.localSavedDbWaiting(result.error)
-            : text.messages.localSavedDbUnconfirmed,
-        );
+        setMeetingStatusMessage(text.messages.localSavedDbUnconfirmed);
         return;
       }
 
@@ -1621,12 +1617,9 @@ export function CalendarCommandCenter({
         detail: text.messages.providerDisconnected(providerLabel),
         status: "success",
       });
-    } catch (error) {
+    } catch {
       setLiveCalendarAction({
-        detail:
-          error instanceof Error
-            ? error.message
-            : text.messages.providerDisconnectFailed(providerLabel),
+        detail: text.messages.providerDisconnectFailed(providerLabel),
         status: "error",
       });
     }
@@ -1695,7 +1688,7 @@ export function CalendarCommandCenter({
       const data = (await response.json()) as LiveCalendarResponse;
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || text.liveSyncError);
+        throw new Error(getMeetingActionErrorMessage(data.error, text.liveSyncError, text));
       }
 
       setLiveCalendarAction({
@@ -1705,7 +1698,7 @@ export function CalendarCommandCenter({
       });
     } catch (error) {
       setLiveCalendarAction({
-        detail: error instanceof Error ? error.message : text.liveSyncError,
+        detail: error instanceof Error && [text.noEvents, oauthStatusMessage, text.calendarSetup.missingConnection, text.messages.googleApiMissing, text.messages.googleScopeMissing, text.messages.googleNotConnected, text.messages.microsoftNotConnected, text.messages.resendTesting].includes(error.message) ? error.message : text.liveSyncError,
         status: "error",
       });
     }
@@ -3494,7 +3487,7 @@ export function CalendarCommandCenter({
                         </div>
                         {notification.error ? (
                           <p className="mt-3 break-words rounded-md bg-red-50 px-3 py-2 text-xs text-red-900">
-                            {notification.error}
+                            {getMeetingActionErrorMessage(notification.error, text.messages.retryError, text)}
                           </p>
                         ) : null}
                         {notification.status === "failed" ? (
@@ -3527,6 +3520,7 @@ export function CalendarCommandCenter({
             <div className="flex flex-wrap gap-2">
               {views.map((view) => (
                 <button
+                  aria-pressed={activeView === view.id}
                   className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                     activeView === view.id
                       ? "border-slate-950 bg-slate-950 text-white"

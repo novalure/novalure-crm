@@ -1,0 +1,15 @@
+# Personal CRM UI language
+
+The CRM workspace reads its personal language at request time from the central authentication identity. The root layout and workspace share a React request cache; no identity preference is placed in a shared data cache. Server and client receive the same initial language. A failed preference read displays an unavailable notice and uses the automatic default without importing a previous account's browser preference.
+
+Automatic means German for AT, DE, CH, LU and LI, and English for every other, missing or invalid country. Only `x-vercel-ip-country` in a Vercel runtime supplies that country. There is no browser-language fallback, geolocation permission, extra geo service, stored IP or stored country. The country is evaluated for a new server entry and remains fixed while the user edits the current page.
+
+Migration `107_account_ui_language_preference.sql` adds one small table because the existing system has workspace-scoped onboarding and a shared browser language value, but no account-wide UI preference. Existing authentication identities, credentials, memberships and business records are unchanged. Missing rows mean `auto`; an explicit reset persists `auto`, not its resolved language. The migration must be applied through the existing deployment process; the application never applies it automatically.
+
+Forced RLS requires the existing active actor and tenant context to identify a membership belonging to the exact preference identity. Only SELECT, INSERT and UPDATE are granted to the existing tenant role. The personal save route requires an authenticated human identity, the existing one-time CSRF guard and the user ID expected by the current page, so a stale page cannot write to a different account after login changes. The preference and its bounded authentication audit event commit in one tenant transaction. No role or workspace-management capability is needed to set one's own language.
+
+The header, mobile navigation and Settings language card use the same state and save path. A successful database receipt updates that state without navigation, remounting, changing the workspace or clearing drafts and filters. Pending controls are disabled. Failed writes retain the previous setting and report an error, with no success message. They neither store a browser override nor claim cross-device persistence.
+
+Before login, the deliberate language links use a separate `novalure.crm-language-preference` cookie with an explicit `auto`, `de` or `en` mode. Missing cookies mean automatic. The signed-in workspace never reads that cookie, old shared language storage, URL language or browser locale. Marketing and other public pages keep their existing language rules. Denied browser storage is tolerated by document-language synchronization and CRM navigation preferences.
+
+Local unit and synthetic database/browser evidence must be reported separately from hosted login, cross-device and Production evidence. Applying the schema or receiving a local synthetic save response does not prove a hosted migration or Production save succeeded.
