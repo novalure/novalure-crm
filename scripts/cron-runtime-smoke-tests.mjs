@@ -48,11 +48,19 @@ test("production schedules are staggered and workers use shared guards", async (
       ["/api/cron/teams-alerts", "4,19,34,49 * * * *"],
       ["/api/cron/google-alerts", "9,24,39,54 * * * *"],
       ["/api/cron/property-reservations", "7 * * * *"],
+      ["/api/cron/knowledge-monitoring", "0 6 * * *"],
     ],
   );
 
   for (const route of vercel.crons) {
-    const source = await readFile(new URL(`../src/app${route.path}/route.ts`, import.meta.url), "utf8");
+    const entry = await readFile(new URL(`../src/app${route.path}/route.ts`, import.meta.url), "utf8");
+    let source = entry;
+    if (route.path === "/api/cron/knowledge-monitoring") {
+      assert.match(entry, /import \{ handleKnowledgeMonitoringCron \} from "@\/lib\/knowledge-center\/monitoring-delegation"/);
+      assert.match(entry, /return handleKnowledgeMonitoringCron\(request\)/);
+      source = await readFile(new URL("../src/lib/knowledge-center/monitoring-delegation.ts", import.meta.url), "utf8");
+      assert.match(source, /!env\.CRON_SECRET\?\.trim\(\) \|\| !isCronAuthorized\(request, env\)/);
+    }
     assert.match(source, /isCronAuthorized/);
     assert.match(source, /areQueueWorkersPaused/);
     assert.match(source, /runId/);

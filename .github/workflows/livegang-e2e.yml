@@ -140,6 +140,9 @@ jobs:
       - name: Isolated sales browser flows
         run: npm run qa:sales:e2e
 
+      - name: Website knowledge import UI regression
+        run: npm run test:knowledge-import-ui
+
       - name: Production build
         run: npm run build
 

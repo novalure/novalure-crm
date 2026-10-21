@@ -26,6 +26,10 @@
     {
       "path": "/api/cron/property-reservations",
       "schedule": "7 * * * *"
+    },
+    {
+      "path": "/api/cron/knowledge-monitoring",
+      "schedule": "0 6 * * *"
     }
   ]
 }
