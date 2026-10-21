@@ -4,6 +4,7 @@ import { discardUncommittedKnowledgeFile, saveKnowledgeFile, type MediaAsset } f
 import { extractKnowledgeDocument } from "./document-extraction";
 import type { KnowledgeDocumentUploadMetadata, VerifiedKnowledgeDocumentUpload } from "./document-upload";
 import type { AppSession } from "../auth/session";
+import { knowledgeMonitoringAuditMetadata } from "./monitoring-delegation";
 import { assertProjectGrant, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
 import { KnowledgeCenterError, knowledgeId, knowledgePermissions, knowledgeRevision, knowledgeStructured, knowledgeText, knowledgeUrl, requireKnowledgePermission } from "./policy";
 import type { AssignKnowledgeAreasInput, CreateKnowledgeAreaInput, CreateKnowledgeSourceInput, KnowledgeArea, KnowledgeCenterSnapshot, KnowledgeChannel, KnowledgeDocument, KnowledgeDocumentFormat, KnowledgeDocumentProcessingStatus, KnowledgeEntitlement, KnowledgeQueryResult, KnowledgeSource, KnowledgeSourceType, KnowledgeUsage, KnowledgeVersion, QueryKnowledgeCenterInput, UpdateKnowledgeSourceInput } from "./types";
@@ -37,7 +38,7 @@ async function usage(tx: TenantTransaction, session: AppSession): Promise<Knowle
   return row ?? { sources: 0, storageBytes: 0, queriesThisMonth: 0 };
 }
 async function audit(tx: TenantTransaction, session: AppSession, action: string, entityId: string, details: Record<string, unknown> = {}) {
-  await tx.execute(`insert into audit_logs(workspace_id,actor_user_id,action,entity_type,entity_id,after) values($1::uuid,$2::uuid,$3,'knowledge_center',$4::uuid,$5::jsonb)`, [session.workspaceId, session.userId, action, entityId, JSON.stringify(details)]);
+  await tx.execute(`insert into audit_logs(workspace_id,actor_user_id,action,entity_type,entity_id,after) values($1::uuid,$2::uuid,$3,'knowledge_center',$4::uuid,$5::jsonb)`, [session.workspaceId, session.userId, action, entityId, JSON.stringify({ ...details, ...knowledgeMonitoringAuditMetadata(session) })]);
 }
 async function area(tx: TenantTransaction, session: AppSession, areaId: string, write = false) {
   const row = await tx.queryOne<KnowledgeArea>(`select id,name,kind,project_id as "projectId",description,archived_at::text as "archivedAt" from knowledge_areas where id=$1::uuid and workspace_id=$2::uuid and archived_at is null`, [knowledgeId(areaId, "areaId"), session.workspaceId]);

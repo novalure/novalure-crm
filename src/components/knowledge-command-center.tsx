@@ -15,7 +15,7 @@ import {
 import type { KnowledgeItem, Project } from "@/lib/crm-types";
 import type { LanguageCode } from "@/lib/i18n";
 import { getKnowledgeCenterCopy, getKnowledgeErrorMessage } from "@/lib/knowledge-center/copy";
-import { getKnowledgeLifecycleCopy } from "@/lib/knowledge-center/lifecycle-copy";
+import { getKnowledgeLifecycleCopy, knowledgeMonitoringError } from "@/lib/knowledge-center/lifecycle-copy";
 import { KnowledgeLifecyclePanel } from "@/components/knowledge-lifecycle-panel";
 import { KnowledgeMonitoringPanel } from "@/components/knowledge-monitoring-panel";
 import { KnowledgeMaintenancePanel } from "@/components/knowledge-maintenance-panel";
@@ -64,6 +64,10 @@ const channels: KnowledgeChannel[] = [
   "voice",
 ];
 type Tab = "sources" | "areas" | "assistants" | "maintenance" | "usage";
+type WebsiteImportResponse = {
+  source: KnowledgeSource;
+  websiteImport: { status: "ready" | "scan_failed" | "busy" | "changes_pending" | "stale"; errorCode?: string };
+};
 type SourceEditor = {
   sourceId: string;
   revision: number;
@@ -314,13 +318,13 @@ function KnowledgeCenterContent({
     }
   }
 
-  async function mutate(path: string, body: object, method = "POST") {
+  async function mutate<Result = Record<string, unknown>>(path: string, body: object, method = "POST") {
     const response = await csrfFetch(scopedPath(path), {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return readResponse<Record<string, unknown>>(response, text.saveError);
+    return readResponse<Result>(response, text.saveError);
   }
 
   async function runAction(
@@ -525,6 +529,10 @@ function KnowledgeCenterContent({
       setError(text.requiredFields);
       return;
     }
+    if (current.type === "url" && !current.sourceId) {
+      await importWebsite(undefined, { areaId: current.areaId, name: payload.name, url: current.url.trim() });
+      return;
+    }
     await runAction("source", async () => {
       await mutate(
         current.sourceId
@@ -541,6 +549,41 @@ function KnowledgeCenterContent({
       setEditor(null);
       setHistorySourceId("");
     });
+  }
+
+  async function importWebsite(existing?: KnowledgeSource, create?: { areaId: string; name: string; url: string }) {
+    setBusy(existing ? `website:${existing.id}` : "website");
+    setError("");
+    setNotice("");
+    try {
+      const result = await mutate<WebsiteImportResponse>("/api/knowledge-center/websites", existing
+        ? { action: "import", sourceId: existing.id, expectedVersion: existing.revision }
+        : { action: "create", ...create });
+      if (!result.source?.id || !result.websiteImport?.status) throw new Error(text.saveError);
+      const source = result.source;
+      // Keep the created ID even if the follow-up refresh fails. A failed fetch
+      // is a saved URL with a partial import, not a reason to create a duplicate.
+      setSnapshot((current) => current ? {
+        ...current, sources: [source, ...current.sources.filter((item) => item.id !== source.id)],
+      } : current);
+      setEditor(null);
+      setSearch("");
+      setAreaFilter(source.areaId);
+      setHistorySourceId("");
+      setReviewSourceId(result.websiteImport.status === "ready" ? source.id : "");
+      setMonitoringSourceId(result.websiteImport.status === "ready" ? "" : source.id);
+      const status = result.websiteImport.status;
+      setNotice(status === "ready" ? text.websiteImported
+        : status === "busy" ? text.websiteImportBusy
+          : status === "changes_pending" ? text.websiteChangesPending
+            : status === "stale" ? text.websiteImportStale
+              : `${text.websiteImportPending}${result.websiteImport.errorCode ? ` ${knowledgeMonitoringError(language, result.websiteImport.errorCode)}` : ""}`);
+      setSnapshot(await loadSnapshot());
+    } catch (cause) {
+      setError(getKnowledgeErrorMessage(language, cause, text.saveError));
+    } finally {
+      setBusy("");
+    }
   }
 
   async function uploadDocument(file: File, replacement?: KnowledgeSource) {
@@ -1024,8 +1067,9 @@ function KnowledgeCenterContent({
             }
             type="submit"
           >
-            {busy === "source"
-              ? text.saving
+            {busy === "website"
+              ? text.importingWebsite
+              : busy === "source" ? text.saving
               : editor.sourceId
                 ? text.newVersion
                 : text.save}
@@ -1456,7 +1500,14 @@ function KnowledgeCenterContent({
                                 </a>
                               ) : null}
                               {canWrite && !source.archivedAt && source.type === "url" && snapshot.entitlement.features.websiteImport ? (
-                                <button className={buttonClass} type="button" aria-expanded={monitoringSourceId === source.id} disabled={disabled} onClick={() => setMonitoringSourceId((current) => current === source.id ? "" : source.id)}>{lifecycleText.monitoring}</button>
+                                <>
+                                  {!source.approvedVersionId && source.revision === 1 && source.version?.version === 1 && !source.version.content.trim() && !Object.keys(source.version.structuredData).length ? (
+                                    <button className={buttonClass} type="button" disabled={disabled} onClick={() => void importWebsite(source)}>
+                                      {busy === `website:${source.id}` ? text.importingWebsite : text.importWebsiteContent}
+                                    </button>
+                                  ) : null}
+                                  <button className={buttonClass} type="button" aria-expanded={monitoringSourceId === source.id} disabled={disabled} onClick={() => setMonitoringSourceId((current) => current === source.id ? "" : source.id)}>{lifecycleText.monitoring}</button>
+                                </>
                               ) : null}
                               {canWrite && !source.archivedAt ? (
                                 <details className="group">

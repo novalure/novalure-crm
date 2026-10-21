@@ -6,6 +6,7 @@ import { KnowledgeCenterError, knowledgeId, knowledgeRevision, requireKnowledgeP
 import { knowledgeInternals } from "./repository";
 import { createKnowledgeProposalInTransaction, recordKnowledgeWorkflowEventInTransaction } from "./workflow";
 import type { KnowledgeEntitlement } from "./types";
+import { getKnowledgeMonitoringDispatcherReadiness, knowledgeMonitoringGrant, withKnowledgeMonitoringDelegation } from "./monitoring-delegation";
 import { scanWebsite, WebsiteScanError, type WebsiteScanPorts, type WebsiteScanResult } from "./website-scanner";
 
 export const knowledgeMonitoringIntervals = ["manual", "daily", "weekly", "monthly"] as const;
@@ -66,7 +67,7 @@ export async function getKnowledgeMonitoring(session: AppSession, input: { sourc
     const config = stored ? publicConfig(stored) : null;
     const history = await tx.query<KnowledgeWebsiteRun>(`select ${runColumns} from knowledge_website_scan_runs where source_id=$1::uuid and workspace_id=$2::uuid order by started_at desc,id desc limit 30`, [sourceId, fresh.workspaceId]);
     const totals = await tx.queryOne<{ scans: number }>(`select scans_this_month as scans from knowledge_center_usage($1::uuid)`, [fresh.workspaceId]);
-    return { config, history, scansThisMonth: totals?.scans ?? 0, allowedIntervals: allowedKnowledgeMonitoringIntervals(contract) };
+    return { config, history, scansThisMonth: totals?.scans ?? 0, allowedIntervals: allowedKnowledgeMonitoringIntervals(contract), dispatcher: getKnowledgeMonitoringDispatcherReadiness({ workspaceId: fresh.workspaceId, sourceId, actorId: fresh.userId }) };
   }, options);
 }
 function publicConfig(config: KnowledgeMonitoringConfig): KnowledgeMonitoringConfig {
@@ -86,8 +87,10 @@ export async function saveKnowledgeMonitoring(session: AppSession, input: SaveKn
       values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,case when $6 and $5<>'manual' then clock_timestamp() else null end)
       on conflict(source_id) do update set configured_by=excluded.configured_by,interval=excluded.interval,enabled=excluded.enabled,revision=knowledge_website_monitoring.revision+1,
       next_due_at=case when excluded.enabled and excluded.interval<>'manual' then clock_timestamp() else null end,updated_at=clock_timestamp()`, [sourceId, fresh.workspaceId, fresh.userId, row.projectId, interval, input.enabled]);
-    await knowledgeInternals.audit(tx, fresh, "knowledge.website.monitoring_configured", sourceId, { interval, enabled: input.enabled });
-    return publicConfig((await readConfig(tx, fresh, sourceId))!);
+    const config = (await readConfig(tx, fresh, sourceId))!;
+    const delegation = await knowledgeMonitoringGrant(tx, fresh, config.revision, input.enabled, interval);
+    await knowledgeInternals.audit(tx, fresh, "knowledge.website.monitoring_configured", sourceId, { interval, enabled: input.enabled, ...delegation });
+    return publicConfig(config);
   }, options);
 }
 
@@ -96,8 +99,16 @@ type ClaimedRun = {
   url: string; previousHash: string | null; leaseToken: string; trigger: "manual" | "scheduled";
 };
 type ActiveRun = ClaimedRun & { status: KnowledgeWebsiteRun["status"]; attempts: number; leaseActive: boolean; retryPending: boolean };
+function monitoringRead<T>(session: AppSession, job: KnowledgeMonitoringJob | undefined, callback: (tx: TenantTransaction, fresh: AppSession) => Promise<T>, options: TenantTransactionOptions): Promise<T> {
+  if (session.serviceIdentity?.role !== "Knowledge.Monitor") return withCrmRead(session, callback, options);
+  if (!job) fail("MONITORING_DELEGATION_REQUIRED", "A delegated job must match its exact scheduled scope.", 403);
+  return withKnowledgeMonitoringDelegation(session, job, callback, options);
+}
+function claimedJob(session: AppSession, claimed: ClaimedRun): KnowledgeMonitoringJob | undefined {
+  return claimed.configRevision === null ? undefined : { workspaceId: session.workspaceId, actorId: claimed.actorId, sourceId: claimed.sourceId, configRevision: claimed.configRevision };
+}
 async function claimRun(session: AppSession, input: { sourceId: string; expectedVersion?: number; job?: KnowledgeMonitoringJob }, options: TenantTransactionOptions): Promise<{ claimed: ClaimedRun } | { busy: KnowledgeWebsiteRun }> {
-  return withCrmRead(session, async (tx, fresh) => {
+  return monitoringRead(session, input.job, async (tx, fresh) => {
     requireKnowledgePermission(fresh, "canWrite"); await knowledgeInternals.lock(tx, fresh);
     const contract = await knowledgeInternals.enabled(tx, fresh), row = await knowledgeInternals.source(tx, fresh, input.sourceId, true);
     if (row.type !== "url" || !row.version?.url) fail("VALIDATION_ERROR", "Only URL sources may be scanned.", 400);
@@ -138,15 +149,18 @@ async function claimRun(session: AppSession, input: { sourceId: string; expected
 async function advanceConfig(tx: TenantTransaction, session: AppSession, sourceId: string, configRevision: number | null, status: string, errorCode: string | null) {
   await tx.execute(`update knowledge_website_monitoring set last_scan_at=clock_timestamp(),last_run_status=$1,last_error_code=$2,
     last_success_at=case when $1 in ('changed','unchanged') then clock_timestamp() else last_success_at end,
-    next_due_at=case when $3::int is not null and enabled and interval<>'manual' then clock_timestamp()+${intervalSql} else next_due_at end,
-    updated_at=clock_timestamp() where source_id=$4::uuid and workspace_id=$5::uuid and ($3::int is null or revision=$3::int)`, [status, errorCode, configRevision, sourceId, session.workspaceId]);
+    next_due_at=case when $6::boolean and $3::int is not null and enabled and interval='daily'
+      then (date_trunc('day',statement_timestamp() at time zone 'UTC')+interval '6 hours'
+        +case when (statement_timestamp() at time zone 'UTC')::time>=time '06:00' then interval '1 day' else interval '0 days' end) at time zone 'UTC'
+      when $3::int is not null and enabled and interval<>'manual' then clock_timestamp()+${intervalSql} else next_due_at end,
+    updated_at=clock_timestamp() where source_id=$4::uuid and workspace_id=$5::uuid and ($3::int is null or revision=$3::int)`, [status, errorCode, configRevision, sourceId, session.workspaceId, session.serviceIdentity?.role === "Knowledge.Monitor"]);
 }
 async function ownLease(tx: TenantTransaction, session: AppSession, claimed: ClaimedRun) {
   const lease = await tx.queryOne<{ id: string }>(`select id from knowledge_website_scan_runs where id=$1::uuid and workspace_id=$2::uuid and actor_id=$3::uuid and status='running' and lease_token=$4::uuid and lease_until>clock_timestamp() for update`, [claimed.id, session.workspaceId, session.userId, claimed.leaseToken]);
   if (!lease) fail("SCAN_LEASE_LOST", "Website scan lease expired or was superseded.");
 }
 async function finishScan(session: AppSession, claimed: ClaimedRun, scanned: WebsiteScanResult, options: TenantTransactionOptions) {
-  return withCrmRead(session, async (tx, fresh) => {
+  return monitoringRead(session, claimedJob(session, claimed), async (tx, fresh) => {
     requireKnowledgePermission(fresh, "canWrite"); await knowledgeInternals.lock(tx, fresh);
     const contract = await knowledgeInternals.enabled(tx, fresh), row = await knowledgeInternals.source(tx, fresh, claimed.sourceId, true);
     await ownLease(tx, fresh, claimed);
@@ -169,7 +183,7 @@ async function finishScan(session: AppSession, claimed: ClaimedRun, scanned: Web
   }, options);
 }
 async function recordFailure(session: AppSession, claimed: ClaimedRun, errorCode: string, options: TenantTransactionOptions) {
-  return withCrmRead(session, async (tx, fresh) => {
+  return monitoringRead(session, claimedJob(session, claimed), async (tx, fresh) => {
     requireKnowledgePermission(fresh, "canWrite"); await knowledgeInternals.lock(tx, fresh); await ownLease(tx, fresh, claimed);
     const run = await readRun(tx, fresh, claimed.id), retry = retryableErrors.has(errorCode) && run.attempts < 3;
     const status = retry ? "retry_wait" : ["ENTITLEMENT_REQUIRED", "MONITORING_CONFIG_CHANGED", "FORBIDDEN", "PROJECT_FORBIDDEN"].includes(errorCode) ? "blocked" : "failed";
