@@ -2,6 +2,7 @@ import { Fragment, type CSSProperties, type ReactNode } from "react";
 import localFont from "next/font/local";
 import Link from "next/link";
 import { CookieConsentButton, type CookieConsentButtonCopy } from "@/components/cookie-consent-button";
+import { NovalureWordmark } from "@/components/novalure-wordmark";
 import { PublicHashRouteLoginRedirect } from "@/components/public-hash-route-login-redirect";
 import { PublicCrmMobileMenu } from "@/components/public-crm-mobile-menu";
 import styles from "@/components/public-crm-landing.module.css";
@@ -182,7 +183,7 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
 function Brand({ language }: { language: PublicLanguageCode }) {
   return (
     <Link aria-label="Novalure CRM" className={styles.brand} href={withPublicLanguage("/", language)}>
-      <span className={styles.wordmark}>Novalure<span>.</span></span>
+      <NovalureWordmark className={styles.wordmark} />
       <span className={styles.crmBadge}>CRM</span>
     </Link>
   );
@@ -504,7 +505,7 @@ export function PublicCrmLanding({
       <footer aria-label={localizedLegalCopy.ariaLabel} className={styles.footer}>
         <div className={styles.footerInner}>
           <div>
-            <p><strong>Novalure<span>.</span></strong> · {localizedLegalCopy.companyLine}</p>
+            <p><NovalureWordmark className={styles.footerWordmark} /> · {localizedLegalCopy.companyLine}</p>
             <a href={`mailto:${companyLegalDetails.email}`}>{companyLegalDetails.email}</a>
           </div>
           <nav aria-label={localizedLegalCopy.ariaLabel}>

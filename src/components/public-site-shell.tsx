@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import Link from "next/link";
+import { NovalureWordmark } from "@/components/novalure-wordmark";
 import styles from "@/components/public-site-shell.module.css";
 import {
   getLoginLegalFooterCopy,
@@ -70,7 +71,7 @@ export function PublicSiteShell({
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link aria-label="Novalure CRM" className={styles.brand} href={homeHref}>
-            <span className={styles.wordmark}>Novalure<span>.</span></span>
+            <NovalureWordmark className={styles.wordmark} />
             <span className={styles.crmBadge}>CRM</span>
           </Link>
 
@@ -104,7 +105,7 @@ export function PublicSiteShell({
       <footer aria-label={legalCopy.ariaLabel} className={styles.footer}>
         <div className={styles.footerInner}>
           <div>
-            <p><strong>Novalure<span>.</span></strong> · {legalCopy.companyLine}</p>
+            <p><NovalureWordmark className={styles.footerWordmark} /> · {legalCopy.companyLine}</p>
             <a href={`mailto:${companyLegalDetails.email}`}>{companyLegalDetails.email}</a>
           </div>
           <nav aria-label={legalCopy.ariaLabel}>
