@@ -1,6 +1,7 @@
 # CSRF route inventory
 
 Inventory date: 2026-08-11. Scope: state-changing Next.js route handlers and browser API callers.
+Booking additions verified: 2026-10-21.
 
 ## Central cookie-session protection
 
@@ -11,6 +12,8 @@ Inventory date: 2026-08-11. Scope: state-changing Next.js route handlers and bro
 | `/api/approvals` | `POST` |
 | `/api/bots/actions`, `/api/bots/agent`, `/api/bots/calls`, `/api/bots/channels`, `/api/bots/chat`, `/api/bots/documents`, `/api/bots/evaluations`, `/api/bots/knowledge`, `/api/bots/leads`, `/api/bots/meetings` | `POST` |
 | `/api/calendar/google`, `/api/calendar/microsoft` | `POST` |
+| `/api/booking/availability`, `/api/booking/holds`, `/api/booking/requests`, `/api/booking/bookings/[bookingId]/[action]` | `POST` |
+| `/api/booking/settings`, `/api/booking/connections/[provider]` | `PUT`; connections also `POST`, `DELETE` |
 | `/api/crm/bots`, `/api/crm/dashboard-views`, `/api/crm/data-quality`, `/api/crm/editor-preflight`, `/api/crm/funnels`, `/api/crm/properties`, `/api/crm/recommendation-runtime`, `/api/crm/units` | `POST` |
 | `/api/crm/broker/mandates`, `/api/crm/broker/search-profiles`, `/api/crm/calendar-events`, `/api/crm/customer-access`, `/api/crm/deals`, `/api/crm/google-notifications`, `/api/crm/leads`, `/api/crm/notes`, `/api/crm/projects`, `/api/crm/reservations`, `/api/crm/tasks`, `/api/crm/teams-notifications` | `POST`, `PATCH` |
 | `/api/crm/contacts` | `POST`, `PATCH`, `DELETE` |
