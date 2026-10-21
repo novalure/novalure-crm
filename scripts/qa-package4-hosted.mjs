@@ -171,7 +171,7 @@ async function api(page, pathname, body, workspaceId, method = body === undefine
   }, { pathname, body, workspaceId, method });
 }
 async function login(page, account) {
-  await page.goto(target.origin + "/login?lang=de", { waitUntil: "domcontentloaded" });
+  await page.goto(target.origin + "/login?languagePreference=de&lang=de", { waitUntil: "domcontentloaded" });
   if (new URL(page.url()).origin !== target.origin) fail("HOSTED_PROTECTION_REDIRECT_DENIED");
   await expect(page.locator("#login-email")).toBeVisible();
   const consent = page.getByRole("button", { name: "Nur essentielle", exact: true });
@@ -259,7 +259,7 @@ async function publish(name, content) {
   await expect(review.getByTestId("knowledge-revoke")).toBeVisible();
 }
 async function assign(channel, checked = true) {
-  await customerPage.getByRole("button", { name: "KI-Zuordnungen", exact: true }).click();
+  await customerPage.getByRole("button", { name: "Assistenten", exact: true }).click();
   await customerPage.getByLabel("KI-Assistent", { exact: true }).selectOption(target.accounts.customerA.botId);
   await customerPage.getByRole("button", { name: channel === "voice" ? "Telefonassistent" : "Webchat", exact: true }).click();
   await customerPage.getByRole("checkbox", { name: new RegExp(areaName) }).setChecked(checked);

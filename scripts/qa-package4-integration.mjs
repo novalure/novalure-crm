@@ -129,7 +129,7 @@ async function publish(name, content) {
   await expect(panel.getByTestId("knowledge-revoke")).toBeVisible();
 }
 async function assign(channel, checked = true) {
-  await page.getByRole("button", { name: "KI-Zuordnungen", exact: true }).click();
+  await page.getByRole("button", { name: "Assistenten", exact: true }).click();
   await page.getByLabel("KI-Assistent", { exact: true }).selectOption(accounts.customer.botId);
   await page.getByRole("button", { name: channel === "voice" ? "Telefonassistent" : "Webchat", exact: true }).click();
   const checkbox = page.getByRole("checkbox", { name: new RegExp(areaName) });
@@ -185,7 +185,7 @@ try {
   page.on("response", response => { if (new URL(response.url()).origin === base.origin && response.status() >= 500) serverErrors.push({ status: response.status(), path: new URL(response.url()).pathname }); });
 
   await step("A fresh Design C customer obtains its session with ordinary password and real TOTP", async () => {
-    await page.goto(new URL("/login?lang=de", base).href);
+    await page.goto(new URL("/login?languagePreference=de&lang=de", base).href);
     const consent = page.getByRole("button", { name: "Nur essentielle", exact: true });
     if (await consent.isVisible()) await consent.click();
     await page.locator("#login-email").fill(accounts.customer.email);
@@ -366,7 +366,7 @@ try {
   });
 } catch (error) {
   if (!results.some(result => result.status === "FAIL")) results.push({ name: "Package 4 setup", status: "FAIL", error: error.message });
-  console.error(error);
+  console.error(error instanceof Error ? error.message : "Package 4 QA failed");
   process.exitCode = 1;
 } finally {
   await writeFile(path.join(output, "result.json"), JSON.stringify({ syntheticOnly: true, productionAccess: 0,

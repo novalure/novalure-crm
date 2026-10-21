@@ -1448,7 +1448,7 @@ async function runIntegration() {
       assert.equal(snapshot.body.snapshot.available, false);
       await expect(
         operatorPage.getByText(
-          "Das Knowledge-Modul ist nicht freigeschaltet.",
+          "Die Wissensverwaltung ist nicht freigeschaltet.",
           { exact: true },
         ),
       ).toBeVisible();
@@ -1785,7 +1785,7 @@ async function runIntegration() {
     async () => {
       assert(areaId && sourceId, "Requires the persisted self-service draft");
       await customerPage
-        .getByRole("button", { name: "KI-Zuordnungen", exact: true })
+        .getByRole("button", { name: "Assistenten", exact: true })
         .click();
       await customerPage
         .getByLabel("KI-Assistent", { exact: true })

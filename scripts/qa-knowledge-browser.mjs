@@ -103,7 +103,7 @@ try {
   await step("disabled module shows an honest state with no sample knowledge", async () => {
     await page.goto(fixture.baseUrl + "/?lang=de&workspaceId=" + fixture.workspaceId + "&projectId=all#knowledge");
     await expect(page.getByRole("heading", { name: "Mein Unternehmenswissen", exact: true })).toBeVisible();
-    await expect(page.getByText("Das Knowledge-Modul ist nicht freigeschaltet.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Die Wissensverwaltung ist nicht freigeschaltet.", { exact: true })).toBeVisible();
     await page.evaluate(workspace => { window.knowledgeWorkspace = workspace; }, fixture.workspaceId);
     assert.equal((await api("/api/knowledge-center/areas", { name: "SYNTHETIC denied", kind: "company" })).status, 403);
   });
@@ -133,7 +133,7 @@ try {
     assert.equal(snapshot.sources[0].version.status, "draft");
   });
   await step("explicit assistant assignment never activates an unpublished draft", async () => {
-    await page.getByRole("button", { name: "KI-Zuordnungen", exact: true }).click();
+    await page.getByRole("button", { name: "Assistenten", exact: true }).click();
     await page.getByLabel("KI-Assistent", { exact: true }).selectOption(botId);
     await page.getByRole("checkbox", { name: /SYNTHETIC Firmenwissen/ }).check();
     await page.getByRole("button", { name: "Zuordnungen speichern", exact: true }).click();
@@ -172,7 +172,7 @@ try {
     }
   });
   await step("one approved document serves independently assigned webchat and voice; revocation is immediate", async () => {
-    await page.getByRole("button", { name: "KI-Zuordnungen", exact: true }).click();
+    await page.getByRole("button", { name: "Assistenten", exact: true }).click();
     await page.getByLabel("KI-Assistent", { exact: true }).selectOption(botId);
     await page.getByRole("button", { name: "Telefonassistent", exact: true }).click();
     await page.getByRole("checkbox", { name: /SYNTHETIC Firmenwissen/ }).check();

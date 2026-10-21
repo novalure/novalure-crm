@@ -292,6 +292,23 @@
     "Units/reservations were empty in visual captures; loaded project sales and all provider actions were not visually accepted.",
     "Real login/device/geo/provider acceptance on a hosted UX deployment remains blocked."
   ],
+  "releaseFollowup": {
+    "productionAuthority": "CURRENT_EXPLICIT_OWNER_LIVE_REQUEST_2026_10_21",
+    "qaBranchRights": "EXACT_BRANCH_ADDITION_APPROVED_AND_NATIVE_PROTECTION_EQUIVALENCE_VERIFIED",
+    "ci79fb3ed": "FAIL_STALE_SALES_ENUM_ASSERTIONS_REPAIRED_WITH_PERSISTED_STATE_CHECKS",
+    "cidd2b9c8": "FAIL_STALE_KNOWLEDGE_UI_SELECTORS_REPAIRED_NO_FALSE_PASS",
+    "localSyntheticBrowserResults": { "sales": 20, "designC": 50, "knowledge": 13, "combinedLifecycle": 13, "failuresInSuccessfulRuns": 0 },
+    "historicalFollowupFailures": ["Direct old optimized instance API401 after MFA; fresh salesE2E20/20 separately", "Missing Linux browser path and Windows bundled browser spawn; existing installed Chrome used", "Combined helper chose old lang query without conscious guest preference; explicit German guest mode fixed"],
+    "runtimeSourceChangedByFollowup": false,
+    "hostedHelperExecuted": false,
+    "productionMigration107": "NATIVE_ROLE_BOUND_CATALOG_SELECT_CONFIRMS_TABLE_AND_LEDGER_ENTRY_MISSING",
+    "productionRolePreflight": "NOVALURE_APP_WITHOUT_ELEVATED_PRIVILEGES_TENANT_MEMBERSHIP_PRESENT_NO_OWNED_OR_INHERITED_RLS_TABLES",
+    "nativeProductionQueryCount": 1,
+    "nativeProductionQueryKind": "SELECT_ONLY_NO_BUSINESS_OR_AUTH_DATA",
+    "trustedAppAttestation": "MISSING_INTERNAL_REVIEW_IS_SEPARATE",
+    "allEightProductionGates": "NOT_CLOSED",
+    "productionMutation": false
+  },
   "deployment": {
     "hostedPreview": "BLOCKED_NO_VERIFIED_ISOLATED_BRANCH_BINDING",
     "migration107": "LOCAL_DISPOSABLE_QA_ONLY",
