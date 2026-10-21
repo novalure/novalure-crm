@@ -855,7 +855,7 @@ export function PropertyCommandCenter({
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusChip label={copy.statusLabels[selectedAsset.status]} status={selectedAsset.status} />
-                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{getCrmPropertyTypeLabel(getCrmSystemTextLabel(selectedAsset.objectType, language), language)}</span>
+                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{getCrmProjectTypeLabel(getCrmPropertyTypeLabel(getCrmSystemTextLabel(selectedAsset.objectType, language), language), language)}</span>
                 </div>
                 <h4 className="mt-3 break-words text-xl font-semibold text-slate-950">{selectedAsset.title}</h4>
                 <p className="mt-2 break-words text-sm text-stone-600">{selectedAsset.location}</p>
