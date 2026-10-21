@@ -16,6 +16,7 @@
     { "name": "CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL", "targets": ["preview", "production"], "reason": "Retired by External Integration Gateway V1; customer-facing traffic must use the existing application runtime and must never restore a dedicated database login." }
   ],
   "runtimeConditional": [
+    { "feature": "universal-booking-preview", "names": ["BOOKING_ENGINE_ENABLED", "BOOKING_MICROSOFT_AUTHORITY", "BOOKING_TEST_BINDINGS_JSON"], "targets": ["preview"], "notes": "Package 5 test-account booking only. Engine enablement and approved test-account/calendar bindings are forbidden in Production; Microsoft authority selection does not enable booking or grant provider access." },
     { "feature": "knowledge-assistant-qa", "names": ["CRM_KNOWLEDGE_QA_MACHINE_ENABLED", "CRM_KNOWLEDGE_QA_WORKSPACE_ID"] },
     { "feature": "studio-enquiry-preview", "names": ["STUDIO_ENQUIRY_SIGNING_SECRET", "STUDIO_ENQUIRY_QA_ENABLED", "STUDIO_ENQUIRY_QA_CRM_PROJECT_ID", "STUDIO_ENQUIRY_QA_EMAILS_JSON", "STUDIO_ENQUIRY_QA_PHONES_JSON", "STUDIO_ENQUIRY_QA_APPROVAL_ID"] },
     { "feature": "studio-enquiry-production", "names": ["STUDIO_ENQUIRY_SIGNING_SECRET", "STUDIO_PUBLIC_ENQUIRY_ENABLED", "STUDIO_PUBLIC_ENQUIRY_APPROVAL_ID", "STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA", "STUDIO_PUBLIC_ENQUIRY_CRM_PROJECT_ID", "STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN", "STUDIO_PUBLIC_ENQUIRY_STUDIO_PROJECT_ID", "STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN", "STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST", "STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME", "STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE", "STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID", "STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID", "STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID", "STUDIO_PUBLIC_CANARY_SECRET", "NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL"] },
@@ -54,6 +55,9 @@
     "NOVALURE_BUILD_TIMESTAMP"
   ],
   "previewOnlyOrTestOnly": [
+    "BOOKING_ENGINE_ENABLED",
+    "BOOKING_MICROSOFT_AUTHORITY",
+    "BOOKING_TEST_BINDINGS_JSON",
     "STUDIO_ENQUIRY_CANDIDATE_ENABLED",
     "CRM_KNOWLEDGE_QA_MACHINE_ENABLED",
     "CRM_KNOWLEDGE_QA_WORKSPACE_ID",
@@ -87,6 +91,8 @@
     "NOVALURE_TRUST_AUTH_HEADERS"
   ],
   "forbiddenInProduction": [
+    "BOOKING_ENGINE_ENABLED",
+    "BOOKING_TEST_BINDINGS_JSON",
     "STUDIO_ENQUIRY_CANDIDATE_ENABLED",
     "CRM_KNOWLEDGE_QA_MACHINE_ENABLED",
     "CRM_KNOWLEDGE_QA_WORKSPACE_ID",
