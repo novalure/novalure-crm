@@ -9,6 +9,7 @@ export type WorkspaceOperatingModel =
   | "novalure_internal";
 
 export type WorkspaceCustomerType =
+  | "general_company"
   | "real_estate_broker"
   | "property_developer"
   | "hybrid_real_estate"
@@ -174,6 +175,7 @@ export const workspaceOperatingModels: WorkspaceOperatingModel[] = [
 ];
 
 export const workspaceCustomerTypes: WorkspaceCustomerType[] = [
+  "general_company",
   "real_estate_broker",
   "property_developer",
   "hybrid_real_estate",

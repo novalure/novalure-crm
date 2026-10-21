@@ -235,8 +235,11 @@ export function getOAuthAuthorizationUrl(input: {
   provider: CalendarOAuthProvider;
   requestUrl: string;
   state: string;
+  /** Server-configured binding for the employee-scoped booking flow. */
+  trustedOrigin?: string;
+  microsoftAuthority?: string;
 }) {
-  const origin = getAppOrigin(input.requestUrl);
+  const origin = input.trustedOrigin || getAppOrigin(input.requestUrl);
   const redirectUri = getRedirectUri(input.provider, origin);
 
   if (input.provider === "google") {
@@ -256,7 +259,7 @@ export function getOAuthAuthorizationUrl(input: {
     return url.toString();
   }
 
-  const tenantId = envValue("MICROSOFT_TENANT_ID") || "common";
+  const tenantId = input.microsoftAuthority || envValue("MICROSOFT_TENANT_ID") || "common";
   const clientId = envValue("MICROSOFT_CLIENT_ID");
   if (!clientId) throw new Error("MICROSOFT_CLIENT_ID is not configured");
 
@@ -277,8 +280,10 @@ export async function exchangeOAuthCode(input: {
   codeVerifier: string;
   provider: CalendarOAuthProvider;
   requestUrl: string;
+  trustedOrigin?: string;
+  microsoftAuthority?: string;
 }) {
-  const origin = getAppOrigin(input.requestUrl);
+  const origin = input.trustedOrigin || getAppOrigin(input.requestUrl);
   const redirectUri = getRedirectUri(input.provider, origin);
 
   if (input.provider === "google") {
@@ -296,7 +301,7 @@ export async function exchangeOAuthCode(input: {
     });
   }
 
-  const tenantId = envValue("MICROSOFT_TENANT_ID") || "common";
+  const tenantId = input.microsoftAuthority || envValue("MICROSOFT_TENANT_ID") || "common";
   const clientId = envValue("MICROSOFT_CLIENT_ID");
   const clientSecret = envValue("MICROSOFT_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Microsoft OAuth credentials are not configured");
@@ -317,6 +322,9 @@ async function postToken(url: string, body: Record<string, string>) {
     body: new URLSearchParams(body),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     method: "POST",
+    signal: AbortSignal.timeout(12_000),
+    redirect: "error",
+    cache: "no-store",
   });
   const data = (await response.json().catch(() => ({}))) as TokenResponse;
 

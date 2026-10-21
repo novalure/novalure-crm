@@ -1491,12 +1491,14 @@ export const dashboardCopy = {
       defaultCalendar: "Calendar setup",
       workingFor: (workspaceName: string) => `Novalure is working on behalf of ${workspaceName}.`,
       customerTypeOptions: [
+        { id: "general_company", label: "Company" },
         { id: "real_estate_broker", label: "Real estate broker" },
         { id: "property_developer", label: "Property developer" },
         { id: "hybrid_real_estate", label: "Hybrid" },
         { id: "novalure_internal", label: "Novalure internal" },
       ],
       customerTypeLabels: {
+        general_company: "Company",
         real_estate_broker: "Real estate broker",
         property_developer: "Property developer",
         hybrid_real_estate: "Hybrid",
@@ -2302,12 +2304,14 @@ export const dashboardCopy = {
       defaultCalendar: "Kalender-Setup",
       workingFor: (workspaceName: string) => `Novalure arbeitet im Auftrag von ${workspaceName}.`,
       customerTypeOptions: [
+        { id: "general_company", label: "Unternehmen" },
         { id: "real_estate_broker", label: "Immobilienmakler" },
         { id: "property_developer", label: "Bauträger" },
         { id: "hybrid_real_estate", label: "Hybrid" },
         { id: "novalure_internal", label: "Novalure intern" },
       ],
       customerTypeLabels: {
+        general_company: "Unternehmen",
         real_estate_broker: "Immobilienmakler",
         property_developer: "Bauträger",
         hybrid_real_estate: "Hybrid",
