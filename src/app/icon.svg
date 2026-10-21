@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Novalure CRM favicon">
-  <rect width="64" height="64" rx="14" fill="#07080b"/>
-  <rect x="13" y="13" width="38" height="38" rx="8" fill="#111318" stroke="#ffd43b" stroke-width="4"/>
-  <path d="M23 42V22h6.3l9.4 12.8V22H44v20h-6.1L28.4 29v13H23z" fill="#ffd43b"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Novalure CRM">
+  <rect x="1.5" y="1.5" width="61" height="61" rx="15" fill="#101A33" stroke="#2D68F0" stroke-width="3"/>
+  <path d="M12.5 48V18.5h9.3v4.3c2.8-3.3 6.5-5 11.1-5 9.1 0 13.8 6 13.8 15.5V48h-9.5V34.4c0-5.4-2.1-8-6.4-8-5 0-8.8 3.9-8.8 10V48h-9.5Z" fill="#FFFFFF"/>
+  <circle cx="52.5" cy="43" r="5.5" fill="#2D68F0"/>
 </svg>

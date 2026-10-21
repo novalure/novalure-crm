@@ -69,15 +69,7 @@
 }
 
 .wordmark {
-  color: var(--nl-ink);
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.wordmark span,
-.footer strong span {
-  color: var(--nl-blue);
+  font-size: 26px;
 }
 
 .crmBadge {
@@ -1060,9 +1052,8 @@
   margin: 0;
 }
 
-.footer strong {
-  color: var(--nl-ink);
-  font-weight: 700;
+.footerWordmark {
+  font-size: 18px;
 }
 
 .footerInner > div > a {
@@ -1306,7 +1297,7 @@
   }
 
   .wordmark {
-    font-size: 18px;
+    font-size: 24px;
   }
 
   .crmBadge {
