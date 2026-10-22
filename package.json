@@ -81,7 +81,7 @@
     "test:u1-c04:source-ingest": "node --test scripts/u1-c04-source-ingest-tests.mjs",
     "test:u1-c05:successor": "node --test scripts/u1-c05-successor-mount-tests.mjs",
     "test:studio-enquiry:production": "node --conditions=react-server --import tsx --test scripts/studio-enquiry-production-tests.mjs scripts/studio-enquiry-candidate-tests.ts",
-    "test:knowledge-center": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-direct-upload-tests.ts scripts/knowledge-private-upload-framing-tests.ts scripts/knowledge-website-import-tests.ts scripts/knowledge-monitoring-delegation-tests.ts scripts/knowledge-document-upload-client-tests.ts scripts/knowledge-document-extraction-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-machine-qa-auth-tests.ts scripts/package4-machine-qa-native-tests.ts scripts/knowledge-timeout-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts",
+    "test:knowledge-center": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-direct-upload-tests.ts scripts/knowledge-private-upload-framing-tests.ts scripts/knowledge-website-import-tests.ts scripts/knowledge-monitoring-delegation-tests.ts scripts/knowledge-document-upload-client-tests.ts scripts/knowledge-document-extraction-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-machine-qa-auth-tests.ts scripts/package4-machine-qa-native-tests.ts scripts/knowledge-timeout-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-connected-assistant-quota-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts",
     "qa:knowledge:browser": "node scripts/qa-knowledge-browser.mjs",
     "test:knowledge-import-ui": "node scripts/knowledge-website-import-browser-tests.mjs",
     "design:c:dev": "next dev design-c --hostname 127.0.0.1 --port 3190",
@@ -94,7 +94,9 @@
     "test:crm-operational-readers": "node --conditions=react-server --import tsx --test scripts/crm-operational-read-tests.ts && node --import tsx --test scripts/calendar-oauth-source-tests.mjs",
     "test:knowledge-package3": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-workflow-tests.ts scripts/knowledge-monitoring-tests.ts scripts/knowledge-monitoring-batch-tests.ts scripts/knowledge-package3-acceptance-tests.ts && node --import tsx --test scripts/knowledge-lifecycle-ui-tests.ts scripts/knowledge-design-c-integration-tests.ts",
     "test:package4-migrations": "node --conditions=react-server --import tsx --test scripts/package4-migration-tests.ts",
-    "qa:package4:e2e": "node scripts/qa-package4-e2e.mjs"
+    "qa:package4:e2e": "node scripts/qa-package4-e2e.mjs",
+    "test:knowledge-assistant-quota": "node --conditions=react-server --import tsx --test scripts/knowledge-connected-assistant-quota-tests.ts",
+    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -104,6 +106,7 @@
     "@types/react-grid-layout": "^1.3.6",
     "@vercel/blob": "2.8.0",
     "@vercel/oidc": "3.8.8",
+    "ai": "^7.0.148",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "next": "16.4.0",

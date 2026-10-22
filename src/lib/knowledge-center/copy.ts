@@ -169,6 +169,8 @@ const de = {
   assignmentEmpty:
     "Ohne zugeordnete Bereiche erhält der Assistent kein Wissen aus dem Knowledge Center.",
   saveAssignments: "Zuordnungen speichern",
+  removeChannelAssignments: "Alle Wissenszuordnungen dieses Kanals entfernen",
+  unavailableAssignments: "Dieser Kanal enthält Zuordnungen zu derzeit nicht verfügbaren Wissensbereichen. Sie können alle Zuordnungen des Kanals entfernen und anschließend die freigegebenen Bereiche neu auswählen.",
   assignmentsSaved: "Wissenszuordnungen gespeichert.",
   webchat: "Webchat",
   whatsapp: "WhatsApp",
@@ -203,7 +205,8 @@ const de = {
   websiteLimit: "Websites",
   scanLimit: "Websiteprüfungen pro Monat",
   userLimit: "Benutzer",
-  assistantLimit: "KI-Assistenten",
+  assistantLimit: "Mit Wissen verbundene Assistenten",
+  assistantLimitHint: "Ein Assistent mit Wissenszuweisungen belegt einen Platz, auch bei mehreren Kanälen. Pausieren oder Archivieren eines Wissensbereichs gibt den Platz nicht frei. Entfernen Sie dafür alle Wissenszuweisungen des Assistenten.",
   requiredFields: "Bitte füllen Sie alle Pflichtfelder aus.",
 } as const;
 
@@ -372,6 +375,8 @@ const en: Copy = {
   assignmentEmpty:
     "Without assigned areas, the assistant receives no knowledge from the Knowledge Center.",
   saveAssignments: "Save assignments",
+  removeChannelAssignments: "Remove all knowledge assignments for this channel",
+  unavailableAssignments: "This channel includes assignments to currently unavailable knowledge areas. You can remove all assignments for the channel, then select the available areas again.",
   assignmentsSaved: "Knowledge assignments saved.",
   webchat: "Webchat",
   whatsapp: "WhatsApp",
@@ -406,7 +411,8 @@ const en: Copy = {
   websiteLimit: "Websites",
   scanLimit: "Website checks per month",
   userLimit: "Users",
-  assistantLimit: "AI assistants",
+  assistantLimit: "Assistants connected to knowledge",
+  assistantLimitHint: "An assistant with knowledge assignments uses one place, including across multiple channels. Pausing it or archiving a knowledge area does not release the place. Remove all of the assistant’s knowledge assignments to release it.",
   requiredFields: "Please complete all required fields.",
 };
 
@@ -575,6 +581,8 @@ const es: Copy = {
   assignmentEmpty:
     "Sin áreas asignadas, el asistente no recibe conocimiento del centro.",
   saveAssignments: "Guardar asignaciones",
+  removeChannelAssignments: "Eliminar todas las asignaciones de conocimiento de este canal",
+  unavailableAssignments: "Este canal incluye asignaciones a áreas de conocimiento que no están disponibles. Puedes eliminar todas las asignaciones del canal y después seleccionar de nuevo las áreas disponibles.",
   assignmentsSaved: "Asignaciones de conocimiento guardadas.",
   webchat: "Chat web",
   whatsapp: "WhatsApp",
@@ -609,7 +617,8 @@ const es: Copy = {
   websiteLimit: "Sitios web",
   scanLimit: "Comprobaciones web al mes",
   userLimit: "Usuarios",
-  assistantLimit: "Asistentes de IA",
+  assistantLimit: "Asistentes conectados al conocimiento",
+  assistantLimitHint: "Un asistente con asignaciones de conocimiento ocupa una plaza, incluso en varios canales. Pausarlo o archivar un área de conocimiento no libera la plaza. Para liberarla, elimine todas sus asignaciones de conocimiento.",
   requiredFields: "Complete todos los campos obligatorios.",
 };
 

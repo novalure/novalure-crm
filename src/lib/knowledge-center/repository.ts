@@ -110,7 +110,18 @@ export async function loadKnowledgeCenter(session: AppSession, options: TenantTr
     const contract = await entitlement(tx, fresh);
     const permissions = knowledgePermissions(fresh);
     const workspace = { id: fresh.workspaceId, name: fresh.workspaceName };
-    if (!contract.enabled || !contract.contractReference?.trim()) return { workspace, available: false, areas: [], sources: [], projects: [], bots: [], assignments: [], entitlement: contract, usage: { sources: 0, storageBytes: 0, queriesThisMonth: 0 }, permissions };
+    const available = Boolean(contract.enabled && contract.contractReference?.trim());
+    if (!available && !permissions.canAssign) return { workspace, available: false, areas: [], sources: [], projects: [], bots: [], assignments: [], entitlement: contract, usage: { sources: 0, storageBytes: 0, queriesThisMonth: 0 }, permissions };
+    // Revocation remains possible after contract/module shutdown. Return only
+    // authorized management metadata in that state, never source contents.
+    const projects = await tx.query<{ id: string; name: string }>(`select id,name from projects where workspace_id=$1::uuid and crm_project_access(workspace_id,id,false) order by name`, [fresh.workspaceId]);
+    const bots = await tx.query<{ id: string; name: string; projectId: string | null }>(`select id,name,project_id as "projectId" from bots where workspace_id=$1::uuid and (project_id is null or crm_project_access(workspace_id,project_id,false)) order by name`, [fresh.workspaceId]);
+    // Archived areas still occupy an assistant place until their final grant is
+    // explicitly revoked, so their grant identifiers must remain manageable.
+    const assignments = await tx.query<{ botId: string; channel: KnowledgeChannel; areaId: string }>(`select g.bot_id as "botId",g.channel,g.area_id as "areaId" from knowledge_area_grants g join knowledge_areas a on a.id=g.area_id and a.workspace_id=g.workspace_id join bots b on b.id=g.bot_id and b.workspace_id=g.workspace_id where g.workspace_id=$1::uuid and (b.project_id is null or crm_project_access(b.workspace_id,b.project_id,false))`, [fresh.workspaceId]);
+    const assistantUsage = await tx.queryOne<{ connectedAssistants: number }>(`select public.knowledge_connected_assistant_count($1::uuid) as "connectedAssistants"`, [fresh.workspaceId]);
+    const management = { workspace, projects, bots, assignments, entitlement: contract, usage: { ...await usage(tx, fresh), connectedAssistants: assistantUsage?.connectedAssistants ?? 0 }, permissions, assignmentManagementAvailable: permissions.canAssign };
+    if (!available) return { ...management, available: false, areas: [], sources: [] };
     const areas = await tx.query<KnowledgeArea>(`select id,name,kind,project_id as "projectId",description,archived_at::text as "archivedAt" from knowledge_areas where workspace_id=$1::uuid and archived_at is null and (project_id is null or crm_project_access(workspace_id,project_id,false)) order by kind,name`, [fresh.workspaceId]);
     const ids = await tx.query<{ id: string }>(`select s.id from knowledge_sources s join knowledge_areas a on a.id=s.knowledge_area_id and a.workspace_id=s.workspace_id where s.workspace_id=$1::uuid and s.archived_at is null and a.archived_at is null and ($2::boolean or s.approved_version_id is not null) order by s.updated_at desc limit 500`, [fresh.workspaceId, permissions.canWrite]);
     const sources: KnowledgeSource[] = [];
@@ -120,10 +131,7 @@ export async function loadKnowledgeCenter(session: AppSession, options: TenantTr
       const states = await tx.query<{ sourceId: string; state: NonNullable<KnowledgeSource["workflowState"]> }>(`select w.source_id as "sourceId",w.state from knowledge_publication_workflows w join knowledge_sources s on s.id=w.source_id and s.workspace_id=w.workspace_id where w.workspace_id=$1::uuid and w.version_id=coalesce(s.draft_version_id,s.approved_version_id)`, [fresh.workspaceId]);
       for (const item of sources) item.workflowState = states.find(value => value.sourceId === item.id)?.state ?? (item.draftVersionId ? item.version?.provenance?.kind === "revocation" ? "revoked" : "draft" : "published");
     }
-    const projects = await tx.query<{ id: string; name: string }>(`select id,name from projects where workspace_id=$1::uuid and crm_project_access(workspace_id,id,false) order by name`, [fresh.workspaceId]);
-    const bots = await tx.query<{ id: string; name: string; projectId: string | null }>(`select id,name,project_id as "projectId" from bots where workspace_id=$1::uuid and (project_id is null or crm_project_access(workspace_id,project_id,false)) order by name`, [fresh.workspaceId]);
-    const assignments = await tx.query<{ botId: string; channel: KnowledgeChannel; areaId: string }>(`select g.bot_id as "botId",g.channel,g.area_id as "areaId" from knowledge_area_grants g join knowledge_areas a on a.id=g.area_id and a.workspace_id=g.workspace_id join bots b on b.id=g.bot_id and b.workspace_id=g.workspace_id where g.workspace_id=$1::uuid and a.archived_at is null and (b.project_id is null or crm_project_access(b.workspace_id,b.project_id,false))`, [fresh.workspaceId]);
-    return { workspace, available: true, areas, sources, projects, bots, assignments, entitlement: contract, usage: await usage(tx, fresh), permissions };
+    return { ...management, available: true, areas, sources };
   }, options);
 }
 export async function createKnowledgeArea(session: AppSession, input: CreateKnowledgeAreaInput, options: TenantTransactionOptions = {}) {
@@ -211,10 +219,23 @@ export async function assignKnowledgeAreas(session: AppSession, input: AssignKno
   if (!Array.isArray(input.areaIds) || input.areaIds.length > 100) fail("VALIDATION_ERROR", "At most 100 explicit areas may be assigned");
   const ids = [...new Set(input.areaIds.map(id => knowledgeId(id, "areaId")))];
   return withCrmRead(session, async (tx, fresh) => {
-    requireKnowledgePermission(fresh, "canAssign"); await lock(tx, fresh); const contract = await enabled(tx, fresh);
-    // Revoking a saved grant remains possible after its channel/module is disabled.
-    if (ids.length) await assistantChannelEnabled(tx, fresh, contract, targetChannel);
+    requireKnowledgePermission(fresh, "canAssign"); await lock(tx, fresh);
     const targetBot = await bot(tx, fresh, input.botId, true);
+    // Revocation remains available after a contract/module is disabled or its
+    // limit is lowered. New connections use the same tenant-wide lock as all
+    // assignment writes, so concurrent requests cannot take the last place.
+    if (ids.length) {
+      const contract = await enabled(tx, fresh);
+      await assistantChannelEnabled(tx, fresh, contract, targetChannel);
+      const maximum = contract.limits?.maxAssistants;
+      if (!Number.isSafeInteger(maximum) || maximum < 0) fail("LIMIT_EXCEEDED", "The connected-assistant limit is unavailable", 409);
+      const counts = await tx.queryOne<{ total: number; connected: number }>(`select
+        public.knowledge_connected_assistant_count($1::uuid) as total,
+        public.knowledge_connected_assistant_count($1::uuid,$2::uuid) as connected`, [fresh.workspaceId, targetBot.id]);
+      if (!counts || (counts.connected === 0 && counts.total >= maximum)) {
+        fail("LIMIT_EXCEEDED", "The limit for assistants connected to knowledge has been reached", 409);
+      }
+    }
     for (const id of ids) {
       const targetArea = await area(tx, fresh, id, true);
       if (targetArea.projectId && targetArea.projectId !== targetBot.projectId) fail("PROJECT_SCOPE_MISMATCH", "A bot may only use its own project areas", 403);
@@ -264,7 +285,11 @@ export async function queryKnowledgeCenter(session: AppSession, input: QueryKnow
     if (current.queriesThisMonth >= contract.maxQueriesPerMonth) fail("LIMIT_EXCEEDED", "Monthly knowledge query limit reached", 409);
     await tx.execute(`insert into knowledge_query_usage(workspace_id,month,query_count) values($1::uuid,date_trunc('month',now() at time zone 'UTC')::date,1) on conflict(workspace_id,month) do update set query_count=knowledge_query_usage.query_count+1`, [fresh.workspaceId]);
     const matches = await tx.query<KnowledgeQueryResult["matches"][number]>(`select s.id as "sourceId",v.id as "versionId",c.id as "chunkId",a.id as "areaId",v.name as title,left(c.content,1600) as excerpt,
-      v.source_url as "citationUrl",ts_rank_cd(to_tsvector('simple',c.content),websearch_to_tsquery('simple',$2))::float8 as score
+      v.source_url as "citationUrl",ts_rank_cd(to_tsvector('simple',c.content),websearch_to_tsquery('simple',$2))::float8 as score,
+      case when exists(select 1 from bots policy_bot join projects policy_project
+        on policy_project.id=policy_bot.project_id and policy_project.workspace_id=policy_bot.workspace_id
+        where policy_bot.id=$4::uuid and policy_bot.workspace_id=s.workspace_id and policy_project.division='WEB_DESIGN')
+        then 'WEB_DESIGN' else 'REAL_ESTATE_GROWTH' end as "projectDivision"
       from knowledge_sources s join knowledge_areas a on a.id=s.knowledge_area_id and a.workspace_id=s.workspace_id
       join knowledge_source_versions v on v.id=s.approved_version_id and v.source_id=s.id and v.workspace_id=s.workspace_id
       join knowledge_chunks c on c.source_id=s.id and c.knowledge_version_id=v.id

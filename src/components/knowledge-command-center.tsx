@@ -19,6 +19,8 @@ import { getKnowledgeLifecycleCopy, knowledgeMonitoringError } from "@/lib/knowl
 import { KnowledgeLifecyclePanel } from "@/components/knowledge-lifecycle-panel";
 import { KnowledgeMonitoringPanel } from "@/components/knowledge-monitoring-panel";
 import { KnowledgeMaintenancePanel } from "@/components/knowledge-maintenance-panel";
+import { WebsiteIntegrationPanel } from "@/components/website-integration-panel";
+import { getWebsiteIntegrationCopy } from "@/lib/integrations/website-integration-copy";
 import {
   addKnowledgeTemplateFields,
   createStructuredKnowledgeRows,
@@ -63,7 +65,7 @@ const channels: KnowledgeChannel[] = [
   "internal",
   "voice",
 ];
-type Tab = "sources" | "areas" | "assistants" | "maintenance" | "usage";
+type Tab = "sources" | "areas" | "assistants" | "websites" | "maintenance" | "usage";
 type WebsiteImportResponse = {
   source: KnowledgeSource;
   websiteImport: { status: "ready" | "scan_failed" | "busy" | "changes_pending" | "stale"; errorCode?: string };
@@ -240,6 +242,7 @@ function KnowledgeCenterContent({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [tab, setTab] = useState<Tab>("sources");
+  const [websiteTabVisited, setWebsiteTabVisited] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -378,11 +381,9 @@ function KnowledgeCenterContent({
       snapshot.entitlement.enabled &&
       snapshot.permissions.canWrite,
   );
-  const canAssign = Boolean(
-    snapshot?.available &&
-      snapshot.entitlement.enabled &&
-      snapshot.permissions.canAssign,
-  );
+  const canManageAssignments = Boolean(snapshot && (snapshot.available || snapshot.assignmentManagementAvailable) && snapshot.permissions.canAssign);
+  const canAssign = Boolean(canManageAssignments && snapshot?.available && snapshot.entitlement.enabled);
+  const hasUnavailableAssignments = assignedAreaIds.some(id => !eligibleAreas.some(area => area.id === id));
   const sourceLimitReached = Boolean(
     snapshot && snapshot.usage.sources >= snapshot.entitlement.maxSources,
   );
@@ -1176,7 +1177,7 @@ function KnowledgeCenterContent({
         </div>
       ) : snapshot ? (
         <>
-          {!snapshot.available && snapshot.entitlement.enabled ? (
+          {!snapshot.available && !snapshot.assignmentManagementAvailable && snapshot.entitlement.enabled ? (
             <EmptyState
               description={text.unavailableHint}
               title={text.unavailable}
@@ -1199,7 +1200,7 @@ function KnowledgeCenterContent({
               ) : null}
               <div className="evelyn-knowledge-workspace">
               <nav aria-label={text.title} className="evelyn-knowledge-nav flex flex-wrap gap-2">
-                {(["sources", "areas", "assistants", "maintenance", "usage"] as const).filter((value) => value !== "maintenance" || snapshot.permissions.canWrite).map(
+                {(["sources", "areas", "assistants", "websites", "maintenance", "usage"] as const).filter((value) => value !== "maintenance" || snapshot.permissions.canWrite).map(
                   (value) => (
                     <button
                       aria-controls={`${formId}-panel`}
@@ -1208,12 +1209,13 @@ function KnowledgeCenterContent({
                       key={value}
                       onClick={() => {
                         setTab(value);
+                        if (value === "websites") setWebsiteTabVisited(true);
                         setError("");
                         setNotice("");
                       }}
                       type="button"
                     >
-                      {value === "maintenance" ? lifecycleText.maintenance : text[value]}
+                      {value === "maintenance" ? lifecycleText.maintenance : value === "websites" ? getWebsiteIntegrationCopy(language).tab : text[value]}
                       {value === "sources"
                         ? ` (${snapshot.sources.filter((source) => !source.archivedAt).length})`
                         : value === "areas"
@@ -1853,7 +1855,7 @@ function KnowledgeCenterContent({
                         {botId ? (
                           <fieldset
                             className="evelyn-knowledge-grants grid gap-3"
-                            disabled={!canAssign || disabled}
+                            disabled={!canManageAssignments || disabled}
                           >
                             <legend className="mb-3 text-sm font-semibold">
                               {text.selectedChannel} {channelLabel(channel)}
@@ -1866,6 +1868,7 @@ function KnowledgeCenterContent({
                                 >
                                   <input
                                     checked={assignedAreaIds.includes(area.id)}
+                                    disabled={!canAssign && !assignedAreaIds.includes(area.id)}
                                     className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-800"
                                     onChange={(event) =>
                                       setAssignmentDraft(
@@ -1894,10 +1897,11 @@ function KnowledgeCenterContent({
                             <p className="text-xs leading-5 text-stone-600">
                               {text.assignmentEmpty}
                             </p>
-                            <div>
+                            {hasUnavailableAssignments ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{text.unavailableAssignments}</p> : null}
+                            <div className="flex flex-wrap gap-2">
                               <button
                                 className={primaryClass}
-                                disabled={!canAssign || disabled}
+                                disabled={!canManageAssignments || disabled || hasUnavailableAssignments || (!canAssign && assignedAreaIds.length > 0)}
                                 onClick={() =>
                                   void runAction(
                                     "assignments",
@@ -1921,6 +1925,17 @@ function KnowledgeCenterContent({
                                   ? text.saving
                                   : text.saveAssignments}
                               </button>
+                              <button
+                                className={buttonClass}
+                                disabled={!canManageAssignments || disabled}
+                                onClick={() => void runAction("assignments", async () => {
+                                  await mutate("/api/knowledge-center/assignments", { botId, channel, areaIds: [] });
+                                  setAssignmentDraft(null);
+                                }, text.assignmentsSaved)}
+                                type="button"
+                              >
+                                {text.removeChannelAssignments}
+                              </button>
                             </div>
                           </fieldset>
                         ) : null}
@@ -1933,6 +1948,7 @@ function KnowledgeCenterContent({
                     </p>
                   </div>
                 ) : null}
+                {websiteTabVisited ? <div hidden={tab !== "websites"}><WebsiteIntegrationPanel active={tab === "websites"} snapshot={snapshot} language={language} scopedPath={scopedPath} onAssignKnowledge={assistantId => { setBotId(assistantId); setChannel("webchat"); setAssignmentDraft(null); setTab("assistants"); }} /></div> : null}
                 {tab === "maintenance" ? <KnowledgeMaintenancePanel snapshot={snapshot} language={language} scopedPath={scopedPath} onChanged={reloadSnapshot} /> : null}
                 {tab === "usage" ? (
                   <div className="evelyn-knowledge-section evelyn-knowledge-section-usage grid gap-5">
@@ -2071,6 +2087,7 @@ function KnowledgeCenterContent({
                             {
                               label: text.assistantLimit,
                               limit: snapshot.entitlement.limits.maxAssistants,
+                              used: snapshot.usage.connectedAssistants,
                             },
                           ].map((item) => (
                             <div
@@ -2079,6 +2096,7 @@ function KnowledgeCenterContent({
                             >
                               <dt className="text-stone-600">{item.label}</dt>
                               <dd className="font-medium">
+                                {item.used === undefined ? null : `${new Intl.NumberFormat(language).format(item.used)} / `}
                                 {new Intl.NumberFormat(language).format(
                                   item.limit,
                                 )}
@@ -2086,6 +2104,7 @@ function KnowledgeCenterContent({
                             </div>
                           ))}
                         </dl>
+                        <p className="mt-3 text-sm text-stone-600">{text.assistantLimitHint}</p>
                       </div>
                     </div>
                     <div className="rounded-xl border border-stone-200 p-4">

@@ -128,11 +128,13 @@ export async function retrieveKnowledgeForSavedChannel(
       botId: input.assistantId, channel: input.channel, query,
       limit: Math.min(requested, input.channel === "voice" ? assistantKnowledgeLimits.voiceResults : requested),
     }, { ...options, statementTimeoutMs: Math.min(options.statementTimeoutMs ?? assistantKnowledgeLimits.statementTimeoutMs, assistantKnowledgeLimits.statementTimeoutMs) });
-    if (Date.now() - started > assistantKnowledgeLimits.deadlineMs || requiresLivePropertyFacts(query)) return { ...result, grounded: false, matches: [] };
+    if (Date.now() - started > assistantKnowledgeLimits.deadlineMs) return { ...result, grounded: false, matches: [] };
     let remaining = assistantKnowledgeLimits.totalExcerptCharacters;
     const matches: KnowledgeQueryResult["matches"] = [];
     for (const match of result.matches) {
-      if (requiresLivePropertyFacts(match.excerpt) || remaining <= 0) continue;
+      // The repository derives policy context in the same SQL snapshot as the
+      // authorized hits, so a concurrent project change cannot mix profiles.
+      if (requiresLivePropertyFacts(query, match.projectDivision) || requiresLivePropertyFacts(match.excerpt, match.projectDivision) || remaining <= 0) continue;
       const excerpt = match.excerpt.slice(0, Math.min(assistantKnowledgeLimits.excerptCharacters, remaining));
       if (!excerpt.trim()) continue;
       remaining -= excerpt.length;
