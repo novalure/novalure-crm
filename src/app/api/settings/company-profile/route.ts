@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
-  getRequestSession,
   resolveWorkspaceScopedSession,
+  type AppSession,
 } from "@/lib/auth/session";
 import {
   getCompanyProfilePayload,
@@ -22,7 +22,7 @@ function isOperatorScope(scope: unknown) {
   return scope === "platform_operator";
 }
 
-function canReadOperatorProfile(session: Awaited<ReturnType<typeof getRequestSession>>) {
+function canReadOperatorProfile(session: AppSession) {
   return session?.productRole === "platform_admin" || session?.productRole === "novalureAdmin";
 }
 
@@ -35,18 +35,18 @@ async function readJson(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const session = await getRequestSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  if (!auth.ok) return auth.response;
 
   const profileScope = getProfileScope(request);
-  if (isOperatorScope(profileScope) && !canReadOperatorProfile(session)) {
+  if (isOperatorScope(profileScope) && !canReadOperatorProfile(auth.session)) {
     return NextResponse.json({ error: "operator_profile_forbidden" }, { status: 403 });
   }
 
   const payload = await getCompanyProfilePayload({
     organizationId: getOrganizationId(request),
     profileScope,
-    session,
+    session: auth.session,
   });
 
   return NextResponse.json(payload);

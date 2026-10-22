@@ -288,8 +288,8 @@ function parseRepresentatives(value: string) {
     .map((name) => ({ name }));
 }
 
-function getProfileUrl(scope: CompanyProfileScope, organizationId: string) {
-  const params = new URLSearchParams({ scope });
+function getProfileUrl(scope: CompanyProfileScope, organizationId: string, workspaceId: string) {
+  const params = new URLSearchParams({ scope, workspaceId });
   if (scope === "crm_account" && organizationId) params.set("organizationId", organizationId);
   return `/api/settings/company-profile?${params.toString()}`;
 }
@@ -394,14 +394,22 @@ function IssueList({
   );
 }
 
-export function CompanyProfileSettings({
-  context,
-  language,
-}: {
+type CompanyProfileSettingsProps = {
   context: WorkspaceProductContext;
   language: LanguageCode;
-}) {
+};
+
+export function CompanyProfileSettings(props: CompanyProfileSettingsProps) {
+  // Switching customers must discard drafts and isolate pending responses.
+  return <WorkspaceCompanyProfileSettings key={props.context.workspaceId} {...props} />;
+}
+
+function WorkspaceCompanyProfileSettings({
+  context,
+  language,
+}: CompanyProfileSettingsProps) {
   const text = copy[language];
+  const accessUrl = `/api/settings/access/users?${new URLSearchParams({ workspaceId: context.workspaceId })}`;
   const [profileScope, setProfileScope] = useState<CompanyProfileScope>("workspace_owner");
   const [activeTab, setActiveTab] = useState<ProfileTab>("master");
   const [organizationId, setOrganizationId] = useState("");
@@ -442,7 +450,7 @@ export function CompanyProfileSettings({
 
     setProfileBusy(true);
     setProfileMessage("");
-    const response = await csrfFetch(getProfileUrl(profileScope, organizationId.trim()));
+    const response = await csrfFetch(getProfileUrl(profileScope, organizationId.trim(), context.workspaceId));
     const nextPayload = response.ok ? await readJsonResponse<CompanyProfilePayload>(response) : null;
     if (!nextPayload) {
       setPayload(null);
@@ -456,15 +464,15 @@ export function CompanyProfileSettings({
     setDraft(nextPayload.profile);
     setRepresentativesText(formatRepresentatives(nextPayload.profile.representatives));
     setProfileBusy(false);
-  }, [canLoadCurrentProfile, organizationId, profileScope]);
+  }, [canLoadCurrentProfile, context.workspaceId, organizationId, profileScope]);
 
   const loadAccess = useCallback(async () => {
     await Promise.resolve();
 
-    const response = await csrfFetch("/api/settings/access/users");
+    const response = await csrfFetch(accessUrl, { cache: "no-store" });
     const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload>(response) : null;
     if (nextPayload) setAccessPayload(nextPayload);
-  }, []);
+  }, [accessUrl]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -513,7 +521,7 @@ export function CompanyProfileSettings({
     if (!draft) return;
     setProfileBusy(true);
     setProfileMessage("");
-    const response = await csrfFetch("/api/settings/company-profile", {
+    const response = await csrfFetch(getProfileUrl(profileScope, organizationId.trim(), context.workspaceId), {
       body: JSON.stringify({
         ...draft,
         organizationId: profileScope === "crm_account" ? organizationId.trim() : undefined,
@@ -559,7 +567,7 @@ export function CompanyProfileSettings({
     setAccessBusy("invite");
     setAccessMessage("");
     const role = mapProductRoleToTechnicalRole(inviteDraft.productRole);
-    const response = await csrfFetch("/api/settings/access/users", {
+    const response = await csrfFetch(accessUrl, {
       body: JSON.stringify({ ...inviteDraft, role }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -572,7 +580,7 @@ export function CompanyProfileSettings({
   async function updateUser(user: WorkspaceUser) {
     setAccessBusy(user.id);
     setAccessMessage("");
-    const response = await csrfFetch("/api/settings/access/users", {
+    const response = await csrfFetch(accessUrl, {
       body: JSON.stringify({
         productRole: user.productRole,
         role: user.role,
@@ -589,7 +597,7 @@ export function CompanyProfileSettings({
   async function runAccessAction(action: AccessAction, userId: string) {
     setAccessBusy(`${action}:${userId}`);
     setAccessMessage("");
-    const response = await csrfFetch("/api/settings/access/users", {
+    const response = await csrfFetch(accessUrl, {
       body: JSON.stringify({ operation: action, userId }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
