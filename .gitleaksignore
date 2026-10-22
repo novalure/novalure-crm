@@ -28,3 +28,6 @@ scripts/studio-enquiry-tests.ts:generic-api-key:178
 # The current report uses {path, sha256} records; retain all scanner rules.
 13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6:qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json:generic-api-key:27
 13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6:qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json:generic-api-key:28
+
+# Static unit-test fixture from foreign branch history; exact finding only.
+164fa582b27358250a123325c664bfbcb1485066:scripts/website-widget-tests.mjs:generic-api-key:8
