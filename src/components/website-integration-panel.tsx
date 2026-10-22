@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import type { LanguageCode } from "@/lib/i18n";
-import type { ManagedWebsiteIntegration } from "@/lib/integrations/website-integration-management";
+import type { ManagedWebsiteIntegration, WebsiteBookingOptions } from "@/lib/integrations/website-integration-management";
 import { getWebsiteIntegrationCopy, websiteChatEmbedCode } from "@/lib/integrations/website-integration-copy";
 import type { KnowledgeCenterSnapshot } from "@/lib/knowledge-center/types";
 import { csrfFetch } from "@/lib/security/csrf-client";
@@ -10,12 +11,13 @@ import { csrfFetch } from "@/lib/security/csrf-client";
 const inputClass = "evelyn-domain-input min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:bg-stone-100";
 const buttonClass = "evelyn-domain-button min-h-11 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50";
 const primaryClass = `${buttonClass} evelyn-domain-button-primary border-emerald-800 bg-emerald-800 text-white hover:bg-emerald-900`;
-type WebsiteList = { integrations: ManagedWebsiteIntegration[]; permissions: { canManage: boolean; canPause: boolean } };
+type WebsiteList = { integrations: ManagedWebsiteIntegration[]; permissions: { canManage: boolean; canPause: boolean }; bookingOptions?: WebsiteBookingOptions };
 type Editor = {
   id: string; expectedUpdatedAt: string; projectId: string; knowledgeAssistantId: string; domains: string;
   mode: "training" | "real_customer"; status: "test" | "active" | "disabled" | "revoked";
   brandName: string; assistantName: string; welcomeMessage: string; primaryColor: string;
   language: string; widgetPosition: "bottom_left" | "bottom_right";
+  bookingEnabled: boolean; bookingPublicId: string; bookingTypeIds: string[]; bookingChanged: boolean;
 };
 type Props = {
   snapshot: KnowledgeCenterSnapshot; language: LanguageCode; scopedPath: (path: string) => string;
@@ -71,7 +73,9 @@ export function WebsiteIntegrationPanel({ snapshot, language, scopedPath, active
       mode: row?.mode ?? "training", status: row?.status ?? "test",
       brandName: widgetText(widget, "brandName", snapshot.workspace.name), assistantName: widgetText(widget, "assistantName", text.assistant),
       welcomeMessage: widgetText(widget, "welcomeMessage", text.defaultWelcome), primaryColor: widgetText(widget, "primaryColor", "#111827"),
-      language: widgetText(widget, "language", language), widgetPosition: widget.widgetPosition === "bottom_left" ? "bottom_left" : "bottom_right" });
+      language: widgetText(widget, "language", language), widgetPosition: widget.widgetPosition === "bottom_left" ? "bottom_left" : "bottom_right",
+      bookingEnabled: row?.booking?.enabled === true, bookingPublicId: row?.booking?.publicId ?? data?.bookingOptions?.publication?.publicId ?? "",
+      bookingTypeIds: row?.booking?.typeIds ?? [], bookingChanged: false });
   }
   function update(patch: Partial<Editor>) { setEditor(current => current ? { ...current, ...patch } : current); }
 
@@ -87,12 +91,14 @@ export function WebsiteIntegrationPanel({ snapshot, language, scopedPath, active
   }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!editor || !data?.permissions.canManage || busy) return;
+    if (editor.bookingChanged && editor.bookingEnabled && !editor.bookingTypeIds.length) { setError(text.bookingSelectType); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       await mutate({ ...(editor.id ? { integrationId: editor.id, expectedUpdatedAt: editor.expectedUpdatedAt, status: editor.status } : { projectId: editor.projectId || null }),
         knowledgeAssistantId: editor.knowledgeAssistantId || null,
         allowedOrigins: editor.domains.split(/\r?\n/u).map(value => value.trim()).filter(Boolean),
         mode: editor.id ? editor.mode : "training",
+        ...(editor.id && editor.bookingChanged ? { booking: editor.bookingEnabled ? { enabled: true, publicId: editor.bookingPublicId, typeIds: editor.bookingTypeIds } : { enabled: false } } : {}),
         widget: { brandName: editor.brandName, assistantName: editor.assistantName, welcomeMessage: editor.welcomeMessage,
           primaryColor: editor.primaryColor, language: editor.language, widgetPosition: editor.widgetPosition },
       }, editor.id ? "PATCH" : "POST");
@@ -159,6 +165,19 @@ export function WebsiteIntegrationPanel({ snapshot, language, scopedPath, active
           <Field label={text.status}><select className={inputClass} value={editor.status} onChange={event => update({ status: event.target.value as Editor["status"] })}>{(["test", "active", "disabled", "revoked"] as const).map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></Field>
         </div> : <p className="rounded-lg bg-stone-50 p-3 text-sm">{text.newHelp}</p>}
         {editor.mode === "training" ? <p className="text-xs leading-5 text-stone-600">{text.trainingHelp}</p> : null}
+        {selectedRow?.integrationType === "website_chat" ? <fieldset className="grid min-w-0 gap-3 rounded-lg border border-stone-200 p-4">
+          <legend className="px-1 font-semibold">{text.bookingTitle}</legend>
+          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={editor.bookingEnabled}
+            disabled={!editor.bookingEnabled && (!data?.bookingOptions?.canManage || !data.bookingOptions.publication?.types.length || editor.mode !== "real_customer" || editor.status !== "active" || !editor.knowledgeAssistantId)}
+            onChange={event => update({ bookingEnabled: event.target.checked, bookingChanged: true, bookingPublicId: data?.bookingOptions?.publication?.publicId ?? editor.bookingPublicId })} />{text.bookingEnable}</label>
+          <p className="text-xs leading-5 text-stone-600">{text.bookingHelp}</p>
+          {!data?.bookingOptions?.publication?.types.length ? <p className="text-sm text-amber-900">{text.bookingSetupRequired}</p> : null}
+          {editor.mode !== "real_customer" || editor.status !== "active" ? <p className="text-sm text-stone-600">{text.bookingLiveRequired}</p> : null}
+          {editor.bookingEnabled ? <fieldset className="grid min-w-0 gap-2"><legend className="mb-2 text-sm font-medium">{text.bookingTypes}</legend>
+            {data?.bookingOptions?.publication?.types.map(type => <label className="flex min-h-11 min-w-0 items-center gap-3 text-sm" key={type.id}><input className="shrink-0" type="checkbox" checked={editor.bookingTypeIds.includes(type.id)} onChange={event => update({ bookingChanged: true, bookingTypeIds: event.target.checked ? [...editor.bookingTypeIds, type.id] : editor.bookingTypeIds.filter(id => id !== type.id) })} /><span className="min-w-0 break-words">{text[`bookingKind_${type.kind}`]} · {type.organizerName}</span></label>)}
+          </fieldset> : null}
+          <Link className="min-h-11 w-fit content-center text-sm font-semibold text-emerald-900 underline" href="/booking" prefetch={false}>{text.bookingSetup}</Link>
+        </fieldset> : null}
         {selectedRow?.readiness && !selectedRow.readiness.ready ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{selectedRow.readiness.message || text.notReady}</p> : null}
       </fieldset>
       <div className="flex flex-wrap gap-2"><button className={primaryClass} disabled={busy || !data?.permissions.canManage} type="submit">{busy ? text.saving : text.save}</button><button className={buttonClass} disabled={busy} onClick={() => setEditor(null)} type="button">{text.cancel}</button></div>

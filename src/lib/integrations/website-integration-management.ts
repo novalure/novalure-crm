@@ -5,13 +5,17 @@ import { assertProjectGrant, CrmCommandError, withCrmRead, type TenantTransactio
 import { createPublicSiteKey, normalizeExternalOrigin, type ExternalIntegrationMode } from "@/lib/db/external-integration-gateway";
 import { KnowledgeCenterError, knowledgeId, knowledgeText } from "@/lib/knowledge-center/policy";
 import { knowledgeInternals } from "@/lib/knowledge-center/repository";
-import { hasProductCapability } from "@/lib/product-model";
+import { hasProductCapability, isProductRole } from "@/lib/product-model";
+import type { BookingKind } from "@/lib/booking/types";
+import type { BookingPublicationConfig } from "@/lib/booking/publication-types";
 
 const chatCapabilities = ["chat.start", "chat.context", "chat.message"] as const;
 const statuses = ["test", "active", "disabled", "revoked"] as const;
 type IntegrationStatus = typeof statuses[number];
 type Widget = Record<string, unknown>;
 export type WebsiteIntegrationReadiness = { ready: boolean; code: string | null; message: string | null; publishedSources: number };
+export type WebsiteBookingGrant = { enabled: true; publicId: string; channels: ["chat"]; typeIds: string[] };
+export type WebsiteBookingOptions = { canManage: boolean; publication: { publicId: string; types: { id: string; kind: BookingKind; organizerName: string }[] } | null };
 type IntegrationRow = {
   id: string; publicSiteKey: string; projectId: string | null; formId: string | null;
   integrationType: string; status: IntegrationStatus; mode: ExternalIntegrationMode;
@@ -19,10 +23,10 @@ type IntegrationRow = {
   updatedAt: string; widget: Widget;
 };
 export type ManagedWebsiteIntegration = Omit<IntegrationRow, "configuration"> & {
-  knowledgeAssistantId: string | null; readiness: WebsiteIntegrationReadiness;
+  knowledgeAssistantId: string | null; readiness: WebsiteIntegrationReadiness; booking: WebsiteBookingGrant | null;
 };
 export const websiteIntegrationCreateFields = ["projectId", "knowledgeAssistantId", "allowedOrigins", "mode", "widget", "integrationType", "capabilities", "formId"] as const;
-export const websiteIntegrationUpdateFields = ["integrationId", "expectedUpdatedAt", "knowledgeAssistantId", "allowedOrigins", "mode", "status", "widget"] as const;
+export const websiteIntegrationUpdateFields = ["integrationId", "expectedUpdatedAt", "knowledgeAssistantId", "allowedOrigins", "mode", "status", "widget", "booking"] as const;
 const widgetFields = ["brandName", "assistantName", "assistantAvatarReference", "primaryColor", "widgetPosition", "language", "welcomeMessage"] as const;
 
 function fail(code: string, message: string, status = 400): never { throw new KnowledgeCenterError(code, message, status); }
@@ -47,6 +51,76 @@ function origins(value: unknown) {
     if (!origin.startsWith("https://")) fail("VALIDATION_ERROR", "Die Website-Verbindung benötigt HTTPS.");
     return origin;
   }))];
+}
+const bookingId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function storedBooking(row: IntegrationRow): WebsiteBookingGrant | null {
+  const value = row.configuration.booking;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const grant = value as Record<string, unknown>;
+  if (grant.enabled !== true || typeof grant.publicId !== "string" || !/^[a-z0-9][a-z0-9-]{10,79}$/.test(grant.publicId) ||
+    !Array.isArray(grant.channels) || !grant.channels.includes("chat") || !Array.isArray(grant.typeIds) ||
+    !grant.typeIds.length || grant.typeIds.length > 50 || grant.typeIds.some(id => typeof id !== "string" || !bookingId.test(id))) return null;
+  return { enabled: true, publicId: grant.publicId, channels: ["chat"], typeIds: [...new Set(grant.typeIds as string[])] };
+}
+function bookingPatch(value: unknown): { enabled: false } | Omit<WebsiteBookingGrant, "channels"> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail("VALIDATION_ERROR", "Ungültige Buchungsfreigabe.");
+  const input = value as Record<string, unknown>; fields(input, ["enabled", "publicId", "typeIds"]);
+  if (input.enabled === false && Object.keys(input).length === 1) return { enabled: false };
+  if (input.enabled !== true || typeof input.publicId !== "string" || !/^[a-z0-9][a-z0-9-]{10,79}$/.test(input.publicId) ||
+    !Array.isArray(input.typeIds) || !input.typeIds.length || input.typeIds.length > 20 ||
+    input.typeIds.some(id => typeof id !== "string" || !bookingId.test(id)) || new Set(input.typeIds).size !== input.typeIds.length) {
+    fail("VALIDATION_ERROR", "Bitte veröffentlichte Terminarten für die Buchungsfreigabe auswählen.");
+  }
+  return { enabled: true, publicId: input.publicId, typeIds: input.typeIds as string[] };
+}
+function canManageBooking(session: AppSession) {
+  return !session.serviceIdentity && permissions(session).canManage && hasProductCapability(session.productRole, "calendar:manage") && session.productPermissions.includes("workspace:admin");
+}
+async function bookingOptions(tx: TenantTransaction, session: AppSession, lock = false): Promise<WebsiteBookingOptions & { allowedOrigins: string[] }> {
+  const canManage = canManageBooking(session), empty = { canManage: false, publication: null, allowedOrigins: [] };
+  if (!canManage) return empty;
+  const calendarModule = await tx.queryOne<{ enabled: boolean }>("select enabled from public.workspace_module_settings where workspace_id=$1::uuid and module_key='calendar'", [session.workspaceId]);
+  if (calendarModule?.enabled !== true) return empty;
+  const publication = await tx.queryOne<{ id: string; config: BookingPublicationConfig }>(`select id,config from public.booking_publications
+    where workspace_id=$1::uuid and enabled and (config->>'enabled')::boolean and (config->'channels'->>'chat')::boolean${lock ? " for share" : ""}`, [session.workspaceId]);
+  if (!publication) return { canManage: true, publication: null, allowedOrigins: [] };
+  const assignments = await tx.query<{ id: string; organizerId: string; kind: string; provider: string; organizerName: string; productRole: string }>(`select a.id,a.organizer_id as "organizerId",a.kind,a.provider,u.name as "organizerName",u.product_role as "productRole"
+    from public.booking_publication_assignments a join public.workspace_users u on u.id=a.organizer_id and u.workspace_id=a.workspace_id
+    where a.workspace_id=$1::uuid and a.publication_id=$2::uuid and a.enabled and u.status='active' and u.role in ('owner','admin','agent')${lock ? " for share of a" : ""}`, [session.workspaceId, publication.id]);
+  const types = assignments.flatMap(row => {
+    const configured = publication.config.assignments.find(item => item.id === row.id);
+    return configured && configured.organizerId === row.organizerId && configured.kind === row.kind && configured.provider === row.provider &&
+      isProductRole(row.productRole) && hasProductCapability(row.productRole, "calendar:manage")
+      ? [{ id: row.id, kind: configured.kind, organizerName: row.organizerName }] : [];
+  });
+  return { canManage: true, publication: { publicId: publication.config.publicId, types }, allowedOrigins: publication.config.allowedOrigins };
+}
+function removeBooking(row: IntegrationRow) {
+  // The capability existed before chat booking. Leave separately configured
+  // appointment-request paths intact when this connection has no chat grant.
+  if (!storedBooking(row)) return;
+  delete row.configuration.booking;
+  row.capabilities = row.capabilities.filter(value => value !== "appointment.request");
+  const enabled = Array.isArray(row.widget.enabledCapabilities) ? row.widget.enabledCapabilities : [];
+  row.widget = { ...row.widget, calendarEnabled: false, enabledCapabilities: enabled.filter(value => value !== "appointment.request") };
+}
+async function saveBookingGrant(tx: TenantTransaction, session: AppSession, row: IntegrationRow, patch: ReturnType<typeof bookingPatch>) {
+  if (!patch) return;
+  if (!patch.enabled) { removeBooking(row); return; }
+  if (row.integrationType !== "website_chat" || row.mode !== "real_customer" || row.status !== "active" || !storedAssistant(row)) {
+    fail("BOOKING_CHAT_NOT_ACTIVE", "Buchungen benötigen einen aktiven Website-Chat im Kundenbetrieb mit zugeordnetem Assistenten.", 409);
+  }
+  const available = await bookingOptions(tx, session, true);
+  if (!available.canManage) fail("BOOKING_MANAGEMENT_FORBIDDEN", "Für Buchungsfreigaben fehlen Kalender-Verwaltungsrechte oder das Kalendermodul.", 403);
+  if (!available.publication || available.publication.publicId !== patch.publicId || patch.typeIds.some(id => !available.publication!.types.some(type => type.id === id))) {
+    fail("BOOKING_PUBLICATION_REQUIRED", "Bitte zuerst Terminarten und Webchat in der Terminbuchung veröffentlichen.", 409);
+  }
+  if (row.allowedOrigins.some(origin => !available.allowedOrigins.includes(origin))) fail("BOOKING_ORIGIN_REQUIRED", "Bitte diese Website-Adressen auch in der Terminbuchung freigeben.", 409);
+  row.configuration.booking = { ...patch, channels: ["chat"] } satisfies WebsiteBookingGrant;
+  row.capabilities = [...new Set([...row.capabilities, "appointment.request"])];
+  const enabled = Array.isArray(row.widget.enabledCapabilities) ? row.widget.enabledCapabilities.filter((value): value is string => typeof value === "string") : [];
+  row.widget = { ...row.widget, calendarEnabled: true, enabledCapabilities: [...new Set([...enabled, "appointment.request"])] };
 }
 function mode(value: unknown): ExternalIntegrationMode {
   if (value !== "training" && value !== "real_customer") fail("VALIDATION_ERROR", "Ungültiger Betriebsmodus.");
@@ -140,7 +214,7 @@ async function present(tx: TenantTransaction, session: AppSession, row: Integrat
     readiness = { ready: false, code: error.code, message: error.message, publishedSources: 0 };
   }
   const { configuration, ...safe } = row;
-  return { ...safe, knowledgeAssistantId: typeof configuration.knowledgeAssistantId === "string" ? configuration.knowledgeAssistantId : null, readiness };
+  return { ...safe, knowledgeAssistantId: typeof configuration.knowledgeAssistantId === "string" ? configuration.knowledgeAssistantId : null, readiness, booking: storedBooking(row) };
 }
 async function saveWidget(tx: TenantTransaction, session: AppSession, row: IntegrationRow) {
   const w = row.widget;
@@ -165,17 +239,21 @@ function binding(row: IntegrationRow, assistantId: string | null) {
     row.capabilities = [...new Set([...row.capabilities, ...chatCapabilities])];
     row.widget = { ...row.widget, chatEnabled: true, enabledCapabilities: [...new Set([...enabled, ...chatCapabilities])] };
   } else {
+    const hadBooking = storedBooking(row) !== null;
+    removeBooking(row);
+    if (hadBooking) delete config.booking;
     delete config.knowledgeAssistantId;
     const keep = (value: string) => !(chatCapabilities as readonly string[]).includes(value);
     row.capabilities = row.capabilities.filter(keep);
-    row.widget = { ...row.widget, chatEnabled: false, enabledCapabilities: enabled.filter(keep) };
+    const remaining = Array.isArray(row.widget.enabledCapabilities) ? row.widget.enabledCapabilities : [];
+    row.widget = { ...row.widget, chatEnabled: false, enabledCapabilities: remaining.filter(value => typeof value === "string" && keep(value)) };
     if (!row.capabilities.length && row.status !== "revoked") row.status = "disabled";
   }
   row.configuration = config;
 }
 function auditState(row: IntegrationRow | null) {
   return row ? { projectId: row.projectId, knowledgeAssistantId: storedAssistant(row), status: row.status, mode: row.mode,
-    allowedOrigins: row.allowedOrigins, capabilities: row.capabilities, widget: row.widget } : null;
+    allowedOrigins: row.allowedOrigins, capabilities: row.capabilities, widget: row.widget, booking: storedBooking(row) } : null;
 }
 async function audit(tx: TenantTransaction, session: AppSession, action: string, before: IntegrationRow | null, after: IntegrationRow) {
   await tx.execute(`insert into public.audit_logs(workspace_id,actor_user_id,project_id,action,entity_type,entity_id,before,after)
@@ -189,7 +267,8 @@ export async function listManagedWebsiteIntegrations(session: AppSession, option
       and (i.project_id is null or crm_project_access(i.workspace_id,i.project_id,false)) order by i.updated_at desc,i.id`, [fresh.workspaceId]);
     const integrations: ManagedWebsiteIntegration[] = [];
     for (const row of rows) integrations.push(await present(tx, fresh, row));
-    return { integrations, permissions: permissions(fresh) };
+    const available = await bookingOptions(tx, fresh);
+    return { integrations, permissions: permissions(fresh), bookingOptions: { canManage: available.canManage, publication: available.publication } };
   }, options);
 }
 export async function createManagedWebsiteIntegration(session: AppSession, input: Record<string, unknown>, options: TenantTransactionOptions = {}) {
@@ -222,6 +301,7 @@ export async function updateManagedWebsiteIntegration(session: AppSession, input
   const assistantId = input.knowledgeAssistantId === undefined ? undefined : optionalId(input.knowledgeAssistantId, "knowledgeAssistantId");
   const integrationMode = input.mode === undefined ? undefined : mode(input.mode), nextStatus = input.status === undefined ? undefined : status(input.status);
   const appearance = widgetPatch(input.widget);
+  const booking = bookingPatch(input.booking);
   return withCrmRead(session, async (tx, fresh) => {
     authorize(fresh, true);
     // Public knowledge reads hold this integration before taking the knowledge
@@ -233,10 +313,13 @@ export async function updateManagedWebsiteIntegration(session: AppSession, input
     const row: IntegrationRow = { ...previous, configuration: { ...previous.configuration }, capabilities: [...previous.capabilities],
       allowedOrigins: allowedOrigins ?? previous.allowedOrigins, mode: integrationMode ?? previous.mode, status: nextStatus ?? previous.status,
       widget: { ...defaultWidget(fresh), ...previous.widget, ...appearance } };
+    const originChanged = row.allowedOrigins.length !== previous.allowedOrigins.length || row.allowedOrigins.some(origin => !previous.allowedOrigins.includes(origin));
+    const onlyRevokesBooking = booking?.enabled === false && (assistantId === undefined || assistantId === storedAssistant(previous)) &&
+      row.mode === previous.mode && row.status === previous.status && !originChanged && Object.entries(appearance).every(([key, value]) => previous.widget[key] === value);
     if (assistantId !== undefined) { authorize(fresh, true, true); binding(row, assistantId); if (assistantId) await assistantScope(tx, fresh, row, true); }
     const runnable = row.status === "test" || row.status === "active";
     const chat = row.integrationType === "website_chat" || Boolean(storedAssistant(row)) || row.widget.chatEnabled === true || row.capabilities.some(value => (chatCapabilities as readonly string[]).includes(value));
-    if (runnable && chat) {
+    if (runnable && chat && !onlyRevokesBooking) {
       authorize(fresh, true, true);
       // Older Studio bindings may have an assistant but only lead/form capabilities.
       if (storedAssistant(row)) binding(row, storedAssistant(row));
@@ -249,11 +332,13 @@ export async function updateManagedWebsiteIntegration(session: AppSession, input
       (row.status === previous.status || row.status === "disabled" || row.status === "revoked") &&
       row.allowedOrigins.length === previous.allowedOrigins.length && row.allowedOrigins.every(origin => previous.allowedOrigins.includes(origin)) &&
       Object.entries(appearance).every(([key, value]) => previous.widget[key] === value);
-    if (runnable && row.formId && !onlyDetachesChat) {
+    if (runnable && row.formId && !onlyDetachesChat && !onlyRevokesBooking) {
       const form = await tx.queryOne<{ id: string }>(`select id from public.forms where workspace_id=$1::uuid and id=$2::uuid
         and project_id is not distinct from $3::uuid and status in ('aktiv','eingebaut')`, [fresh.workspaceId, row.formId, row.projectId]);
       if (!form) fail("PUBLISHED_FORM_REQUIRED", "Das zugeordnete Formular ist nicht veröffentlicht.", 409);
     }
+    const retained = storedBooking(row);
+    await saveBookingGrant(tx, fresh, row, booking ?? (originChanged && retained ? retained : undefined));
     await tx.execute(`update public.external_integrations set allowed_origins=$3::text[],capabilities=$4::text[],configuration=$5::jsonb,
       status=$6,mode=$7,revoked_at=case when $6='revoked' then coalesce(revoked_at,clock_timestamp()) else null end,
       updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond') where workspace_id=$1::uuid and id=$2::uuid`,

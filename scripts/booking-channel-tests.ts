@@ -13,6 +13,7 @@ import {startBookingChannelSession,issueTrustedBookingChannelSession,dispatchBoo
 import {saveBookingRules,createBookingHold} from "../src/lib/booking/service";
 import {withPublicSubmissionTransaction,queryRows} from "../src/lib/db/client";
 import {saveBookingSetup} from "../src/lib/booking/configuration";
+import {readTrustedChatBookingConfiguration} from "../src/lib/booking/chat-configuration";
 
 test("published channels use real forced-RLS PostgreSQL and the single booking engine",{timeout:180_000},async t=>{
  const db=await startDesignCIntegrationDatabase(),prior={...process.env};
@@ -52,6 +53,22 @@ test("published channels use real forced-RLS PostgreSQL and the single booking e
     await assert.rejects(withTenantTransaction({workspaceId:a.session.workspaceId,actorId:a.session.userId},tx=>tx.execute("insert into booking_publication_organizer_cutovers(workspace_id,organizer_id,publication_id) values($1,$2,(select id from booking_publications where workspace_id=$1))",[a.session.workspaceId,otherOwnerId]),pool),/row-level security/);
   });
   await t.test("public GET exposes no tenant/calendar scope and makes no session or booking",async()=>{const before=(await db.admin.query("select count(*)::int n from booking_channel_sessions")).rows[0].n;const dto=await getPublicBookingPublication(publication.publicId,undefined,pool);assert.equal(dto.types[0].id,typeId);assert.equal(JSON.stringify(dto).includes(a.session.userId),false);assert.equal(JSON.stringify(dto).includes("PRIVATE"),false);assert.equal((await db.admin.query("select count(*)::int n from booking_channel_sessions")).rows[0].n,before);});
+  await t.test("trusted chat discovery exposes only granted current types without creating a booking session",async()=>{
+    const otherType=randomUUID(),authority={publicId:publication.publicId,workspaceId:a.session.workspaceId,bindingId:"synthetic-chat",typeIds:[typeId]};
+    const current=await getBookingPublication(a.session,pool);
+    await saveBookingPublication(a.session,{publication:{...publication,assignments:[...publication.assignments,{...publication.assignments[0],id:otherType}]},expectedRevision:current.revision},pool);
+    const dto=await readTrustedChatBookingConfiguration(authority,pool);
+    assert.deepEqual(dto.types.map(type=>type.id),[typeId]);assert.equal(JSON.stringify(dto).includes(otherType),false);
+    for(const privateValue of [a.session.workspaceId,a.session.userId,a.connectionId,"PRIVATE"]){assert.equal(JSON.stringify(dto).includes(privateValue),false);}
+    await assert.rejects(readTrustedChatBookingConfiguration({...authority,workspaceId:b.session.workspaceId},pool),/BOOKING_CHANNEL_FORBIDDEN/);
+    await assert.rejects(readTrustedChatBookingConfiguration({...authority,typeIds:[randomUUID()]},pool),/PUBLICATION_NOT_FOUND/);
+    await saveBookingPublication(a.session,{publication:{...publication,channels:{...publication.channels,chat:false}}},pool);
+    await assert.rejects(readTrustedChatBookingConfiguration(authority,pool),/PUBLICATION_NOT_FOUND/);
+    await saveBookingPublication(a.session,{publication},pool);
+    assert.equal((await db.admin.query("select count(*)::int n from booking_channel_sessions")).rows[0].n,0);
+    assert.equal((await db.admin.query("select count(*)::int n from booking_reservations")).rows[0].n,0);
+    assert.equal(creates,0);
+  });
   await t.test("foreign organizer, client scope and direct voice authority are rejected",async()=>{await assert.rejects(saveBookingPublication(a.session,{publication:{...publication,assignments:[{...publication.assignments[0],organizerId:b.session.userId}]}},pool));await assert.rejects(startBookingChannelSession(request(),{publicId:publication.publicId,channel:"voice",typeId,language:"de"},pool),/TRUSTED_BOOKING_CHANNEL_REQUIRED/);await assert.rejects(startBookingChannelSession(request(),{publicId:publication.publicId,channel:"link",typeId,language:"de",workspaceId:b.session.workspaceId},pool),/INVALID_CHANNEL_INPUT/);});
   await t.test("session hold replay and concurrent CRM collision share one durable reservation",async()=>{token=(await issue()).token;const key=randomUUID();holdKey=key;const body={startsAt,recipientEmail:"synthetic@example.invalid",recipientName:"SYNTHETIC",idempotencyKey:key};const result=await dispatchBookingChannelAction(token,"hold",body,request(),options) as {booking:{id:string}};bookingId=result.booking.id;assert.equal((await dispatchBookingChannelAction(token,"hold",body,request(),options) as typeof result).booking.id,bookingId);await assert.rejects(createBookingHold(a.session,{provider:"google",kind:"phone",startsAt,title:"CRM collision",idempotencyKey:randomUUID()},options),/SLOT_UNAVAILABLE/);await assert.rejects(dispatchBookingChannelAction(token,"confirm",{bookingId,consent:false},request(),options),/BOOKING_CONSENT_REQUIRED/);await dispatchBookingChannelAction(token,"confirm",{bookingId,consent:true},request(),options);await dispatchBookingChannelAction(token,"confirm",{bookingId,consent:true},request(),options);assert.equal(creates,1);});
   await t.test("another visitor cannot read or mutate a booking and own status resolves the hold idempotency",async()=>{const own=await dispatchBookingChannelAction(token,"status",{idempotencyKey:holdKey},request(),options) as {booking:{id:string}};assert.equal(own.booking.id,bookingId);const other=(await issue()).token;await assert.rejects(dispatchBookingChannelAction(other,"status",{bookingId},request(),options),/BOOKING_NOT_FOUND/);await assert.rejects(dispatchBookingChannelAction(token,"status",{bookingId,workspaceId:b.session.workspaceId},request(),options),/INVALID_CHANNEL_INPUT/);});

@@ -1,10 +1,11 @@
 /* Public shared website-chat layout; no customer credentials or inline style blocks. */
 :host{all:initial;position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483000;font-family:system-ui,-apple-system,sans-serif;color:#182431;font-size:15px;line-height:1.5}
 *{box-sizing:border-box}
-button,textarea{font:inherit}
+[hidden]{display:none!important}
+button,textarea,input,select{font:inherit}
 button{min-height:44px;border:0;border-radius:12px;padding:10px 16px;cursor:pointer;background:var(--novalure-primary-color,#193f44);color:var(--novalure-button-text,#fff)}
 button:disabled{opacity:.55;cursor:wait}
-button:focus-visible,textarea:focus-visible{outline:3px solid #ca8b29;outline-offset:3px}
+button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #ca8b29;outline-offset:3px}
 .launcher{box-shadow:0 6px 24px #10282830}
 .panel{width:370px;height:min(580px,78dvh);max-height:calc(100dvh - 36px);background:white;border:1px solid #ccd5d8;border-radius:18px;box-shadow:0 16px 60px #10282838;display:flex;flex-direction:column;overflow:hidden}
 .panel[hidden]{display:none}
@@ -26,6 +27,16 @@ button:focus-visible,textarea:focus-visible{outline:3px solid #ca8b29;outline-of
 textarea{resize:none;width:100%;border:1px solid #bac7ca;border-radius:10px;min-height:70px;padding:10px;background:#fff;color:#182431}
 .status{font-size:12px;min-height:18px;margin:0;color:#526269}
 .send{justify-self:end}
+.booking-launcher{margin:8px 16px;align-self:flex-start}
+.booking{min-width:0;border:1px solid #ccd5d8;border-radius:12px;padding:12px;margin-top:12px}
+.booking h3{font-size:16px;margin:0 0 8px}
+.booking form,.booking fieldset{min-width:0;margin:0;padding:0;border:0;display:grid;gap:10px}
+.booking-label{display:grid;gap:4px;font-size:13px}
+.booking input:not([type=checkbox]),.booking select{min-width:0;width:100%;min-height:44px;border:1px solid #bac7ca;border-radius:8px;background:white;color:#182431;padding:8px}
+.booking input[type=checkbox]{width:20px;height:20px;justify-self:start}
+.booking-summary{white-space:pre-wrap;overflow-wrap:anywhere;border-radius:8px;background:#f1f5f5;padding:10px;font-size:13px}
+.booking-back{margin-bottom:10px;background:#e4efed;color:#182431}
+.booking a{min-height:44px;display:inline-flex;align-items:center;overflow-wrap:anywhere}
 @media(max-width:440px){:host{right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left))}
 .launcher{float:right}
 :host([data-position="bottom_left"]){left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right))}

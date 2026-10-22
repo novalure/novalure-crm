@@ -16,6 +16,8 @@ import {
   observeExternalSuccess,
   readBoundedJsonObject,
 } from "@/lib/external-api-response";
+import { readSavedBookingGrant, verifyExternalChatBookingAuthority } from "@/lib/booking/channel-bindings";
+import { readTrustedChatBookingConfiguration } from "@/lib/booking/chat-configuration";
 
 export async function POST(request: Request) {
   const context = { correlationId: createCorrelationId(), operation: "chat.start", startedAt: Date.now() };
@@ -51,8 +53,20 @@ export async function POST(request: Request) {
       origin,
       publicSiteKey,
     });
+    // The existing chat remains usable when booking is not independently
+    // granted. No booking session, hold, calendar access or model call occurs.
+    let bookingAvailable = false;
+    if (session.status === "active" && session.mode === "real_customer") {
+      try {
+        readSavedBookingGrant(resolution.configuration, "chat");
+        const authority = await verifyExternalChatBookingAuthority({ publicSiteKey, origin,
+          sessionId: session.sessionId, sessionToken: session.sessionToken, correlationId: context.correlationId });
+        await readTrustedChatBookingConfiguration(authority);
+        bookingAvailable = true;
+      } catch { /* Booking failure must not replace the existing chat. */ }
+    }
     observeExternalSuccess({ ...context, status: 201 });
-    return externalJson(origin, session, { correlationId: context.correlationId, status: 201 });
+    return externalJson(origin, bookingAvailable ? { ...session, bookingAvailable: true } : session, { correlationId: context.correlationId, status: 201 });
   } catch (error) {
     return externalFailure(error, origin, context);
   }
