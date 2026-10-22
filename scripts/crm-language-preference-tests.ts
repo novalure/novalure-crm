@@ -38,7 +38,7 @@ test("country comes only from the Vercel header in a Vercel runtime", () => {
   assert.equal(getTrustedCrmCountry(headers, true), null);
 });
 
-test("login ignores browser language and legacy shared cookie; explicit guest choice/reset remain distinct", () => {
+test("login ignores browser language and legacy shared cookie; explicit guest choice/reset remain distinct", async () => {
   const previous = process.env.VERCEL;
   process.env.VERCEL = "1";
   try {
@@ -46,13 +46,13 @@ test("login ignores browser language and legacy shared cookie; explicit guest ch
       headers: { "x-vercel-ip-country": country, "accept-language": country === "AT" ? "en-US" : "de-DE", cookie },
     });
     const appLanguage = (response: Response) => response.headers.get("x-middleware-request-x-novalure-language");
-    assert.equal(appLanguage(proxy(request("https://crm.example/login", "AT", "novalure.system-language=en"))), "de");
-    assert.equal(appLanguage(proxy(request("https://crm.example/login?lang=de", "FR"))), "en");
-    const explicit = proxy(request("https://crm.example/login?languagePreference=en&lang=en", "AT"));
+    assert.equal(appLanguage(await proxy(request("https://crm.example/login", "AT", "novalure.system-language=en"))), "de");
+    assert.equal(appLanguage(await proxy(request("https://crm.example/login?lang=de", "FR"))), "en");
+    const explicit = await proxy(request("https://crm.example/login?languagePreference=en&lang=en", "AT"));
     assert.equal(appLanguage(explicit), "en");
     assert.match(explicit.headers.get("set-cookie") ?? "", /novalure\.crm-language-preference=en/);
-    assert.equal(appLanguage(proxy(request("https://crm.example/login", "AT", `${guestCrmPreferenceCookieName}=en`))), "en");
-    const automatic = proxy(request("https://crm.example/login?languagePreference=auto", "AT", `${guestCrmPreferenceCookieName}=en`));
+    assert.equal(appLanguage(await proxy(request("https://crm.example/login", "AT", `${guestCrmPreferenceCookieName}=en`))), "en");
+    const automatic = await proxy(request("https://crm.example/login?languagePreference=auto", "AT", `${guestCrmPreferenceCookieName}=en`));
     assert.equal(appLanguage(automatic), "de");
     assert.match(automatic.headers.get("set-cookie") ?? "", /novalure\.crm-language-preference=auto/);
     const prefetchCases: Array<Record<string, string>> = [{ "next-router-prefetch": "1" }, { purpose: "prefetch" }, { "sec-purpose": "prefetch;prerender" }];
@@ -60,14 +60,14 @@ test("login ignores browser language and legacy shared cookie; explicit guest ch
       const prefetch = new NextRequest("https://crm.example/login?languagePreference=en&lang=en", {
         headers: { "x-vercel-ip-country": "AT", ...prefetchHeaders },
       });
-      assert.equal(proxy(prefetch).headers.get("set-cookie"), null, "speculative navigation must not persist a manual choice");
+      assert.equal((await proxy(prefetch)).headers.get("set-cookie"), null, "speculative navigation must not persist a manual choice");
     }
-    const publicPage = proxy(request("https://crm.example/?lang=es", "AT"));
+    const publicPage = await proxy(request("https://crm.example/?lang=es", "AT"));
     assert.equal(publicPage.headers.get("x-middleware-request-x-novalure-public-language"), "es");
     assert.equal(publicPage.headers.get(`x-middleware-request-${crmEntryRequestHeaderName}`), "1");
     for (const path of ["/login/forgot-password", "/login/reset-password"]) {
-      assert.equal(appLanguage(proxy(request(`https://crm.example${path}?lang=en`, "AT"))), "de");
-      assert.equal(appLanguage(proxy(request(`https://crm.example${path}?lang=de&languagePreference=en`, "AT"))), "en");
+      assert.equal(appLanguage(await proxy(request(`https://crm.example${path}?lang=en`, "AT"))), "de");
+      assert.equal(appLanguage(await proxy(request(`https://crm.example${path}?lang=de&languagePreference=en`, "AT"))), "en");
       const source = readFileSync(new URL(`../src/app${path}/page.tsx`, import.meta.url), "utf8");
       assert.equal(source.match(/resolveLanguage\(requestHeaders\.get\(languageRequestHeaderName\), "en"\)/g)?.length, 2, "metadata and page share the resolved request language");
       assert.match(source, /lang: language, languagePreference: language/);

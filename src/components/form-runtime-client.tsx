@@ -10,9 +10,11 @@ import {
   type FormRuntimeCopy,
 } from "@/components/form-renderer";
 import type { FormField, WebsiteForm } from "@/lib/form-types";
+import type { LanguageCode } from "@/lib/language-runtime";
 import type { PublicSubmissionProof } from "@/lib/public-submission-contract";
 
 type FormRuntimeClientProps = {
+  language?: LanguageCode;
   action?: string;
   className?: string;
   copy?: Partial<FormRuntimeCopy>;
@@ -37,6 +39,7 @@ export function FormRuntimeClient({
 }
 
 function FormRuntimeClientRuntime({
+  language = "de",
   action,
   className,
   copy,
@@ -145,6 +148,7 @@ function FormRuntimeClientRuntime({
 
   return (
     <FormRenderer
+      language={language}
       action={action}
       className={className}
       copy={runtimeCopy}
@@ -171,6 +175,7 @@ function FormRuntimeClientRuntime({
 }
 
 function initialValue(field: FormField) {
+  if (field.type === "booking") return "";
   if (field.type === "checkbox" || field.type === "consent") return Boolean(field.defaultValue);
   if (field.type === "multiCheckbox") return field.defaultValue ? field.defaultValue.split(",").map((item) => item.trim()) : [];
   return getFieldDefaultValue(field);
@@ -207,6 +212,11 @@ function validateField(
   copy: FormRuntimeCopy,
 ) {
   if (field.type === "hidden") return "";
+  if (field.type === "booking") {
+    const id = formElement?.querySelector<HTMLInputElement>(`input[name="booking_${CSS.escape(field.id)}_id"]`)?.value;
+    const token = formElement?.querySelector<HTMLInputElement>(`input[name="booking_${CSS.escape(field.id)}_token"]`)?.value;
+    return (field.bookingRequired ?? field.required) && (!id || !token) ? field.errorMessage || `${field.label} ${copy.required}` : "";
+  }
   const label = field.label || "Field";
   const requiredMessage = field.errorMessage || `${label} ist erforderlich.`;
 

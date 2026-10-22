@@ -7,9 +7,10 @@ import { readBookingSetup } from "./configuration";
 import { bookingResourceLock, readBooking, withBookingTransaction } from "./repository";
 import { BookingError, type BookingRecord } from "./types";
 import { createBookingActionLinks } from "./message-actions";
+import { bookingMailBindings, bookingMessageActivation, bookingMessageScopes, isBookingMessageQaRuntime, isBookingMessageRuntime } from "./message-runtime";
+export { bookingMailBindings, bookingMessageActivation, bookingMessageScopes, isBookingMessageQaRuntime, isBookingMessageRuntime, isBookingReminderRuntime } from "./message-runtime";
 import { BookingTemplateError, renderBookingEmail, type BookingCommunicationSettings, type BookingEmailLanguage, type BookingEmailTemplate, type BookingEmailValues, type EmailTemplateKind } from "./templates";
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function normalizeBookingRecipient(input: { recipientEmail?: unknown; recipientName?: unknown; communicationLanguage?: unknown }): { recipientEmail: string | null; recipientName: string; communicationLanguage: "de" | "en" } {
   const recipientEmail = input.recipientEmail === undefined || input.recipientEmail === null || input.recipientEmail === "" ? null : input.recipientEmail;
   if (recipientEmail !== null && (typeof recipientEmail !== "string" || recipientEmail.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(recipientEmail))) throw new BookingError("INVALID_RECIPIENT_EMAIL");
@@ -19,31 +20,13 @@ export function normalizeBookingRecipient(input: { recipientEmail?: unknown; rec
   if (communicationLanguage !== "de" && communicationLanguage !== "en") throw new BookingError("INVALID_COMMUNICATION_LANGUAGE");
   return { recipientEmail: typeof recipientEmail === "string" ? recipientEmail.trim().toLowerCase() : null, recipientName: recipientName.trim(), communicationLanguage };
 }
-export type BookingMailBinding = { workspaceId: string; userId: string; recipientEmail: string };
-export function isBookingMessageQaRuntime(env: NodeJS.ProcessEnv = process.env) {
-  return env.BOOKING_MESSAGES_ENABLED === "1" && env.VERCEL_ENV !== "production" && (env.VERCEL_ENV === "preview" || env.NODE_ENV !== "production");
-}
-export function bookingMailBindings(env: NodeJS.ProcessEnv = process.env): BookingMailBinding[] {
-  if (!isBookingMessageQaRuntime(env)) return [];
-  const raw = env.BOOKING_MAIL_TEST_BINDINGS_JSON || "[]";
-  if (raw.length > 16_384) return [];
-  try {
-    const rows: unknown = JSON.parse(raw);
-    if (!Array.isArray(rows) || rows.length > 20) return [];
-    const seen = new Set<string>();
-    return rows.flatMap(row => {
-      if (!row || typeof row !== "object") return [];
-      const { workspaceId, userId, recipientEmail } = row as BookingMailBinding;
-      // This QA release is explicitly limited to the owner's approved mailbox.
-      if (!uuid.test(workspaceId) || !uuid.test(userId) || recipientEmail !== "hello@novalure.eu") return [];
-      const key = `${workspaceId}:${userId}:${recipientEmail}`;
-      if (seen.has(key)) return [];
-      seen.add(key); return [{ workspaceId, userId, recipientEmail }];
-    });
-  } catch { return []; }
-}
 function mailAllowed(session: Pick<AppSession, "workspaceId" | "userId">, recipient: string) {
   return bookingMailBindings().some(b => b.workspaceId === session.workspaceId && b.userId === session.userId && b.recipientEmail === recipient);
+}
+async function isOrganizerRecipient(tx: TenantTransaction, session: Pick<AppSession, "workspaceId" | "userId">, recipient: string) {
+  const user = await tx.queryOne<{ allowed: boolean }>(`select lower(btrim(email))=$3 as allowed from workspace_users
+    where workspace_id=$1::uuid and id=$2::uuid and status='active'`, [session.workspaceId,session.userId,recipient]);
+  return user?.allowed === true;
 }
 function scopedSession(scope: TenantScope): AppSession {
   return { authenticated: true, userId: scope.actorId, workspaceId: scope.workspaceId, workspaceName: "", email: "", name: "", role: "agent", permissions: [], productRole: "team_member", productPermissions: [], source: "database" };
@@ -56,8 +39,9 @@ type MessageJob = {
   language: BookingEmailLanguage; reminderId: string | null; scheduledFor: string; status: string; recipientEmail: string;
   replyTo: string; template: FrozenTemplate; rendered: { subject: string; text: string; html: string } | null;
   providerMessageId: string | null; firstAttemptAt: string | null; nextAttemptAt: string | null; attemptCount: number; leaseOwner: string | null;
+  createdAt: string;
 };
-const jobColumns = `id,workspace_id as "workspaceId",organizer_id as "organizerId",booking_id as "bookingId",booking_version as "bookingVersion",kind,template_kind as "templateKind",language,reminder_id as "reminderId",scheduled_for as "scheduledFor",status,recipient_email as "recipientEmail",reply_to as "replyTo",template,rendered,provider_message_id as "providerMessageId",first_attempt_at as "firstAttemptAt",next_attempt_at as "nextAttemptAt",attempt_count as "attemptCount",lease_owner as "leaseOwner"`;
+const jobColumns = `id,workspace_id as "workspaceId",organizer_id as "organizerId",booking_id as "bookingId",booking_version as "bookingVersion",kind,template_kind as "templateKind",language,reminder_id as "reminderId",scheduled_for as "scheduledFor",status,recipient_email as "recipientEmail",reply_to as "replyTo",template,rendered,provider_message_id as "providerMessageId",first_attempt_at as "firstAttemptAt",next_attempt_at as "nextAttemptAt",attempt_count as "attemptCount",lease_owner as "leaseOwner",created_at as "createdAt"`;
 
 async function insertMessage(tx: TenantTransaction, session: AppSession, row: BookingRecord, config: BookingCommunicationSettings,
   input: { version: number; kind: MessageJob["kind"]; templateKind: EmailTemplateKind; reminderId?: string; scheduledFor: number; language: BookingEmailLanguage; template?: BookingEmailTemplate }) {
@@ -77,13 +61,15 @@ export async function syncBookingMessages(tx: TenantTransaction, session: AppSes
   const unchanged = previous.state === after.state && previous.startsAt === after.startsAt && previous.endsAt === after.endsAt && previous.recipientEmail === after.recipientEmail;
   if (unchanged) return;
   const config = (await readBookingSetup(tx, session, after.kind)).communication;
+  const activated = isBookingMessageQaRuntime() || await bookingMessageActivation(tx, session, after) !== null;
+  const enabled = config.enabled && activated;
   const version = (after.messageVersion ?? 0) + 1;
   const snapshot: MessageSnapshot = { state: after.state, startsAt: after.startsAt, endsAt: after.endsAt, recipientEmail: after.recipientEmail };
   await tx.execute(`update booking_message_jobs set status=case when status='sending' then 'uncertain' else 'cancelled' end,last_error='BOOKING_VERSION_CHANGED',updated_at=now()
     where workspace_id=$1::uuid and organizer_id=$2::uuid and booking_id=$3::uuid and status in ('planned','sending')`, [session.workspaceId, session.userId, after.id]);
   await tx.execute(`update booking_reservations set message_version=$4,message_snapshot=$5::jsonb,notification_status=$6 where workspace_id=$1::uuid and organizer_id=$2::uuid and id=$3::uuid`,
-    [session.workspaceId, session.userId, after.id, version, JSON.stringify(snapshot), config.enabled ? "pending" : "not_requested"]);
-  if (!config.enabled) return;
+    [session.workspaceId, session.userId, after.id, version, JSON.stringify(snapshot), enabled ? "pending" : "not_requested"]);
+  if (!enabled) return;
   const language = after.communicationLanguage === "en" ? "en" : "de";
   const kind: EmailTemplateKind = after.state === "cancelled" ? "cancellation" : previous.state ? "reschedule" : "confirmation";
   await insertMessage(tx, session, after, config, { version, kind, templateKind: kind, language, scheduledFor: nowMs });
@@ -107,10 +93,14 @@ export function bookingMessageValues(row: BookingRecord, template: FrozenTemplat
     preparationNote: template.preparationNote, rescheduleUrl: links.rescheduleUrl, cancelUrl: links.cancelUrl };
 }
 export async function queueBookingTestMessage(session: AppSession, input: { bookingId: string; kind: EmailTemplateKind; language?: BookingEmailLanguage; template?: BookingEmailTemplate }, options: TenantTransactionOptions = {}) {
+  if (!isBookingMessageRuntime()) throw new BookingError("MAIL_TEST_RECIPIENT_NOT_ALLOWED", 403);
   return withBookingTransaction(session, async (tx, fresh) => {
     await bookingResourceLock(tx, fresh);
     const row = await readBooking(tx, fresh, input.bookingId);
-    if (!row.recipientEmail || !mailAllowed(fresh, row.recipientEmail) || !["confirmed", "cancelled"].includes(row.state)) throw new BookingError("MAIL_TEST_RECIPIENT_NOT_ALLOWED", 403);
+    if (!row.recipientEmail || !["confirmed", "cancelled"].includes(row.state)) throw new BookingError("MAIL_TEST_RECIPIENT_NOT_ALLOWED", 403);
+    const allowed = isBookingMessageQaRuntime() ? mailAllowed(fresh, row.recipientEmail)
+      : await isOrganizerRecipient(tx, fresh, row.recipientEmail) && await bookingMessageActivation(tx, fresh, row) !== null;
+    if (!allowed) throw new BookingError("MAIL_TEST_RECIPIENT_NOT_ALLOWED", 403);
     const config = (await readBookingSetup(tx, fresh, row.kind)).communication;
     const language = row.communicationLanguage === "en" ? "en" : "de";
     if (input.language && input.language !== language) throw new BookingError("BOOKING_LANGUAGE_MISMATCH");
@@ -130,9 +120,13 @@ async function markJob(tx: TenantTransaction, id: string, status: string, error:
   if (row && status === "failed") await tx.execute(`update booking_reservations set notification_status='failed' where id=$1::uuid and message_version=$2`, [row.bookingId, row.version]);
 }
 async function currentJobValid(tx: TenantTransaction, session: AppSession, row: BookingRecord, job: MessageJob, now: number) {
-  if (!mailAllowed(session, job.recipientEmail) || row.recipientEmail !== job.recipientEmail || (row.messageVersion ?? 0) !== job.bookingVersion || (row.communicationLanguage ?? "de") !== job.language) return false;
+  if (!isBookingMessageRuntime() || isBookingMessageQaRuntime() && !mailAllowed(session, job.recipientEmail) || row.recipientEmail !== job.recipientEmail || (row.messageVersion ?? 0) !== job.bookingVersion || (row.communicationLanguage ?? "de") !== job.language) return false;
+  try { if (normalizeBookingRecipient({ recipientEmail: job.recipientEmail, communicationLanguage: job.language }).recipientEmail !== job.recipientEmail) return false; }
+  catch { return false; }
+  const activation = await bookingMessageActivation(tx, session, row);
+  if (!activation || new Date(job.createdAt).getTime() < activation.activatedAt) return false;
   if (job.kind !== "test" && (job.kind === "cancellation" ? row.state !== "cancelled" : row.state !== "confirmed")) return false;
-  if (job.kind === "test") return ["confirmed", "cancelled"].includes(row.state);
+  if (job.kind === "test") return ["confirmed", "cancelled"].includes(row.state) && (isBookingMessageQaRuntime() || await isOrganizerRecipient(tx, session, job.recipientEmail));
   const config = (await readBookingSetup(tx, session, row.kind)).communication;
   if (!config.enabled) return false;
   if (job.kind === "reminder") {
@@ -147,6 +141,9 @@ async function claimJob(scope: TenantScope, jobId: string, options: ProcessOptio
     await bookingResourceLock(tx, session);
     const job = await tx.queryOne<MessageJob>(`select ${jobColumns} from booking_message_jobs where id=$1::uuid for update`, [jobId]);
     if (!job || job.status !== "planned" || Date.parse(job.scheduledFor) > now || job.nextAttemptAt && Date.parse(job.nextAttemptAt) > now) return null;
+    if (!isBookingMessageQaRuntime() && !job.firstAttemptAt && now - new Date(job.scheduledFor).getTime() > 5 * 60_000) {
+      await markJob(tx, job.id, "skipped", "MAIL_SCHEDULE_WINDOW_EXPIRED"); return null;
+    }
     const row = await readBooking(tx, session, job.bookingId);
     if (!await currentJobValid(tx, session, row, job, now)) { await markJob(tx, job.id, "cancelled", "BOOKING_OR_REMINDER_CHANGED"); return null; }
     if (job.firstAttemptAt && now - Date.parse(job.firstAttemptAt) >= 23 * 60 * 60_000 || job.attemptCount >= 6) { await markJob(tx, job.id, "failed", "MAIL_RETRY_WINDOW_EXPIRED"); return null; }
@@ -167,11 +164,11 @@ async function claimJob(scope: TenantScope, jobId: string, options: ProcessOptio
 }
 export async function processDueBookingMessages(options: ProcessOptions = {}): Promise<BookingMessageProcessResult> {
   const result: BookingMessageProcessResult = { checked: 0, accepted: 0, failed: 0, uncertain: 0, skipped: 0 };
-  if (!isBookingMessageQaRuntime()) return result;
-  const bindings = bookingMailBindings(), scopes = [...new Map(bindings.map(b => [`${b.workspaceId}:${b.userId}`, { workspaceId: b.workspaceId, actorId: b.userId }])).values()];
+  if (!isBookingMessageRuntime()) return result;
+  const scopes = await bookingMessageScopes(options);
   const max = Math.max(1, Math.min(50, options.limit ?? 25)), now = options.now?.() ?? Date.now();
   for (const scope of scopes) {
-    if (options.shouldContinue && !options.shouldContinue()) break;
+    if (result.checked >= max || options.shouldContinue && !options.shouldContinue()) break;
     const refs = await withTenantTransaction(scope, async tx => {
       // A lost lease has an unknown outcome. Never automatically retry that send.
       await tx.execute(`update booking_message_jobs set status='uncertain',last_error='MAIL_WORKER_LEASE_LOST',lease_owner=null,lease_until=null,updated_at=now() where status='sending' and lease_until<=to_timestamp($1::double precision/1000)`, [now]);
@@ -218,6 +215,6 @@ export async function processDueBookingMessages(options: ProcessOptions = {}): P
 }
 
 export async function getBookingMessageJobs(session: AppSession, options: TenantTransactionOptions = {}) {
-  return withBookingTransaction(session, (tx, fresh) => tx.query<{ id: string; bookingId: string; kind: string; scheduledFor: string; status: string; providerMessageId: string | null; lastError: string | null }>(
-    `select id,booking_id as "bookingId",kind,scheduled_for as "scheduledFor",status,provider_message_id as "providerMessageId",last_error as "lastError" from booking_message_jobs where workspace_id=$1::uuid and organizer_id=$2::uuid order by created_at desc limit 100`, [fresh.workspaceId, fresh.userId]), options);
+  return withBookingTransaction(session, (tx, fresh) => tx.query<{ id: string; bookingId: string; bookingVersion: number; kind: string; scheduledFor: string; status: string; providerMessageId: string | null; lastError: string | null; lastEventAt: string | null; eventCount: number }>(
+    `select id,booking_id as "bookingId",booking_version as "bookingVersion",kind,scheduled_for as "scheduledFor",status,provider_message_id as "providerMessageId",last_error as "lastError",last_event_at as "lastEventAt",cardinality(event_ids)::int as "eventCount" from booking_message_jobs where workspace_id=$1::uuid and organizer_id=$2::uuid order by created_at desc limit 100`, [fresh.workspaceId, fresh.userId]), options);
 }

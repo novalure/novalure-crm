@@ -5,6 +5,7 @@ import type { AppSession } from "@/lib/auth/session";
 import type { TenantTransactionOptions } from "@/lib/db/tenant-client";
 import { readBooking, withBookingTransaction } from "./repository";
 import { BookingError, type BookingRecord } from "./types";
+import { bookingMessageActivation, isBookingMessageRuntime } from "./message-runtime";
 
 export type BookingActionPayload = { workspaceId: string; organizerId: string; bookingId: string; version: number; purpose: "cancel" | "reschedule"; recipientHash: string; expiresAt: number };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -48,12 +49,13 @@ export function verifyBookingActionForm(request: Request, token: string, nonce: 
 }
 /** Bearer authority is narrow and signed; service still revalidates active membership and module. */
 export async function readBookingAction(token: string, options: TenantTransactionOptions = {}) {
-  if (process.env.BOOKING_MESSAGES_ENABLED !== "1" || process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production" && process.env.VERCEL_ENV !== "preview") throw new BookingError("BOOKING_PREVIEW_ONLY", 403);
+  if (!isBookingMessageRuntime()) throw new BookingError("BOOKING_MAIL_NOT_ENABLED", 403);
   const payload = verifyBookingActionToken(token);
   const session: AppSession = { authenticated: true, userId: payload.organizerId, workspaceId: payload.workspaceId, workspaceName: "", email: "", name: "", role: "agent", permissions: [], productRole: "team_member", productPermissions: [], source: "database" };
   const row = await withBookingTransaction(session, async (tx, fresh) => {
     const current = await readBooking(tx, fresh, payload.bookingId);
     if (!current.recipientEmail || !equal(recipientHash(current.recipientEmail), payload.recipientHash) || (current.messageVersion ?? 0) !== payload.version || current.state !== "confirmed") throw new BookingError("BOOKING_ACTION_STALE", 409);
+    if (!await bookingMessageActivation(tx, fresh, current)) throw new BookingError("BOOKING_ACTION_STALE", 409);
     return current;
   }, options);
   return { payload, session, row };

@@ -95,11 +95,13 @@
     "test:knowledge-package3": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-workflow-tests.ts scripts/knowledge-monitoring-tests.ts scripts/knowledge-monitoring-batch-tests.ts scripts/knowledge-package3-acceptance-tests.ts && node --import tsx --test scripts/knowledge-lifecycle-ui-tests.ts scripts/knowledge-design-c-integration-tests.ts",
     "test:package4-migrations": "node --conditions=react-server --import tsx --test scripts/package4-migration-tests.ts",
     "qa:package4:e2e": "node scripts/qa-package4-e2e.mjs",
-    "test:booking": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/universal-booking-tests.ts scripts/booking-provider-tests.ts scripts/booking-connections-tests.ts",
+    "test:booking": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/universal-booking-tests.ts scripts/booking-provider-tests.ts scripts/booking-connections-tests.ts scripts/booking-production-guard-tests.ts scripts/booking-provider-activation-race-tests.ts",
     "qa:booking:browser": "node scripts/qa-booking-browser.mjs",
     "test:booking:setup": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-setup-tests.ts scripts/booking-travel-tests.ts scripts/booking-travel-service-tests.ts",
-    "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts",
+    "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts scripts/booking-message-production-tests.ts",
     "test:booking:language": "node --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-db-tests.ts",
+    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts",
+    "qa:booking:public-ui": "node --import tsx scripts/booking-public-ui-browser.mjs",
     "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs"
   },
   "dependencies": {

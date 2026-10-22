@@ -1,0 +1,146 @@
+import assert from "node:assert/strict";
+import {randomUUID} from "node:crypto";
+import {readFile} from "node:fs/promises";
+import {test} from "node:test";
+import {startDesignCIntegrationDatabase} from "./lib/design-c-integration-fixture.mjs";
+import {getRolePermissions} from "../src/lib/auth/permissions";
+import {getProductRoleCapabilities} from "../src/lib/product-model";
+import type {AppSession} from "../src/lib/auth/session";
+import {withTenantTransaction,type TenantPool} from "../src/lib/db/tenant-client";
+import type {BookingProvider,ProviderEvent,ProviderWrite} from "../src/lib/booking/types";
+import {getBookingPublication,saveBookingPublication,getPublicBookingPublication,validateBookingPublication,lookupActiveWorkspaceBookingPublication} from "../src/lib/booking/publication";
+import {startBookingChannelSession,issueTrustedBookingChannelSession,dispatchBookingChannelAction,attachFormBookingRelation} from "../src/lib/booking/channels";
+import {saveBookingRules,createBookingHold} from "../src/lib/booking/service";
+import {withPublicSubmissionTransaction,queryRows} from "../src/lib/db/client";
+import {saveBookingSetup} from "../src/lib/booking/configuration";
+
+test("published channels use real forced-RLS PostgreSQL and the single booking engine",{timeout:180_000},async t=>{
+ const db=await startDesignCIntegrationDatabase(),prior={...process.env};
+ try{
+  for(const name of ["108_universal_booking.sql","109_booking_setup_communications.sql","111_booking_public_channels.sql"]){const c=await db.admin.connect();try{await c.query("begin");await c.query(await readFile(`migrations/${name}`,"utf8"));await c.query("commit");}catch(e){await c.query("rollback");throw e;}finally{c.release();}}
+  Object.assign(process.env,{NODE_ENV:"test",DATABASE_URL:`postgresql://${db.role}@127.0.0.1:${db.port}/neondb`,BOOKING_ENGINE_ENABLED:"1",NOVALURE_APP_ORIGIN:"https://crm.example.test",NOVALURE_AUTH_RATE_LIMIT_SECRET:"synthetic-channel-rate-secret-12345678901234567890"});
+  for(const key of ["VERCEL_ENV","VERCEL","BOOKING_PRODUCTION_ENABLED"])delete process.env[key];
+  const pool={pool:db.pool as unknown as TenantPool};
+  async function owner(){const workspaceId=randomUUID(),userId=randomUUID(),connectionId=randomUUID();await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'SYNTHETIC publication','self_service_customer','general_company')",[workspaceId]);await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC publisher',$3,'owner','customer_owner','active')",[userId,workspaceId,`${userId}@example.invalid`]);await db.admin.query("insert into workspace_module_settings(workspace_id,module_key,enabled) values($1,'calendar',true)",[workspaceId]);await db.admin.query(`insert into booking_calendar_connections(id,workspace_id,user_id,provider,status,account_id,write_calendar_id,calendars) values($1,$2,$3,'google','connected','synthetic-account-'||$2::uuid::text,'synthetic-calendar-'||$2::uuid::text,$4::jsonb)`,[connectionId,workspaceId,userId,JSON.stringify([{id:`synthetic-calendar-${workspaceId}`,name:"PRIVATE title",canWrite:true,canRead:true,teamsSupported:false,meetSupported:true,protectedReadOnly:false}])]);const session:AppSession={authenticated:true,source:"database",workspaceId,userId,workspaceName:"SYNTHETIC",name:"SYNTHETIC",email:`${userId}@example.invalid`,role:"owner",productRole:"customer_owner",permissions:getRolePermissions("owner"),productPermissions:getProductRoleCapabilities("customer_owner")};return {session,connectionId};}
+  const a=await owner(),b=await owner(),events=new Map<string,ProviderEvent>();let creates=0;
+  const provider:BookingProvider={async listBusy(){return [...events.values()].filter(e=>!e.cancelled).map(e=>({startsAt:e.startsAt,endsAt:e.endsAt,eventId:e.eventId}));},async create(input:ProviderWrite){creates++;const e:ProviderEvent={eventId:`synthetic-${input.bookingId}`,etag:'"one"',startsAt:input.startsAt,endsAt:input.endsAt,onlineMeetingUrl:null,videoStatus:"none",cancelled:false};events.set(input.bookingId,e);return e;},async lookup(input){return events.get(input.bookingId)??null;},async update(input){const e={...events.get(input.bookingId)!,startsAt:input.startsAt,endsAt:input.endsAt};events.set(input.bookingId,e);return e;},async delete(input){const e={...events.get(input.bookingId)!,cancelled:true};events.set(input.bookingId,e);}};
+  const options={...pool,providerFactory:async()=>provider,connectionResolver:async()=>({connectionId:a.connectionId,calendarId:`synthetic-calendar-${a.session.workspaceId}`,revision:1})};
+  await saveBookingRules(a.session,{rules:{timeZone:"UTC",minNoticeMinutes:0,preparationMinutes:0,followupMinutes:0,maxAdvanceDays:366,workingHours:[0,1,2,3,4,5,6].map(day=>({day,start:"09:00",end:"17:00"}))}},pool);
+  await saveBookingSetup(a.session,{scope:"company",kind:"*",section:"communication",value:{enabled:false}},pool);
+  const draft=await getBookingPublication(a.session,pool),typeId=randomUUID(),legacyPageId=randomUUID(),unmappedPageId=randomUUID(),futurePageId=randomUUID(),otherOwnerId=randomUUID(),otherOwnerPageId=randomUUID();const publication={...draft.publication,enabled:true,channels:{...draft.publication.channels,link:true,voice:true,form:true,chat:true},assignments:[{id:typeId,kind:"phone" as const,provider:"google" as const,organizerId:a.session.userId}],allowedOrigins:["https://site.example.test"],legacyMeetingPageIds:[legacyPageId]};
+  await db.admin.query("insert into meeting_pages(id,workspace_id,owner_user_id,slug,title) values($1,$2,$3,$4,'SYNTHETIC legacy page')",[legacyPageId,a.session.workspaceId,a.session.userId,`synthetic-${legacyPageId}`]);
+  await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC other organizer',$3,'agent','team_member','active')",[otherOwnerId,a.session.workspaceId,`${otherOwnerId}@example.invalid`]);
+  await db.admin.query("insert into meeting_pages(id,workspace_id,owner_user_id,slug,title) values($1,$3,$4,$1::uuid::text,'SYNTHETIC existing unmapped page'),($2,$3,$5,$2::uuid::text,'SYNTHETIC other organizer page')",[unmappedPageId,otherOwnerPageId,a.session.workspaceId,a.session.userId,otherOwnerId]);
+  await saveBookingPublication(a.session,{publication:{...publication,enabled:false},expectedRevision:0},pool);
+  assert.equal(await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,legacyPageId,pool),null,"unpublished draft does not cut over legacy");
+  assert.equal(await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,unmappedPageId,pool),null);
+  await saveBookingPublication(a.session,{publication,expectedRevision:1},pool);
+  assert.ok(await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,legacyPageId,pool));
+  assert.equal(await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,randomUUID(),pool),null);
+  assert.throws(()=>validateBookingPublication({...publication,allowedOrigins:["https://*.example.test"]}),/INVALID_PUBLICATION_ORIGIN/);
+  const request=()=>new Request("https://crm.example.test/api/public/booking/status",{method:"POST",headers:{origin:"https://site.example.test"}});
+  const issue=()=>startBookingChannelSession(request(),{publicId:publication.publicId,channel:"link",typeId,language:"de"},options);
+  let token="",bookingId="",holdKey="";const day=new Date(Date.now()+3*86400000);day.setUTCHours(10,0,0,0);const startsAt=day.toISOString();
+  await t.test("exact persisted organizer scope covers existing and newly created pages while other organizers stay unchanged",async()=>{
+    assert.equal((await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,unmappedPageId,pool))?.publicId,publication.publicId);
+    await db.admin.query("insert into meeting_pages(id,workspace_id,owner_user_id,slug,title) values($1,$2,$3,$1::uuid::text,'SYNTHETIC future legacy page')",[futurePageId,a.session.workspaceId,a.session.userId]);
+    assert.equal((await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,futurePageId,pool))?.publicId,publication.publicId);
+    assert.equal(await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,otherOwnerPageId,pool),null);
+    assert.equal(await lookupActiveWorkspaceBookingPublication(b.session.workspaceId,futurePageId,pool),null);
+    const rows=(await db.admin.query("select organizer_id,publication_id from booking_publication_organizer_cutovers where workspace_id=$1",[a.session.workspaceId])).rows;assert.equal(rows.length,1);assert.equal(rows[0].organizer_id,a.session.userId);
+    await assert.rejects(db.pool.query("delete from booking_publication_organizer_cutovers"),/permission denied/);
+    await assert.rejects(withTenantTransaction({workspaceId:a.session.workspaceId,actorId:a.session.userId},tx=>tx.execute("insert into booking_publication_organizer_cutovers(workspace_id,organizer_id,publication_id) values($1,$2,(select id from booking_publications where workspace_id=$1))",[a.session.workspaceId,otherOwnerId]),pool),/row-level security/);
+  });
+  await t.test("public GET exposes no tenant/calendar scope and makes no session or booking",async()=>{const before=(await db.admin.query("select count(*)::int n from booking_channel_sessions")).rows[0].n;const dto=await getPublicBookingPublication(publication.publicId,undefined,pool);assert.equal(dto.types[0].id,typeId);assert.equal(JSON.stringify(dto).includes(a.session.userId),false);assert.equal(JSON.stringify(dto).includes("PRIVATE"),false);assert.equal((await db.admin.query("select count(*)::int n from booking_channel_sessions")).rows[0].n,before);});
+  await t.test("foreign organizer, client scope and direct voice authority are rejected",async()=>{await assert.rejects(saveBookingPublication(a.session,{publication:{...publication,assignments:[{...publication.assignments[0],organizerId:b.session.userId}]}},pool));await assert.rejects(startBookingChannelSession(request(),{publicId:publication.publicId,channel:"voice",typeId,language:"de"},pool),/TRUSTED_BOOKING_CHANNEL_REQUIRED/);await assert.rejects(startBookingChannelSession(request(),{publicId:publication.publicId,channel:"link",typeId,language:"de",workspaceId:b.session.workspaceId},pool),/INVALID_CHANNEL_INPUT/);});
+  await t.test("session hold replay and concurrent CRM collision share one durable reservation",async()=>{token=(await issue()).token;const key=randomUUID();holdKey=key;const body={startsAt,recipientEmail:"synthetic@example.invalid",recipientName:"SYNTHETIC",idempotencyKey:key};const result=await dispatchBookingChannelAction(token,"hold",body,request(),options) as {booking:{id:string}};bookingId=result.booking.id;assert.equal((await dispatchBookingChannelAction(token,"hold",body,request(),options) as typeof result).booking.id,bookingId);await assert.rejects(createBookingHold(a.session,{provider:"google",kind:"phone",startsAt,title:"CRM collision",idempotencyKey:randomUUID()},options),/SLOT_UNAVAILABLE/);await assert.rejects(dispatchBookingChannelAction(token,"confirm",{bookingId,consent:false},request(),options),/BOOKING_CONSENT_REQUIRED/);await dispatchBookingChannelAction(token,"confirm",{bookingId,consent:true},request(),options);await dispatchBookingChannelAction(token,"confirm",{bookingId,consent:true},request(),options);assert.equal(creates,1);});
+  await t.test("another visitor cannot read or mutate a booking and own status resolves the hold idempotency",async()=>{const own=await dispatchBookingChannelAction(token,"status",{idempotencyKey:holdKey},request(),options) as {booking:{id:string}};assert.equal(own.booking.id,bookingId);const other=(await issue()).token;await assert.rejects(dispatchBookingChannelAction(other,"status",{bookingId},request(),options),/BOOKING_NOT_FOUND/);await assert.rejects(dispatchBookingChannelAction(token,"status",{bookingId,workspaceId:b.session.workspaceId},request(),options),/INVALID_CHANNEL_INPUT/);});
+  await t.test("trusted tokens require current exact upstream binding and current permitted type",async()=>{const trusted=await issueTrustedBookingChannelSession(request(),{publicId:publication.publicId,typeId,channel:"voice",language:"de",workspaceId:a.session.workspaceId,bindingId:"synthetic-bot"},options);await assert.rejects(dispatchBookingChannelAction(trusted.token,"status",{bookingId},request(),options),/TRUSTED_BOOKING_CHANNEL_REQUIRED/);await assert.rejects(dispatchBookingChannelAction(trusted.token,"status",{bookingId},request(),{...options,trustedBinding:{expectedChannel:"voice",expectedWorkspaceId:a.session.workspaceId,expectedPublicId:publication.publicId,expectedBindingId:"synthetic-bot",expectedTypeIds:[]}}),/TRUSTED_BOOKING_CHANNEL_REQUIRED/);});
+  await t.test("concurrent independent CRM and channel claims have exactly one winner",async()=>{
+    const visitor=(await issue()).token,at=new Date(Date.parse(startsAt)+2*3600000).toISOString();
+    const outcomes=await Promise.allSettled([dispatchBookingChannelAction(visitor,"hold",{startsAt:at,recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),options),createBookingHold(a.session,{provider:"google",kind:"phone",startsAt:at,title:"CRM simultaneous",idempotencyKey:randomUUID()},options)]);
+    assert.equal(outcomes.filter(x=>x.status==="fulfilled").length,1);
+    assert.equal((await db.admin.query("select count(*)::int n from booking_reservations where workspace_id=$1 and starts_at=$2",[a.session.workspaceId,at])).rows[0].n,1);
+  });
+  await t.test("atomic form relation sees the uncommitted canonical submission and rejects mismatched proof",async()=>{
+    const formId=randomUUID();await db.admin.query("insert into forms(id,workspace_id,owner_user_id,name,slug,status,fields) values($1,$2,$3,'SYNTHETIC booking form',$4,'aktiv',$5::jsonb)",[formId,a.session.workspaceId,a.session.userId,`synthetic-${formId}`,JSON.stringify([{id:"appointment",type:"booking",bookingPublicId:publication.publicId}])]);
+    const form=await startBookingChannelSession(request(),{publicId:publication.publicId,channel:"form",typeId,language:"de"},options),at=new Date(Date.parse(startsAt)+4*3600000).toISOString();
+    const held=await dispatchBookingChannelAction(form.token,"hold",{startsAt:at,recipientEmail:"synthetic@example.invalid",recipientName:"SYNTHETIC",idempotencyKey:randomUUID()},request(),options) as {booking:{id:string}};
+    await dispatchBookingChannelAction(form.token,"confirm",{bookingId:held.booking.id,consent:true},request(),options);
+    const submissionId=randomUUID();
+    await withPublicSubmissionTransaction({workspaceId:a.session.workspaceId,actorId:a.session.userId},async()=>{
+      await queryRows("insert into form_submissions(id,workspace_id,form_id) values($1,$2,$3) returning id",[submissionId,a.session.workspaceId,formId]);
+      await attachFormBookingRelation(form.token,held.booking.id,{publicId:publication.publicId,workspaceId:a.session.workspaceId,formId,submissionId});
+    },{pool:pool.pool});
+    const linked=(await db.admin.query("select metadata->'bookingChannelRelation' relation from meeting_bookings where id=$1",[held.booking.id])).rows[0].relation;
+    assert.equal(linked.source,"form_submission");assert.equal(linked.sourceId,submissionId);
+    const rejected=randomUUID();await assert.rejects(withPublicSubmissionTransaction({workspaceId:a.session.workspaceId,actorId:a.session.userId},async()=>{
+      await queryRows("insert into form_submissions(id,workspace_id,form_id) values($1,$2,$3) returning id",[rejected,a.session.workspaceId,formId]);
+      await attachFormBookingRelation(form.token,held.booking.id,{publicId:publication.publicId,workspaceId:a.session.workspaceId,formId,submissionId:rejected});
+    },{pool:pool.pool}));
+    assert.equal((await db.admin.query("select count(*)::int n from form_submissions where id=$1",[rejected])).rows[0].n,0);
+  });
+  await t.test("durable per-session hold budget limits unresolved attempts",async()=>{
+    const visitor=(await issue()).token;for(let i=0;i<2;i++)await dispatchBookingChannelAction(visitor,"hold",{startsAt:new Date(Date.parse(startsAt)+86400000+i*3600000).toISOString(),recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),options);
+    await assert.rejects(dispatchBookingChannelAction(visitor,"hold",{startsAt:new Date(Date.parse(startsAt)+86400000+2*3600000).toISOString(),recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),options),/BOOKING_HOLD_LIMIT/);
+  });
+  await t.test("unknown hold intent is inspected through status without blind replay",async()=>{
+    const visitor=(await issue()).token,key=randomUUID();let probes=0;
+    const uncertain={...options,connectionResolver:async()=>{probes++;throw new Error("SYNTHETIC_NETWORK_UNKNOWN");}};
+    const body={startsAt:new Date(Date.parse(startsAt)+2*86400000).toISOString(),recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:key};
+    const first=await dispatchBookingChannelAction(visitor,"hold",body,request(),uncertain) as {booking:null;unknown:boolean};assert.equal(first.unknown,true);
+    await dispatchBookingChannelAction(visitor,"hold",body,request(),uncertain);assert.equal(probes,1);
+    const inspected=await dispatchBookingChannelAction(visitor,"status",{idempotencyKey:key},request(),options) as {booking:null;pending:boolean};assert.equal(inspected.booking,null);assert.equal(inspected.pending,true);
+  });
+  await t.test("foreign origins, expired sessions, fresh inactive organizers and direct table reads fail closed",async()=>{
+    const hostile=new Request("https://crm.example.test/api/public/booking/status",{method:"POST",headers:{origin:"https://evil.example.test"}});
+    await assert.rejects(startBookingChannelSession(hostile,{publicId:publication.publicId,channel:"link",typeId,language:"de"},options),/BOOKING_ORIGIN_FORBIDDEN/);
+    await assert.rejects(dispatchBookingChannelAction(token,"status",{bookingId},hostile,options),/BOOKING_ORIGIN_FORBIDDEN/);
+    const expired=(await issue()).token;await db.admin.query("update booking_channel_sessions set expires_at=now()-interval '1 minute' where token_hash=encode(sha256($1::bytea),'hex')",[expired]);
+    await assert.rejects(dispatchBookingChannelAction(expired,"status",{bookingId},request(),options),/BOOKING_SESSION_INVALID/);
+    await db.admin.query("update workspace_users set status='suspended' where id=$1",[a.session.userId]);try{await assert.rejects(dispatchBookingChannelAction(token,"status",{bookingId},request(),options));}finally{await db.admin.query("update workspace_users set status='active' where id=$1",[a.session.userId]);}
+    for(const table of ["booking_publications","booking_publication_assignments","booking_publication_organizer_cutovers","booking_channel_sessions","booking_channel_operations"]){assert.equal((await db.pool.query(`select count(*)::int n from ${table}`)).rows[0].n,0);const row=(await db.admin.query("select relrowsecurity,relforcerowsecurity from pg_class where oid=$1::regclass",[table])).rows[0];assert.equal(row.relrowsecurity,true);assert.equal(row.relforcerowsecurity,true);}
+  });
+  await t.test("external chat revocation during provider probe prevents the authoritative shared-engine claim",async()=>{
+    const integrationId=randomUUID(),chatId=randomUUID(),grant={enabled:true,publicId:publication.publicId,channels:["chat"],typeIds:[typeId]};
+    await db.admin.query("insert into external_integrations(id,workspace_id,public_site_key,integration_type,status,mode,allowed_origins,capabilities,configuration) values($1,$2,$3,'website_chat','active','real_customer',$4,$5,$6::jsonb)",[integrationId,a.session.workspaceId,`nov_pk_${randomUUID()}`,["https://site.example.test"],["appointment.request"],JSON.stringify({booking:grant})]);
+    await db.admin.query("insert into external_chat_sessions(id,integration_id,workspace_id,session_token_hash,idempotency_hash,mode,language,status,synthetic) values($1,$2,$3,repeat('a',64),repeat('b',64),'real_customer','de','active',true)",[chatId,integrationId,a.session.workspaceId]);
+    const trusted=await issueTrustedBookingChannelSession(request(),{publicId:publication.publicId,typeId,channel:"chat",language:"de",workspaceId:a.session.workspaceId,bindingId:integrationId,relation:{source:"external_chat",sourceId:chatId}},options);
+    const liveOptions={...options,trustedBinding:{expectedChannel:"chat" as const,expectedWorkspaceId:a.session.workspaceId,expectedPublicId:publication.publicId,expectedBindingId:integrationId,expectedTypeIds:[typeId]}};
+    const accepted=await dispatchBookingChannelAction(trusted.token,"hold",{startsAt:new Date(Date.parse(startsAt)+6*3600000).toISOString(),recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),liveOptions) as {booking:{id:string}};
+    assert.ok(accepted.booking.id);
+    await assert.rejects(dispatchBookingChannelAction(trusted.token,"status",{bookingId:accepted.booking.id},request(),{...liveOptions,trustedBinding:{...liveOptions.trustedBinding,expectedTypeIds:[]}}),/TRUSTED_BOOKING_CHANNEL_REQUIRED/);
+    for(const changed of ["disabled","malformed","origin-removed"]){
+      await db.admin.query("update external_integrations set configuration=$2::jsonb,allowed_origins=$3 where id=$1",[integrationId,JSON.stringify({booking:grant}),["https://site.example.test"]]);
+      let release!:()=>void,entered!:()=>void;const waiting=new Promise<void>(resolve=>release=resolve),started=new Promise<void>(resolve=>entered=resolve);
+      const scoped={...options,trustedBinding:{expectedChannel:"chat" as const,expectedWorkspaceId:a.session.workspaceId,expectedPublicId:publication.publicId,expectedBindingId:integrationId,expectedTypeIds:[typeId]},providerFactory:async()=>({...provider,listBusy:async()=>{entered();await waiting;return [];}})};
+      const call=dispatchBookingChannelAction(trusted.token,"hold",{startsAt:new Date(Date.parse(startsAt)+5*3600000).toISOString(),recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),scoped);
+      await started;
+      if(changed==="disabled")await db.admin.query("update external_integrations set configuration=jsonb_set(configuration,'{booking,enabled}','false'::jsonb) where id=$1",[integrationId]);
+      else if(changed==="malformed")await db.admin.query("update external_integrations set configuration=$2::jsonb where id=$1",[integrationId,JSON.stringify({booking:{...grant,channels:{chat:false},typeIds:{[typeId]:false}}})]);
+      else await db.admin.query("update external_integrations set allowed_origins='{}' where id=$1",[integrationId]);
+      release();await assert.rejects(call,/BOOKING_SESSION_INVALID/);
+      assert.equal((await db.admin.query("select count(*)::int n from booking_reservations where workspace_id=$1 and starts_at=$2 and state<>'cancelled'",[a.session.workspaceId,new Date(Date.parse(startsAt)+5*3600000).toISOString()])).rows[0].n,0);
+    }
+  });
+  await t.test("office publication exposes only its approved location and keeps existing cancellation possible after private address changes",async()=>{
+    await saveBookingRules(b.session,{rules:{timeZone:"UTC",location:"SYNTHETIC approved office",minNoticeMinutes:0,preparationMinutes:0,followupMinutes:0,maxAdvanceDays:366,cancelNoticeMinutes:0,workingHours:[0,1,2,3,4,5,6].map(day=>({day,start:"09:00",end:"17:00"}))}},pool);
+    await saveBookingSetup(b.session,{scope:"company",kind:"*",section:"communication",value:{enabled:false}},pool);
+    const officeDraft=await getBookingPublication(b.session,pool),officeId=randomUUID(),office={...officeDraft.publication,enabled:true,channels:{...officeDraft.publication.channels,link:true},allowedOrigins:["https://site.example.test"],assignments:[{id:officeId,organizerId:b.session.userId,kind:"office" as const,provider:"google" as const,publicLocation:"SYNTHETIC approved office"}]};
+    await saveBookingPublication(b.session,{publication:office,expectedRevision:0},pool);
+    const access={...options,connectionResolver:async()=>({connectionId:b.connectionId,calendarId:`synthetic-calendar-${b.session.workspaceId}`,revision:1})},visitor=await startBookingChannelSession(request(),{publicId:office.publicId,channel:"link",typeId:officeId,language:"de"},access),at=new Date(Date.parse(startsAt)+8*86400000).toISOString();
+    const held=await dispatchBookingChannelAction(visitor.token,"hold",{startsAt:at,recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),access) as {booking:{id:string}};
+    await dispatchBookingChannelAction(visitor.token,"confirm",{bookingId:held.booking.id,consent:true},request(),access);
+    await saveBookingRules(b.session,{rules:{location:"PRIVATE employee home address"}},pool);
+    assert.equal(JSON.stringify(await getPublicBookingPublication(office.publicId,undefined,pool)).includes("PRIVATE"),false);
+    const cancelled=await dispatchBookingChannelAction(visitor.token,"cancel",{bookingId:held.booking.id,idempotencyKey:randomUUID(),consent:true},request(),access) as {booking:{state:string}};
+    assert.equal(cancelled.booking.state,"cancelled");assert.equal(JSON.stringify(cancelled).includes("PRIVATE"),false);
+    await assert.rejects(dispatchBookingChannelAction(visitor.token,"hold",{startsAt:new Date(Date.parse(at)+3600000).toISOString(),recipientEmail:"synthetic@example.invalid",recipientName:"",idempotencyKey:randomUUID()},request(),access),/PUBLIC_OFFICE_LOCATION_REQUIRED/);
+  });
+  await t.test("cross-worker IP session budget is durable and bounded",async()=>{
+    let accepted=0,rejected=false;for(let i=0;i<13;i++){try{await issue();accepted++;}catch(error){assert.match(String(error),/BOOKING_SESSION_LIMIT/);rejected=true;break;}}
+    assert.equal(rejected,true);assert.ok(accepted<13);assert.equal((await db.admin.query("select count(*)::int n from booking_channel_sessions where publication_id=(select id from booking_publications where public_id=$1)",[publication.publicId])).rows[0].n,12);
+  });
+  await t.test("atomic request limit holds under concurrent calls; publication revision revokes tokens",async()=>{await db.admin.query("update booking_channel_sessions set request_count=199 where token_hash=encode(sha256($1::bytea),'hex')",[token]);const calls=await Promise.allSettled([dispatchBookingChannelAction(token,"status",{bookingId},request(),options),dispatchBookingChannelAction(token,"status",{bookingId},request(),options)]);assert.equal(calls.filter(x=>x.status==="fulfilled").length,1);const current=await getBookingPublication(a.session,pool);await saveBookingPublication(a.session,{publication:{...publication,enabled:false,legacyMeetingPageIds:[],assignments:[]},expectedRevision:current.revision},pool);assert.equal((await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,legacyPageId,pool))?.enabled,false,"disabled or unmapped once-published page never revives old engine");assert.equal((await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,futurePageId,pool))?.enabled,false);assert.equal(await lookupActiveWorkspaceBookingPublication(a.session.workspaceId,otherOwnerPageId,pool),null);await assert.rejects(dispatchBookingChannelAction(token,"status",{bookingId},request(),options),/BOOKING_SESSION_INVALID/);});
+ }finally{for(const key of Object.keys(process.env))if(!(key in prior))delete process.env[key];Object.assign(process.env,prior);await db.stop();}
+});

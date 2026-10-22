@@ -4,6 +4,8 @@ import type { AppSession } from "@/lib/auth/session";
 import { assertCrmUuid, crmPayloadDigest, type TenantTransactionOptions, type TenantTransaction } from "@/lib/crm-command";
 import type { TenantScope } from "@/lib/db/tenant-client";
 import { getBookingCalendarAccess } from "./connections";
+import { assertBookingRuntime, bookingRuntimeMode } from "./runtime";
+import { assertBookingActivation } from "./activation";
 import { BookingProviderError, createBookingProvider } from "./providers";
 import { BookingError, type BookingKind, type BookingProvider, type BookingProviderFactory, type BookingProviderName, type BookingRecord, type BookingRules, type ProviderEvent, type ProviderWrite } from "./types";
 import { bookingWindow, enumerateSlots, isSlotAllowed, localParts, overlaps, validateBookingRules, validInstant } from "./rules";
@@ -17,6 +19,8 @@ export type BookingServiceOptions = TenantTransactionOptions & {
   providerFactory?: BookingProviderFactory; now?:()=>number;
   connectionResolver?:(scope:TenantScope,provider:BookingProviderName)=>Promise<{connectionId:string;calendarId:string;revision:number}>;
   drivingRouter?:DrivingRouter;
+  /** Server-created channel authorization, rechecked after forecasts and before writes. */
+  authorize?:(tx:TenantTransaction,fresh:AppSession)=>Promise<void>;
 };
 const clock=(options:BookingServiceOptions)=>options.now?.()??Date.now();
 const scope=(session:AppSession)=>({workspaceId:session.workspaceId,actorId:session.userId});
@@ -27,8 +31,10 @@ function validateChoice(provider:BookingProviderName,kind:BookingKind) {
 function sameSnapshot(current:BookingRecord,snapshot:BookingRecord) { return current.operationId===snapshot.operationId&&current.revision===snapshot.revision&&current.state===snapshot.state; }
 function title(value:string) { if(typeof value!=="string"||value.trim().length<1||value.length>200)throw new BookingError("INVALID_TITLE");return value.trim(); }
 function assertRuntime(options:BookingServiceOptions) {
-  if(process.env.VERCEL_ENV==="production"||process.env.NODE_ENV==="production"&&process.env.VERCEL_ENV!=="preview")throw new BookingError("BOOKING_PREVIEW_ONLY",403);
-  if(process.env.BOOKING_ENGINE_ENABLED!=="1" && !(process.env.NODE_ENV==="test"&&options.providerFactory))throw new BookingError("BOOKING_NOT_ENABLED",403);
+  const isolatedTest=process.env.NODE_ENV==="test"&&!process.env.VERCEL_ENV&&!!options.providerFactory&&process.env.BOOKING_PRODUCTION_ENABLED!=="1";
+  if(isolatedTest)return;
+  const mode=assertBookingRuntime();
+  if(mode==="production"&&(options.providerFactory||options.connectionResolver||options.drivingRouter))throw new BookingError("BOOKING_TEST_ADAPTER_FORBIDDEN",403);
 }
 async function connection(session:AppSession,provider:BookingProviderName,options:BookingServiceOptions) {
   assertRuntime(options);
@@ -36,14 +42,22 @@ async function connection(session:AppSession,provider:BookingProviderName,option
   return getBookingCalendarAccess(scope(session),provider);
 }
 async function adapter(session:AppSession,provider:BookingProviderName,options:BookingServiceOptions) {
-  assertRuntime(options);return (options.providerFactory??createBookingProvider)(scope(session),provider);
+  assertRuntime(options);
+  if(options.providerFactory)return options.providerFactory(scope(session),provider);
+  return createBookingProvider(scope(session),provider,{pool:options.pool,statementTimeoutMs:options.statementTimeoutMs,
+    ...(options.authorize?{beforeWrite:()=>withBookingTransaction(session,async(tx,fresh)=>{await bookingResourceLock(tx,fresh);await options.authorize!(tx,fresh);},options)}:{})});
 }
 async function verifyConnection(tx:TenantTransaction,session:AppSession,c:{connectionId:string;calendarId:string;revision:number}) {
-  const current=await tx.queryOne<{ok:boolean}>(`select status='connected' and revision=$4 and write_calendar_id=$5 as ok from booking_calendar_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid for share`,[c.connectionId,session.workspaceId,session.userId,c.revision,c.calendarId]);
+  const current=await tx.queryOne<{ok:boolean;provider:BookingProviderName;accountId:string|null}>(`select status='connected' and revision=$4 and write_calendar_id=$5 as ok,provider,account_id as "accountId" from booking_calendar_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid for share`,[c.connectionId,session.workspaceId,session.userId,c.revision,c.calendarId]);
   if(!current?.ok)throw new BookingProviderError("connection_changed","rejected");
+  if(process.env.VERCEL_ENV==="production"||bookingRuntimeMode()==="production")try {
+    await assertBookingActivation(scope(session),{provider:current.provider,accountId:current.accountId,connectionId:c.connectionId,calendarId:c.calendarId},{tx});
+  }catch(error){throw new BookingProviderError(error instanceof BookingError?error.code:"booking_activation_unavailable","rejected");}
 }
 async function verifyCurrentBinding(session:AppSession,row:BookingRecord,options:BookingServiceOptions) {
   return withBookingTransaction(session,async(tx,fresh)=>{
+    await bookingResourceLock(tx,fresh);
+    try{await options.authorize?.(tx,fresh);}catch(error){throw new BookingProviderError(error instanceof BookingError?error.code:"booking_authorization_unavailable","rejected");}
     await verifyConnection(tx,fresh,{connectionId:row.connectionId,calendarId:row.calendarId,revision:row.connectionRevision});
     const rules=row.operationTarget?.rules??row.rules;
     if(row.operationKind!=="cancel"&&rules.propertyId) {
@@ -152,7 +166,7 @@ export async function createBookingHold(session:AppSession,input:{provider:Booki
   if(!onsiteLocationReady(input.kind,rules))throw new BookingError("ADDRESS_CONFIRMATION_REQUIRED",409);
   const evaluation=await evaluateTravel(session,input.kind,input.startsAt,rules,provider,options),external=evaluation.external;
   return withBookingTransaction(session,async(tx,fresh)=>{
-    await bookingResourceLock(tx,fresh);await expireBookingHolds(tx,fresh,clock(options));
+    await bookingResourceLock(tx,fresh);await options.authorize?.(tx,fresh);await expireBookingHolds(tx,fresh,clock(options));
     const replay=await tx.queryOne<BookingRecord>(`select ${bookingColumns} from booking_reservations where workspace_id=$1::uuid and organizer_id=$2::uuid and idempotency_key=$3::uuid`,[fresh.workspaceId,fresh.userId,input.idempotencyKey]);
     if(replay){if(replay.requestHash!==requestHash)throw new BookingError("IDEMPOTENCY_CONFLICT",409);return replay;}
     await verifyConnection(tx,fresh,c);
@@ -202,7 +216,7 @@ export async function confirmBooking(session:AppSession,id:string,options:Bookin
   const c=await connection(session,pre.provider,options);matchingConnection(pre,c);const provider=await adapter(session,pre.provider,options);
   const travel=hasTravel(pre.rules)?await evaluateTravel(session,pre.kind,pre.startsAt,pre.rules,provider,options,pre):null;
   const claimed=await withBookingTransaction(session,async(tx,fresh)=>{
-    await bookingResourceLock(tx,fresh);await expireBookingHolds(tx,fresh,clock(options));const row=await readBooking(tx,fresh,id);
+    await bookingResourceLock(tx,fresh);await options.authorize?.(tx,fresh);await expireBookingHolds(tx,fresh,clock(options));const row=await readBooking(tx,fresh,id);
     if(row.state!=="held")return {row,claimed:false};
     await verifyConnection(tx,fresh,c);
     const current=await effectiveRules(tx,fresh,row.kind,{location:row.rules.location,locationConfirmed:row.rules.locationConfirmed??false,propertyId:row.rules.propertyId??null});
@@ -270,7 +284,7 @@ async function mutate(session:AppSession,id:string,input:{startsAt?:string;idemp
   const evaluation=target?await evaluateTravel(session,pre.kind,target.startsAt,snapshot.rules,provider,options,pre):null;
   const external=evaluation?.external??[];
   const claimed=await withBookingTransaction(session,async(tx,fresh)=>{
-    await bookingResourceLock(tx,fresh);await expireBookingHolds(tx,fresh,clock(options));const row=await readBooking(tx,fresh,id);
+    await bookingResourceLock(tx,fresh);await options.authorize?.(tx,fresh);await expireBookingHolds(tx,fresh,clock(options));const row=await readBooking(tx,fresh,id);
     if(input.expectedMessageVersion!==undefined&&row.messageVersion!==input.expectedMessageVersion)throw new BookingError("BOOKING_ACTION_STALE",409);
     const replay=await tx.queryOne<{requestHash:string}>(`select request_hash as "requestHash" from booking_operations where workspace_id=$1::uuid and organizer_id=$2::uuid and idempotency_key=$3::uuid`,[fresh.workspaceId,fresh.userId,input.idempotencyKey]);
     if(replay){if(replay.requestHash!==requestHash)throw new BookingError("IDEMPOTENCY_CONFLICT",409);return {row,claimed:false};}

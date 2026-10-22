@@ -35,6 +35,7 @@ import {
 } from "@/lib/security/public-submission-abuse";
 import { resolveSafeFormRedirect } from "@/lib/security/redirects";
 import { websiteSalesFormId } from "@/lib/website-sales-ingestion";
+import { prepareFormBookingFields, attachFormBookingFields } from "@/lib/booking/form-field";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -223,12 +224,14 @@ export async function POST(request: Request) {
         }
 
         stripPublicSubmissionControlFields(formData);
+        const bookingProofs = prepareFormBookingFields(lookup.form, formData);
         const persistence = await persistWebsiteFormSubmission({
           actorUserId: submissionScope.actorId,
           formData,
           formKey: formSlug,
           requestUrl: request.url,
         });
+        if (persistence.persisted) await attachFormBookingFields(bookingProofs, { workspaceId: submissionScope.workspaceId, formId: lookup.id, ids: persistence.ids });
         return complete(createPublicFormPersistenceSnapshot({
           formSlug, persistence, request, returnTo, source,
         }));
@@ -349,6 +352,10 @@ function buildPublicFormFieldRules(form: WebsiteForm) {
     name: string;
   }>();
   for (const field of form.fields) {
+    if (field.type === "booking") {
+      rules.set(`booking_${field.id}_id`, { maxLength: 36, maxEntries: 1, name: `booking_${field.id}_id` });
+      rules.set(`booking_${field.id}_token`, { maxLength: 43, maxEntries: 1, name: `booking_${field.id}_token` });
+    }
     const name = field.crmField || field.id;
     rules.set(name, {
       allowFile: field.type === "file",

@@ -3,6 +3,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { withTenantTransaction, type TenantScope, type TenantTransaction } from "@/lib/db/tenant-client";
 import { createSignedOAuthState, parseSignedOAuthState, hashOAuthState, encryptOAuthStateSecret,
   decryptOAuthStateSecret, type CalendarOAuthProvider } from "@/lib/integrations/calendar-oauth-state";
+import { assertBookingOAuthConfiguration, bookingRuntimeMode } from "./runtime";
+import { assertBookingActivation } from "./activation";
 
 export type BookingProvider = CalendarOAuthProvider;
 export type BookingCalendar = { id: string; name: string; canWrite: boolean; canRead: boolean;
@@ -295,11 +297,20 @@ export async function selectBookingCalendars(scope: TenantScope, provider: Booki
   }).catch(calendarWriterConflict);
 }
 export async function getBookingCalendarAccess(scope: TenantScope, provider: BookingProvider) {
+  // OAuth connection/discovery remains possible before activation. Booking access
+  // must be approved before a token refresh or any provider calendar request.
+  if (process.env.VERCEL_ENV === "production" || bookingRuntimeMode() === "production") {
+    assertBookingOAuthConfiguration(provider);
+    const current = await getBookingConnection(scope,provider);
+    if (!current?.writeCalendarId) throw new BookingConnectionError("calendar_write_unavailable");
+    await assertBookingActivation(scope,{provider,connectionId:current.id,accountId:current.accountId,calendarId:current.writeCalendarId});
+  }
   const {connection,accessToken} = await refreshBookingCalendars(scope,provider);
   const calendar = connection.calendars.find(c => c.id === connection.writeCalendarId);
   if (!calendar?.canWrite || calendar.protectedReadOnly || isProtectedBookingCalendar(calendar.name)) throw new BookingConnectionError("calendar_write_unavailable");
   if (connection.conflictCalendarIds.some(id => !connection.calendars.some(c => c.id === id && c.canRead)))
     throw new BookingConnectionError("calendar_conflict_unavailable");
+  if (process.env.VERCEL_ENV === "production") await assertBookingActivation(scope,{provider,connectionId:connection.id,accountId:connection.accountId,calendarId:calendar.id});
   return {connectionId:connection.id,userId:connection.userId,provider,accessToken,calendarId:calendar.id,
     conflictCalendarIds:connection.conflictCalendarIds,calendar,calendars:connection.calendars,
     accountId:connection.accountId,accountLabel:connection.accountLabel,revision:connection.revision};
@@ -316,6 +327,7 @@ export async function disconnectBookingConnection(scope: TenantScope, provider: 
   });
 }
 export async function createBookingOAuthState(scope: TenantScope, provider: BookingProvider) {
+  if (process.env.VERCEL_ENV === "production") assertBookingOAuthConfiguration(provider);
   const signed = createSignedOAuthState({provider,returnTo:"/booking",userId:scope.actorId,workspaceId:scope.workspaceId});
   await withTenantTransaction(scope,tx => tx.execute(`insert into booking_oauth_authorization_states
     (state_hash,nonce_hash,provider,workspace_id,user_id,return_to,code_verifier_encrypted,expires_at)

@@ -1,5 +1,6 @@
 import { requirePermissionAndProductCapability } from "@/lib/auth/session";
 import { BookingConnectionError, listBookingConnections } from "@/lib/booking/connections";
+import { bookingOAuthReadiness, bookingRuntimeMode } from "@/lib/booking/runtime";
 
 export async function GET(request: Request) {
   const auth = await requirePermissionAndProductCapability(request,"crm:write","calendar:manage");
@@ -8,7 +9,8 @@ export async function GET(request: Request) {
   if (requestedWorkspace && requestedWorkspace !== auth.session.workspaceId)
     return Response.json({error:"calendar_scope_forbidden"},{status:403,headers:{"cache-control":"private, no-store"}});
   try {
-    return Response.json({connections:await listBookingConnections({workspaceId:auth.session.workspaceId,actorId:auth.session.userId})},
+    return Response.json({connections:await listBookingConnections({workspaceId:auth.session.workspaceId,actorId:auth.session.userId}),
+      runtime:{mode:bookingRuntimeMode(),providers:{microsoft:bookingOAuthReadiness("microsoft"),google:bookingOAuthReadiness("google")}}},
       {headers:{"cache-control":"private, no-store"}});
   } catch (error) {
     return Response.json({error:error instanceof BookingConnectionError ? error.code : "calendar_unavailable"},

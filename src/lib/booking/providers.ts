@@ -1,7 +1,9 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { TenantScope } from "@/lib/db/tenant-client";
+import type { TenantScope, TenantTransactionOptions } from "@/lib/db/tenant-client";
 import { getBookingCalendarAccess, invalidateBookingConnection } from "@/lib/booking/connections";
+import { assertBookingActivation } from "./activation";
+import { bookingRuntimeMode } from "./runtime";
 import { BookingError, type BookingProvider, type BookingProviderName, type BusyInterval, type ProviderEvent, type ProviderWrite } from "@/lib/booking/types";
 
 const graphRoot = "https://graph.microsoft.com/v1.0";
@@ -10,6 +12,8 @@ const ownershipProperty = "String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name No
 const operationProperty = "String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name NovalureOperation";
 type JsonObject = Record<string, unknown>;
 type CalendarAccess = Awaited<ReturnType<typeof getBookingCalendarAccess>>;
+/** Only application code constructs these options; public request bodies never supply callbacks. */
+export type BookingProviderOptions = TenantTransactionOptions & { beforeWrite?:()=>Promise<void> };
 
 /** A write may have reached the provider. Call lookup; never repeat a create blindly. */
 export class BookingProviderError extends BookingError {
@@ -70,10 +74,17 @@ function googleTime(value: unknown, calendarTimeZone: string): string {
   throw new BookingProviderError("provider_invalid_time", "rejected");
 }
 
-async function request(scope: TenantScope, access: CalendarAccess, url: URL, method = "GET", body?: unknown, etag?: string | null) {
+async function request(scope: TenantScope, access: CalendarAccess, url: URL, method = "GET", body?: unknown, etag?: string | null, options:BookingProviderOptions={}) {
   const expected = access.provider === "microsoft" ? new URL(graphRoot) : new URL(googleRoot);
   if (url.origin !== expected.origin || !url.pathname.startsWith(`${expected.pathname}/`)) throw new BookingProviderError("provider_invalid_page", "rejected");
   const write = method !== "GET";
+  // Ownership/etag GETs may have awaited the provider since the initial policy
+  // check. Re-authorize at the actual write boundary, outside the unknown-outcome
+  // catch: a denial here proves that no mutation request was sent.
+  if(write){
+    try{await options.beforeWrite?.();}catch(error){throw new BookingProviderError(error instanceof BookingError?error.code:"booking_authorization_unavailable","rejected");}
+    if(process.env.VERCEL_ENV==="production")await assertProductionPolicy(scope,access,options);
+  }
   let response: Response;
   try {
     response = await fetch(url, { method, headers: {
@@ -99,7 +110,14 @@ function assertWrite(access: CalendarAccess, kind?: ProviderWrite["kind"]) {
   if (kind === "teams" && (access.provider !== "microsoft" || !access.calendar.teamsSupported)) throw new BookingProviderError("teams_not_supported", "rejected");
   if (kind === "meet" && (access.provider !== "google" || !access.calendar.meetSupported)) throw new BookingProviderError("meet_not_supported", "rejected");
 }
-function assertTestWritePolicy(scope: TenantScope, access: CalendarAccess) {
+async function assertProductionPolicy(scope: TenantScope, access: CalendarAccess, options:TenantTransactionOptions={}) {
+  try { await assertBookingActivation(scope,access,options); }
+  catch (error) { throw new BookingProviderError(error instanceof BookingError ? error.code : "booking_activation_unavailable", "rejected"); }
+}
+async function assertTestWritePolicy(scope: TenantScope, access: CalendarAccess, options:TenantTransactionOptions={}) {
+  if (process.env.VERCEL_ENV === "production" || bookingRuntimeMode() === "production") {
+    await assertProductionPolicy(scope,access,options); return;
+  }
   const preview = process.env.VERCEL_ENV === "preview";
   const localTest = !process.env.VERCEL_ENV && ["test", "development"].includes(process.env.NODE_ENV || "");
   if (process.env.BOOKING_ENGINE_ENABLED !== "1" || (!preview && !localTest)) throw new BookingProviderError("booking_preview_only", "rejected");
@@ -152,15 +170,15 @@ function graphEventUrl(access: CalendarAccess, eventId?: string) {
 function googleEventUrl(access: CalendarAccess, eventId?: string) {
   return new URL(`${googleRoot}/calendars/${encodeURIComponent(access.calendarId)}/events${eventId ? `/${encodeURIComponent(eventId)}` : ""}`);
 }
-async function graphOwnedEvent(access: CalendarAccess, scope: TenantScope, bookingId: string, eventId: string) {
+async function graphOwnedEvent(access: CalendarAccess, scope: TenantScope, bookingId: string, eventId: string, options:BookingProviderOptions={}) {
   const url = graphEventUrl(access, eventId);
   url.searchParams.set("$expand", `singleValueExtendedProperties($filter=id eq '${ownershipProperty}')`);
-  const { data } = await request(scope, access, url);
+  const { data } = await request(scope, access, url,"GET",undefined,undefined,options);
   if (data) assertOwned(scope, bookingId, "microsoft", data);
   return data;
 }
-async function googleOwnedEvent(access: CalendarAccess, scope: TenantScope, bookingId: string, eventId: string) {
-  const { data } = await request(scope, access, googleEventUrl(access, eventId));
+async function googleOwnedEvent(access: CalendarAccess, scope: TenantScope, bookingId: string, eventId: string, options:BookingProviderOptions={}) {
+  const { data } = await request(scope, access, googleEventUrl(access, eventId),"GET",undefined,undefined,options);
   if (data && data.status !== "cancelled") assertOwned(scope, bookingId, "google", data);
   // Deleted Google tombstones can omit private properties: the caller must retain its own event mapping.
   return data;
@@ -190,19 +208,21 @@ function googleWriteBody(scope: TenantScope, input: ProviderWrite, create: boole
 }
 
 /** Each factory invocation obtains only the current actor's explicitly selected connection. */
-export async function createBookingProvider(scope: TenantScope, provider: BookingProviderName): Promise<BookingProvider> {
+export async function createBookingProvider(scope: TenantScope, provider: BookingProviderName, options:BookingProviderOptions={}): Promise<BookingProvider> {
   const access = await getBookingCalendarAccess(scope, provider);
-  return createBookingProviderWithAccess(scope, access);
+  return createBookingProviderWithAccess(scope, access, options);
 }
 
 /** Also used by isolated transport tests; the application factory always loads persisted scope. */
-export function createBookingProviderWithAccess(scope: TenantScope, access: CalendarAccess): BookingProvider {
+export function createBookingProviderWithAccess(scope: TenantScope, access: CalendarAccess, options:BookingProviderOptions={}): BookingProvider {
   if (access.userId !== scope.actorId) throw new BookingProviderError("connection_actor_mismatch", "rejected");
   const provider = access.provider;
   const eventUrl = (eventId?: string) => provider === "microsoft" ? graphEventUrl(access, eventId) : googleEventUrl(access, eventId);
-  const ownedEvent = (bookingId: string, eventId: string) => provider === "microsoft" ? graphOwnedEvent(access, scope, bookingId, eventId) : googleOwnedEvent(access, scope, bookingId, eventId);
+  const ownedEvent = (bookingId: string, eventId: string) => provider === "microsoft" ? graphOwnedEvent(access, scope, bookingId, eventId,options) : googleOwnedEvent(access, scope, bookingId, eventId,options);
+  const send=(url:URL,method="GET",body?:unknown,etag?:string|null)=>request(scope,access,url,method,body,etag,options);
   return {
     async listBusy(input) {
+      if (process.env.VERCEL_ENV === "production") await assertProductionPolicy(scope,access,options);
       const intervals: BusyInterval[] = [];
       for (const calendarId of new Set([access.calendarId, ...access.conflictCalendarIds])) {
         const calendar = access.calendars.find(entry => entry.id === calendarId);
@@ -210,7 +230,7 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
         if (provider === "google" && calendarId !== access.calendarId) {
           // freeBusyReader grants do not permit reading event details. The provider expands
           // recurring events, exceptions and whole-day entries for this exact calendar.
-          const { data } = await request(scope, access, new URL(`${googleRoot}/freeBusy`), "POST", {
+          const { data } = await send(new URL(`${googleRoot}/freeBusy`), "POST", {
             timeMin: instant(input.startsAt), timeMax: instant(input.endsAt), items: [{ id: calendarId }],
           });
           const busyCalendar = object(object(data?.calendars)[calendarId]);
@@ -231,7 +251,7 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
         let pages = 0;
         while (page) {
           if (++pages > 50) throw new BookingProviderError("provider_busy_page_limit", "rejected");
-          const result = await request(scope, access, page);
+          const result = await send(page);
           if (!result.data) throw new BookingProviderError("conflict_calendar_unavailable", "rejected");
           const events = provider === "microsoft" ? result.data.value : result.data.items;
           if (!Array.isArray(events)) throw new BookingProviderError("provider_invalid_busy_response", "rejected");
@@ -259,14 +279,15 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       return intervals;
     },
     async create(input) {
-      assertTestWritePolicy(scope, access); assertWrite(access, input.kind); assertTimes(input);
+      await assertTestWritePolicy(scope, access,options); assertWrite(access, input.kind); assertTimes(input);
       const url = eventUrl();
       if (provider === "google") { url.searchParams.set("sendUpdates", "none"); if (input.kind === "meet") url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await request(scope, access, url, "POST", provider === "microsoft" ? graphWriteBody(scope, input, true) : googleWriteBody(scope, input, true));
+      const { data } = await send(url, "POST", provider === "microsoft" ? graphWriteBody(scope, input, true) : googleWriteBody(scope, input, true));
       if (!data) throw new BookingProviderError("provider_create_unknown", "unknown");
       return writtenEventResult(provider, data, input);
     },
     async lookup(input) {
+      if (process.env.VERCEL_ENV === "production") await assertProductionPolicy(scope,access,options);
       if (input.eventId) {
         const data = await ownedEvent(input.bookingId, input.eventId);
         // Only a previously persisted owned-event mapping may resolve a 404/410 as
@@ -282,7 +303,7 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       url.searchParams.set("$filter", `singleValueExtendedProperties/Any(ep: ep/id eq '${operationProperty}' and ep/value eq '${escaped}')`);
       url.searchParams.set("$expand", `singleValueExtendedProperties($filter=id eq '${ownershipProperty}')`);
       url.searchParams.set("$top", "2");
-      const { data } = await request(scope, access, url);
+      const { data } = await send(url);
       if (!data) throw new BookingProviderError("calendar_unavailable", "rejected");
       if (!Array.isArray(data.value)) throw new BookingProviderError("provider_invalid_response", "rejected");
       const rows = data.value;
@@ -292,24 +313,24 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       return eventResult(provider, event);
     },
     async update(input) {
-      assertTestWritePolicy(scope, access); assertWrite(access, input.kind); assertTimes(input);
+      await assertTestWritePolicy(scope, access,options); assertWrite(access, input.kind); assertTimes(input);
       const existing = await ownedEvent(input.bookingId, input.eventId);
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) throw new BookingProviderError("provider_event_missing", "rejected");
       const current = eventResult(provider, existing);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
       const url = eventUrl(input.eventId); if (provider === "google") { url.searchParams.set("sendUpdates", "none"); url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await request(scope, access, url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false) : googleWriteBody(scope, input, false), current.etag);
+      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false) : googleWriteBody(scope, input, false), current.etag);
       if (!data) throw new BookingProviderError("provider_update_unknown", "unknown");
       return writtenEventResult(provider, data, input);
     },
     async delete(input) {
-      assertTestWritePolicy(scope, access); assertWrite(access);
+      await assertTestWritePolicy(scope, access,options); assertWrite(access);
       const existing = await ownedEvent(input.bookingId, input.eventId);
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) return;
       const current = eventResult(provider, existing);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
       const url = eventUrl(input.eventId); if (provider === "google") url.searchParams.set("sendUpdates", "none");
-      await request(scope, access, url, "DELETE", undefined, current.etag);
+      await send(url, "DELETE", undefined, current.etag);
     },
   };
 }

@@ -10,6 +10,7 @@ import {
   toAppLanguage,
 } from "@/lib/public-language";
 import { crmEntryRequestHeaderName, getTrustedCrmCountry, guestCrmPreferenceCookieName, isLanguagePreference, resolveCrmLanguage } from "@/lib/crm-language";
+import { bookingFrameAncestors } from "@/lib/booking/public-frame-policy";
 
 function getRequestCountry(headers: Headers) {
   return headers.get("x-vercel-ip-country") ?? headers.get("cf-ipcountry") ?? headers.get("x-country-code");
@@ -25,6 +26,7 @@ export function proxy(request: NextRequest) {
     requestedLanguage,
   });
   const isCrmLogin = request.nextUrl.pathname === "/login" || request.nextUrl.pathname.startsWith("/login/");
+  const appointment = /^\/appointments\/([a-zA-Z0-9_-]{10,100})\/?$/.exec(request.nextUrl.pathname);
   const requestedCrmPreference = request.nextUrl.searchParams.get("languagePreference");
   const isPrefetch = request.headers.has("next-router-prefetch") ||
     /\bprefetch\b/i.test(`${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`);
@@ -55,7 +57,7 @@ export function proxy(request: NextRequest) {
       secure: request.nextUrl.protocol === "https:",
     });
   }
-  if (!isPrefetch && !isCrmLogin && isPublicLanguageCode(requestedLanguage)) {
+  if (!isPrefetch && !isCrmLogin && !appointment && isPublicLanguageCode(requestedLanguage)) {
     response.cookies.set(languageCookieName, requestedLanguage, {
       maxAge: 31536000,
       path: "/",
@@ -63,6 +65,17 @@ export function proxy(request: NextRequest) {
     });
   }
 
+  if (appointment) return applyAppointmentFramePolicy(response, appointment[1]);
+  return response;
+}
+
+async function applyAppointmentFramePolicy(response: NextResponse, publicId: string) {
+  const publication = await import("@/lib/booking/publication").then(({ getPublicBookingPublication }) => getPublicBookingPublication(publicId)).catch(() => null);
+  const policy = bookingFrameAncestors(publication?.allowedOrigins ?? [], process.env.NODE_ENV !== "production");
+  response.headers.set("Content-Security-Policy", `object-src 'none'; base-uri 'self'; form-action 'self'; ${policy}`);
+  if (!publication?.allowedOrigins.length) response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  else response.headers.delete("X-Frame-Options");
+  response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
 

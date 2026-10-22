@@ -95,12 +95,12 @@ test("Unsupported Teams/Meet capability and protected calendar fail before trans
   });
 });
 
-test("Final write gate denies Production, missing enable and unapproved exact account/calendar", async () => {
+test("Final write gate denies unactivated Production, missing enable and unapproved exact account/calendar", async () => {
   let calls = 0;
   await transport(() => { calls++; return response({}); }, async () => {
     const provider = createBookingProviderWithAccess(scope, access("google"));
     process.env.VERCEL_ENV = "production";
-    await assert.rejects(provider.create(write), /booking_preview_only/);
+    await assert.rejects(provider.create(write), /BOOKING_NOT_ENABLED/);
     process.env.VERCEL_ENV = "preview"; delete process.env.BOOKING_ENGINE_ENABLED;
     await assert.rejects(provider.create(write), /booking_preview_only/);
     process.env.BOOKING_ENGINE_ENABLED = "1"; process.env.BOOKING_TEST_BINDINGS_JSON = JSON.stringify([{ workspaceId: scope.workspaceId, userId: scope.actorId, provider: "google", accountId: "other-account", calendarId: "test-calendar" }]);

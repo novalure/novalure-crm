@@ -1,9 +1,9 @@
 import { recordBookingMailProviderEvent, verifyBookingMailWebhook } from "@/lib/booking/message-webhooks";
-import { isBookingMessageQaRuntime } from "@/lib/booking/messages";
+import { isBookingMessageRuntime } from "@/lib/booking/messages";
 import { BookingError } from "@/lib/booking/types";
 export async function POST(request: Request) {
   try {
-    if (!isBookingMessageQaRuntime()) throw new BookingError("BOOKING_PREVIEW_ONLY", 403);
+    if (!isBookingMessageRuntime()) throw new BookingError("BOOKING_MAIL_NOT_ENABLED", 403);
     const reader = request.body?.getReader();
     if (!reader) throw new BookingError("INVALID_MAIL_EVENT");
     const chunks: Uint8Array[] = []; let length = 0;

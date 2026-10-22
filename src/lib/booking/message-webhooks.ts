@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { withTenantTransaction, type TenantTransactionOptions } from "@/lib/db/tenant-client";
-import { bookingMailBindings } from "./messages";
+import { bookingMessageScopes } from "./message-runtime";
 import { BookingError } from "./types";
 
 export type BookingEmailProviderEvent = { eventId: string; messageId: string; jobId?: string; type: "email.sent" | "email.delivered" | "email.bounced" | "email.complained" | "email.failed" | "email.suppressed"; occurredAt: string };
@@ -39,14 +39,16 @@ export function nextBookingMailDeliveryStatus(current: string, event: BookingEma
   return "failed";
 }
 export async function recordBookingMailProviderEvent(event: BookingEmailProviderEvent, options: TenantTransactionOptions = {}) {
-  const scopes = [...new Map(bookingMailBindings().map(b => [`${b.workspaceId}:${b.userId}`, { workspaceId: b.workspaceId, actorId: b.userId }])).values()];
+  const scopes = await bookingMessageScopes(options);
   for (const scope of scopes) {
     const matched = await withTenantTransaction(scope, async tx => {
       await tx.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [`booking:${scope.workspaceId}:${scope.actorId}`]);
       const row = await tx.queryOne<{ id: string; bookingId: string; bookingVersion: number; status: string; eventIds: string[]; lastEventAt: string | null }>(
         `select id,booking_id as "bookingId",booking_version as "bookingVersion",status,event_ids as "eventIds",last_event_at as "lastEventAt" from booking_message_jobs
-          where (provider_message_id=$1 or ($2::uuid is not null and id=$2::uuid and provider_message_id is null and status in ('sending','uncertain'))) for update`, [event.messageId, event.jobId ?? null]);
+          where (provider_message_id=$1 or ($2::uuid is not null and id=$2::uuid and provider_message_id is null and status in ('sending','uncertain') and first_attempt_at<=$3::timestamptz+interval '5 seconds'))
+          order by (provider_message_id=$1) desc nulls last limit 1 for update`, [event.messageId, event.jobId ?? null, event.occurredAt]);
       if (!row) return false;
+      if (event.jobId && event.jobId !== row.id) return false;
       if (row.eventIds.includes(event.eventId) || row.lastEventAt && Date.parse(row.lastEventAt) > Date.parse(event.occurredAt) || row.eventIds.length >= 64) return true;
       const status = nextBookingMailDeliveryStatus(row.status, event.type);
       await tx.execute(`update booking_message_jobs set status=$2,provider_message_id=coalesce(provider_message_id,$6),last_event_at=$3::timestamptz,event_ids=array_append(event_ids,$4),last_error=case when $2='failed' then $5 else null end,updated_at=now() where id=$1::uuid`, [row.id, status, event.occurredAt, event.eventId, event.type, event.messageId]);

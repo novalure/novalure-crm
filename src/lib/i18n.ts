@@ -9639,6 +9639,7 @@ export const formCommandCenterCopy = {
       ticket: "Ticket",
     },
     fieldTypes: {
+      booking: "Appointment booking",
       checkbox: "Checkbox",
       company: "Company",
       consent: "Privacy consent",
@@ -9930,6 +9931,7 @@ export const formCommandCenterCopy = {
       ticket: "Ticket",
     },
     fieldTypes: {
+      booking: "Terminbuchung",
       checkbox: "Checkbox",
       company: "Firma",
       consent: "Datenschutz",

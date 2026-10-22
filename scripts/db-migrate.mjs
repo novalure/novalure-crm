@@ -16,7 +16,6 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import pg from "pg";
 import {
   assertConnectedDatabaseTarget,
   assertDatabaseTarget,
@@ -24,8 +23,7 @@ import {
 import { applyNeon061Compatibility } from "./lib/neon-061-compat.mjs";
 import { applyMedia062Compatibility } from "./lib/media-062-compat.mjs";
 import { applyCrm080Compatibility } from "./lib/crm-080-compat.mjs";
-
-const { Pool } = pg;
+import { createMigrationPool, resolveMigrationTransport } from "./lib/migration-pool.mjs";
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
@@ -56,6 +54,9 @@ const manualCutoverVersions = new Set([
   "108_universal_booking",
   "109_booking_setup_communications",
   "110_account_ui_language_preference",
+  "111_booking_public_channels",
+  "112_booking_production_activation",
+  "113_meeting_reminder_admission",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -77,11 +78,57 @@ const migrationDependencies = new Map([
   ["108_universal_booking", "106_crm_operational_readers"],
   ["109_booking_setup_communications", "108_universal_booking"],
   ["110_account_ui_language_preference", "109_booking_setup_communications"],
+  ["111_booking_public_channels", "110_account_ui_language_preference"],
+  ["112_booking_production_activation", "111_booking_public_channels"],
+  ["113_meeting_reminder_admission", "112_booking_production_activation"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
 const validMedia062Profiles = new Set(["production", "rehearsal"]);
 const validCrm080Profiles = new Set(["production", "rehearsal"]);
+const bookingCutoverVersions = new Set([
+  "108_universal_booking", "109_booking_setup_communications", "110_account_ui_language_preference",
+  "111_booking_public_channels", "112_booking_production_activation", "113_meeting_reminder_admission",
+]);
+
+export function bookingProductionCutoverProfile({ enabled = false, command, only, allowManualCutover, target, env = process.env }) {
+  const version = String(only || "").replace(/\.sql$/, "");
+  if (!enabled) {
+    if (target === "prod" && bookingCutoverVersions.has(version) && version !== "108_universal_booking") {
+      throw new Error("Package 5 Auftrag 2 migrations are QA-only without --booking-production-cutover; booking production migrations require the explicit cutover mode.");
+    }
+    return null;
+  }
+  if (!["dry-run", "up"].includes(command) || !allowManualCutover || !bookingCutoverVersions.has(version)) {
+    throw new Error("--booking-production-cutover requires dry-run or up, one explicit --only in 108-113, and --allow-manual-cutover.");
+  }
+  if (target !== "prod" || env.MIGRATION_TARGET !== "prod" || env.BOOKING_PRODUCTION_ENABLED !== "1") {
+    throw new Error("--booking-production-cutover requires MIGRATION_TARGET=prod and BOOKING_PRODUCTION_ENABLED=1.");
+  }
+  const activationId = env.BOOKING_PRODUCTION_ACTIVATION_ID?.trim() || "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activationId)) {
+    throw new Error("--booking-production-cutover requires a valid BOOKING_PRODUCTION_ACTIVATION_ID.");
+  }
+  return Object.freeze({ mode: "booking-production-cutover-v1", activationId });
+}
+
+export function migrationExecutionProfile({ bookingProduction = null, compatibility = null, hostFingerprint, runtimeRole, transport = "pg" }) {
+  if (bookingProduction) return { ...bookingProduction, hostFingerprint, runtimeRole, transport };
+  return transport === "pg" ? compatibility : { compatibility, transport };
+}
+
+export async function assertBookingMigrationRuntimeRole(client, runtimeRole) {
+  if (!runtimeRole || !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(runtimeRole)) {
+    throw new Error("Booking production cutover requires the declared normal runtime role.");
+  }
+  const result = await client.query({ query_timeout: guardQueryTimeoutMs,
+    text: "select rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls from pg_roles where rolname=$1",
+    values: [runtimeRole] });
+  const role = result.rows[0];
+  if (!role || role.rolcanlogin !== true || ["rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"].some(key => role[key] !== false)) {
+    throw new Error("Booking production cutover requires an existing normal runtime role without elevated privileges.");
+  }
+}
 
 export function compatibilityProfileMatchesTarget(profile, target) {
   if (!profile) return true;
@@ -127,12 +174,13 @@ function parseArgs(argv) {
   const media062ProfileArg = args.find((arg) => arg.startsWith("--media-062-profile="));
   const crm080ProfileArg = args.find((arg) => arg.startsWith("--crm-080-profile="));
   const allowManualCutover = args.includes("--allow-manual-cutover");
+  const bookingProductionCutover = args.includes("--booking-production-cutover");
 
   if (!command || !validCommands.has(command)) {
     fail(`Command required: ${[...validCommands].join("|")}`);
   }
 
-  if (allowManualCutover && !onlyArg) {
+  if (allowManualCutover && args.filter(arg => arg.startsWith("--only=")).length !== 1) {
     fail("--allow-manual-cutover requires one explicit --only=<version>");
   }
   if (command === "up" && !planTokenFileArg) {
@@ -179,6 +227,7 @@ function parseArgs(argv) {
 
   return {
     allowManualCutover,
+    bookingProductionCutover,
     command,
     crm080Profile,
     media062Profile,
@@ -238,7 +287,7 @@ function resolveTarget() {
   console.log(`Active target: ${targetName}`);
   console.log("Active project identity verified");
 
-  return { databaseUrl, name: targetName };
+  return { databaseUrl, hostFingerprint, name: targetName };
 }
 
 function normalizeSqlContent(content) {
@@ -778,11 +827,11 @@ async function applyMigration(client, migration, context = {}) {
 }
 
 async function main() {
-  const { allowManualCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
+  const { allowManualCutover, bookingProductionCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
   const target = resolveTarget();
-  if (["109_booking_setup_communications", "110_account_ui_language_preference"].includes(only) && target.name === "prod") {
-    fail("Package 5 Auftrag 2 migrations are QA-only");
-  }
+  const bookingProduction = bookingProductionCutoverProfile({ enabled: bookingProductionCutover, command,
+    only, allowManualCutover, target: target.name });
+  const transport = resolveMigrationTransport();
   const migrations = readMigrations();
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
   if (command === "dry-run" || command === "up") {
@@ -791,12 +840,11 @@ async function main() {
       plan: migrations.filter((migration) => !migration.rollback),
     });
   }
-  const pool = new Pool({
-    connectionString: target.databaseUrl,
+  const pool = createMigrationPool({ databaseUrl: target.databaseUrl, target: target.name, options: {
     connectionTimeoutMillis: 10_000,
     idle_in_transaction_session_timeout: 60_000,
     query_timeout: migrationClientTimeoutMs,
-  });
+  } });
   const client = await pool.connect();
 
   try {
@@ -820,6 +868,7 @@ async function main() {
     if ((neon061Profile || media062Profile || crm080Profile) && !runtimeRole) {
       throw new Error("The selected compatibility execution profile requires the declared runtime role.");
     }
+    if (bookingProduction) await assertBookingMigrationRuntimeRole(client, runtimeRole);
     await client.query({
       query_timeout: guardQueryTimeoutMs,
       text: "set search_path = public",
@@ -858,7 +907,8 @@ async function main() {
     assertChecksumSafety({ ledgerRows: ledger.rows, migrations, plan });
     const planToken = createMigrationPlanToken({
       connectedTarget,
-      executionProfile: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null) || (crm080Profile ? `crm-080:${crm080Profile}` : null),
+      executionProfile: migrationExecutionProfile({ bookingProduction, hostFingerprint: target.hostFingerprint, runtimeRole, transport,
+        compatibility: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null) || (crm080Profile ? `crm-080:${crm080Profile}` : null) }),
       headCommit,
       ledgerRows: ledger.rows,
       plan,

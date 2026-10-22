@@ -7,6 +7,7 @@ import type { BookingCommunicationSettings } from "@/lib/booking/templates";
 import type { LanguageCode } from "@/lib/language-runtime";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { BookingMessageSettings } from "./booking-message-settings";
+import { BookingPublicationPanel } from "./booking-publication-panel";
 
 export type BookingSetupStep = "calendar" | "rules" | "travel" | "messages" | "publish";
 type SetupValue = { rules: BookingRules; travel: BookingTravelSettings; communication: BookingCommunicationSettings };
@@ -73,7 +74,7 @@ export function BookingSetupControls({ language, step, onSaved, bookingId, booki
     } catch { setFailed(true); } finally { setBusy(false); }
   }
   if (step === "calendar") return null;
-  if (step === "publish") return <section className={bookingSetupPanel}><h2 className="text-xl font-semibold">{text.publishTitle}</h2><p className="mt-3 text-sm text-slate-600">{text.publishHelp}</p><p className="mt-4 inline-block rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold">{text.publishPending}</p></section>;
+  if (step === "publish") return <BookingPublicationPanel language={language} />;
   const value = kind === "*" ? setup?.[scope === "company" ? "companyBaseDefaults" : "effectiveDefaults"] : setup?.[scope === "company" ? "companyDefaults" : "effective"]?.[kind];
   const layer = setup?.layers.find(item => item.scope === scope && item.kind === kind);
   return <section className={bookingSetupPanel} aria-labelledby="booking-setup-heading">
