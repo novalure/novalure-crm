@@ -101,7 +101,8 @@ export async function startLocalSalesDb() {
  * is replaced. All other baseline SQL and ALL new sales migrations run unchanged.
  * Historical manual media cutover 062 is excluded: it conflicts with the existing
  * append-only audit trigger. Audit protection stays enabled. Rollbacks are not applied.
- * This is explicitly not a full historical, pgvector/RAG or production validation.
+ * This partial bootstrap is not a production upgrade plan or a full historical
+ * or pgvector/RAG validation; dedicated predecessor fixtures cover those cutovers.
  */
 export async function applySalesSchema(db, {
   includeD11Contract = true,
@@ -130,7 +131,11 @@ export async function applySalesSchema(db, {
       name === "097_studio_sales_calendar_bridge.sql" ||
       name === "098_studio_enquiry_handoff.sql" ||
       name === "099_studio_enquiry_public_launch.sql" ||
-      name === "100_studio_enquiry_production.sql"
+      name === "100_studio_enquiry_production.sql" ||
+      // 111 requires the deliberately omitted 096 gateway and 100 Studio
+      // tables. Dedicated Design-C/booking and production-upgrade fixtures
+      // apply those predecessors and then the unchanged 111 SQL explicitly.
+      name === "111_booking_public_channels.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
@@ -192,6 +197,6 @@ export async function applySalesSchema(db, {
   }
   await db.admin.query(`grant usage on schema public to ${db.role}`);
   await db.admin.query(`grant select on workspaces, workspace_users, project_pipeline_permissions to ${db.role}`);
-  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
+  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { migration: "111_booking_public_channels.sql", reason: "Requires the deliberately omitted 096 gateway and 100 Studio predecessors; unchanged SQL is applied by the dedicated booking and production-upgrade fixtures" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
   return applied;
 }
