@@ -104,6 +104,7 @@
     "qa:booking:public-ui": "node --import tsx scripts/booking-public-ui-browser.mjs",
     "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs",
     "test:knowledge-assistant-quota": "node --conditions=react-server --import tsx --test scripts/knowledge-connected-assistant-quota-tests.ts",
+    "test:customer-onboarding": "node --conditions=react-server --import tsx --test scripts/customer-workspace-provisioning-tests.ts",
     "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
   },
   "dependencies": {

@@ -63,6 +63,7 @@ const manualCutoverVersions = new Set([
   "111_booking_public_channels",
   "112_booking_production_activation",
   "113_meeting_reminder_admission",
+  "114_customer_workspace_provisioning",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -88,6 +89,7 @@ const migrationDependencies = new Map([
   ["111_booking_public_channels", "110_account_ui_language_preference"],
   ["112_booking_production_activation", "111_booking_public_channels"],
   ["113_meeting_reminder_admission", "112_booking_production_activation"],
+  ["114_customer_workspace_provisioning", "108_knowledge_connected_assistant_quota"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);

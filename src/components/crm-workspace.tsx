@@ -34,6 +34,7 @@ import { DealPipelineWorkspace } from "@/components/deal-pipeline-workspace";
 import { FormCommandCenter } from "@/components/form-command-center";
 import { FunnelCommandCenter } from "@/components/funnel-command-center";
 import { KnowledgeCommandCenter } from "@/components/knowledge-command-center";
+import { CustomerWorkspaceSetup, type CreatedCustomerWorkspace } from "@/components/customer-workspace-setup";
 import { LeadInbox } from "@/components/lead-inbox";
 import { LeadSequenceCommandCenter } from "@/components/lead-sequence-command-center";
 import { MobileDailyWork, type MobileDailyPanel } from "@/components/mobile-daily-work";
@@ -145,7 +146,7 @@ function usesFocusedWorkspaceSidebar(section: DashboardSection) {
   return section === "pipelines" || section === "properties";
 }
 
-type HeaderActionModal = "import" | "project" | null;
+type HeaderActionModal = "import" | "project" | "customer" | null;
 
 type ImportSource = "hubspot" | "csv" | "contacts" | "meetings";
 
@@ -3052,6 +3053,7 @@ export function CrmWorkspace({
   const pageTitleRef = useRef<HTMLHeadingElement | null>(null);
   const focusPageTitleAfterNavigationRef = useRef(false);
   const [actionModal, setActionModal] = useState<HeaderActionModal>(null);
+  const [customerSetupBusy, setCustomerSetupBusy] = useState(false);
   const [importNotice, setImportNotice] = useState("");
   const [importSource, setImportSource] = useState<ImportSource>("hubspot");
   const [projectNotice, setProjectNotice] = useState("");
@@ -3101,6 +3103,7 @@ export function CrmWorkspace({
   const canCreateOrEditContacts = canWriteContacts(contactAccessActor);
   const canManageContactOwners = canAssignContactOwner(contactAccessActor);
   const canCreateProject = hasAppPermission(sessionRole, "crm:write") && hasProductCapability(sessionProductRole, "settings:manage");
+  const canCreateCustomer = (sessionRole === "owner" || sessionRole === "admin") && canUseWorkspaceSwitch && canCreateProject && hasProductCapability(sessionProductRole, "bots:publish");
 
   const refreshCoreData = useCallback(async (workspaceId = activeWorkspace.id) => {
     setCoreDataStatus("loading");
@@ -3203,13 +3206,13 @@ export function CrmWorkspace({
     canUseWorkspaceSwitch,
   ]);
 
-  async function handleWorkspaceSwitch(workspaceId: string) {
-    const nextWorkspace = availableWorkspaces.find((item) => item.id === workspaceId);
+  async function handleWorkspaceSwitch(workspaceId: string, options = availableWorkspaces, projectId?: string) {
+    const nextWorkspace = options.find((item) => item.id === workspaceId);
     if (!nextWorkspace) {
       setWorkspaceSwitchState("error");
-      return;
+      return false;
     }
-    if (nextWorkspace.id === activeWorkspace.id) return;
+    if (nextWorkspace.id === activeWorkspace.id) return true;
 
     setWorkspaceSwitchState("loading");
     setScopeHydrated(false);
@@ -3224,7 +3227,11 @@ export function CrmWorkspace({
       const payload = (await response.json()) as { data?: CoreCrmDataResult };
       if (!payload.data) throw new Error("CRM data refresh failed");
 
-      const nextScope = resolveCrmScope({
+      const nextScope = projectId ? createSelectedCrmScope({
+        projectId,
+        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
+        workspaceId: nextWorkspace.id,
+      }) : resolveCrmScope({
         projects: selectAuthoritativeCrmPresentation(payload.data).projects,
         search: "",
         storage: getBrowserCrmScopeStorage(),
@@ -3252,11 +3259,31 @@ export function CrmWorkspace({
       setScopeHydrated(true);
       setCoreDataStatus("fresh");
       setWorkspaceSwitchState("idle");
+      return true;
     } catch {
       setScopeHydrated(true);
       setCoreDataStatus("error");
       setWorkspaceSwitchState("error");
+      return false;
     }
+  }
+
+  async function handleCustomerWorkspaceCreated(result: CreatedCustomerWorkspace) {
+    const response = await fetch("/api/workspaces", { cache: "no-store" });
+    const payload = await response.json() as { workspaces?: ManagedWorkspaceOption[] };
+    if (!response.ok || !payload.workspaces?.some(item => item.id === result.workspace.id)) {
+      throw new Error(language === "de" ? "Der Kunde ist angelegt. Der Kundenbereich konnte noch nicht geöffnet werden. Bitte erneut öffnen." : "The customer was created. Their workspace could not be opened yet. Please try opening it again.");
+    }
+    setAvailableWorkspaces(payload.workspaces);
+    const switched = await handleWorkspaceSwitch(result.workspace.id, payload.workspaces, result.project.id);
+    if (!switched) {
+      throw new Error(language === "de" ? "Der Kunde ist angelegt. Seine Daten konnten noch nicht geladen werden. Bitte erneut öffnen." : "The customer was created. Their data could not be loaded yet. Please try opening it again.");
+    }
+    setActivePresetId("admin");
+    setActiveNavigationEntryId("knowledge");
+    setActiveSection("knowledge");
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#knowledge`);
+    setActionModal(null);
   }
 
   const { contacts, leads } = selectVisibleBusinessRecords({
@@ -4643,6 +4670,13 @@ export function CrmWorkspace({
                 >
                   {copy.header.newProjectButton}
                 </button>
+                {canCreateCustomer ? <button
+                  className="min-h-12 min-w-32 rounded-md border border-emerald-700 bg-white px-4 py-2.5 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
+                  onClick={() => setActionModal("customer")}
+                  type="button"
+                >
+                  {language === "de" ? "Neuer Kunde" : "New customer"}
+                </button> : null}
                 <div className="sm:flex">
                   <button
                     aria-busy={isLoggingOut}
@@ -5119,7 +5153,7 @@ export function CrmWorkspace({
               automations={visibleAutomations}
               bots={visibleCrmBots}
               callInsights={visibleBotCallInsights}
-              canManageBotSetup={hasProductCapability(workspaceContext.productRole, "bots:publish")}
+              canManageBotSetup={hasProductCapability(activeWorkspace.productRole ?? (activeWorkspace.id === sessionWorkspace.id ? sessionProductRole : "viewer"), "bots:publish")}
               conversations={visibleCrmBotConversations}
               knowledgeItems={visibleKnowledgeBase}
               language={language}
@@ -5285,6 +5319,7 @@ export function CrmWorkspace({
             {visibleActiveSection === "knowledge" ? (
               <KnowledgeCommandCenter
                 key={activeWorkspace.id}
+                initialProjectId={activeProjectId === "all" ? undefined : activeProjectId}
                 language={language}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
@@ -5403,6 +5438,17 @@ export function CrmWorkspace({
           </div>
         </section>
       </div>
+      {actionModal === "customer" && canCreateCustomer ? (
+        <ModalShell
+          closeLabel={copy.dialogs.close}
+          eyebrow={language === "de" ? "Eigener Kundenbereich" : "Separate customer workspace"}
+          footer={null}
+          onClose={() => { if (!customerSetupBusy) setActionModal(null); }}
+          title={language === "de" ? "Neuen Kunden mit Website-Chatbot anlegen" : "Create a customer with a website chatbot"}
+        >
+          <CustomerWorkspaceSetup language={language} onBusyChange={setCustomerSetupBusy} onCreated={handleCustomerWorkspaceCreated} userId={sessionUserId} />
+        </ModalShell>
+      ) : null}
       {actionModal === "import" ? (
         <ModalShell
           closeLabel={copy.dialogs.close}
