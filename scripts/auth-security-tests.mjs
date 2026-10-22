@@ -350,14 +350,16 @@ test("active role and product-role changes atomically revoke the affected member
   assert.match(repository, /session_audited as \([\s\S]*'auth\.session\.revoked'/);
 });
 
-test("forgot and reset metadata and bodies resolve the same persisted language", async () => {
+test("forgot and reset metadata and bodies share the resolved CRM request language", async () => {
   for (const path of ["forgot-password", "reset-password"]) {
     const page = await readFile(
       new URL(`../src/app/login/${path}/page.tsx`, import.meta.url),
       "utf8",
     );
-    assert.equal(page.match(/resolvePublicPageLanguage\(requestHeaders, query\)/g)?.length, 2);
-    assert.doesNotMatch(page, /resolvePublicLanguage\(/);
+    assert.equal(page.match(/resolveLanguage\(requestHeaders\.get\(languageRequestHeaderName\), "en"\)/g)?.length, 2);
+    assert.doesNotMatch(page, /resolvePublic(?:Page)?Language\(/);
+    assert.match(page, /new URLSearchParams\(\{ lang: language, languagePreference: language \}\)/);
+    assert.match(page, /data-crm-login-language lang=\{language\}/);
   }
 });
 

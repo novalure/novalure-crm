@@ -96,7 +96,11 @@
     "test:package4-migrations": "node --conditions=react-server --import tsx --test scripts/package4-migration-tests.ts",
     "qa:package4:e2e": "node scripts/qa-package4-e2e.mjs",
     "test:booking": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/universal-booking-tests.ts scripts/booking-provider-tests.ts scripts/booking-connections-tests.ts",
-    "qa:booking:browser": "node scripts/qa-booking-browser.mjs"
+    "qa:booking:browser": "node scripts/qa-booking-browser.mjs",
+    "test:booking:setup": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-setup-tests.ts scripts/booking-travel-tests.ts scripts/booking-travel-service-tests.ts",
+    "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts",
+    "test:booking:language": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts scripts/crm-language-preference-db-tests.ts",
+    "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",

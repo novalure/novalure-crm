@@ -94,12 +94,14 @@ test("Package 5 durable booking acceptance: two isolated PostgreSQL tenants; pro
     catch (error) { evidence.status="FAIL"; evidence.failure=error instanceof Error?error.message:String(error); throw error; }
   });
   try {
-    const migration = await readFile("migrations/108_universal_booking.sql", "utf8");
     const client = await db.admin.connect();
     try {
       await client.query("begin");
-      await client.query(migration);
-      await client.query("insert into novalure_schema_migrations(version,name,checksum) values('108_universal_booking','108_universal_booking.sql',$1)", [createHash("sha256").update(migration.replace(/\r\n/g, "\n")).digest("hex")]);
+      for (const name of ["108_universal_booking.sql", "109_booking_setup_communications.sql"]) {
+        const migration = await readFile(`migrations/${name}`, "utf8");
+        await client.query(migration);
+        await client.query("insert into novalure_schema_migrations(version,name,checksum) values($1,$2,$3)", [name.slice(0,-4),name,createHash("sha256").update(migration.replace(/\r\n/g, "\n")).digest("hex")]);
+      }
       await client.query("commit");
     } catch (error) { await client.query("rollback"); throw error; }
     finally { client.release(); }

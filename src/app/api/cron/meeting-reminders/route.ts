@@ -1,11 +1,15 @@
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
 import { areQueueWorkersPaused, createCronRun, isCronAuthorized } from "@/lib/cron/runtime";
+import { isBookingMessageQaRuntime } from "@/lib/booking/messages";
 
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (request.headers.get("x-novalure-booking-qa") === "1" && !isBookingMessageQaRuntime()) {
+    return Response.json({ error: "BOOKING_QA_WORKER_NOT_ENABLED" }, { status: 409 });
   }
   const run = createCronRun({ route: "meeting-reminders" });
   if (areQueueWorkersPaused()) {

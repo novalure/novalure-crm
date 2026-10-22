@@ -2404,7 +2404,7 @@ export function CalendarCommandCenter({
             <p className="mt-2 max-w-3xl break-words text-sm text-stone-600">
               {text.description}
             </p>
-            {isHomeWorkspace ? <a className="mt-3 inline-flex min-h-11 items-center rounded-md border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50" href="/booking">{language === "de" ? "Gemeinsame Terminbuchung öffnen" : "Open appointment booking"}</a> : null}
+            <a className="mt-3 inline-flex min-h-11 items-center rounded-md border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50" href="/booking">{language === "de" ? "Terminbuchung" : "Appointment booking"}</a>
           </div>
           <div className="grid min-w-0 grid-cols-2 gap-2 text-sm sm:min-w-[520px] md:grid-cols-4 xl:min-w-[620px]">
             {[

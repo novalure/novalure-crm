@@ -30,6 +30,7 @@ Direct cookie-session routes migrated without changing their authorization model
 
 - `POST /api/auth/logout`
 - `POST /api/auth/onboarding`
+- `POST /api/settings/language` — personal account preference, with expected current user validation.
 - `PATCH /api/settings/access/password`
 - `POST /api/crm/properties`
 

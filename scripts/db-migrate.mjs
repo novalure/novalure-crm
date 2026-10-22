@@ -54,6 +54,8 @@ const manualCutoverVersions = new Set([
   "099_studio_enquiry_public_launch",
   "100_studio_enquiry_production",
   "108_universal_booking",
+  "109_booking_setup_communications",
+  "110_account_ui_language_preference",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -73,6 +75,8 @@ const migrationDependencies = new Map([
   ["099_studio_enquiry_public_launch", "098_studio_enquiry_handoff"],
   ["100_studio_enquiry_production", "096_public_integration_gateway"],
   ["108_universal_booking", "106_crm_operational_readers"],
+  ["109_booking_setup_communications", "108_universal_booking"],
+  ["110_account_ui_language_preference", "109_booking_setup_communications"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
@@ -776,6 +780,9 @@ async function applyMigration(client, migration, context = {}) {
 async function main() {
   const { allowManualCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
   const target = resolveTarget();
+  if (["109_booking_setup_communications", "110_account_ui_language_preference"].includes(only) && target.name === "prod") {
+    fail("Package 5 Auftrag 2 migrations are QA-only");
+  }
   const migrations = readMigrations();
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
   if (command === "dry-run" || command === "up") {

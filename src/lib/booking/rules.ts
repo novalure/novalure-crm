@@ -2,7 +2,7 @@ import { BookingError, type BookingRules, type BusyInterval } from "./types";
 export const defaultBookingRules: BookingRules = {
   durationMinutes: 30, preparationMinutes: 0, followupMinutes: 0, timeZone: "Europe/Vienna",
   minNoticeMinutes: 120, maxAdvanceDays: 60, gridMinutes: 15, maxPerDay: null,
-  cancelNoticeMinutes: 120, rescheduleNoticeMinutes: 120, location: "",
+  cancelNoticeMinutes: 120, rescheduleNoticeMinutes: 120, location: "", locationConfirmed: false, propertyId: null,
   workingHours: [1,2,3,4,5].map(day => ({ day, start: "09:00", end: "17:00" })), breaks: [], absences: [],
   travel: { policy: "deferred", required: false },
 };
@@ -18,6 +18,8 @@ export function validateBookingRules(value: Partial<BookingRules>): Partial<Book
   if (value.maxPerDay !== undefined && value.maxPerDay !== null && !finiteInteger(value.maxPerDay,1,100)) throw new BookingError("INVALID_RULES");
   if (value.timeZone !== undefined) { if (typeof value.timeZone !== "string" || value.timeZone.length > 100) throw new BookingError("INVALID_TIME_ZONE"); try { new Intl.DateTimeFormat("en",{timeZone:value.timeZone}).format(); } catch { throw new BookingError("INVALID_TIME_ZONE"); } }
   if (value.location !== undefined && (typeof value.location !== "string" || value.location.length > 500)) throw new BookingError("INVALID_RULES");
+  if (value.locationConfirmed !== undefined && typeof value.locationConfirmed !== "boolean") throw new BookingError("INVALID_RULES");
+  if (value.propertyId !== undefined && value.propertyId !== null && (typeof value.propertyId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.propertyId))) throw new BookingError("INVALID_PROPERTY");
   for (const field of ["workingHours","breaks"] as const) if (value[field] !== undefined) {
     const slots = value[field];
     if (!Array.isArray(slots) || slots.length > 35 || slots.some(x => !x || !finiteInteger(x.day,0,6) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(x.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(x.end) || minute(x.end) <= minute(x.start))) throw new BookingError("INVALID_RULES");
@@ -27,8 +29,11 @@ export function validateBookingRules(value: Partial<BookingRules>): Partial<Book
   return value;
 }
 export function validInstant(value: unknown): value is string { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value)); }
+const localFormatters = new Map<string, Intl.DateTimeFormat>();
 export function localParts(instant: number, timeZone: string) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(instant).map(x => [x.type,x.value]));
+  let formatter = localFormatters.get(timeZone);
+  if (!formatter) { formatter = new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}); if (localFormatters.size >= 64) localFormatters.clear(); localFormatters.set(timeZone, formatter); }
+  const p = Object.fromEntries(formatter.formatToParts(instant).map(x => [x.type,x.value]));
   const date = `${p.year}-${p.month}-${p.day}`;
   return { date, minute: Number(p.hour)*60+Number(p.minute), day: new Date(`${date}T12:00:00Z`).getUTCDay() };
 }

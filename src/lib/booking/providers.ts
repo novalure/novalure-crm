@@ -215,16 +215,17 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
           });
           const busyCalendar = object(object(data?.calendars)[calendarId]);
           if (!data || !Array.isArray(busyCalendar.busy) || (busyCalendar.errors !== undefined && (!Array.isArray(busyCalendar.errors) || busyCalendar.errors.length))) throw new BookingProviderError("conflict_calendar_unavailable", "rejected");
-          for (const range of busyCalendar.busy) { const entry = object(range); intervals.push(busyInterval(instant(entry.start), instant(entry.end))); }
+          for (const range of busyCalendar.busy) { const entry = object(range); intervals.push({ ...busyInterval(instant(entry.start), instant(entry.end)), ...(input.includeLocations ? { calendarId, location: null } : {}) }); }
           continue;
         }
         const url = provider === "microsoft"
           ? new URL(`${graphRoot}/me/calendars/${encodeURIComponent(calendarId)}/calendarView`)
           : new URL(`${googleRoot}/calendars/${encodeURIComponent(calendarId)}/events`);
         if (provider === "microsoft") {
-          url.searchParams.set("startDateTime", instant(input.startsAt)); url.searchParams.set("endDateTime", instant(input.endsAt)); url.searchParams.set("$select", "id,start,end,showAs,isCancelled"); url.searchParams.set("$top", "250");
+          url.searchParams.set("startDateTime", instant(input.startsAt)); url.searchParams.set("endDateTime", instant(input.endsAt)); url.searchParams.set("$select", `id,start,end,showAs,isCancelled${input.includeLocations ? ",location" : ""}`); url.searchParams.set("$top", "250");
         } else {
           url.searchParams.set("timeMin", instant(input.startsAt)); url.searchParams.set("timeMax", instant(input.endsAt)); url.searchParams.set("singleEvents", "true"); url.searchParams.set("showDeleted", "false"); url.searchParams.set("maxResults", "2500");
+          if (input.includeLocations) url.searchParams.set("fields", "items(id,start,end,status,transparency,location),nextPageToken,timeZone");
         }
         let page: URL | null = url;
         let pages = 0;
@@ -242,7 +243,10 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
             if (provider === "google" && (object(event.start).date || object(event.end).date) && !string(result.data.timeZone)) throw new BookingProviderError("provider_invalid_busy_response", "rejected");
             const startsAt = provider === "microsoft" ? graphTime(event.start) : googleTime(event.start, string(result.data.timeZone) || "UTC");
             const endsAt = provider === "microsoft" ? graphTime(event.end) : googleTime(event.end, string(result.data.timeZone) || "UTC");
-            intervals.push(busyInterval(startsAt, endsAt, id || undefined));
+            const postal = object(object(event.location).address);
+            const graphLocation = [postal.street, postal.postalCode, postal.city, postal.countryOrRegion].filter(value => typeof value === "string" && value.trim()).join(", ");
+            const location = provider === "google" ? string(event.location) : graphLocation || string(object(event.location).displayName);
+            intervals.push({ ...busyInterval(startsAt, endsAt, id || undefined), ...(input.includeLocations ? { calendarId, location } : {}) });
           }
           const next = provider === "microsoft" ? result.data["@odata.nextLink"] : result.data.nextPageToken;
           if (next !== undefined && !string(next)) throw new BookingProviderError("provider_invalid_page", "rejected");

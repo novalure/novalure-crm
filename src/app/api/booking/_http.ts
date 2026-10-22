@@ -14,9 +14,9 @@ export async function bookingAuth(request: Request, write = false) {
   return auth;
 }
 
-export async function bookingBody(request: Request): Promise<Record<string, unknown>> {
+export async function bookingBody(request: Request, limit = 16_384): Promise<Record<string, unknown>> {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) throw new BookingError("invalid_json", 415);
-  const limit = 16_384;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 65_536) throw new BookingError("body_too_large", 413);
   if (Number(request.headers.get("content-length")) > limit) throw new BookingError("body_too_large", 413);
   const reader = request.body?.getReader();
   if (!reader) throw new BookingError("invalid_json");
@@ -53,6 +53,12 @@ export function bookingProvider(body: Record<string, unknown>): BookingProviderN
   const value = bookingString(body, "provider");
   if (value !== "microsoft" && value !== "google") throw new BookingError("invalid_provider");
   return value;
+}
+export function bookingLocation(body: Record<string, unknown>): {location?:string;locationConfirmed?:boolean;propertyId?:string|null} {
+  if(body.location!==undefined&&(typeof body.location!=="string"||body.location.length>500||/[\u0000-\u001f\u007f]/.test(body.location)))throw new BookingError("INVALID_LOCATION");
+  if(body.locationConfirmed!==undefined&&typeof body.locationConfirmed!=="boolean")throw new BookingError("INVALID_LOCATION");
+  if(body.propertyId!==undefined&&body.propertyId!==null&&(typeof body.propertyId!=="string"||!bookingUuid(body.propertyId)))throw new BookingError("INVALID_PROPERTY");
+  return {...(typeof body.location==="string"?{location:body.location.trim()}:{}),...(typeof body.locationConfirmed==="boolean"?{locationConfirmed:body.locationConfirmed}:{}),...(body.propertyId!==undefined?{propertyId:body.propertyId as string|null}:{})};
 }
 export function bookingFailure(error: unknown) {
   if (error instanceof BookingError) return bookingJson({ error: error.code }, error.status);

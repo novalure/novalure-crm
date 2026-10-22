@@ -6,6 +6,7 @@ import {
   renderMeetingNotificationTemplate,
 } from "@/lib/db/meeting-repositories";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
+import { isBookingMessageQaRuntime, processDueBookingMessages, type BookingMessageProcessResult } from "@/lib/booking/messages";
 import {
   classifyDeliveryError,
   createLeaseOwner,
@@ -17,6 +18,7 @@ type ProcessResult = {
   checked: number;
   failed: number;
   sent: number;
+  booking?: BookingMessageProcessResult;
 };
 
 function escapeHtml(value: string) {
@@ -50,6 +52,12 @@ function textToEmailHtml(input: { body: string; title: string }) {
 export async function processDueMeetingNotifications(
   input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean } = {},
 ): Promise<ProcessResult> {
+  if (isBookingMessageQaRuntime()) {
+    // A preview worker is restricted to the explicit booking QA bindings. It must
+    // not drain unrelated historical meeting or customer queues.
+    const booking = await processDueBookingMessages(input);
+    return { checked: booking.checked, failed: booking.failed, sent: 0, booking };
+  }
   const jobRefs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueMeetingNotificationJobs(input.limit ?? 25);

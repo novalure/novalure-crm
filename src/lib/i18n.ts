@@ -51,6 +51,33 @@ export const languageOptionsByCode = Object.fromEntries(
   supportedLanguages.map((language) => [language.code, language]),
 ) as Record<LanguageCode, LanguageOption>;
 
+export const languagePreferenceCopy = {
+  de: {
+    label: "Sprache",
+    automatic: "Automatisch (Standort)",
+    description: "Gilt für Ihr Konto in allen Arbeitsbereichen.",
+    saving: "Sprache wird gespeichert …",
+    saved: "Sprache gespeichert.",
+    error: "Sprache konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+    retry: "Erneut speichern",
+    unavailable: "Ihre gespeicherte Sprache ist derzeit nicht verfügbar. Änderungen werden erst nach erfolgreichem Speichern übernommen.",
+  },
+  en: {
+    label: "Language",
+    automatic: "Automatic (location)",
+    description: "Applies to your account across all workspaces.",
+    saving: "Saving language…",
+    saved: "Language saved.",
+    error: "Could not save your language. Please try again.",
+    retry: "Try saving again",
+    unavailable: "Your saved language is currently unavailable. Changes take effect after they are saved.",
+  },
+} as const;
+
+export function getLanguagePreferenceCopy(language: LanguageCode) {
+  return languagePreferenceCopy[language] ?? languagePreferenceCopy[fallbackLanguage];
+}
+
 export const loginLegalFooterCopy = {
   en: {
     ariaLabel: "Legal information",
