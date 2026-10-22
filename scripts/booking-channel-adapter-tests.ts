@@ -66,7 +66,7 @@ test("legacy reschedule rechecks a pending calendar result but persists a known 
   const selectedDate = day.toISOString().slice(0, 10);
   const names = ["OAUTH_TOKEN_ENCRYPTION_KEY", "MICROSOFT_GRAPH_ACCESS_TOKEN", "MICROSOFT_TENANT_ID", "MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "MICROSOFT_CALENDAR_USER_ID", "MICROSOFT_GRAPH_USER_ID"];
   const originalEnv = Object.fromEntries(names.map(name => [name, process.env[name]])), originalFetch = globalThis.fetch;
-  const secret = "SYNTHETIC-legacy-pending-regression-1234567890", iv = randomBytes(12);
+  const secret = randomBytes(32).toString("hex"), iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", createHash("sha256").update(secret).digest(), iv);
   const encrypted = Buffer.concat([cipher.update("SYNTHETIC-access", "utf8"), cipher.final()]);
   const accessToken = ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), encrypted.toString("base64url")].join(".");
