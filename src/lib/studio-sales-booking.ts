@@ -105,7 +105,7 @@ export async function studioBookingAvailability(policy: StudioCalendarPolicy, in
   kind: BookingKind; visitorTimeZone: string;
 }, now = new Date(), excludeHash?: string) {
   const replacement = await getLegacyBookingReplacement(websiteSalesWorkspaceId);
-  if (replacement?.publicId === process.env.STUDIO_BOOKING_PUBLIC_ID) throw new StudioBookingFailure("booking_channel_moved");
+  if (replacement && replacement.publicId === process.env.STUDIO_BOOKING_PUBLIC_ID) throw new StudioBookingFailure("booking_channel_moved");
   if (!["phone", "teams"].includes(input.kind) || !zoneValid(input.visitorTimeZone)) {
     throw new StudioBookingFailure("invalid_booking_request");
   }
@@ -206,7 +206,7 @@ export async function studioBookingStatus(policy: StudioCalendarPolicy, input: {
 
 export async function studioBook(policy: StudioCalendarPolicy, raw: unknown) {
   const replacement = await getLegacyBookingReplacement(websiteSalesWorkspaceId);
-  if (replacement?.publicId === process.env.STUDIO_BOOKING_PUBLIC_ID) throw new StudioBookingFailure("booking_channel_moved");
+  if (replacement && replacement.publicId === process.env.STUDIO_BOOKING_PUBLIC_ID) throw new StudioBookingFailure("booking_channel_moved");
   const input = validatedBooking(raw);
   if (policy.qaRecipients?.length && !policy.qaRecipients.includes(input.email)) {
     throw new StudioBookingFailure("qa_recipient_not_approved");

@@ -43,6 +43,7 @@ const savedEnv = {
   STUDIO_BOOKING_REAL_MODE: process.env.STUDIO_BOOKING_REAL_MODE,
   STUDIO_BOOKING_POLICY_JSON: process.env.STUDIO_BOOKING_POLICY_JSON,
   STUDIO_BOOKING_CONFIG_APPROVAL_ID: process.env.STUDIO_BOOKING_CONFIG_APPROVAL_ID,
+  STUDIO_BOOKING_PUBLIC_ID: process.env.STUDIO_BOOKING_PUBLIC_ID,
   MICROSOFT_TENANT_ID: process.env.MICROSOFT_TENANT_ID,
   MICROSOFT_CLIENT_ID: process.env.MICROSOFT_CLIENT_ID,
   MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
@@ -122,6 +123,8 @@ before(async () => {
   process.env.NOVALURE_ABUSE_SECRET = "synthetic-website-sales-abuse-secret-for-local-tests";
   process.env.NOVALURE_STUDIO_INGESTION_SECRET = "synthetic-website-sales-signing-secret-for-local-tests";
   process.env.NOVALURE_TRUSTED_CLIENT_IP_HEADER = "x-test-client-ip";
+  // This predecessor fixture has no published common-channel Studio scope.
+  delete process.env.STUDIO_BOOKING_PUBLIC_ID;
 });
 
 after(async () => {

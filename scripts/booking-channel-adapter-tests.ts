@@ -22,6 +22,9 @@ import { getLegacyBookingReplacement } from "../src/lib/booking/legacy-routing";
 import { syncGoogleCalendarEvent, updateGoogleCalendarEvent } from "../src/lib/integrations/google-calendar";
 import { syncMicrosoftCalendarEvent, updateMicrosoftCalendarEvent } from "../src/lib/integrations/microsoft-calendar";
 import { reschedulePublicMeetingBooking } from "../src/lib/db/meeting-repositories";
+import { studioBook, studioBookingAvailability } from "../src/lib/studio-sales-booking";
+import { websiteSalesActorId, websiteSalesWorkspaceId } from "../src/lib/website-sales-ingestion";
+import type { StudioCalendarPolicy } from "../src/lib/integrations/studio-microsoft-calendar";
 
 const typeId = randomUUID(), publicId = "synthetic-booking-adapter";
 const grant = () => ({ booking: { enabled: true, publicId, channels: ["voice"], typeIds: [typeId] } });
@@ -154,6 +157,29 @@ test("machine booking authority uses actual PostgreSQL principal, actor and inde
       try { await client.query("begin"); await client.query(await readFile(`migrations/${migration}`, "utf8")); await client.query("commit"); }
       catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
     }
+    await t.test("an explicitly published Studio scope keeps both old entry points closed even after disable", async () => {
+      const publicationId = randomUUID(), studioPublicId = "synthetic-studio-cutover";
+      const config = { publicId: studioPublicId, enabled: true, channels: { chat: true }, assignments: [] };
+      await db.admin.query("insert into booking_publications(id,workspace_id,owner_id,public_id,enabled,config,published_at) values($1,$2,$3,$4,true,$5::jsonb,now())", [publicationId, websiteSalesWorkspaceId, websiteSalesActorId, studioPublicId, JSON.stringify(config)]);
+      const actor: AppSession = { authenticated: true, source: "database", workspaceId: websiteSalesWorkspaceId, userId: websiteSalesActorId, workspaceName: "SYNTHETIC", name: "SYNTHETIC", email: "synthetic@example.invalid", role: "agent", permissions: getRolePermissions("agent"), productRole: "novalure_operator", productPermissions: getProductRoleCapabilities("novalure_operator") };
+      const policy: StudioCalendarPolicy = { approvalId: "SYNTHETIC-CUTOVER", organizerId: "synthetic@example.invalid", calendarId: "SYNTHETIC-calendar", timeZone: "UTC", durationMinutes: 30, intervalMinutes: 30, minNoticeMinutes: 0, bufferMinutes: 15, horizonDays: 2, hours: {} };
+      const priorPublicId = process.env.STUDIO_BOOKING_PUBLIC_ID, originalFetch = globalThis.fetch;
+      let providerCalls = 0;
+      process.env.STUDIO_BOOKING_PUBLIC_ID = studioPublicId;
+      globalThis.fetch = async () => { providerCalls++; throw new Error("unexpected synthetic provider request"); };
+      try {
+        for (const enabled of [true, false]) {
+          await db.admin.query("update booking_publications set enabled=$2::boolean,config=jsonb_set(config,'{enabled}',to_jsonb($2::boolean)) where id=$1", [publicationId, enabled]);
+          await assert.rejects(withCrmRead(actor, () => studioBookingAvailability(policy, { kind: "teams", visitorTimeZone: "UTC" }), options), /booking_channel_moved/);
+          await assert.rejects(withCrmRead(actor, () => studioBook(policy, {}), options), /booking_channel_moved/);
+        }
+        assert.equal(providerCalls, 0);
+        assert.equal((await db.admin.query("select count(*)::int n from booking_reservations where workspace_id=$1", [websiteSalesWorkspaceId])).rows[0].n, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (priorPublicId === undefined) delete process.env.STUDIO_BOOKING_PUBLIC_ID; else process.env.STUDIO_BOOKING_PUBLIC_ID = priorPublicId;
+      }
+    });
     const workspaceId = randomUUID(), userId = randomUUID(), publicationId = randomUUID();
     await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'SYNTHETIC booking form','managed_by_novalure','property_developer')", [workspaceId]);
     await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC form owner','form-adapter@example.invalid','owner','customer_owner','active')", [userId, workspaceId]);
