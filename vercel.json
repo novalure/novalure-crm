@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/cron/meeting-reminders",
-      "schedule": "* * * * *"
+      "schedule": "2 * * * *"
     },
     {
       "path": "/api/cron/teams-alerts",

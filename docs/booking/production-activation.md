@@ -57,6 +57,16 @@ unreadable conflict calendars. Every booking write checks the current binding.
 Token refresh alone does not invalidate an activation. A resource/account change
 requires an exact matching approved row; there is no fallback to another resource.
 
+The first Production build must retain the existing hourly cron expression
+`2 * * * *` for `/api/cron/meeting-reminders`. Keep the activation registry empty
+and booking message dispatch disabled while staging this code. After the actual
+Production aliases and version endpoint identify the new guarded worker, release
+the minute cron expression as a separate, normally checked configuration change.
+Only then approve exact message bindings and observe a real platform-triggered
+reminder. Do not assume that a staged Production build leaves cron registration
+unchanged merely because its custom domains have not been promoted. Other cron
+definitions and the existing global worker pause stay unchanged throughout.
+
 `booking_admin_revoke_production(registry_row_id, review_reference)` revokes an
 exact row. Dispatch holds a shared activation-row lock within its transaction, so
 revocation serializes with an admitted send. Known provider outcomes are still
