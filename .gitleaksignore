@@ -29,9 +29,10 @@ scripts/studio-enquiry-tests.ts:generic-api-key:178
 13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6:qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json:generic-api-key:27
 13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6:qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json:generic-api-key:28
 
-# Independently reviewed static public-site-key fixture in an isolated historical
-# widget unit test. Its VM uses mocked fetch and a reserved .invalid destination.
-# Keep this exception limited to the exact finding; retain every scanner rule.
+# Independently reviewed historical false positive: synthetic public website
+# routing identifier in the widget test, not a provider or customer credential.
+# The current fixture is constructed explicitly. Retain all scanner rules and
+# full-history/current-tree scanning; this exception matches only this finding.
 164fa582b27358250a123325c664bfbcb1485066:scripts/website-widget-tests.mjs:generic-api-key:8
 
 # Independently reviewed isolated AES-GCM fixture in a synthetic legacy race test.

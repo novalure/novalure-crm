@@ -106,6 +106,25 @@ test("price and availability requests require current CRM truth across languages
   if (result.tool === "search_approved_knowledge") assert.deepEqual(result.sources, []);
 });
 
+test("only WEB_DESIGN service facts bypass the generic property-price guard", () => {
+  for (const prompt of [
+    "Website package prices start at EUR 499.",
+    "Managed care is available. What does a website cost?",
+    "Novalure provides real-estate marketing and CRM services separately. Those services are distinct from Studio website packages and must not be assumed included in a website price.",
+    "Was kostet die Website?", "¿Cuál es el precio del sitio web?",
+  ]) {
+    assert.equal(requiresLivePropertyFacts(prompt, "WEB_DESIGN"), false, prompt);
+    assert.equal(requiresLivePropertyFacts(prompt, "REAL_ESTATE_GROWTH"), true, prompt);
+    assert.equal(requiresLivePropertyFacts(prompt), true, prompt);
+  }
+  for (const prompt of [
+    "Apartment A01 is available for EUR 450000.", "What is the property price?",
+    "Is this unit sold?", "Wie teuer ist diese Wohnung?", "Ist das Haus frei?",
+    "What is the rent?", "Wie hoch ist der Kaufpreis?", "¿Está disponible el piso?",
+    "How much is this house?", "Real estate is available for EUR 500000.",
+  ]) assert.equal(requiresLivePropertyFacts(prompt, "WEB_DESIGN"), true, prompt);
+});
+
 test("current price requests hand off without model call even with strict knowledge disabled", async () => {
   const result = await withCrmRead(session, () => runBotChat({ language: "de", session, payload: { botId, channel: "webchat", prompt: "Was kostet die Wohnung aktuell?", strictKnowledge: false, customerFacing: false, testMode: true } }), options);
   assert.equal(result.externalModelCall, false);

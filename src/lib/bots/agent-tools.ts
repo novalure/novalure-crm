@@ -1,4 +1,5 @@
 import { crmBotTools } from "@/lib/crm-source";
+import type { CrmDivision } from "@/lib/crm-division";
 import type { CrmBotTool } from "@/lib/crm-types";
 
 export type CrmBotToolExecution =
@@ -79,17 +80,22 @@ function asOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-/** Prices and unit status need current authorized CRM facts, never imported excerpts. */
-export function requiresLivePropertyFacts(prompt: string) {
+/** Property prices and unit status need live CRM facts; other prices depend on the saved project. */
+export function requiresLivePropertyFacts(prompt: string, projectDivision?: CrmDivision) {
   const normalized = prompt.normalize("NFKC").toLowerCase()
     .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
-  const property = /\b(wohnung\w*|einheit\w*|apartment\w*|unit\w*|immobilie\w*|property|properties|haus|haeuser|vivienda\w*|piso\w*)\b/.test(normalized);
+  const property = /\b(wohnung\w*|einheit\w*|apartment\w*|unit\w*|immobilie\w*|property|properties|haus|haeuser|vivienda\w*|piso\w*)\b/.test(normalized) ||
+    (projectDivision === "WEB_DESIGN" && /\b(houses?|villas?|condos?|condominiums?|real[ -]estate(?!\s+(?:marketing|crm|websites?|web\s*design)\b))\b/.test(normalized));
+  // Only a trusted, persisted WEB_DESIGN project may use published service
+  // pricing. Real-estate marketing is a service, not a property inventory fact.
+  // Unknown/unassigned projects retain the existing conservative policy.
+  if (projectDivision === "WEB_DESIGN" && !property && !/\b(kaufpreis(?:e)?|mietpreis(?:e)?|miete|rent)\b/.test(normalized)) return false;
   const price = /\b(preis(?:e|en)?|kaufpreis(?:e)?|price(?:s)?|pricing|kost(?:en|et)|cost(?:s)?|precio(?:s)?|cuesta|coste|mietpreis(?:e)?|miete|rent|teuer\w*|expensive)\b/.test(normalized) ||
     /(?:€|\beur\b|\beuro\b|\$)\s*[0-9]|[0-9]\s*(?:€|\beur\b|\beuro\b)/.test(normalized) ||
     (property && /\b(how much|wie viel|wieviel|cuanto|cuánto|vale)\b/.test(normalized));
   const availability = /\b(verfuegbar\w*|availability|available|disponib\w*|reserviert\w*|reserved|verkauft\w*|sold|ausverkauft\w*)\b/.test(normalized);
   const meetingOnly = /\b(termin\w*|meeting\w*|appointment\w*|slot\w*)\b/.test(normalized) &&
-    !/\b(wohnung\w*|einheit\w*|apartment\w*|unit\w*|immobilie\w*|property|properties|haus|haeuser|vivienda\w*|piso\w*)\b/.test(normalized);
+    !property;
   return price || (availability && !meetingOnly) || (property && /\b(frei(?:e|en|em|es)?|vacant|libre(?:s)?)\b/.test(normalized));
 }
 

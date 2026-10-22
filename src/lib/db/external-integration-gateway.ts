@@ -275,7 +275,7 @@ export async function startExternalChatSession(input: {
   publicSiteKey: string;
 }) {
   const idempotencyKey = assertOpaqueKey(input.idempotencyKey);
-  const language = assertLanguage(input.language);
+  const requestedLanguage = assertLanguage(input.language);
   const resolution = await resolveExternalIntegration({
     capability: "chat.start",
     origin: input.origin,
@@ -284,6 +284,9 @@ export async function startExternalChatSession(input: {
   if (!resolution || resolution.widgetConfiguration.chatEnabled !== true) {
     throw new ExternalIntegrationError("integration_not_found", 404);
   }
+  const configuredLanguage = resolution.widgetConfiguration.language;
+  const language = typeof configuredLanguage === "string" && languagePattern.test(configuredLanguage)
+    ? configuredLanguage : requestedLanguage;
   const { sessionToken, sessionTokenHash } = deriveSessionCredential(
     resolution.integrationId,
     idempotencyKey,

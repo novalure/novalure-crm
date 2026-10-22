@@ -36,6 +36,12 @@ const ledgerTable = "public.novalure_schema_migrations";
 const lockKey = 941041;
 const guardQueryTimeoutMs = 15_000;
 const migrationClientTimeoutMs = 960_000;
+// These independently shipped migrations already have immutable canonical ledger
+// identities. This exception covers only their reviewed, unchanged source files.
+const reviewedNumber108Checksums = new Map([
+  ["108_knowledge_connected_assistant_quota", "4738538ac4a74bb571b1baf6b5c41583ba77e23d55acdec9489e8979189470aa"],
+  ["108_universal_booking", "97c2ce591e021467262e1ed5b54485e985f9cb0004f0df52dd8caf77e6ab6b56"],
+]);
 const manualCutoverVersions = new Set([
   "057_bot_webhook_legacy_index_cutover",
   "060_tenant_rls_pilot_prepare",
@@ -75,6 +81,7 @@ const migrationDependencies = new Map([
   ["098_studio_enquiry_handoff", "097_studio_sales_calendar_bridge"],
   ["099_studio_enquiry_public_launch", "098_studio_enquiry_handoff"],
   ["100_studio_enquiry_production", "096_public_integration_gateway"],
+  ["108_knowledge_connected_assistant_quota", "101_knowledge_center"],
   ["108_universal_booking", "106_crm_operational_readers"],
   ["109_booking_setup_communications", "108_universal_booking"],
   ["110_account_ui_language_preference", "109_booking_setup_communications"],
@@ -601,9 +608,62 @@ function checkedMigrationLedgerState(args) {
   }
 }
 
-function numberCollisions(ledgerRows, migrations, aliases) {
+function hasNumber108Coexistence(ledgerRows, migrations) {
+  return new Set([...ledgerRows, ...migrations.filter((migration) => !migration.rollback)]
+    .filter((entry) => entry.number === 108).map((entry) => entry.version)).size > 1;
+}
+
+function assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd }) {
+  const candidates = migrations.filter((migration) => !migration.rollback && migration.number === 108);
+  const refuse = (reason) => {
+    throw new Error(`Refusing unreviewed number 108 coexistence: ${reason}`);
+  };
+  if (candidates.length !== 2 || new Set(candidates.map((candidate) => candidate.version)).size !== 2) {
+    refuse("both canonical source files, and no third 108 migration, are required");
+  }
+  for (const candidate of candidates) {
+    const expected = reviewedNumber108Checksums.get(candidate.version);
+    const file = `${candidate.version}.sql`;
+    const path = `migrations/${file}`;
+    if (!expected || candidate.checksum !== expected || candidate.file !== file || candidate.path !== path ||
+        candidate.name !== candidate.version.slice(4)) {
+      refuse(`unexpected canonical name, checksum, or path for ${candidate.version}`);
+    }
+    try {
+      const sourcePath = join(cwd, path);
+      if (!lstatSync(sourcePath).isFile()) refuse(`canonical source is not a regular file: ${path}`);
+      const content = readFileSync(sourcePath, "utf8");
+      if (createHash("sha256").update(content).digest("hex") !== expected || candidate.content !== content) {
+        refuse(`canonical source checksum drift: ${path}`);
+      }
+      execFileSync("git", ["ls-files", "--error-unmatch", path], { cwd, stdio: "ignore" });
+    } catch (error) {
+      refuse(`canonical source must exist, match its reviewed hash, and be git tracked: ${path} (${error.message})`);
+    }
+  }
+  for (const row of ledgerRows.filter((entry) => entry.number === 108)) {
+    const expected = reviewedNumber108Checksums.get(row.version);
+    if (!expected || row.checksum !== expected || (row.name != null && row.name !== row.version.slice(4))) {
+      refuse(`unexpected canonical ledger name or missing/mismatched checksum for ${row.version}`);
+    }
+  }
+}
+
+export function reviewedNumber108Coexistence({ ledgerRows, migrations, cwd = process.cwd() }) {
+  if (!hasNumber108Coexistence(ledgerRows, migrations)) return false;
+  try {
+    assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function numberCollisions(ledgerRows, migrations, aliases = [], cwd = process.cwd()) {
   const migrationsByNumber = new Map();
   const verifiedAliasVersions = new Set(aliases.map((alias) => alias.aliasVersion));
+  const unreviewed108 = hasNumber108Coexistence(ledgerRows, migrations) &&
+    !reviewedNumber108Coexistence({ ledgerRows, migrations, cwd });
   for (const migration of migrations) {
     if (migration.rollback) continue;
     if (!migrationsByNumber.has(migration.number)) migrationsByNumber.set(migration.number, []);
@@ -612,6 +672,9 @@ function numberCollisions(ledgerRows, migrations, aliases) {
 
   return ledgerRows.flatMap((row) => {
     const codeVersions = migrationsByNumber.get(row.number) ?? [];
+    if (row.number === 108 && unreviewed108) {
+      return [{ ledger: row.version, number: row.number, codeVersions }];
+    }
     if (
       !codeVersions.length ||
       codeVersions.includes(row.version) ||
@@ -663,14 +726,21 @@ function plannedMigrations(args) {
   }
 }
 
-export function validateMigrationPlan({ ledgerRows, migrations, plan }) {
+export function validateMigrationPlan({ ledgerRows, migrations, plan, cwd = process.cwd() }) {
   resolveMigrationLedgerState({ ledgerRows, migrations });
+  const reviewed108 = hasNumber108Coexistence(ledgerRows, [...migrations, ...plan]);
+  if (reviewed108) {
+    assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd });
+    if (plan.some((migration) => migration.number === 108 && !migrations.includes(migration))) {
+      throw new Error("Refusing unreviewed number 108 coexistence: planned migration is not one of the reviewed local files");
+    }
+  }
 
   for (const migration of plan) {
     const conflictingRows = ledgerRows.filter(
       (row) => row.number === migration.number && row.version !== migration.version,
     );
-    if (conflictingRows.length) {
+    if (conflictingRows.length && !(migration.number === 108 && reviewed108)) {
       throw new Error(
         `Refusing migration ${migration.version}: number ${String(migration.number).padStart(3, "0")} already exists in ledger as ${conflictingRows.map((row) => row.version).join(", ")}`,
       );
@@ -700,6 +770,9 @@ function printStatus({ ledger, migrations, plan }) {
   console.log(`Migration files: ${migrations.length}`);
   console.log(`Ledger rows: ${ledger.rows.length}`);
   console.log(`Legacy ledger rows without checksum: ${legacyWithoutChecksum.length}`);
+  if (reviewedNumber108Coexistence({ ledgerRows: ledger.rows, migrations })) {
+    console.log("Reviewed canonical number 108 coexistence: 108_knowledge_connected_assistant_quota + 108_universal_booking (exact source and ledger checksums verified)");
+  }
 
   console.log("Verified legacy numeric aliases:");
   if (!aliases.length) {

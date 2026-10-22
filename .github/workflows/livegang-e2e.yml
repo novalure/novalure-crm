@@ -158,6 +158,10 @@ jobs:
         # The later sales E2E process owns and closes its children in finally.
         run: npm run test:external-integration-gateway
 
+      - name: Website assistant self-service, tenant isolation and grounded answer boundaries
+        # Disposable PostgreSQL and a synthetic model; no live tenants or model spend.
+        run: npm run test:website-self-service
+
       - name: Isolated sales browser flows
         run: npm run qa:sales:e2e
 

@@ -68,6 +68,7 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       "104_knowledge_publication_workflow.sql",
       "105_knowledge_website_monitoring.sql",
       "106_crm_operational_readers.sql",
+      "108_knowledge_connected_assistant_quota.sql",
       // Current browser acceptance needs the additive personal-language table;
       // predecessor-only database tests keep their original schema by default.
       ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),

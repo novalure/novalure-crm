@@ -93,10 +93,13 @@ operator record; keep credentials out of this document.
 Before migration or promotion, record the exact current deployment/SHA, both
 production alias mappings, production project/branch/host, normal runtime role,
 original migration ledger/checksums and a recoverable pre-change recovery point.
-The last independently read pre-release aliases `www.novalure-crm.app` and
+The latest independently read pre-release aliases `www.novalure-crm.app` and
 `novalure-crm.vercel.app` both identified deployment
-`dpl_C8cYbF3CqzuXUTxgQHCW74g2VEa1`, source
-`6b55f40ef361ffef0438b24f34bd49bc0ba2d997`; re-read them before acting. A recovery
+`dpl_9LqGTuqPboTdAN9uG2qs8tttR4m9`, source
+`0707b785ee9e8c6a06d5636d63057d74ba206e64`, after the authorized parallel
+website-assistant release. Its quota migration is now the 61st ledger row;
+the earlier 60-row rehearsal is historical evidence, not this new upgrade.
+Preserve that release and re-read both aliases before acting. A recovery
 point is an incident-recovery option, not permission to replace later customer
 records with an older snapshot.
 
@@ -107,6 +110,10 @@ records with an older snapshot.
    PASS, and an internal agent review is not a trusted-App attestation. Earlier
    Studio/ST1 package exceptions do not apply to this release. Do not use an
    administrator bypass or change protection to merge.
+   Before merging can trigger an automatic Production build, disable automatic
+   domain assignment for this controlled stage and record the actual current
+   aliases. An intervening authorized release can change both the predecessor
+   and the assignment setting; do not restore an older deployment over it.
 2. Use the reviewed production-version rehearsal and retention/normal-runtime
    evidence before applying SQL to the actual production branch. Leave
    migrations 108–110 immutable. Apply the explicit sequence 108, 109, 110, 111,
@@ -117,6 +124,12 @@ records with an older snapshot.
    exact target guards and the declared normal runtime role. A clone/rehearsal
    plan token is never reusable against production; create a new plan after each
    ledger change. Keep the additional schema and ledger on binary rollback.
+   The independently applied `108_knowledge_connected_assistant_quota` and
+   `108_universal_booking` retain their different full canonical ledger keys.
+   Only their two exact tracked source files and pinned source/ledger checksums
+   qualify for the runner's reviewed same-number case; no general numeric
+   collision exemption is allowed. Include the current quota function and its
+   owner policies in the fresh baseline and production-copy upgrade checks.
 3. Build the first guarded production candidate with the existing hourly
    `2 * * * *` meeting-reminder schedule, the production activation registry
    empty, `BOOKING_MESSAGES_ENABLED=0`, `BOOKING_REMINDERS_ENABLED=0`, no enabled

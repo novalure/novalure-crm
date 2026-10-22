@@ -187,6 +187,9 @@ test("native QA auth preserves the real 60/13/94 predecessor under FORCE RLS", {
       }
     });
 
+    // Preserve the actual 60/13/94 predecessor and all installer checks above.
+    // Only the following current-code grant/HTTP scenario needs migration 108.
+    await apply("108_knowledge_connected_assistant_quota.sql", ownerPool);
     await t.test("real HTTP handler uses the QA reader, saved channel grants and published local fixture, with actor/kill denial", async () => {
       // This new synthetic content exists only in the disposable local cluster.
       // The installer itself never writes knowledge, publications or contracts.

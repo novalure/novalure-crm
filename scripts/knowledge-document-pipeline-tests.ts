@@ -20,7 +20,7 @@ test("private document pipeline: bytes, immutable results, replay, approval, rep
   const keys = ["DATABASE_URL", "CRM_LOCAL_TEST_DATABASE", "NODE_ENV", "NOVALURE_MEDIA_ROOT", "VERCEL", "VERCEL_ENV", "VERCEL_URL"];
   const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
-    await applySalesSchema(db, { maxMigrationNumber: 102 });
+    await applySalesSchema(db, { maxMigrationNumber: 108 });
     for (const key of keys) delete process.env[key];
     Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, CRM_LOCAL_TEST_DATABASE: "1", NODE_ENV: "test", NOVALURE_MEDIA_ROOT: mediaRoot });
     const workspaceId = randomUUID(), ownerId = randomUUID(), staffId = randomUUID(), viewerId = randomUUID(), projectId = randomUUID();
