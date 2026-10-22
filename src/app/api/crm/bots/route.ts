@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermissionAndProductCapability } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { upsertBotSetup } from "@/lib/db/crm-write-repositories";
 import { runEditorPreflight } from "@/lib/db/editor-preflight-repositories";
 
@@ -25,7 +25,7 @@ function getBotWriteStatus(reason: string) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermissionAndProductCapability(request, "crm:write", "bots:publish");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "bots:publish" });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);

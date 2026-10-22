@@ -162,6 +162,10 @@ jobs:
         # Disposable PostgreSQL and a synthetic model; no live tenants or model spend.
         run: npm run test:website-self-service
 
+      - name: Separate customer provisioning, retry safety and tenant isolation
+        # Exercises the real authenticated command against disposable PostgreSQL.
+        run: npm run test:customer-onboarding
+
       - name: Isolated sales browser flows
         run: npm run qa:sales:e2e
 

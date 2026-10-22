@@ -600,8 +600,8 @@ export function BotCommandCenter({
   const text = getBotCommandCenterCopy(language);
   const isHomeWorkspace = isHomeBotWorkspace(workspaceId, sessionWorkspaceId);
   const readOnlyMessage = language === "de"
-    ? "Die Kanal-, Freigabe- und Aktionshistorien sind hier nur lesbar. Änderungen an Freigaben, Aktionen oder der Bot-Einrichtung sowie Dokument-Uploads sind nur im angemeldeten Arbeitsbereich verfügbar."
-    : "Channel, approval and action histories are read-only here. Approval decisions, action changes, bot setup and document uploads are available only in your signed-in workspace.";
+    ? "Die Kanal-, Freigabe- und Aktionshistorien sind hier nur lesbar. Änderungen an Freigaben und Aktionen sowie Dokument-Uploads sind nur im angemeldeten Arbeitsbereich verfügbar. Die Bot-Einrichtung verwendet die Berechtigungen des ausgewählten Kundenbereichs."
+    : "Channel, approval and action histories are read-only here. Approval decisions, action changes and document uploads are available only in your signed-in workspace. Bot setup uses the selected customer workspace's permissions.";
   const legacyRequest = (url: string, init: RequestInit) => homeWorkspaceBotRequest(workspaceId, sessionWorkspaceId, readOnlyMessage, url, init);
   const [activeTab, setActiveTab] = useState<BotTab>("overview");
   const [approvalActionResult, setApprovalActionResult] = useState<string | null>(null);
@@ -896,12 +896,12 @@ export function BotCommandCenter({
   }
 
   async function saveBotSetup(bot: CrmBot) {
-    if (!isHomeWorkspace) return;
+    if (!canManageBotSetup) return;
     try {
       setBotSetupSaveMessage(null);
       setBotSetupSaveStatus("idle");
       setBotSetupSavingId(bot.id);
-      const response = await legacyRequest("/api/crm/bots", {
+      const response = await csrfFetch(botWorkspaceUrl("/api/crm/bots", workspaceId), {
         body: JSON.stringify({ bot }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -1536,7 +1536,7 @@ export function BotCommandCenter({
                       {canManageBotSetup ? (
                         <button
                           className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={botSetupSavingId === bot.id || !isHomeWorkspace}
+                          disabled={botSetupSavingId === bot.id}
                           onClick={() => void saveBotSetup(bot)}
                           type="button"
                         >

@@ -19,6 +19,8 @@ import {
   type WorkspaceOperatingModel,
   type WorkspaceTeamStructure,
 } from "@/lib/product-model";
+import { crmCommandErrorResponse } from "@/lib/crm-command";
+import { parseCustomerWorkspaceInput, provisionCustomerWorkspace } from "@/lib/customer-workspace-provisioning";
 
 type WorkspaceRow = {
   id: string;
@@ -40,6 +42,21 @@ async function readJson(request: Request) {
     return await request.json();
   } catch {
     return null;
+  }
+}
+
+export async function POST(request: Request) {
+  // Provisioning authority always comes from the persisted signed-in membership;
+  // the caller cannot supply an actor, role, tenant ID or commercial limits.
+  const auth = await requirePermission(request, "crm:write");
+  if (!auth.ok) return auth.response;
+  if (!canPersist()) return Response.json({ error: "Workspace persistence is not available" }, { status: 503 });
+  try {
+    const input = parseCustomerWorkspaceInput(await readJson(request));
+    const result = await provisionCustomerWorkspace(auth.session, input);
+    return Response.json(result, { status: result.replayed ? 200 : 201 });
+  } catch (error) {
+    return crmCommandErrorResponse(error);
   }
 }
 

@@ -688,6 +688,18 @@ test("connected-assistant quota requires the checksummed Knowledge Center predec
   assert.deepEqual(createMigrationPlan({ ledgerRows: [...ledgerRows, ledgerRow(migrations[1].version, "sha-108")], migrations, only: "" }), []);
 });
 
+test("customer provisioning stays manual and requires the checksummed assistant quota predecessor", () => {
+  const knowledge = migration("101_knowledge_center", "sha-101");
+  const quota = migration("108_knowledge_connected_assistant_quota", "sha-108");
+  const provisioner = migration("114_customer_workspace_provisioning", "sha-114", { manualCutover: true });
+  const migrations = [knowledge, quota, provisioner];
+  const ledgerRows = [ledgerRow(knowledge.version, knowledge.checksum), ledgerRow(quota.version, quota.checksum)];
+  assert.deepEqual(createMigrationPlan({ ledgerRows, migrations, only: "" }), []);
+  assert.throws(() => createMigrationPlan({ ledgerRows, migrations, only: provisioner.version }), /manual cutover/);
+  assert.throws(() => createMigrationPlan({ allowManualCutover: true, ledgerRows: [], migrations, only: provisioner.version }), /required predecessor 108_knowledge_connected_assistant_quota/);
+  assert.deepEqual(createMigrationPlan({ allowManualCutover: true, ledgerRows, migrations, only: provisioner.version }), [provisioner]);
+});
+
 test("quota 108 permits the 107 gap and coexists with the independent account-language migration", () => {
   const knowledge = migration("101_knowledge_center", "sha-101");
   const language = migration("107_account_ui_language_preference", "sha-language-107");
