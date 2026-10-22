@@ -38,7 +38,7 @@ test("Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retain
       await migrationClient.query(`set local role ${migrationOwner}`);
       await migrationClient.query(sql);
       await migrationClient.query(await readFile("migrations/102_knowledge_document_processing.sql", "utf8"));
-      await migrationClient.query(await readFile("migrations/107_knowledge_connected_assistant_quota.sql", "utf8"));
+      await migrationClient.query(await readFile("migrations/108_knowledge_connected_assistant_quota.sql", "utf8"));
       await migrationClient.query("commit");
     } catch (error) { await migrationClient.query("rollback"); throw error; } finally { migrationClient.release(); }
     await db.admin.query(`insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC Knowledge','managed_by_novalure'),($2,'SYNTHETIC other Knowledge','managed_by_novalure')`, [ids.tenant, ids.otherTenant]);

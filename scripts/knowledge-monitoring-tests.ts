@@ -27,7 +27,7 @@ test("persisted website scan retries, stale leases, changes of authority and ato
   const keys = ["DATABASE_URL", "CRM_LOCAL_TEST_DATABASE", "NODE_ENV"];
   const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
-    await applySalesSchema(db, { maxMigrationNumber: 107 });
+    await applySalesSchema(db, { maxMigrationNumber: 108 });
     Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, CRM_LOCAL_TEST_DATABASE: "1", NODE_ENV: "test" });
     const workspaceId = randomUUID(), ownerId = randomUUID();
     await db.admin.query("insert into workspaces(id,name) values($1,'SYNTHETIC monitoring')", [workspaceId]);

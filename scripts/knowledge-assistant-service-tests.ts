@@ -88,7 +88,7 @@ before(async () => {
   await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC machine knowledge','novalure_internal','novalure_internal','{}') on conflict(id) do update set operating_model='novalure_internal',customer_type='novalure_internal'", [CRM_MACHINE_WORKSPACE_ID]);
   await db.admin.query("alter table company_profiles enable row level security; alter table company_profiles force row level security; alter table company_profile_versions enable row level security; alter table company_profile_versions force row level security");
   await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");
-  for (const migration of ["092_crm_production_machine_identity.sql", "093_crm_machine_internal_context.sql", "101_knowledge_center.sql", "107_knowledge_connected_assistant_quota.sql"]) {
+  for (const migration of ["092_crm_production_machine_identity.sql", "093_crm_machine_internal_context.sql", "101_knowledge_center.sql", "108_knowledge_connected_assistant_quota.sql"]) {
     await db.admin.query(await readFile(new URL(`../migrations/${migration}`, import.meta.url), "utf8"));
   }
   // Exercise definer row locks under FORCE RLS without superuser/owner bypass.

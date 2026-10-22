@@ -47,7 +47,7 @@ test("Knowledge workflow PostgreSQL: publication, restored drafts, revoked retri
     // owner remains the fixture administrator. It is unrelated to this flow.
     await migrate("103_knowledge_assistant_service.sql", false);
     await migrate("104_knowledge_publication_workflow.sql", true);
-    await migrate("107_knowledge_connected_assistant_quota.sql", true);
+    await migrate("108_knowledge_connected_assistant_quota.sql", true);
     await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC Workflow','managed_by_novalure'),($2,'SYNTHETIC Other workflow','managed_by_novalure')", [ids.tenant, ids.otherTenant]);
     for (const actor of ["owner", "staff", "assistant", "otherOwner"] as const) {
       const member = session(actor);

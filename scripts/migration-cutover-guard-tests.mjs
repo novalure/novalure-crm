@@ -415,11 +415,31 @@ test("standard QA includes 094 but never applies pending manual 095 or 096", () 
 });
 
 test("connected-assistant quota requires the checksummed Knowledge Center predecessor", () => {
-  const migrations = [migration("101_knowledge_center", "sha-101"), migration("107_knowledge_connected_assistant_quota", "sha-107")];
+  const migrations = [migration("101_knowledge_center", "sha-101"), migration("108_knowledge_connected_assistant_quota", "sha-108")];
   assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only: migrations[1].version }), /required predecessor 101_knowledge_center/);
   const ledgerRows = [ledgerRow("101_knowledge_center", "sha-101")];
   assert.deepEqual(createMigrationPlan({ ledgerRows, migrations, only: migrations[1].version }), [migrations[1]]);
-  assert.deepEqual(createMigrationPlan({ ledgerRows: [...ledgerRows, ledgerRow(migrations[1].version, "sha-107")], migrations, only: "" }), []);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [...ledgerRows, ledgerRow(migrations[1].version, "sha-108")], migrations, only: "" }), []);
+});
+
+test("quota 108 permits the 107 gap and coexists with the independent account-language migration", () => {
+  const knowledge = migration("101_knowledge_center", "sha-101");
+  const language = migration("107_account_ui_language_preference", "sha-language-107");
+  const quota = migration("108_knowledge_connected_assistant_quota", "sha-quota-108");
+  const knowledgeLedger = [ledgerRow(knowledge.version, knowledge.checksum)];
+
+  for (const { migrations, ledgerRows, expected } of [
+    { migrations: [knowledge, quota], ledgerRows: knowledgeLedger, expected: [quota] },
+    { migrations: [knowledge, language, quota], ledgerRows: knowledgeLedger, expected: [language, quota] },
+    { migrations: [knowledge, language, quota], ledgerRows: [...knowledgeLedger, ledgerRow(language.version, language.checksum)], expected: [quota] },
+  ]) {
+    const plan = createMigrationPlan({ ledgerRows, migrations, only: "" });
+    assert.deepEqual(plan, expected);
+    assert.doesNotThrow(() => validateMigrationPlan({ ledgerRows, migrations, plan }));
+    const explicitPlan = createMigrationPlan({ ledgerRows, migrations, only: quota.version });
+    assert.deepEqual(explicitPlan, [quota]);
+    assert.doesNotThrow(() => validateMigrationPlan({ ledgerRows, migrations, plan: explicitPlan }));
+  }
 });
 
 test("legacy-breaking release contracts are isolated from automatic expand migrations", () => {

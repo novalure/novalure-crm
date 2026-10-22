@@ -71,7 +71,7 @@ test("Package 3 synthetic acceptance: one engine, approved publication, monitore
     try {
       await client.query("begin");
       await client.query(`set local role ${migrationOwner}`);
-      for (const migration of ["101_knowledge_center.sql", "102_knowledge_document_processing.sql", "103_knowledge_assistant_service.sql", "104_knowledge_publication_workflow.sql", "105_knowledge_website_monitoring.sql", "107_knowledge_connected_assistant_quota.sql"]) {
+      for (const migration of ["101_knowledge_center.sql", "102_knowledge_document_processing.sql", "103_knowledge_assistant_service.sql", "104_knowledge_publication_workflow.sql", "105_knowledge_website_monitoring.sql", "108_knowledge_connected_assistant_quota.sql"]) {
         await client.query(await readFile(`migrations/${migration}`, "utf8"));
       }
       await client.query("commit");

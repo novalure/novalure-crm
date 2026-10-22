@@ -35,7 +35,7 @@ test("connected-assistant quota: complete tenant count, last-place race and reve
     try {
       await client.query("begin");
       await client.query(`set local role ${migrationOwner}`);
-      for (const file of ["101_knowledge_center.sql", "107_knowledge_connected_assistant_quota.sql"]) await client.query(await readFile(`migrations/${file}`, "utf8"));
+      for (const file of ["101_knowledge_center.sql", "108_knowledge_connected_assistant_quota.sql"]) await client.query(await readFile(`migrations/${file}`, "utf8"));
       await client.query("commit");
     } catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
     await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC quota A','managed_by_novalure'),($2,'SYNTHETIC quota B','managed_by_novalure')", [ids.workspace, ids.foreignWorkspace]);

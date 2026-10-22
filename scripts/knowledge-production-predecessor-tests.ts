@@ -140,7 +140,7 @@ test("unchanged 101 upgrades the actual 091–096 → standalone100 predecessor 
     });
     // The historical upgrade assertions above run on their exact predecessor.
     // Current repository snapshots additionally require the licensed-usage reader.
-    await apply("107_knowledge_connected_assistant_quota.sql");
+    await apply("108_knowledge_connected_assistant_quota.sql");
     await admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC predecessor owner',$3,'owner','novalureAdmin','active')",[ownerId,workspaceId,owner.email]);
     await t.test("real non-owner runtime cannot self-provision a contract",async()=>{
       assert.equal((await loadKnowledgeCenter(owner,options)).available,false);
