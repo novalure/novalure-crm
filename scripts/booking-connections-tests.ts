@@ -127,9 +127,14 @@ test("real PostgreSQL connection lifecycle preserves existing booking bindings a
   let accountId = "synthetic-google-account";
   let refreshes = 0;
   try {
-    const migration = await readFile("migrations/108_universal_booking.sql","utf8");
     const client = await db.admin.connect();
-    try { await client.query("begin");await client.query(migration);await client.query("commit"); }
+    try {
+      await client.query("begin");
+      for (const name of ["108_universal_booking.sql", "109_booking_setup_communications.sql"]) {
+        await client.query(await readFile(`migrations/${name}`, "utf8"));
+      }
+      await client.query("commit");
+    }
     catch(error) { await client.query("rollback");throw error; }
     finally {client.release();}
     await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'SYNTHETIC connection lifecycle','self_service_customer','property_developer')",[actor.workspaceId]);

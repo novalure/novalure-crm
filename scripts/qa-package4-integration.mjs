@@ -186,17 +186,17 @@ try {
 
   await step("A fresh Design C customer obtains its session with ordinary password and real TOTP", async () => {
     await page.goto(new URL("/login?lang=de", base).href);
-    const consent = page.getByRole("button", { name: "Nur essentielle", exact: true });
+    const consent = page.getByRole("button", { name: /^(Nur essenzielle|Only necessary)$/ });
     if (await consent.isVisible()) await consent.click();
     await page.locator("#login-email").fill(accounts.customer.email);
     await page.locator("#login-password").fill(accounts.customer.password);
     await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), page.locator("form:has(#login-password) button[type=submit]").click()]);
-    const key = page.locator("p").filter({ has: page.locator("strong", { hasText: "TOTP-Schlüssel:" }) }).locator("code");
+    const key = page.locator("p").filter({ has: page.locator("strong", { hasText: /TOTP-Schlüssel:|TOTP key:/ }) }).locator("code");
     await expect(key).toBeVisible();
     assert.equal((await api("/api/knowledge-center")).status, 401);
     await page.locator("input[name=recoveryCodesSaved]").check();
     await page.locator("#login-mfa-code").fill(totp((await key.innerText()).trim()));
-    await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), page.getByRole("button", { name: "Sicher bestätigen", exact: true }).click()]);
+    await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), page.getByRole("button", { name: /^(Sicher bestätigen|Verify securely)$/ }).click()]);
     await expect(page).not.toHaveURL(/\/login/);
     assert((await context.cookies()).some(cookie => cookie.name === "novalure_session" && cookie.httpOnly && cookie.value.startsWith("v2.")));
     const auth = await api("/api/auth/session", undefined, null);
@@ -204,6 +204,13 @@ try {
     assert.equal(auth.body.user.id, accounts.customer.userId); assert.equal(auth.body.workspace.id, accounts.customer.workspaceId);
     const stored = (await admin.query("select id,mfa_verified_at from auth_sessions where auth_identity_id=$1 and revoked_at is null", [accounts.customer.authIdentityId])).rows;
     assert.equal(stored.length, 1); assert(stored[0].mfa_verified_at);
+    // German regression selectors follow the authenticated account's real choice.
+    const language = await api("/api/settings/language", { preference: "de", expectedUserId: accounts.customer.userId }, null);
+    assert.equal(language.status, 200);
+    assert.equal(language.body.persisted, true);
+    assert.equal(language.body.preference, "de");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
     // Rehydrate the actual browser-authenticated actor for the server-only scanner
     // and assistant adapters. No cookie, session row or MFA secret is injected.
     session = { authenticated: true, source: "cookie", userId: auth.body.user.id, workspaceId: auth.body.workspace.id, workspaceName: auth.body.workspace.name,
