@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BookingKind, BookingProviderName, BookingRecord, BookingRules } from "@/lib/booking/types";
 import { csrfFetch } from "@/lib/security/csrf-client";
@@ -139,7 +138,8 @@ export function BookingWorkspace({ language: initialLanguage, employeeName, work
   return <main className="min-h-screen px-4 py-6 text-slate-950 sm:px-8">
     <div className="mx-auto grid max-w-6xl gap-5">
       <header className={`${panel} flex flex-wrap items-start justify-between gap-4`}>
-        <div><Link href="/#meetings" className="text-sm font-semibold text-blue-700 underline">{text.back}</Link><p className="mt-4 text-xs font-semibold uppercase tracking-wider text-blue-700">{workspaceName}</p><h1 className="mt-1 text-3xl font-semibold">{text.title}</h1><p className="mt-2 text-sm text-slate-600">{text.intro}</p><p className="mt-2 text-sm"><strong>{text.employee}:</strong> {employeeName}</p></div>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- A full document return avoids the Next history/CRM scope hydration race. */}
+        <div><a href="/#meetings" className="text-sm font-semibold text-blue-700 underline">{text.back}</a><p className="mt-4 text-xs font-semibold uppercase tracking-wider text-blue-700">{workspaceName}</p><h1 className="mt-1 text-3xl font-semibold">{text.title}</h1><p className="mt-2 text-sm text-slate-600">{text.intro}</p><p className="mt-2 text-sm"><strong>{text.employee}:</strong> {employeeName}</p></div>
 
       </header>
       {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{errorMessage(error, language)}</p> : null}

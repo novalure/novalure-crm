@@ -1321,23 +1321,61 @@ async function runIntegration() {
         { label: "Terminbuchung", tag: "a", href: "/booking" },
       ], "The authorized operator has exactly the explicit booking-page link");
       const visited = [];
+      const bookingNavigation = [];
+      async function captureBookingNavigation(phase) {
+        const url = new URL(operatorPage.url());
+        const safeId = value => value === null || value === "all" || /^[a-f0-9-]{36}$/i.test(value) ? value : "<unrecognized>";
+        const storedScope = await operatorPage.evaluate(({ userId, workspaceId }) => {
+          const key = `novalure:crm-scope:v1:${encodeURIComponent(userId)}:${encodeURIComponent(workspaceId)}`;
+          try {
+            const stored = JSON.parse(localStorage.getItem(key));
+            return stored && stored.userId === userId && stored.workspaceId === workspaceId
+              ? { version: stored.version, workspaceId: stored.workspaceId, projectId: stored.projectId }
+              : null;
+          } catch { return null; }
+        }, { userId: accounts.operator.userId, workspaceId: accounts.operator.workspaceId });
+        const snapshot = {
+          phase, origin: url.origin === base.origin ? base.origin : "<unexpected origin>",
+          path: ["/", "/booking", "/login"].includes(url.pathname) ? url.pathname : "<unexpected path>",
+          hash: /^#[a-z-]{0,64}$/.test(url.hash) || url.hash === "" ? url.hash : "<unexpected hash>",
+          workspaceIds: url.searchParams.getAll("workspaceId").slice(0, 2).map(safeId),
+          projectIds: url.searchParams.getAll("projectId").slice(0, 2).map(safeId),
+          storedScope: storedScope?.workspaceId ? { version: storedScope.version, workspaceId: safeId(storedScope.workspaceId), projectId: safeId(storedScope.projectId) } : null,
+        };
+        bookingNavigation.push(snapshot);
+        return snapshot;
+      }
+      async function expectBookingUrl(phase, expected) {
+        try { await expect(operatorPage, phase).toHaveURL(expected); }
+        catch {
+          await captureBookingNavigation(`${phase}: failed`);
+          throw new Error(`${phase}: ${JSON.stringify(bookingNavigation)}`);
+        }
+      }
       for (const { label, tag, href } of entries) {
         if (tag === "a") {
           assert.equal(href, "/booking");
-          await nav.getByRole("link", { name: label, exact: true }).click();
-          await expect(operatorPage).toHaveURL(new URL("/booking", base).href);
-          await expect(operatorPage.getByRole("heading", { name: "Terminbuchung", exact: true })).toBeVisible();
-          const back = operatorPage.getByRole("link", { name: "Zurück zum CRM", exact: true });
-          await expect(back).toHaveAttribute("href", "/#meetings");
-          await back.click();
-          // The CRM may add its current scope query during hydration; the
-          // backlink's path/hash and any restored scope must stay exact.
-          await expect(operatorPage).toHaveURL(url => url.origin === base.origin && url.pathname === "/" && url.hash === "#meetings" &&
-            (url.searchParams.get("workspaceId") ?? accounts.operator.workspaceId) === accounts.operator.workspaceId &&
-            (url.searchParams.get("projectId") ?? "all") === "all");
-          await themeAndLayout(operatorPage);
-          await expect(nav.locator('button[aria-current="page"]')).toHaveCount(1);
-          visited.push({ label, href, returnHash: new URL(operatorPage.url()).hash });
+          for (let roundTrip = 1; roundTrip <= 3; roundTrip++) {
+            await captureBookingNavigation("Before booking link");
+            await nav.getByRole("link", { name: label, exact: true }).click();
+            await captureBookingNavigation("After booking link");
+            await expectBookingUrl("Booking link opens exact authenticated /booking route", new URL("/booking", base).href);
+            await expect(operatorPage.getByRole("heading", { name: "Terminbuchung", exact: true })).toBeVisible();
+            const back = operatorPage.getByRole("link", { name: "Zurück zum CRM", exact: true });
+            await expect(back).toHaveAttribute("href", "/#meetings");
+            await back.click();
+            await captureBookingNavigation("After CRM backlink");
+            // The CRM may add its current scope query during hydration; the
+            // backlink's path/hash and any restored scope must stay exact.
+            await expectBookingUrl("CRM backlink returns to meetings in own workspace and all-project scope", url => url.origin === base.origin && url.pathname === "/" && url.hash === "#meetings" &&
+              (url.searchParams.get("workspaceId") ?? accounts.operator.workspaceId) === accounts.operator.workspaceId &&
+              (url.searchParams.get("projectId") ?? "all") === "all");
+            await themeAndLayout(operatorPage);
+            await expect(nav.getByRole("button", { name: "Termine", exact: true })).toHaveAttribute("aria-current", "page");
+            await expect(operatorPage.getByRole("heading", { name: "Termine und Kalender", exact: true })).toBeVisible();
+            await captureBookingNavigation(`CRM calendar ready after roundtrip ${roundTrip}`);
+            visited.push({ label, href, roundTrip, returnHash: new URL(operatorPage.url()).hash });
+          }
           continue;
         }
         assert.equal(tag, "button", `Unsupported role-authorized navigation element: ${label}`);
@@ -1348,7 +1386,7 @@ async function runIntegration() {
         await themeAndLayout(operatorPage);
         visited.push({ label, hash: new URL(operatorPage.url()).hash });
       }
-      return visited;
+      return { visited, bookingNavigation };
     },
   );
 
