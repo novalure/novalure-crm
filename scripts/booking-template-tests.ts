@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import test from "node:test";
 import { defaultBookingCommunication, renderBookingEmail, validateBookingCommunication, validateBookingEmailTemplate, type BookingEmailValues } from "../src/lib/booking/templates";
 import { bookingMailBindings, normalizeBookingRecipient } from "../src/lib/booking/messages";
@@ -85,6 +85,39 @@ test("webhook authentication uses raw body, bounded timestamps and authenticated
   assert.equal(verifyBookingMailWebhook(body, headers, `whsec_${secret}`, now)?.jobId, "31131845-c1fa-4c2b-9854-94bba2c28586");
   assert.throws(() => verifyBookingMailWebhook(`${body} `, headers, `whsec_${secret}`, now));
   assert.throws(() => verifyBookingMailWebhook(body, headers, `whsec_${secret}`, now + 6 * 60_000));
+});
+test("Svix provider signing keys accept valid 24-byte keys and preserve larger keys", () => {
+  const now = Date.parse("2026-10-22T08:00:00Z"), timestamp = String(now / 1000), id = "msg_provider_key_sizes";
+  const body = JSON.stringify({ type: "email.delivered", created_at: new Date(now).toISOString(), data: { email_id: "mail_provider_key_sizes" } });
+  // Standard Webhooks specifies 24–64 random bytes for HMAC signing secrets.
+  // Resend's 32-character base64 secret component decodes to 24 bytes.
+  for (const length of [24, 32, 64]) {
+    const key = randomBytes(length), encoded = key.toString("base64");
+    const signature = createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest("base64");
+    const headers = new Headers({ "svix-id": id, "svix-timestamp": timestamp, "svix-signature": `v1,${signature}` });
+    for (const serialized of [encoded, encoded.replace(/=+$/, "")]) {
+      assert.equal(verifyBookingMailWebhook(body, headers, `whsec_${serialized}`, now)?.messageId, "mail_provider_key_sizes");
+    }
+  }
+});
+test("24-byte Svix keys still reject altered payloads, metadata, signatures and truncated keys", () => {
+  const now = Date.parse("2026-10-22T08:00:00Z"), timestamp = String(now / 1000), id = "msg_provider_key_tamper";
+  const key = randomBytes(24), secret = `whsec_${key.toString("base64")}`;
+  const body = JSON.stringify({ type: "email.delivered", created_at: new Date(now).toISOString(), data: { email_id: "mail_provider_key_tamper" } });
+  const mac = createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest();
+  const headers = new Headers({ "svix-id": id, "svix-timestamp": timestamp, "svix-signature": `v1,${mac.toString("base64")}` });
+  assert.throws(() => verifyBookingMailWebhook(`${body} `, headers, secret, now), /MAIL_WEBHOOK_UNAUTHORIZED/);
+  for (const [name, value] of [["svix-id", `${id}_changed`], ["svix-timestamp", String(now / 1000 + 1)], ["svix-signature", ""], ["svix-signature", `v1,${mac.subarray(0, 31).toString("base64")}`], ["svix-signature", `v1,${randomBytes(32).toString("base64")}`]]) {
+    const altered = new Headers(headers); altered.set(name, value);
+    assert.throws(() => verifyBookingMailWebhook(body, altered, secret, now), /MAIL_WEBHOOK_UNAUTHORIZED/);
+  }
+  assert.throws(() => verifyBookingMailWebhook(body, headers, `whsec_${randomBytes(24).toString("base64")}`, now), /MAIL_WEBHOOK_UNAUTHORIZED/);
+  assert.throws(() => verifyBookingMailWebhook(body, headers, secret, now + 6 * 60_000), /MAIL_WEBHOOK_UNAUTHORIZED/);
+  // Even a matching MAC cannot make an undersized, truncated secret valid.
+  const shortKey = key.subarray(0, 23), shortSecret = `whsec_${shortKey.toString("base64")}`;
+  const shortHeaders = new Headers(headers);
+  shortHeaders.set("svix-signature", `v1,${createHmac("sha256", shortKey).update(`${id}.${timestamp}.${body}`).digest("base64")}`);
+  assert.throws(() => verifyBookingMailWebhook(body, shortHeaders, shortSecret, now), /MAIL_WEBHOOK_UNAUTHORIZED/);
 });
 test("webhook refuses empty, short and noncanonical signing keys even with a matching MAC", () => {
   const now = Date.parse("2026-10-22T08:00:00Z"), timestamp = String(now / 1000), id = "msg_bad_configuration";

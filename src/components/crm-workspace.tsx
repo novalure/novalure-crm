@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
 import { Notice as CommandNotice } from "../../design-c/components/ui";
 import { getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
@@ -3395,6 +3396,11 @@ export function CrmWorkspace({
     ? activeSection
     : visibleActiveNavigationEntry.section;
   const focusedNavigationItems = profileNavigationItems;
+  const canUseBookingNavigation = activeWorkspace.id === sessionWorkspace.id &&
+    isWorkspaceModuleEnabled(workspaceContext.enabledModules, "calendar") &&
+    hasAppPermission(sessionRole, "crm:write") &&
+    hasProductCapability(sessionProductRole, "calendar:manage");
+  const bookingNavigationLabel = language === "de" ? "Terminbuchung" : "Appointment booking";
   const visibleQuickActions = normalizedActivePreset.quickActions.filter((actionId) =>
     actionId === "newProject" ? canCreateProject : enabledNavigationEntryIds.some(
       (entryId) => navigationEntries[entryId].section === quickActionSections[actionId],
@@ -4236,6 +4242,20 @@ export function CrmWorkspace({
                 {!sidebarCollapsed ? <span className="min-w-0 break-words">{item.label}</span> : null}
               </button>
             ))}
+            {canUseBookingNavigation ? (
+              <Link
+                aria-label={bookingNavigationLabel}
+                className={`flex w-full items-center rounded-md py-2.5 text-slate-600 hover:bg-stone-100 hover:text-slate-950 ${sidebarCollapsed ? "justify-center px-0" : "justify-between px-3"}`}
+                data-active="false"
+                data-crm-nav-item
+                href="/booking"
+                prefetch={false}
+                title={bookingNavigationLabel}
+              >
+                <NavigationIcon section="calendar" />
+                {!sidebarCollapsed ? <span className="min-w-0 break-words">{bookingNavigationLabel}</span> : null}
+              </Link>
+            ) : null}
           </nav>
 
           {!sidebarCollapsed ? (
@@ -4502,6 +4522,18 @@ export function CrmWorkspace({
                           <span className="min-w-0 break-words">{item.label}</span>
                         </button>
                       ))}
+                      {canUseBookingNavigation ? (
+                        <Link
+                          data-active="false"
+                          data-crm-nav-item
+                          href="/booking"
+                          onNavigate={() => setMobileNavigationOpen(false)}
+                          prefetch={false}
+                        >
+                          <NavigationIcon section="calendar" />
+                          <span className="min-w-0 break-words">{bookingNavigationLabel}</span>
+                        </Link>
+                      ) : null}
                     </nav>
                   </section>
 

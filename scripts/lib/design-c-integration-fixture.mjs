@@ -19,7 +19,7 @@ import {
  * production-predecessor test. Every pinned migration runs unchanged; these
  * local role names satisfy its real guard without weakening production SQL.
  */
-export async function startDesignCIntegrationDatabase({ accountLanguagePreference = false } = {}) {
+export async function startDesignCIntegrationDatabase({ accountLanguagePreference = false, bookingSetup = false } = {}) {
   const cluster = await startLocalSalesDb();
   let owner, bootstrap, runtime;
   try {
@@ -69,10 +69,23 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       "105_knowledge_website_monitoring.sql",
       "106_crm_operational_readers.sql",
       "108_knowledge_connected_assistant_quota.sql",
+      // Full browser navigation also opens the authenticated booking page.
+      // Core booking suites keep applying their own migrations with this off.
+      ...(bookingSetup ? ["108_universal_booking.sql", "109_booking_setup_communications.sql"] : []),
       // Current browser acceptance needs the additive personal-language table;
       // predecessor-only database tests keep their original schema by default.
       ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),
     ]) {
+      if (bookingSetup && filename === "108_universal_booking.sql") {
+        const { reviewedNumber108Coexistence } = await import("../db-migrate.mjs");
+        const migrations = await Promise.all(["108_knowledge_connected_assistant_quota.sql", filename].map(async file => {
+          const content = await readFile(path.resolve("migrations", file), "utf8"), version = file.slice(0, -4);
+          return { file, version, name: version.slice(4), path: `migrations/${file}`, number: 108,
+            content, checksum: createHash("sha256").update(content).digest("hex"), rollback: false };
+        }));
+        const ledgerRows = (await owner.query("select version,name,checksum from novalure_schema_migrations")).rows.map(row => ({ ...row, number: Number(row.version.slice(0, 3)) }));
+        assert.equal(reviewedNumber108Coexistence({ ledgerRows, migrations }), true, "Browser fixture requires the unchanged canonical 108 pair and ledger");
+      }
       const sql = await readFile(path.resolve("migrations", filename), "utf8");
       const client = await owner.connect();
       try {
@@ -82,7 +95,9 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
           "insert into novalure_schema_migrations(version,name,checksum) values($1,$2,$3)",
           [
             filename.slice(0, -4),
-            filename,
+            // The opt-in current-schema fixture follows the official runner's
+            // descriptive basename, including both immutable 108 identities.
+            bookingSetup ? filename.slice(4, -4) : filename,
             createHash("sha256")
               .update(sql.replace(/\r\n/g, "\n"))
               .digest("hex"),
@@ -117,6 +132,7 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
           productionAccess: 0,
           unmodifiedPinnedMigrations: true,
           optionalRagExcluded: true,
+          bookingSetup,
           manual062Excluded: true,
           preview097Through099Excluded: true,
           applied,

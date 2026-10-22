@@ -12,7 +12,8 @@ export function verifyBookingMailWebhook(body: string, headers: Headers, secret 
   const encodedKey = secret.slice(6);
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encodedKey) || encodedKey.length > 512 || encodedKey.length % 4 === 1) throw new BookingError("MAIL_WEBHOOK_UNAUTHORIZED", 401);
   const key = Buffer.from(encodedKey, "base64"), canonicalKey = key.toString("base64");
-  if (key.length < 32 || encodedKey !== canonicalKey && encodedKey !== canonicalKey.replace(/=+$/, "")) throw new BookingError("MAIL_WEBHOOK_UNAUTHORIZED", 401);
+  // Svix/Standard Webhooks HMAC secrets start at 24 bytes (192 bits).
+  if (key.length < 24 || encodedKey !== canonicalKey && encodedKey !== canonicalKey.replace(/=+$/, "")) throw new BookingError("MAIL_WEBHOOK_UNAUTHORIZED", 401);
   const expected = createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest();
   const authenticated = signatures.split(/\s+/).some(part => {
     const [version, encoded, extra] = part.split(",");
