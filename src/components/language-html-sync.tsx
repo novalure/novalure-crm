@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   defaultLanguage,
   languageCookieName,
@@ -18,10 +19,20 @@ function applyDocumentLanguage(language: PublicLanguageCode) {
 }
 
 function readStoredSystemLanguage() {
-  return resolveLanguage(window.localStorage.getItem(languageStorageKeys.system), defaultLanguage);
+  try {
+    return resolveLanguage(window.localStorage.getItem(languageStorageKeys.system), defaultLanguage);
+  } catch {
+    return defaultLanguage;
+  }
 }
 
 function readPageLanguage() {
+  // The authenticated server render is authoritative over query/cookie values
+  // from the public site and over another account's old browser preference.
+  const crmLanguage = document.querySelector<HTMLElement>("[data-crm-language-preference]")?.getAttribute("lang");
+  if (isPublicLanguageCode(crmLanguage)) return crmLanguage;
+  const loginLanguage = document.querySelector<HTMLElement>("[data-crm-login-language]")?.getAttribute("lang");
+  if (isPublicLanguageCode(loginLanguage)) return loginLanguage;
   const queryLanguage = new URLSearchParams(window.location.search).get("lang");
   if (isPublicLanguageCode(queryLanguage)) return queryLanguage;
 
@@ -32,10 +43,17 @@ function readPageLanguage() {
 }
 
 export function LanguageHtmlSync() {
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
   useEffect(() => {
-    applyDocumentLanguage(readPageLanguage());
+    if (document.querySelector("[data-crm-language-preference]")) {
+      document.documentElement.lang = readPageLanguage();
+    } else {
+      applyDocumentLanguage(readPageLanguage());
+    }
 
     function handleStorage(event: StorageEvent) {
+      if (document.querySelector("[data-crm-language-preference], [data-crm-login-language]")) return;
       if (event.key === languageStorageKeys.system) {
         applyDocumentLanguage(resolveLanguage(event.newValue, defaultLanguage));
       }
@@ -43,7 +61,11 @@ export function LanguageHtmlSync() {
 
     function handleLanguageChange(event: Event) {
       const language = (event as LanguageChangeEvent).detail?.language;
-      applyDocumentLanguage(resolveLanguage(language, defaultLanguage));
+      if (document.querySelector("[data-crm-language-preference]")) {
+        document.documentElement.lang = resolveLanguage(language, defaultLanguage);
+      } else {
+        applyDocumentLanguage(resolveLanguage(language, defaultLanguage));
+      }
     }
 
     window.addEventListener("storage", handleStorage);
@@ -53,7 +75,7 @@ export function LanguageHtmlSync() {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("novalure:language-change", handleLanguageChange);
     };
-  }, []);
+  }, [pathname, search]);
 
   return null;
 }

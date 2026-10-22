@@ -1,11 +1,12 @@
 import {
   claimMeetingNotificationJob,
-  listDueMeetingNotificationJobs,
   markMeetingNotificationJobFailed,
   markMeetingNotificationJobSent,
   renderMeetingNotificationTemplate,
 } from "@/lib/db/meeting-repositories";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
+import { isBookingMessageQaRuntime, isBookingReminderRuntime, processDueBookingMessages, type BookingMessageProcessResult } from "@/lib/booking/messages";
+import { canReadLegacyMeetingReminderQueue, claimMeetingReminderAdmission, completeMeetingReminderAdmission } from "./reminder-admission";
 import {
   classifyDeliveryError,
   createLeaseOwner,
@@ -17,6 +18,9 @@ type ProcessResult = {
   checked: number;
   failed: number;
   sent: number;
+  booking?: BookingMessageProcessResult;
+  legacyPaused?: boolean;
+  legacyUnavailable?: boolean;
 };
 
 function escapeHtml(value: string) {
@@ -48,15 +52,34 @@ function textToEmailHtml(input: { body: string; title: string }) {
 }
 
 export async function processDueMeetingNotifications(
-  input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean } = {},
+  input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean; now?: () => number; legacyPaused?: boolean } = {},
 ): Promise<ProcessResult> {
+  if (isBookingMessageQaRuntime()) {
+    // A preview worker is restricted to the explicit booking QA bindings. It must
+    // not drain unrelated historical meeting or customer queues.
+    if (input.jobIds?.length) return { checked: 0, failed: 0, sent: 0 };
+    const booking = await processDueBookingMessages(input);
+    return { checked: booking.checked, failed: booking.failed, sent: 0, booking };
+  }
+  const bookingStart = Date.now();
+  const booking = !input.jobIds?.length && isBookingReminderRuntime() ? await processDueBookingMessages({ ...input,
+    shouldContinue: () => (!input.shouldContinue || input.shouldContinue()) && Date.now() - bookingStart < 25_000,
+  }) : undefined;
+  const result: ProcessResult = { checked: booking?.checked ?? 0, failed: booking?.failed ?? 0, sent: 0, ...(booking ? { booking } : {}) };
+  if (input.legacyPaused) return { ...result, legacyPaused: true };
+  if (input.shouldContinue && !input.shouldContinue()) return result;
+  if (!await canReadLegacyMeetingReminderQueue()) return { ...result, legacyUnavailable: true };
+  // One durable bounded snapshot per original minute-2 hourly bucket. A delayed
+  // invocation or crashed worker resumes those IDs, never a fresh mass queue.
+  const admission = input.jobIds?.length ? null : await claimMeetingReminderAdmission({ now: input.now?.() });
+  if (!input.jobIds?.length && !admission) return result;
   const jobRefs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
-    : await listDueMeetingNotificationJobs(input.limit ?? 25);
-  const result: ProcessResult = { checked: 0, failed: 0, sent: 0 };
+    : admission!.jobIds.map(id => ({ id }));
+  let completed = true;
 
   for (const jobRef of jobRefs) {
-    if (input.shouldContinue && !input.shouldContinue()) break;
+    if (input.shouldContinue && !input.shouldContinue()) { completed = false; break; }
     result.checked += 1;
     const leaseOwner = createLeaseOwner("meeting-notification");
     const job = await claimMeetingNotificationJob({ id: jobRef.id, leaseOwner });
@@ -111,5 +134,6 @@ export async function processDueMeetingNotifications(
     });
   }
 
+  if (admission && completed) await completeMeetingReminderAdmission(admission, { now: input.now?.() });
   return result;
 }

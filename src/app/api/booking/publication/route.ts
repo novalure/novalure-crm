@@ -1,0 +1,5 @@
+import { getBookingPublication, saveBookingPublication, validateBookingPublication } from "@/lib/booking/publication";
+import { BookingError } from "@/lib/booking/types";
+import { bookingAuth, bookingBody, bookingFailure, bookingJson } from "../_http";
+export async function GET(request:Request){const auth=await bookingAuth(request);if(!auth.ok)return auth.response;try{return bookingJson(await getBookingPublication(auth.session));}catch(error){return bookingFailure(error);}}
+export async function PUT(request:Request){const auth=await bookingAuth(request,true);if(!auth.ok)return auth.response;try{const body=await bookingBody(request,32_768);if(Object.keys(body).some(key=>!["publication","expectedRevision"].includes(key)))throw new BookingError("INVALID_PUBLICATION");return bookingJson(await saveBookingPublication(auth.session,{publication:validateBookingPublication(body.publication),...(body.expectedRevision!==undefined?{expectedRevision:body.expectedRevision as number}:{})}));}catch(error){return bookingFailure(error);}}

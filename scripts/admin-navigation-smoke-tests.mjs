@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -40,9 +41,47 @@ test("admin navigation restores browser history and gates restricted roles", () 
   assert.match(workspace, /productRole === "platform_admin" \|\| productRole === "novalureAdmin"/);
 });
 
-test("active navigation controls the browser title and semantic breadcrumb", () => {
-  assert.match(workspace, /document\.title = `\$\{activeAreaLabel\} \| Novalure CRM`/);
-  assert.match(workspace, /\[activeAreaLabel, language, languageHydrated\]/);
+test("active navigation and central language updates control the browser title, language and breadcrumb", async () => {
+  const { default: ts } = await import("typescript");
+  const source = ts.createSourceFile("crm-workspace.tsx", workspace, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const effects = [];
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "useEffect" &&
+      ts.isArrowFunction(node.arguments[0]) && /document\.title\s*=/.test(node.arguments[0].body.getText(source))) effects.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.equal(effects.length, 1, "One effect owns document title and language synchronization");
+  const [callback, dependencies] = effects[0].arguments;
+  assert(ts.isArrayLiteralExpression(dependencies));
+  const names = dependencies.elements.map(node => node.getText(source));
+  assert(names.includes("activeAreaLabel"), "Navigation changes must rerun synchronization");
+  assert(names.includes("language"), "A saved language change must rerun synchronization even when the area label is unchanged");
+  assert(!names.includes("languageHydrated"), "The central account preference must not wait for a second browser-language state");
+
+  const events = [];
+  const browser = {
+    activeAreaLabel: "CRM", language: "de",
+    document: { title: "", documentElement: { lang: "" } },
+    window: { dispatchEvent(event) { events.push({ type: event.type, language: event.detail.language }); return true; } },
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+  };
+  const executable = ts.transpileModule(`(${callback.getText(source)})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  runInNewContext(executable, browser, { timeout: 1000 });
+  assert.equal(browser.document.title, "CRM | Novalure CRM");
+  assert.equal(browser.document.documentElement.lang, "de");
+  browser.language = "en";
+  runInNewContext(executable, browser, { timeout: 1000 });
+  assert.equal(browser.document.title, "CRM | Novalure CRM");
+  assert.equal(browser.document.documentElement.lang, "en");
+  browser.activeAreaLabel = "Calendar";
+  runInNewContext(executable, browser, { timeout: 1000 });
+  assert.equal(browser.document.title, "Calendar | Novalure CRM");
+  assert.deepEqual(events, [
+    { type: "novalure:language-change", language: "de" },
+    { type: "novalure:language-change", language: "en" },
+    { type: "novalure:language-change", language: "en" },
+  ]);
   assert.match(workspace, /<nav aria-label=\{contextCopy\.label\}[^>]+data-crm-breadcrumb>/);
   assert.match(workspace, /aria-current=\{index === breadcrumbItems\.length - 1 \? "page" : undefined\}/);
 });

@@ -16,7 +16,6 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import pg from "pg";
 import {
   assertConnectedDatabaseTarget,
   assertDatabaseTarget,
@@ -24,8 +23,7 @@ import {
 import { applyNeon061Compatibility } from "./lib/neon-061-compat.mjs";
 import { applyMedia062Compatibility } from "./lib/media-062-compat.mjs";
 import { applyCrm080Compatibility } from "./lib/crm-080-compat.mjs";
-
-const { Pool } = pg;
+import { createMigrationPool, resolveMigrationTransport } from "./lib/migration-pool.mjs";
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
@@ -38,6 +36,12 @@ const ledgerTable = "public.novalure_schema_migrations";
 const lockKey = 941041;
 const guardQueryTimeoutMs = 15_000;
 const migrationClientTimeoutMs = 960_000;
+// These independently shipped migrations already have immutable canonical ledger
+// identities. This exception covers only their reviewed, unchanged source files.
+const reviewedNumber108Checksums = new Map([
+  ["108_knowledge_connected_assistant_quota", "4738538ac4a74bb571b1baf6b5c41583ba77e23d55acdec9489e8979189470aa"],
+  ["108_universal_booking", "97c2ce591e021467262e1ed5b54485e985f9cb0004f0df52dd8caf77e6ab6b56"],
+]);
 const manualCutoverVersions = new Set([
   "057_bot_webhook_legacy_index_cutover",
   "060_tenant_rls_pilot_prepare",
@@ -53,6 +57,12 @@ const manualCutoverVersions = new Set([
   "098_studio_enquiry_handoff",
   "099_studio_enquiry_public_launch",
   "100_studio_enquiry_production",
+  "108_universal_booking",
+  "109_booking_setup_communications",
+  "110_account_ui_language_preference",
+  "111_booking_public_channels",
+  "112_booking_production_activation",
+  "113_meeting_reminder_admission",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -72,11 +82,60 @@ const migrationDependencies = new Map([
   ["099_studio_enquiry_public_launch", "098_studio_enquiry_handoff"],
   ["100_studio_enquiry_production", "096_public_integration_gateway"],
   ["108_knowledge_connected_assistant_quota", "101_knowledge_center"],
+  ["108_universal_booking", "106_crm_operational_readers"],
+  ["109_booking_setup_communications", "108_universal_booking"],
+  ["110_account_ui_language_preference", "109_booking_setup_communications"],
+  ["111_booking_public_channels", "110_account_ui_language_preference"],
+  ["112_booking_production_activation", "111_booking_public_channels"],
+  ["113_meeting_reminder_admission", "112_booking_production_activation"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
 const validMedia062Profiles = new Set(["production", "rehearsal"]);
 const validCrm080Profiles = new Set(["production", "rehearsal"]);
+const bookingCutoverVersions = new Set([
+  "108_universal_booking", "109_booking_setup_communications", "110_account_ui_language_preference",
+  "111_booking_public_channels", "112_booking_production_activation", "113_meeting_reminder_admission",
+]);
+
+export function bookingProductionCutoverProfile({ enabled = false, command, only, allowManualCutover, target, env = process.env }) {
+  const version = String(only || "").replace(/\.sql$/, "");
+  if (!enabled) {
+    if (target === "prod" && bookingCutoverVersions.has(version) && version !== "108_universal_booking") {
+      throw new Error("Package 5 Auftrag 2 migrations are QA-only without --booking-production-cutover; booking production migrations require the explicit cutover mode.");
+    }
+    return null;
+  }
+  if (!["dry-run", "up"].includes(command) || !allowManualCutover || !bookingCutoverVersions.has(version)) {
+    throw new Error("--booking-production-cutover requires dry-run or up, one explicit --only in 108-113, and --allow-manual-cutover.");
+  }
+  if (target !== "prod" || env.MIGRATION_TARGET !== "prod" || env.BOOKING_PRODUCTION_ENABLED !== "1") {
+    throw new Error("--booking-production-cutover requires MIGRATION_TARGET=prod and BOOKING_PRODUCTION_ENABLED=1.");
+  }
+  const activationId = env.BOOKING_PRODUCTION_ACTIVATION_ID?.trim() || "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activationId)) {
+    throw new Error("--booking-production-cutover requires a valid BOOKING_PRODUCTION_ACTIVATION_ID.");
+  }
+  return Object.freeze({ mode: "booking-production-cutover-v1", activationId });
+}
+
+export function migrationExecutionProfile({ bookingProduction = null, compatibility = null, hostFingerprint, runtimeRole, transport = "pg" }) {
+  if (bookingProduction) return { ...bookingProduction, hostFingerprint, runtimeRole, transport };
+  return transport === "pg" ? compatibility : { compatibility, transport };
+}
+
+export async function assertBookingMigrationRuntimeRole(client, runtimeRole) {
+  if (!runtimeRole || !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(runtimeRole)) {
+    throw new Error("Booking production cutover requires the declared normal runtime role.");
+  }
+  const result = await client.query({ query_timeout: guardQueryTimeoutMs,
+    text: "select rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls from pg_roles where rolname=$1",
+    values: [runtimeRole] });
+  const role = result.rows[0];
+  if (!role || role.rolcanlogin !== true || ["rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"].some(key => role[key] !== false)) {
+    throw new Error("Booking production cutover requires an existing normal runtime role without elevated privileges.");
+  }
+}
 
 export function compatibilityProfileMatchesTarget(profile, target) {
   if (!profile) return true;
@@ -122,12 +181,13 @@ function parseArgs(argv) {
   const media062ProfileArg = args.find((arg) => arg.startsWith("--media-062-profile="));
   const crm080ProfileArg = args.find((arg) => arg.startsWith("--crm-080-profile="));
   const allowManualCutover = args.includes("--allow-manual-cutover");
+  const bookingProductionCutover = args.includes("--booking-production-cutover");
 
   if (!command || !validCommands.has(command)) {
     fail(`Command required: ${[...validCommands].join("|")}`);
   }
 
-  if (allowManualCutover && !onlyArg) {
+  if (allowManualCutover && args.filter(arg => arg.startsWith("--only=")).length !== 1) {
     fail("--allow-manual-cutover requires one explicit --only=<version>");
   }
   if (command === "up" && !planTokenFileArg) {
@@ -174,6 +234,7 @@ function parseArgs(argv) {
 
   return {
     allowManualCutover,
+    bookingProductionCutover,
     command,
     crm080Profile,
     media062Profile,
@@ -233,7 +294,7 @@ function resolveTarget() {
   console.log(`Active target: ${targetName}`);
   console.log("Active project identity verified");
 
-  return { databaseUrl, name: targetName };
+  return { databaseUrl, hostFingerprint, name: targetName };
 }
 
 function normalizeSqlContent(content) {
@@ -547,9 +608,62 @@ function checkedMigrationLedgerState(args) {
   }
 }
 
-function numberCollisions(ledgerRows, migrations, aliases) {
+function hasNumber108Coexistence(ledgerRows, migrations) {
+  return new Set([...ledgerRows, ...migrations.filter((migration) => !migration.rollback)]
+    .filter((entry) => entry.number === 108).map((entry) => entry.version)).size > 1;
+}
+
+function assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd }) {
+  const candidates = migrations.filter((migration) => !migration.rollback && migration.number === 108);
+  const refuse = (reason) => {
+    throw new Error(`Refusing unreviewed number 108 coexistence: ${reason}`);
+  };
+  if (candidates.length !== 2 || new Set(candidates.map((candidate) => candidate.version)).size !== 2) {
+    refuse("both canonical source files, and no third 108 migration, are required");
+  }
+  for (const candidate of candidates) {
+    const expected = reviewedNumber108Checksums.get(candidate.version);
+    const file = `${candidate.version}.sql`;
+    const path = `migrations/${file}`;
+    if (!expected || candidate.checksum !== expected || candidate.file !== file || candidate.path !== path ||
+        candidate.name !== candidate.version.slice(4)) {
+      refuse(`unexpected canonical name, checksum, or path for ${candidate.version}`);
+    }
+    try {
+      const sourcePath = join(cwd, path);
+      if (!lstatSync(sourcePath).isFile()) refuse(`canonical source is not a regular file: ${path}`);
+      const content = readFileSync(sourcePath, "utf8");
+      if (createHash("sha256").update(content).digest("hex") !== expected || candidate.content !== content) {
+        refuse(`canonical source checksum drift: ${path}`);
+      }
+      execFileSync("git", ["ls-files", "--error-unmatch", path], { cwd, stdio: "ignore" });
+    } catch (error) {
+      refuse(`canonical source must exist, match its reviewed hash, and be git tracked: ${path} (${error.message})`);
+    }
+  }
+  for (const row of ledgerRows.filter((entry) => entry.number === 108)) {
+    const expected = reviewedNumber108Checksums.get(row.version);
+    if (!expected || row.checksum !== expected || (row.name != null && row.name !== row.version.slice(4))) {
+      refuse(`unexpected canonical ledger name or missing/mismatched checksum for ${row.version}`);
+    }
+  }
+}
+
+export function reviewedNumber108Coexistence({ ledgerRows, migrations, cwd = process.cwd() }) {
+  if (!hasNumber108Coexistence(ledgerRows, migrations)) return false;
+  try {
+    assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function numberCollisions(ledgerRows, migrations, aliases = [], cwd = process.cwd()) {
   const migrationsByNumber = new Map();
   const verifiedAliasVersions = new Set(aliases.map((alias) => alias.aliasVersion));
+  const unreviewed108 = hasNumber108Coexistence(ledgerRows, migrations) &&
+    !reviewedNumber108Coexistence({ ledgerRows, migrations, cwd });
   for (const migration of migrations) {
     if (migration.rollback) continue;
     if (!migrationsByNumber.has(migration.number)) migrationsByNumber.set(migration.number, []);
@@ -558,6 +672,9 @@ function numberCollisions(ledgerRows, migrations, aliases) {
 
   return ledgerRows.flatMap((row) => {
     const codeVersions = migrationsByNumber.get(row.number) ?? [];
+    if (row.number === 108 && unreviewed108) {
+      return [{ ledger: row.version, number: row.number, codeVersions }];
+    }
     if (
       !codeVersions.length ||
       codeVersions.includes(row.version) ||
@@ -609,14 +726,21 @@ function plannedMigrations(args) {
   }
 }
 
-export function validateMigrationPlan({ ledgerRows, migrations, plan }) {
+export function validateMigrationPlan({ ledgerRows, migrations, plan, cwd = process.cwd() }) {
   resolveMigrationLedgerState({ ledgerRows, migrations });
+  const reviewed108 = hasNumber108Coexistence(ledgerRows, [...migrations, ...plan]);
+  if (reviewed108) {
+    assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd });
+    if (plan.some((migration) => migration.number === 108 && !migrations.includes(migration))) {
+      throw new Error("Refusing unreviewed number 108 coexistence: planned migration is not one of the reviewed local files");
+    }
+  }
 
   for (const migration of plan) {
     const conflictingRows = ledgerRows.filter(
       (row) => row.number === migration.number && row.version !== migration.version,
     );
-    if (conflictingRows.length) {
+    if (conflictingRows.length && !(migration.number === 108 && reviewed108)) {
       throw new Error(
         `Refusing migration ${migration.version}: number ${String(migration.number).padStart(3, "0")} already exists in ledger as ${conflictingRows.map((row) => row.version).join(", ")}`,
       );
@@ -646,6 +770,9 @@ function printStatus({ ledger, migrations, plan }) {
   console.log(`Migration files: ${migrations.length}`);
   console.log(`Ledger rows: ${ledger.rows.length}`);
   console.log(`Legacy ledger rows without checksum: ${legacyWithoutChecksum.length}`);
+  if (reviewedNumber108Coexistence({ ledgerRows: ledger.rows, migrations })) {
+    console.log("Reviewed canonical number 108 coexistence: 108_knowledge_connected_assistant_quota + 108_universal_booking (exact source and ledger checksums verified)");
+  }
 
   console.log("Verified legacy numeric aliases:");
   if (!aliases.length) {
@@ -773,8 +900,11 @@ async function applyMigration(client, migration, context = {}) {
 }
 
 async function main() {
-  const { allowManualCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
+  const { allowManualCutover, bookingProductionCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
   const target = resolveTarget();
+  const bookingProduction = bookingProductionCutoverProfile({ enabled: bookingProductionCutover, command,
+    only, allowManualCutover, target: target.name });
+  const transport = resolveMigrationTransport();
   const migrations = readMigrations();
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
   if (command === "dry-run" || command === "up") {
@@ -783,12 +913,11 @@ async function main() {
       plan: migrations.filter((migration) => !migration.rollback),
     });
   }
-  const pool = new Pool({
-    connectionString: target.databaseUrl,
+  const pool = createMigrationPool({ databaseUrl: target.databaseUrl, target: target.name, options: {
     connectionTimeoutMillis: 10_000,
     idle_in_transaction_session_timeout: 60_000,
     query_timeout: migrationClientTimeoutMs,
-  });
+  } });
   const client = await pool.connect();
 
   try {
@@ -812,6 +941,7 @@ async function main() {
     if ((neon061Profile || media062Profile || crm080Profile) && !runtimeRole) {
       throw new Error("The selected compatibility execution profile requires the declared runtime role.");
     }
+    if (bookingProduction) await assertBookingMigrationRuntimeRole(client, runtimeRole);
     await client.query({
       query_timeout: guardQueryTimeoutMs,
       text: "set search_path = public",
@@ -850,7 +980,8 @@ async function main() {
     assertChecksumSafety({ ledgerRows: ledger.rows, migrations, plan });
     const planToken = createMigrationPlanToken({
       connectedTarget,
-      executionProfile: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null) || (crm080Profile ? `crm-080:${crm080Profile}` : null),
+      executionProfile: migrationExecutionProfile({ bookingProduction, hostFingerprint: target.hostFingerprint, runtimeRole, transport,
+        compatibility: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null) || (crm080Profile ? `crm-080:${crm080Profile}` : null) }),
       headCommit,
       ledgerRows: ledger.rows,
       plan,

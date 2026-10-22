@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { PublicBookingForm } from "@/components/public-booking-form";
+import { getLegacyBookingReplacement } from "@/lib/booking/legacy-routing";
 import {
   getPublicMeetingAvailability,
   getPublicMeetingBookingActionState,
@@ -189,6 +191,19 @@ export async function renderPublicBookingPage({
     bookingId && token
       ? await getPublicMeetingBookingActionState({ bookingId, token })
       : null;
+  const replacement = savedPage?.id && savedPage.workspaceId ? await getLegacyBookingReplacement(savedPage.workspaceId, savedPage.id) : null;
+  if (replacement && !cancelMode) {
+    if (rescheduleMode && actionState) return <main className="novalure-public-runtime mx-auto max-w-xl p-6">
+      <h1>{language === "de" ? "Bestehenden Termin umbuchen" : "Reschedule your existing appointment"}</h1>
+      <p>{language === "de" ? "Bitte kontaktieren Sie den Veranstalter zur Umbuchung dieses bestehenden Termins. Es wurde kein neuer Termin gebucht." : "Please contact the organizer to reschedule this existing appointment. No new appointment has been booked."}</p>
+      <p>{actionState.title} · {formatDateTime(actionState.startsAt, language)}</p>
+    </main>;
+    if (!replacement.enabled || !replacement.channels.link) return <main className="novalure-public-runtime mx-auto max-w-xl p-6">
+      <h1>{language === "de" ? "Termin anfragen" : "Request an appointment"}</h1>
+      <p>{language === "de" ? "Bitte kontaktieren Sie den Veranstalter für einen Termin. Für diese Terminseite sind derzeit keine Buchungszeiten freigegeben." : "Please contact the organizer to request an appointment. Booking times are currently unavailable for this appointment page."}</p>
+    </main>;
+    return <PublicBookingForm publicId={replacement.publicId} channel="link" initialLanguage={language} />;
+  }
   const actionDate = actionState ? formatDateKey(actionState.startsAt) : undefined;
   const availability = await getPublicMeetingAvailability({
     date: requestedDate || (actionState ? actionDate : undefined),

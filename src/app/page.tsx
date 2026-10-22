@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { PublicCrmLanding } from "@/components/public-crm-landing";
 import { CrmWorkspace } from "@/components/crm-workspace";
-import { getSessionFromHeaders } from "@/lib/auth/session";
+import { getCrmRequestLanguage } from "@/lib/auth/request-language";
 import { getCoreCrmData } from "@/lib/db/crm-loaders";
 import {
   getCrmLandingPageCopy,
@@ -69,7 +69,9 @@ function resolveHomeLanguage(
 export async function generateMetadata({ searchParams }: HomeProps): Promise<Metadata> {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const { language } = resolveHomeLanguage(requestHeaders, query);
+  const publicLanguage = resolveHomeLanguage(requestHeaders, query).language;
+  const crmLanguage = await getCrmRequestLanguage();
+  const language = crmLanguage.session ? crmLanguage.language : publicLanguage;
   const copy = homeMetadata[language];
   const canonicalUrl = new URL("/", publicSiteOrigin);
   canonicalUrl.searchParams.set("lang", language);
@@ -98,7 +100,8 @@ export async function generateMetadata({ searchParams }: HomeProps): Promise<Met
 
 export default async function Home({ searchParams }: HomeProps) {
   const requestHeaders = await headers();
-  const session = await getSessionFromHeaders(requestHeaders);
+  const crmLanguage = await getCrmRequestLanguage();
+  const { session } = crmLanguage;
   const query = searchParams ? await searchParams : {};
   const { country, language } = resolveHomeLanguage(requestHeaders, query);
   const appLanguage = toAppLanguage(language);
@@ -120,8 +123,12 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <CrmWorkspace
+      key={session.authIdentityId ?? session.userId}
       coreData={coreData}
-      initialLanguage={appLanguage}
+      initialLanguage={crmLanguage.language}
+      initialLanguagePreference={crmLanguage.preference}
+      automaticLanguage={crmLanguage.automaticLanguage}
+      languagePreferenceAvailable={crmLanguage.preferenceAvailable}
       sessionProductRole={session.productRole}
       sessionRole={session.role}
       sessionUserId={session.userId}

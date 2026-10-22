@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getLegacyBookingReplacement, replacementBookingPath } from "@/lib/booking/legacy-routing";
 import type { AppSession } from "@/lib/auth/session";
 import { getProductRoleCapabilities } from "@/lib/product-model";
 import {
@@ -370,6 +371,7 @@ type MeetingAutomationConfig = {
 };
 
 type CreateMeetingBookingResult = {
+  bookingUrl?: string;
   autoConfirmed?: boolean;
   bookingId?: string | null;
   confirmationStatus?: string | null;
@@ -1002,6 +1004,8 @@ async function getMeetingAvailabilityForPage(
   date?: string,
 ): Promise<PublicMeetingAvailability | null> {
   if (!page?.id || !page.workspaceId) return null;
+  // A mapped page offers times only through the common channel service.
+  if (await getLegacyBookingReplacement(page.workspaceId, page.id)) return null;
 
   const inputDate = date;
   const rules = getAvailabilityRules(page);
@@ -1048,6 +1052,8 @@ async function getMeetingAvailabilityForPage(
       workspaceId: page.workspaceId,
     }),
   ]);
+  // Publication may complete while the provider's availability probe is pending.
+  if (await getLegacyBookingReplacement(page.workspaceId, page.id)) return null;
   const busyRanges = [
     ...databaseBusy.map((busy) => ({
       end: new Date(normalizeDateInput(busy.endsAt)),
@@ -1168,6 +1174,9 @@ export async function createMeetingBookingWithNotifications(
     return { persisted: false, reason: resolvedPage.reason || "Meeting page is not available" };
   }
 
+  const replacement = await getLegacyBookingReplacement(page.workspaceId, page.id);
+  if (replacement) return { persisted: false, reason: "booking_channel_moved", ...(replacement.enabled && replacement.channels.link ? { bookingUrl: replacementBookingPath(replacement.publicId) } : {}) };
+
   const contactName = input.contactName.trim();
   const contactEmail = input.contactEmail.trim().toLowerCase();
   const availability = await getMeetingAvailabilityForPage(page, input.selectedDate);
@@ -1190,6 +1199,8 @@ export async function createMeetingBookingWithNotifications(
   const automation = asAutomation(page.automation);
   const publicToken = randomUUID();
 
+  const currentReplacement = await getLegacyBookingReplacement(page.workspaceId, page.id);
+  if (currentReplacement) return { persisted: false, reason: "booking_channel_moved", ...(currentReplacement.enabled && currentReplacement.channels.link ? { bookingUrl: replacementBookingPath(currentReplacement.publicId) } : {}) };
   const bookingRow = await queryOne<IdRow>(
     `
         insert into meeting_bookings (
@@ -1601,8 +1612,12 @@ async function syncExternalCalendarForPublicAction(input: {
   const metadata = getBookingMetadata(input.booking.metadata);
   const eventId = getExternalCalendarEventId(metadata);
   const provider = getExternalCalendarProvider(input.booking);
+  const beforeWrite = input.action === "reschedule" && input.booking.meetingPageId ? async () => {
+    if (await getLegacyBookingReplacement(input.booking.workspaceId, input.booking.meetingPageId!)) throw new Error("booking_reschedule_requires_organizer");
+  } : undefined;
 
   if (!eventId || !provider) {
+    try { await beforeWrite?.(); } catch { return { eventId, provider: provider ?? "none", status: "failed" as const, error: "booking_reschedule_requires_organizer" }; }
     return {
       eventId,
       provider: provider ?? "none",
@@ -1618,6 +1633,7 @@ async function syncExternalCalendarForPublicAction(input: {
             workspaceId: input.booking.workspaceId,
           })
         : await updateGoogleCalendarEvent({
+            beforeWrite,
             body: input.body,
             endsAt: input.endsAt ?? normalizeDateInput(input.booking.endsAt),
             eventId,
@@ -1632,6 +1648,7 @@ async function syncExternalCalendarForPublicAction(input: {
             workspaceId: input.booking.workspaceId,
           })
         : await updateMicrosoftCalendarEvent({
+            beforeWrite,
             body: input.body,
             endsAt: input.endsAt ?? normalizeDateInput(input.booking.endsAt),
             eventId,
@@ -1826,6 +1843,9 @@ export async function reschedulePublicMeetingBooking(input: {
   const booking = await getPublicMeetingBookingByToken(input);
   if (!booking) return { error: "booking_not_found", ok: false };
   if (!booking.pageSlug) return { error: "meeting_page_missing", ok: false };
+  if (booking.meetingPageId && await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId)) {
+    return { error: "booking_reschedule_requires_organizer", ok: false };
+  }
 
   const automation = asAutomation(booking.automation);
   if (!actionAllowed({ action: "reschedule", automation, startsAt: booking.startsAt })) {
@@ -1879,6 +1899,9 @@ export async function reschedulePublicMeetingBooking(input: {
 
   if (externalSync.status === "failed") {
     return { error: "calendar_sync_failed", ok: false };
+  }
+  if (externalSync.status === "pending" && booking.meetingPageId && await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId)) {
+    return { error: "booking_reschedule_requires_organizer", ok: false };
   }
 
   const actionMetadata = {
@@ -2141,6 +2164,11 @@ export async function confirmMeetingBooking(input: {
   if (!booking) return { error: "Booking not found", ok: false };
 
   const metadata = getBookingMetadata(booking.metadata);
+  if (metadata.universalBookingId) return { error: "Use the common booking service for this appointment", ok: false };
+  if (booking.meetingPageId && await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId)) {
+    return booking.status === "confirmed" ? { bookingId: booking.id, status: "confirmed", ok: true }
+      : { error: "Use the published booking channel to confirm a new appointment", ok: false };
+  }
   let calendarEventId =
     typeof metadata.calendarEventId === "string" && isUuid(metadata.calendarEventId)
       ? metadata.calendarEventId
@@ -2165,8 +2193,12 @@ export async function confirmMeetingBooking(input: {
     booking.calendarProvider === "microsoft" || booking.meetingProvider === "microsoft-teams";
   const shouldUseGoogle =
     booking.calendarProvider === "google" || booking.meetingProvider === "google-meet";
+  const beforeWrite = booking.meetingPageId ? async () => {
+    if (await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId!)) throw new Error("booking_channel_moved");
+  } : undefined;
   const syncResult = shouldUseMicrosoft
     ? await syncMicrosoftCalendarEvent({
+        beforeWrite,
         attendees: [booking.contactEmail],
         body: [
           `<p>Termin aus Novalure CRM Buchungsseite.</p>`,
@@ -2181,6 +2213,7 @@ export async function confirmMeetingBooking(input: {
       })
     : shouldUseGoogle
       ? await syncGoogleCalendarEvent({
+          beforeWrite,
           attendees: [booking.contactEmail],
           body: [
             `<p>Termin aus Novalure CRM Buchungsseite.</p>`,
@@ -2211,6 +2244,9 @@ export async function confirmMeetingBooking(input: {
   const syncError = missingOnlineMeetingUrl
     ? `${getMeetingLocation(booking.meetingProvider)} konnte keinen Meeting-Link erstellen.`
     : syncResult.error ?? null;
+  if (syncStatus === "pending" && booking.meetingPageId && await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId)) {
+    return { bookingId: booking.id, error: "booking_channel_moved", ok: false, status: "pending" };
+  }
 
   const mergedMetadata = {
     ...metadata,

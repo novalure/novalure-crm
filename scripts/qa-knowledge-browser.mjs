@@ -89,15 +89,25 @@ try {
   });
   await step("ordinary password and real TOTP enrollment create the session", async () => {
     await page.goto(fixture.baseUrl + "/login?lang=de");
+    const consent = page.getByRole("button", { name: /^(Nur essenzielle|Only necessary)$/ });
+    if (await consent.isVisible()) await consent.click();
     await page.locator("#login-email").fill(fixture.email);
     await page.locator("#login-password").fill(fixture.password);
     await Promise.all([page.waitForNavigation(), page.locator("form:has(#login-password) button[type=submit]").click({ timeout: 120000 })]);
-    const secret = (await page.locator("p").filter({ has: page.locator("strong", { hasText: "TOTP-Schlüssel:" }) }).locator("code").innerText()).trim();
+    const secret = (await page.locator("p").filter({ has: page.locator("strong", { hasText: /TOTP-Schlüssel:|TOTP key:/ }) }).locator("code").innerText()).trim();
     await page.locator("input[name=recoveryCodesSaved]").check();
     await page.locator("#login-mfa-code").fill(totp(secret));
-    await Promise.all([page.waitForNavigation(), page.getByRole("button", { name: "Sicher bestätigen", exact: true }).click({ timeout: 120000 })]);
+    await Promise.all([page.waitForNavigation(), page.getByRole("button", { name: /^(Sicher bestätigen|Verify securely)$/ }).click({ timeout: 120000 })]);
     await expect(page).not.toHaveURL(/\/login/);
     assert.ok((await context.cookies()).some(cookie => cookie.name === "novalure_session" && cookie.httpOnly && cookie.value.startsWith("v2.")));
+    // German regression selectors follow the authenticated account's real choice.
+    await page.evaluate(workspace => { window.knowledgeWorkspace = workspace; }, fixture.workspaceId);
+    const language = await api("/api/settings/language", { preference: "de", expectedUserId: fixture.userId });
+    assert.equal(language.status, 200);
+    assert.equal(language.body.persisted, true);
+    assert.equal(language.body.preference, "de");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
   });
   await step("disabled module shows an honest state with no sample knowledge", async () => {
     await page.goto(fixture.baseUrl + "/?lang=de&workspaceId=" + fixture.workspaceId + "&projectId=all#knowledge");

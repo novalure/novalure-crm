@@ -67,6 +67,21 @@ jobs:
       - name: Design C operational reader permissions and source availability
         run: npm run test:crm-operational-readers
 
+      - name: Universal booking two-tenant concurrency, provider contracts and reconciliation
+        run: npm run test:booking
+
+      - name: Booking setup, travel and tenant isolation
+        run: npm run test:booking:setup
+
+      - name: Booking email rendering, durable reminders and delivery reconciliation
+        run: npm run test:booking:messages
+
+      - name: Shared personal language preference and forced RLS
+        run: npm run test:booking:language
+
+      - name: Published booking channel authority, adapters and embedding contracts
+        run: npm run test:booking:channels
+
       - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
         run: npm run test:knowledge-center
 
@@ -81,6 +96,12 @@ jobs:
 
       - name: Install local QA browser
         run: npx playwright install chromium --with-deps
+
+      - name: Booking setup DE and EN, login, MFA, CSRF and two-tenant request flow
+        run: npm run qa:booking:browser
+
+      - name: Public booking form and exact-origin inline and popup interaction
+        run: npm run qa:booking:public-ui
 
       - name: Sales transactions against isolated local PostgreSQL
         run: npm run test:sales
@@ -161,6 +182,10 @@ jobs:
           # Exact result-file allowlist; never upload fixture-private/context files.
           include-hidden-files: true
           path: |
+            .npm-cache/qa/universal-booking.json
+            .npm-cache/qa/booking-browser/result.json
+            .npm-cache/qa/booking-setup-browser/result.json
+            .npm-cache/qa/booking-public-ui/result.json
             .npm-cache/qa/package4-migrations.json
             .npm-cache/qa/package4-e2e-result.json
             .npm-cache/qa/design-c-integration/result.json

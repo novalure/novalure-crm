@@ -19,13 +19,15 @@ import {
   getCrmLandingPageCopy,
   getLoginPageCopy,
   languageRequestHeaderName,
+  resolveLanguage,
+  getLanguagePreferenceCopy,
   type LanguageCode,
 } from "@/lib/i18n";
 import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
 import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
-import { resolvePublicLanguage } from "@/lib/public-language";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { buildPublicPageMetadata } from "@/lib/page-metadata";
+import { type LanguagePreference } from "@/lib/crm-language";
 
 type LoginPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -33,8 +35,8 @@ type LoginPageProps = {
 
 export async function generateMetadata({ searchParams }: LoginPageProps): Promise<Metadata> {
   const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  void searchParams;
+  const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   return buildPublicPageMetadata({
     description: language === "de"
       ? "Sicherer Zugang zu freigegebenen Novalure CRM Workspaces."
@@ -77,10 +79,11 @@ function getForgotPasswordHref(language: LanguageCode) {
 }
 
 function getLoginLanguageHref(
-  language: LanguageCode,
+  language: LanguagePreference,
   query: Record<string, string | string[] | undefined>,
 ) {
-  const params = new URLSearchParams({ lang: language });
+  const params = new URLSearchParams({ languagePreference: language });
+  if (language !== "auto") params.set("lang", language);
 
   for (const key of ["error", "reset", "returnTo"]) {
     const value = getQueryValue(query[key]);
@@ -154,12 +157,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getSessionFromHeaders(requestHeaders);
   const query = searchParams ? await searchParams : {};
   const country = getRequestCountry(requestHeaders);
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country,
-    persistedLanguage: requestHeaders.get(languageRequestHeaderName),
-    requestedLanguage: query.lang,
-  });
+  const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   const returnTo = resolveSafeLocalRedirect(getQueryValue(query.returnTo, "/"), {
     blockedPathPrefixes: ["/api", "/login"],
     fallback: "/",
@@ -206,7 +204,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         language={language}
         languageHrefs={languageHrefs}
       >
-        <div className={subpageStyles.authLayout}>
+        <div className={subpageStyles.authLayout} data-crm-login-language lang={language}>
           <section className={subpageStyles.authIntro}>
             <p className={subpageStyles.eyebrow}>{introCopy.eyebrow}</p>
             <h1>{introCopy.title}</h1>
@@ -409,6 +407,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               ) : null}
 
             <div className={subpageStyles.authLinks}>
+              <Link className={subpageStyles.textLink} href={getLoginLanguageHref("auto", query)} prefetch={false}>
+                {getLanguagePreferenceCopy(language).automatic}
+              </Link>
               <Link
                 className={subpageStyles.textLink}
                 href={publicHomeHref}

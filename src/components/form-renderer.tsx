@@ -1,4 +1,6 @@
 import type { ChangeEvent, FocusEvent, FormEvent, Ref } from "react";
+import type { LanguageCode } from "@/lib/language-runtime";
+import { FormBookingField } from "./form-booking-field";
 import type { FormField, FormStep, WebsiteForm } from "@/lib/form-types";
 import {
   publicSubmissionControlFields,
@@ -70,6 +72,7 @@ type FormRendererMode = "editor" | "embed" | "public";
 type FormRendererProps = {
   action?: string;
   className?: string;
+  language?: LanguageCode;
   copy?: FormRuntimeCopy;
   currentStepIndex?: number;
   errors?: Record<string, string>;
@@ -117,6 +120,7 @@ export function fieldBelongsToStep(field: FormField, step: FormStep, index: numb
 }
 
 export function FormRenderer({
+  language = "de",
   action = "/api/forms/submissions",
   className = "",
   copy = fallbackFormRuntimeCopy,
@@ -228,6 +232,7 @@ export function FormRenderer({
                 .filter((field) => fieldBelongsToStep(field, step, stepIndex))
                 .map((field) => (
                   <RenderedField
+                    language={language}
                     copy={copy}
                     error={errors[field.id]}
                     field={field}
@@ -321,6 +326,7 @@ function PublicSubmissionProofInputs({ proof }: { proof: PublicSubmissionProof }
 }
 
 function RenderedField({
+  language,
   copy,
   error,
   field,
@@ -332,6 +338,7 @@ function RenderedField({
   value,
   visible,
 }: {
+  language: LanguageCode;
   copy: FormRuntimeCopy;
   error?: string;
   field: FormField;
@@ -374,6 +381,7 @@ function RenderedField({
         {field.required ? <span className="novalure-required shrink-0 text-xs text-slate-500">{copy.required}</span> : null}
       </span>
       {renderControl({
+        language,
         describedBy,
         field,
         mode,
@@ -397,6 +405,7 @@ function RenderedField({
 }
 
 function renderControl({
+  language,
   describedBy,
   field,
   mode,
@@ -405,6 +414,7 @@ function renderControl({
   onValueChange,
   value,
 }: {
+  language: LanguageCode;
   describedBy?: string;
   field: FormField;
   mode: FormRendererMode;
@@ -430,6 +440,11 @@ function renderControl({
     required: field.required,
     value: mode === "embed" ? undefined : controlledValue,
   };
+
+  if (field.type === "booking") {
+    if (mode !== "public") return <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-normal" data-novalure-form-booking={field.bookingPublicId ?? ""} data-booking-field-id={field.id} data-booking-required={String(field.bookingRequired ?? field.required)}>{language === "de" ? "Terminart → bestätigter Ort → freie Zeit → Kontaktdaten → Zusammenfassung und ausdrückliche Buchung. Die Editorvorschau löst keine Buchung aus." : "Appointment type → confirmed location → available time → contact details → summary and explicit booking. The editor preview does not create a booking."}</div>;
+    return <FormBookingField field={field} language={language} onChange={value => onValueChange(value)} />;
+  }
 
   if (field.type === "textarea") {
     return <textarea {...commonInput} className={`${baseInputClass} novalure-textarea min-h-28`} />;

@@ -6,9 +6,9 @@ import subpageStyles from "@/components/public-subpage.module.css";
 import { PublicSiteShell } from "@/components/public-site-shell";
 import { SubmitOnceForm } from "@/components/submit-once-form";
 import { getSessionFromHeaders } from "@/lib/auth/session";
-import { getLoginPageCopy } from "@/lib/i18n";
+import { getLoginPageCopy, languageRequestHeaderName, resolveLanguage } from "@/lib/i18n";
 import { withPublicLanguage } from "@/lib/public-language";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { buildPublicPageMetadata } from "@/lib/page-metadata";
 
 type ForgotPasswordPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -16,8 +16,8 @@ type ForgotPasswordPageProps = {
 
 export async function generateMetadata({ searchParams }: ForgotPasswordPageProps): Promise<Metadata> {
   const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  void searchParams;
+  const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   return buildPublicPageMetadata({
     description: language === "de"
       ? "Fordern Sie einen sicheren, einmalig nutzbaren Link für Ihren Novalure CRM Zugang an."
@@ -34,7 +34,7 @@ function getQueryValue(value: string | string[] | undefined, fallback = "") {
 }
 
 function getForgotLanguageHref(language: "de" | "en", sent = false) {
-  const params = new URLSearchParams({ lang: language });
+  const params = new URLSearchParams({ lang: language, languagePreference: language });
   if (sent) params.set("sent", "1");
   return `/login/forgot-password?${params.toString()}`;
 }
@@ -46,7 +46,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
 
   if (session) redirect("/");
 
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   const login = getLoginPageCopy(language);
   const reset = login.passwordReset;
   const sent = getQueryValue(query.sent) === "1";
@@ -71,7 +71,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
         en: getForgotLanguageHref("en", sent),
       }}
     >
-      <div className={subpageStyles.authLayout}>
+      <div className={subpageStyles.authLayout} data-crm-login-language lang={language}>
         <section className={subpageStyles.authIntro}>
           <p className={subpageStyles.eyebrow}>{intro.eyebrow}</p>
           <h1>{intro.title}</h1>
