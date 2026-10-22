@@ -4,6 +4,7 @@ import { externalFailure, externalJson, externalOptions, readBoundedJsonObject }
 import { dispatchTrustedBookingTool } from "@/lib/booking/channel-http";
 import { verifyExternalChatBookingAuthority } from "@/lib/booking/channel-bindings";
 import { BookingError } from "@/lib/booking/types";
+import { readTrustedChatBookingConfiguration } from "@/lib/booking/chat-configuration";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,6 +27,10 @@ export async function POST(request: Request) {
     const authority = await verifyExternalChatBookingAuthority({ publicSiteKey, origin, sessionId, sessionToken, correlationId: context.correlationId });
     const payload = { ...body };
     delete payload.siteKey; delete payload.sessionId; delete payload.sessionToken;
+    if (payload.operation === "configuration") {
+      if (Object.keys(payload).some(key => key !== "operation")) throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+      return externalJson(origin, await readTrustedChatBookingConfiguration(authority), { correlationId: context.correlationId });
+    }
     const result = await dispatchTrustedBookingTool(request, "chat", authority, payload);
     return externalJson(origin, result, { correlationId: context.correlationId });
   } catch (error) {

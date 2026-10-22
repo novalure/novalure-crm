@@ -75,6 +75,9 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       // Current browser acceptance needs the additive personal-language table;
       // predecessor-only database tests keep their original schema by default.
       ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),
+      // The website editor reads the current published appointment types when
+      // the calendar module is enabled. Its public-channel schema is opt-in too.
+      ...(bookingSetup ? ["111_booking_public_channels.sql"] : []),
     ]) {
       if (bookingSetup && filename === "108_universal_booking.sql") {
         const { reviewedNumber108Coexistence } = await import("../db-migrate.mjs");

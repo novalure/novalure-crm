@@ -26,6 +26,13 @@ const de = {
   conflict: "Die Verbindung wurde inzwischen geändert. Aktualisieren Sie die Liste und öffnen Sie die Bearbeitung erneut.",
   count: "Mit Wissen verbundene Assistenten", countHelp: "Ein Assistent zählt über alle Wissenskanäle einmal. Pausieren oder eine weitere Domain verändert diese Anzahl nicht. Erst das Entfernen aller Wissenszuordnungen gibt den Platz frei.",
   defaultWelcome: "Wie kann ich Ihnen helfen?",
+  bookingTitle: "Terminbuchung im Chat", bookingEnable: "Terminbuchung für diesen Website-Chat freigeben",
+  bookingHelp: "Besucher können die ausgewählten Terminarten buchen. Verfügbarkeit und Bestätigung verwenden Ihre gespeicherten Kalender-, Fahrt- und E-Mail-Regeln.",
+  bookingTypes: "Freigegebene Terminarten und Mitarbeiter", bookingSetup: "Terminbuchung einrichten",
+  bookingSetupRequired: "Veröffentlichen Sie zuerst Terminarten und den Webchat-Kanal in der Terminbuchung. Geben Sie dort auch die Website-Adressen dieser Verbindung frei.",
+  bookingLiveRequired: "Die Buchungsfreigabe benötigt den Status Aktiv und den Betrieb Kundenbetrieb.",
+  bookingSelectType: "Bitte mindestens eine veröffentlichte Terminart auswählen.",
+  bookingKind_phone: "Telefontermin", bookingKind_teams: "Microsoft Teams", bookingKind_meet: "Google Meet", bookingKind_office: "Termin im Büro", bookingKind_onsite: "Kundenbesuch / Besichtigung",
 };
 type Copy = { [Key in keyof typeof de]: string };
 const en: Copy = {
@@ -54,6 +61,13 @@ const en: Copy = {
   conflict: "The connection has changed. Refresh the list and reopen the editor.",
   count: "Assistants connected to knowledge", countHelp: "An assistant counts once across all knowledge channels. Pausing it or adding another domain does not change the count. Removing all its knowledge assignments releases the place.",
   defaultWelcome: "How can I help you?",
+  bookingTitle: "Appointment booking in chat", bookingEnable: "Enable appointment booking for this website chat",
+  bookingHelp: "Visitors can book the selected appointment types using your saved calendar, travel and email rules.",
+  bookingTypes: "Approved appointment types and employees", bookingSetup: "Set up appointment booking",
+  bookingSetupRequired: "Publish appointment types and the webchat channel in appointment booking first. Also approve this connection’s website addresses there.",
+  bookingLiveRequired: "Booking requires Active status and Customer operation mode.",
+  bookingSelectType: "Select at least one published appointment type.",
+  bookingKind_phone: "Phone appointment", bookingKind_teams: "Microsoft Teams", bookingKind_meet: "Google Meet", bookingKind_office: "Office appointment", bookingKind_onsite: "Customer visit / viewing",
 };
 const es: Copy = {
   tab: "Chat web", title: "Conectar el chat de su web",
@@ -81,6 +95,13 @@ const es: Copy = {
   conflict: "La conexión ha cambiado. Actualice la lista y vuelva a abrir el editor.",
   count: "Asistentes conectados al conocimiento", countHelp: "Cada asistente cuenta una vez entre todos sus canales. Pausarlo o añadir otro dominio no cambia la cantidad. Quitar todas sus asignaciones de conocimiento libera la plaza.",
   defaultWelcome: "¿Cómo puedo ayudarle?",
+  bookingTitle: "Reserva de citas en el chat", bookingEnable: "Activar la reserva de citas para este chat web",
+  bookingHelp: "Los visitantes pueden reservar los tipos seleccionados con sus reglas guardadas de calendario, desplazamiento y correo.",
+  bookingTypes: "Tipos de cita y empleados autorizados", bookingSetup: "Configurar la reserva de citas",
+  bookingSetupRequired: "Publique primero los tipos de cita y el canal de chat web en la reserva de citas. Autorice allí también las direcciones web de esta conexión.",
+  bookingLiveRequired: "La reserva requiere estado Activo y modo Cliente.",
+  bookingSelectType: "Seleccione al menos un tipo de cita publicado.",
+  bookingKind_phone: "Cita telefónica", bookingKind_teams: "Microsoft Teams", bookingKind_meet: "Google Meet", bookingKind_office: "Cita en la oficina", bookingKind_onsite: "Visita al cliente",
 };
 
 export function getWebsiteIntegrationCopy(language: LanguageCode | "es"): Copy {

@@ -20,6 +20,7 @@ const ids = {
   workspace: "synthetic-workspace", project: "synthetic-project", otherProject: "synthetic-other-project",
   bot: "synthetic-project-bot", otherBot: "synthetic-other-bot", companyBot: "synthetic-company-bot",
   integration: "synthetic-website-integration",
+  bookingType: "29b8f075-f087-43cd-ac90-81fc72fa03bb", bookingOtherType: "91169696-a0cf-4f5c-b0ef-3e9154944381",
 };
 const siteKey = "nov_pk_AbCdEfGhIjKlMnOpQrStUvWxYz01_-23";
 const initialTimestamp = "2026-10-21T12:00:00.000Z";
@@ -52,10 +53,11 @@ const initialIntegration = {
 // csrfFetch client. All tokens and server responses here are synthetic fixtures.
 function installSyntheticFetch(scope, seed, timestamps) {
   const scenario = new URL(location.href).searchParams.get("scenario");
-  if (scenario !== "manager" && scenario !== "pause-only") throw new Error("Unknown synthetic UI scenario");
+  if (!["manager", "pause-only", "booking"].includes(scenario)) throw new Error("Unknown synthetic UI scenario");
   const state = {
-    integrations: scenario === "manager" ? [] : [structuredClone(seed)],
-    permissions: { canManage: scenario === "manager", canPause: true },
+    integrations: scenario === "manager" ? [] : [{ ...structuredClone(seed), ...(scenario === "booking" ? { mode: "real_customer", booking: null } : {}) }],
+    permissions: { canManage: scenario !== "pause-only", canPause: true },
+    bookingOptions: scenario === "booking" ? { canManage: true, publication: { publicId: "synthetic-ui-chat-booking", types: [{ id: scope.bookingType, kind: "phone", organizerName: "SYNTHETIC organizer" }, { id: scope.bookingOtherType, kind: "onsite", organizerName: "SYNTHETIC other organizer" }] } } : undefined,
     calls: [], csrfRequests: [], unexpected: [], assignments: [], reads: 0,
   };
   const tokens = new Map();
@@ -82,7 +84,7 @@ function installSyntheticFetch(scope, seed, timestamps) {
       return json({ csrfToken: token });
     }
     if (url.pathname !== "/api/integrations/websites" || url.searchParams.get("workspaceId") !== scope.workspace) return fail("Unexpected API or missing workspace scope");
-    if (method === "GET") { state.reads += 1; return json({ integrations: state.integrations, permissions: state.permissions }); }
+    if (method === "GET") { state.reads += 1; return json({ integrations: state.integrations, permissions: state.permissions, bookingOptions: state.bookingOptions }); }
     if (method !== "POST" && method !== "PATCH") return fail("Unexpected mutation method");
     const token = new Headers(init.headers || request?.headers).get("x-novalure-csrf-token");
     if (!token || tokens.get(token) !== method || (init.credentials ?? request?.credentials) !== "same-origin") return fail("Missing fresh method-bound CSRF token or same-origin credentials");
@@ -105,7 +107,7 @@ function installSyntheticFetch(scope, seed, timestamps) {
     const patch = { ...body };
     delete patch.integrationId;
     delete patch.expectedUpdatedAt;
-    const integration = { ...current, ...patch, updatedAt: timestamps.updated };
+    const integration = { ...current, ...patch, ...(patch.booking ? { booking: patch.booking.enabled ? { ...patch.booking, channels: ["chat"] } : null } : {}), updatedAt: timestamps.updated };
     replace(integration); return json({ integration });
   };
 }
@@ -126,7 +128,9 @@ try {
   await build({
     stdin: { contents: entry, loader: "tsx", resolveDir: repository, sourcefile: "synthetic-website-integration-ui.tsx" },
     absWorkingDir: repository, bundle: true, platform: "browser", format: "iife", jsx: "automatic",
-    tsconfig: join(repository, "tsconfig.json"), define: { "process.env.NODE_ENV": '"production"' },
+    // The real Next Link renders its fallback anchor in this standalone UI
+    // fixture; no Node environment exists in the browser and no app env leaks.
+    tsconfig: join(repository, "tsconfig.json"), define: { "process.env.NODE_ENV": '"production"', "process.env": "{}" },
     outfile: join(fixtureDirectory, "fixture.js"), logLevel: "silent",
   });
   await writeFile(join(fixtureDirectory, "index.html"), `<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic website connection UI regression</title><style>body{font:16px sans-serif;margin:24px}button,input,select,textarea{font:inherit;margin:4px;padding:8px}label{display:block}li{margin:16px 0;padding:12px;border:1px solid #aaa}</style><p>${classification}</p><div id="root"></div><script src="/fixture.js"></script></html>`);
@@ -263,12 +267,41 @@ try {
     assert.equal(state.integrations[0].knowledgeAssistantId, ids.bot);
     assert.equal(state.integrations[0].mode, "training");
   });
+  await inScenario("booking", async page => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Edit connection", exact: true }).click();
+    const form = page.locator("form"), enabled = form.getByRole("checkbox", { name: "Enable appointment booking for this website chat", exact: true });
+    await expect(enabled).toBeEnabled(); await expect(enabled).not.toBeChecked();
+    await expect(form.getByRole("link", { name: "Set up appointment booking", exact: true })).toHaveAttribute("href", "/booking");
+    await enabled.check();
+    assert.equal((await inspect(page)).calls.length, 0, "Enabling the editor checkbox does not save or create a booking");
+    await form.getByRole("button", { name: "Save connection", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText("Select at least one published appointment type.");
+    assert.equal((await inspect(page)).calls.length, 0, "An empty type selection is not submitted");
+    const phone = form.getByRole("checkbox", { name: "Phone appointment · SYNTHETIC organizer", exact: true });
+    await expect(phone).toBeVisible(); await phone.check();
+    await expect(form.getByRole("checkbox", { name: "Customer visit / viewing · SYNTHETIC other organizer", exact: true })).not.toBeChecked();
+    // This standalone interaction fixture does not load the app's Tailwind
+    // layout; responsive layout remains part of the real Next/browser checks.
+    await form.getByRole("button", { name: "Save connection", exact: true }).click(); await expect(form).toHaveCount(0);
+    let state = await inspect(page);
+    assert.equal(state.calls.length, 1); assert.equal(state.calls[0].method, "PATCH");
+    assert.deepEqual(state.calls[0].body.booking, { enabled: true, publicId: "synthetic-ui-chat-booking", typeIds: [ids.bookingType] });
+    assert.equal("workspaceId" in state.calls[0].body, false); assert.equal("capabilities" in state.calls[0].body, false);
+    await page.getByRole("button", { name: "Edit connection", exact: true }).click();
+    await expect(enabled).toBeChecked(); await expect(phone).toBeChecked();
+    await enabled.uncheck(); await form.getByRole("button", { name: "Save connection", exact: true }).click();
+    await expect(form).toHaveCount(0); state = await inspect(page);
+    assert.equal(state.calls.length, 2); assert.deepEqual(state.calls[1].body.booking, { enabled: false });
+    assert.equal(state.integrations[0].booking, null);
+  });
   assert.deepEqual(pageErrors, [], "No browser page errors");
   assert.deepEqual(blockedNetwork, [], "All browser HTTP stays within the static loopback fixture");
-  console.log("PASS website connection customer flow: scoped training create, public script, CAS edit/conflict draft, pause-only permission");
-  console.log(JSON.stringify({ classification, passed: 1, failed: 0, scenarios: 2, browserPageErrors: pageErrors.length, unexpectedBrowserNetworkRequests: blockedNetwork.length,
+  console.log("PASS website connection customer flow: scoped training create, public script, CAS edit/conflict draft, pause-only permission and scoped booking enable/revoke");
+  console.log(JSON.stringify({ classification, passed: 1, failed: 0, scenarios: 3, browserPageErrors: pageErrors.length, unexpectedBrowserNetworkRequests: blockedNetwork.length,
     limitations: ["Synthetic fetch responses only", "No Next server or actual API routes", "No authentication, database, external website, model or provider acceptance"] }));
 } finally {
+  if (pageErrors.length) console.error(JSON.stringify({ syntheticUiPageErrors: pageErrors }));
   if (browser) await browser.close();
   if (server) await new Promise((resolveClose, rejectClose) => server.close(error => error ? rejectClose(error) : resolveClose()));
   await rm(fixtureDirectory, { recursive: true, force: true });

@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
-import { createCipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createCipheriv, createHash, createHmac, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 import { startDesignCIntegrationDatabase } from "./lib/design-c-integration-fixture.mjs";
+import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
+import { getBookingPublication, saveBookingPublication } from "../src/lib/booking/publication";
+import { saveBookingRules } from "../src/lib/booking/service";
+import { saveBookingSetup } from "../src/lib/booking/configuration";
+import type { BookingChannelOptions } from "../src/lib/booking/channels";
+import type { BookingProvider, ProviderEvent } from "../src/lib/booking/types";
 import type { TenantPool, TenantTransaction } from "../src/lib/db/tenant-client";
 import { runWithTenantTransaction } from "../src/lib/db/transaction-context";
 import { CRM_MACHINE_AUDIENCE, CRM_MACHINE_ENVIRONMENT, CRM_MACHINE_ISSUER, CRM_MACHINE_OWNER_ID, CRM_MACHINE_PROJECT_ID,
@@ -262,4 +268,194 @@ test("machine booking authority uses actual PostgreSQL principal, actor and inde
       assert.equal(read?.form.fields[0].bookingPublicId, publicId);
     });
   } finally { await db.stop(); }
+});
+
+
+test("authorized voice HTTP tools complete one consent-bound booking without telephony or network access", { timeout: 180000 }, async t => {
+  const previousEnv = { ...process.env }, previousFetch = globalThis.fetch;
+  const evidence: Record<string, unknown> = {
+    format: "booking-voice-http-contract-v1", syntheticOnly: true,
+    realProviderCalls: 0, telephonyCalls: 0, productionAccess: 0,
+    oidcMode: "ephemeral local RS256 signature with existing exact workload claims; not live Vercel OIDC",
+    checks: [] as string[], status: "RUNNING", cleanup: { complete: false },
+  };
+  const db = await startDesignCIntegrationDatabase();
+  let networkAttempts = 0, creates = 0, updates = 0, deletes = 0, verifiedTokens = 0, requests = 0, invalidSignatureRequests = 0;
+  const events = new Map<string, ProviderEvent>();
+  const check = async (name: string, run: () => Promise<void>) => {
+    let failure: unknown;
+    await t.test(name, async () => {
+      try { await run(); (evidence.checks as string[]).push(name); }
+      catch (error) { failure = error; evidence.status = "FAIL"; throw error; }
+    });
+    // node:test reports a failed subtest without rejecting t.test(). A failed
+    // contract must stop this dependent flow and must never receive a PASS receipt.
+    if (failure) throw new Error(`Voice contract check failed: ${name}`, { cause: failure });
+  };
+  try {
+    for (const migration of ["108_universal_booking.sql", "109_booking_setup_communications.sql", "111_booking_public_channels.sql"]) {
+      const client = await db.admin.connect();
+      try { await client.query("begin"); await client.query(await readFile(`migrations/${migration}`, "utf8")); await client.query("commit"); }
+      catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
+    }
+    Object.assign(process.env, { NODE_ENV: "test", DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/neondb`,
+      CRM_LOCAL_TEST_DATABASE: "1", BOOKING_ENGINE_ENABLED: "1", NOVALURE_APP_ORIGIN: "https://crm.example.invalid",
+      NOVALURE_AUTH_RATE_LIMIT_SECRET: randomBytes(40).toString("hex") });
+    for (const name of ["VERCEL", "VERCEL_ENV", "VERCEL_URL", "BOOKING_PRODUCTION_ENABLED", "BOOKING_TEST_BINDINGS_JSON", "BOOKING_MESSAGES_ENABLED", "BOOKING_REMINDERS_ENABLED"]) delete process.env[name];
+    globalThis.fetch = async () => { networkAttempts++; throw new Error("Voice contract forbids every network request"); };
+    const now = new Date(), seconds = Math.floor(now.valueOf() / 1000), keyPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = { alg: "RS256", kid: "synthetic-local-voice-contract", typ: "JWT" };
+    const claims = { aud: CRM_MACHINE_AUDIENCE, environment: CRM_MACHINE_ENVIRONMENT, exp: seconds + 3600,
+      iat: seconds - 5, iss: CRM_MACHINE_ISSUER, jti: randomUUID(), nbf: seconds - 5, owner_id: CRM_MACHINE_OWNER_ID,
+      project_id: CRM_MACHINE_PROJECT_ID, sub: CRM_MACHINE_SUBJECT };
+    const signedBytes = [header, claims].map(value => Buffer.from(JSON.stringify(value)).toString("base64url")).join(".");
+    const signature = sign("RSA-SHA256", Buffer.from(signedBytes), keyPair.privateKey);
+    const localToken = `${signedBytes}.${signature.toString("base64url")}`;
+    const machineAuth: CrmMachineAuthOptions = { env: { CRM_MACHINE_AUTH_ENABLED: "1", NODE_ENV: "production", VERCEL_ENV: "production" }, now,
+      verifier: async (token, policy) => {
+        const parts = token.split(".");
+        assert.equal(parts.length, 3); assert.ok(verify("RSA-SHA256", Buffer.from(parts.slice(0, 2).join(".")), keyPair.publicKey, Buffer.from(parts[2], "base64url")));
+        assert.deepEqual(policy?.algorithms, ["RS256"]); assert.equal(policy?.issuer, CRM_MACHINE_ISSUER); assert.equal(policy?.audience, CRM_MACHINE_AUDIENCE);
+        verifiedTokens++;
+        return { payload: JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")), protectedHeader: JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) };
+      },
+    };
+    const organizerId = randomUUID(), connectionId = randomUUID(), botId = randomUUID(), voiceTypeId = randomUUID();
+    const principalId = "8b3238e9-efea-459f-ac84-a08e2a6ec59b", calendarId = `synthetic-voice-${organizerId}`;
+    const pool = { pool: db.pool as unknown as TenantPool };
+    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC voice organizer',$3,'owner','novalureAdmin','active')", [organizerId, CRM_MACHINE_WORKSPACE_ID, `${organizerId}@example.invalid`]);
+    await db.admin.query("insert into booking_calendar_connections(id,workspace_id,user_id,provider,status,account_id,write_calendar_id,calendars) values($1,$2,$3,'google','connected',$4,$5,$6::jsonb)",
+      [connectionId, CRM_MACHINE_WORKSPACE_ID, organizerId, `synthetic-voice-account-${organizerId}`, calendarId, JSON.stringify([{ id: calendarId, name: "SYNTHETIC voice calendar", canWrite: true, canRead: true, teamsSupported: false, meetSupported: false, protectedReadOnly: false }])]);
+    const organizer: AppSession = { authenticated: true, source: "database", workspaceId: CRM_MACHINE_WORKSPACE_ID,
+      userId: organizerId, workspaceName: "SYNTHETIC voice workspace", name: "SYNTHETIC voice organizer", email: `${organizerId}@example.invalid`,
+      role: "owner", permissions: getRolePermissions("owner"), productRole: "novalureAdmin", productPermissions: getProductRoleCapabilities("novalureAdmin") };
+    await saveBookingRules(organizer, { rules: { timeZone: "UTC", durationMinutes: 30, preparationMinutes: 0, followupMinutes: 0,
+      minNoticeMinutes: 0, cancelNoticeMinutes: 0, rescheduleNoticeMinutes: 0, maxAdvanceDays: 366,
+      workingHours: [0, 1, 2, 3, 4, 5, 6].map(day => ({ day, start: "09:00", end: "17:00" })) } }, pool);
+    await saveBookingSetup(organizer, { scope: "company", kind: "*", section: "communication", value: { enabled: false } }, pool);
+    const draft = await getBookingPublication(organizer, pool);
+    const publication = { ...draft.publication, enabled: true, title: "SYNTHETIC authorized voice booking", assignments: [{ id: voiceTypeId, organizerId, provider: "google" as const, kind: "phone" as const }],
+      channels: { ...draft.publication.channels, voice: true } };
+    await saveBookingPublication(organizer, { publication, expectedRevision: draft.revision }, pool);
+    const savedGrant = { booking: { enabled: true, publicId: publication.publicId, channels: ["voice"], typeIds: [voiceTypeId] } };
+    await db.admin.query("insert into bots(id,workspace_id,name,role,config) values($1,$2,'SYNTHETIC voice HTTP assistant','advisor',$3::jsonb)", [botId, CRM_MACHINE_WORKSPACE_ID, JSON.stringify(savedGrant)]);
+    await db.admin.query("insert into knowledge_assistant_service_bindings(workspace_id,principal_id,bot_id,channel) values($1,$2,$3,'voice')", [CRM_MACHINE_WORKSPACE_ID, principalId, botId]);
+    const provider: BookingProvider = {
+      async listBusy(input) { return [...events.values()].filter(event => !event.cancelled && event.eventId !== input.excludeEventId)
+        .map(event => ({ startsAt: event.startsAt, endsAt: event.endsAt, eventId: event.eventId })); },
+      async create(input) { creates++; const event: ProviderEvent = { eventId: `synthetic-voice-${input.bookingId}`, etag: '"voice-v1"', startsAt: input.startsAt, endsAt: input.endsAt, onlineMeetingUrl: null, videoStatus: "none", cancelled: false }; events.set(input.bookingId, event); return event; },
+      async lookup(input) { return events.get(input.bookingId) ?? null; },
+      async update(input) { updates++; const current = events.get(input.bookingId); assert.ok(current); assert.equal(input.etag, current.etag); const event = { ...current, startsAt: input.startsAt, endsAt: input.endsAt, etag: '"voice-v2"' }; events.set(input.bookingId, event); return event; },
+      async delete(input) { deletes++; const current = events.get(input.bookingId); assert.ok(current); assert.equal(input.etag, current.etag); events.set(input.bookingId, { ...current, cancelled: true }); },
+    };
+    const options: BookingChannelOptions & { machineAuth: CrmMachineAuthOptions } = { ...pool, machineAuth,
+      providerFactory: async () => provider, connectionResolver: async () => ({ connectionId, calendarId, revision: 1 }) };
+    const call = async (body: Record<string, unknown>, token = localToken) => {
+      requests++; if (token !== localToken) invalidSignatureRequests++;
+      const request = new Request("https://crm.example.invalid/api/integrations/booking/voice", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await handleMachineBookingRequest(request, "voice", options);
+      return { status: response.status, body: await response.json() as { token?: string; booking?: PublicBookingRecord; code?: string; slots?: Array<{ startsAt: string; endsAt: string }> } };
+    };
+    let sessionToken = "", booking: PublicBookingRecord;
+    const day = new Date(Date.now() + 3 * 86400000); day.setUTCHours(10, 0, 0, 0);
+    const startsAt = day.toISOString(), holdKey = randomUUID();
+    await check("normal runtime and all booking channel relations enforce FORCE RLS", async () => {
+      const runtime = (await db.pool.query("select rolsuper,rolbypassrls from pg_roles where rolname=current_user")).rows[0];
+      assert.deepEqual(runtime, { rolsuper: false, rolbypassrls: false });
+      for (const table of ["booking_reservations", "booking_channel_sessions", "booking_channel_operations"]) {
+        const row = (await db.admin.query("select relrowsecurity,relforcerowsecurity from pg_class where oid=$1::regclass", [table])).rows[0];
+        assert.equal(row.relrowsecurity, true); assert.equal(row.relforcerowsecurity, true);
+        assert.equal((await db.pool.query(`select count(*)::int n from ${table}`)).rows[0].n, 0);
+      }
+    });
+    await check("cryptographic workload verification and current saved voice grant issue an opaque scoped session", async () => {
+      const altered = Buffer.from(signature); altered[0] ^= 1;
+      assert.equal((await call({ operation: "session", typeId: voiceTypeId }, `${signedBytes}.${altered.toString("base64url")}`)).status, 401);
+      const issued = await call({ operation: "session", typeId: voiceTypeId, language: "de" });
+      assert.equal(issued.status, 200); assert.match(issued.body.token ?? "", /^[A-Za-z0-9_-]{43}$/); sessionToken = issued.body.token!;
+      const stored = (await db.admin.query("select channel,binding_id,relation,organizer_id,workspace_id from booking_channel_sessions where token_hash=encode(sha256($1::bytea),'hex')", [sessionToken])).rows[0];
+      assert.equal(stored.channel, "voice"); assert.equal(stored.binding_id, principalId); assert.equal(stored.relation.source, "machine"); assert.equal(stored.relation.sourceId, principalId); assert.equal(stored.organizer_id, organizerId); assert.equal(stored.workspace_id, CRM_MACHINE_WORKSPACE_ID);
+    });
+    await check("voice availability and repeated holds use the shared durable reservation", async () => {
+      const availability = await call({ operation: "availability", token: sessionToken, date: startsAt.slice(0, 10) });
+      assert.equal(availability.status, 200); assert.ok(availability.body.slots?.some(slot => slot.startsAt === startsAt));
+      const body = { operation: "hold", token: sessionToken, startsAt, recipientEmail: "synthetic-voice@example.invalid", recipientName: "SYNTHETIC voice visitor", idempotencyKey: holdKey };
+      const held = await call(body); assert.equal(held.status, 200); assert.equal(held.body.booking?.state, "held"); booking = held.body.booking!;
+      assert.equal((await call(body)).body.booking?.id, booking.id);
+      assert.equal((await db.admin.query("select count(*)::int n from booking_reservations where id=$1", [booking.id])).rows[0].n, 1); assert.equal(creates, 0);
+    });
+    await check("wrong consent and summary cannot confirm; one correct consent creates once despite replay", async () => {
+      const summary = { startsAt: booking.startsAt, timeZone: booking.timeZone, kind: booking.kind, location: booking.location };
+      for (const patch of [{ consent: false }, { summary: { ...summary, startsAt: new Date(Date.parse(startsAt) + 3600000).toISOString() } }, { summary: { ...summary, timeZone: "Europe/Vienna" } }, { summary: { ...summary, location: "forged place" } }, { summary: { ...summary, kind: "meet" } }]) {
+        const denied = await call({ operation: "confirm", token: sessionToken, bookingId: booking.id, consent: true, summary, ...patch });
+        assert.equal(denied.status, 409); assert.equal(denied.body.code, "BOOKING_SUMMARY_CONSENT_REQUIRED");
+      }
+      assert.equal(creates, 0);
+      const body = { operation: "confirm", token: sessionToken, bookingId: booking.id, consent: true, summary };
+      const confirmed = await call(body); assert.equal(confirmed.status, 200); assert.equal(confirmed.body.booking?.state, "confirmed"); booking = confirmed.body.booking!;
+      assert.equal((await call(body)).body.booking?.state, "confirmed"); assert.equal(creates, 1);
+      const canonical = (await db.admin.query("select metadata->>'bookingChannel' channel,metadata->'bookingChannelRelation' relation from meeting_bookings where id=$1", [booking.id])).rows[0];
+      assert.equal(canonical.channel, "voice"); assert.equal(canonical.relation.source, "machine"); assert.equal(canonical.relation.sourceId, principalId);
+      assert.equal((await db.admin.query("select count(*)::int n from audit_logs where entity_id=$1 and action='booking.channel_consent'", [booking.id])).rows[0].n, 1);
+    });
+    await check("another session, a foreign scope override and a changed assistant grant cannot access the booking", async () => {
+      const other = await call({ operation: "session", typeId: voiceTypeId }); assert.equal(other.status, 200);
+      assert.equal((await call({ operation: "status", token: other.body.token, bookingId: booking.id })).status, 404);
+      assert.equal((await call({ operation: "status", token: sessionToken, bookingId: booking.id, workspaceId: randomUUID() })).status, 400);
+      await db.admin.query("update bots set config=jsonb_set(config,'{booking,typeIds}',$2::jsonb) where id=$1", [botId, JSON.stringify([randomUUID()])]);
+      assert.equal((await call({ operation: "status", token: sessionToken, bookingId: booking.id })).status, 403);
+      await db.admin.query("update bots set config=$2::jsonb where id=$1", [botId, JSON.stringify(savedGrant)]);
+      const own = await call({ operation: "status", token: sessionToken, idempotencyKey: holdKey }); assert.equal(own.status, 200); assert.equal(own.body.booking?.id, booking.id); assert.equal(creates, 1);
+    });
+    await check("voice reschedule and cancellation each require the exact current summary and replay safely", async () => {
+      const target = new Date(Date.parse(booking.startsAt) + 2 * 3600000).toISOString(), rescheduleKey = randomUUID();
+      const summary = { startsAt: target, timeZone: booking.timeZone, kind: booking.kind, location: booking.location };
+      const moveBody = { operation: "reschedule", token: sessionToken, bookingId: booking.id, startsAt: target, idempotencyKey: rescheduleKey, consent: true, summary };
+      assert.equal((await call({ ...moveBody, summary: { ...summary, startsAt: booking.startsAt } })).status, 409);
+      assert.equal((await call({ ...moveBody, consent: false })).status, 409); assert.equal(updates, 0);
+      const moved = await call(moveBody);
+      assert.equal(moved.status, 200); assert.equal(moved.body.booking?.startsAt, target); booking = moved.body.booking!; assert.equal(updates, 1);
+      assert.equal((await call(moveBody)).body.booking?.startsAt, target); assert.equal(updates, 1);
+      const cancelKey = randomUUID(), body = { operation: "cancel", token: sessionToken, bookingId: booking.id, idempotencyKey: cancelKey, consent: true,
+        summary: { startsAt: booking.startsAt, timeZone: booking.timeZone, kind: booking.kind, location: booking.location } };
+      assert.equal((await call({ ...body, consent: false })).status, 409);
+      assert.equal((await call({ ...body, summary: { ...body.summary, startsAt } })).status, 409); assert.equal(deletes, 0);
+      const cancelled = await call(body); assert.equal(cancelled.status, 200); assert.equal(cancelled.body.booking?.state, "cancelled");
+      assert.equal((await call(body)).body.booking?.state, "cancelled"); assert.equal(deletes, 1); assert.equal(creates, 1);
+      assert.equal((await call({ operation: "status", token: sessionToken, bookingId: booking.id })).body.booking?.state, "cancelled");
+    });
+    await check("every tool call rechecks the upstream grant and no network, messages or calls occurred", async () => {
+      await db.admin.query("update knowledge_assistant_service_bindings set enabled=false where principal_id=$1", [principalId]);
+      assert.equal((await call({ operation: "status", token: sessionToken, bookingId: booking.id })).status, 403);
+      await db.admin.query("update knowledge_assistant_service_bindings set enabled=true where principal_id=$1", [principalId]);
+      assert.equal(verifiedTokens, requests - invalidSignatureRequests); assert.equal(invalidSignatureRequests, 1); assert.equal(networkAttempts, 0);
+      assert.equal((await db.admin.query("select count(*)::int n from booking_message_jobs where workspace_id=$1", [CRM_MACHINE_WORKSPACE_ID])).rows[0].n, 0);
+      assert.equal(preparedTelephonyBookingIntegration.status, "not_connected"); assert.equal(preparedTelephonyBookingIntegration.outboundActionsEnabled, false);
+    });
+    evidence.status = "PASS_ISOLATED_VOICE_HTTP_CONTRACT";
+    evidence.providerPortOperations = { creates, updates, deletes, liveEvents: [...events.values()].filter(event => !event.cancelled).length };
+    evidence.verifiedLocalSignatures = verifiedTokens; evidence.toolRequests = requests; evidence.invalidSignatureRequests = invalidSignatureRequests; evidence.networkAttempts = networkAttempts;
+  } catch (error) {
+    evidence.status = "FAIL"; evidence.failure = error instanceof Error ? error.message : String(error); throw error;
+  } finally {
+    globalThis.fetch = previousFetch;
+    const cleanupFailures: string[] = [];
+    let clusterStopped = false, disposableDirectoryRemoved = false;
+    try {
+      try { await closeLocalTestPool(); } catch { cleanupFailures.push("local-pool-close"); }
+      try { await db.stop(); clusterStopped = true; } catch { cleanupFailures.push("cluster-stop"); }
+      // The complete database is this test's disposable loopback cluster. Audit
+      // records are never deleted or rewritten through application tables.
+      if (clusterStopped) {
+        try { await rm(db.directory, { recursive: true, force: true }); disposableDirectoryRemoved = true; }
+        catch { cleanupFailures.push("disposable-directory-remove"); }
+      }
+    } finally { process.env = previousEnv; events.clear(); }
+    evidence.cleanup = { complete: cleanupFailures.length === 0 && clusterStopped && disposableDirectoryRemoved,
+      clusterStopped, disposableDirectoryRemoved, simulatedEventsRemoved: true, failures: cleanupFailures };
+    if (cleanupFailures.length) evidence.status = "FAIL_CLEANUP";
+    await mkdir(".npm-cache/qa/booking3", { recursive: true });
+    await writeFile(".npm-cache/qa/booking3/voice-http-contract.json", JSON.stringify(evidence, null, 2));
+    assert.deepEqual(cleanupFailures, [], "The isolated voice test must clean up completely");
+  }
 });

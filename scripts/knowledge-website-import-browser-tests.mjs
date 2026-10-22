@@ -178,7 +178,7 @@ try {
   await build({
     stdin: { contents: entry, loader: "tsx", resolveDir: repository, sourcefile: "synthetic-knowledge-website-ui.tsx" },
     absWorkingDir: repository, bundle: true, platform: "browser", format: "iife", jsx: "automatic",
-    tsconfig: join(repository, "tsconfig.json"), define: { "process.env.NODE_ENV": '"production"' },
+    tsconfig: join(repository, "tsconfig.json"), define: { "process.env.NODE_ENV": '"production"', "process.env": "{}" },
     outfile: join(fixtureDirectory, "fixture.js"), logLevel: "silent",
   });
   await writeFile(join(fixtureDirectory, "index.html"), `<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic knowledge import UI regression</title><style>body{font:16px sans-serif;margin:24px}button,input,select,textarea{font:inherit;margin:4px;padding:8px}label{display:block}li{margin:16px 0;padding:12px;border:1px solid #aaa}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style><p>${classification}</p><div id="root"></div><script src="/fixture.js"></script></html>`);

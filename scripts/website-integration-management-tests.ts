@@ -11,6 +11,7 @@ import { createManagedWebsiteIntegration, listManagedWebsiteIntegrations, update
 import { assignKnowledgeAreas, createKnowledgeArea, createKnowledgeSource, knowledgeInternals, publishKnowledgeSource } from "../src/lib/knowledge-center/repository";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 import { createCsrfToken } from "../src/lib/security/csrf-core";
+import { startDesignCIntegrationDatabase } from "./lib/design-c-integration-fixture.mjs";
 
 const errorCode = (code: string) => (error: unknown) => (error as { code?: string }).code === code;
 
@@ -124,19 +125,21 @@ test("Website self-service uses saved tenant/project authority, atomic edits and
         values($1,$2,$3,$4,'SYNTHETIC form','synthetic-studio','aktiv','[]','{}')`, [ids.form, ids.workspace, ids.project, ids.owner]);
       const legacyKey = `nov_pk_${randomUUID().replaceAll("-", "")}`;
       await db.admin.query(`insert into external_integrations(id,public_site_key,workspace_id,project_id,form_id,integration_type,status,mode,allowed_origins,capabilities,configuration)
-        values($1,$2,$3,$4,$5,'novalure_studio','test','training',array['https://studio.example'],array['form.read','form.submit','lead.create'],'{"legacyCompatibility":false,"privateServerConfiguration":"SYNTHETIC-DO-NOT-RETURN"}')`, [ids.legacy, legacyKey, ids.workspace, ids.project, ids.form]);
-      await db.admin.query(`insert into external_integration_widget_configs(integration_id,workspace_id,brand_name,lead_capture_enabled,enabled_capabilities)
-        values($1,$2,'SYNTHETIC Studio',true,array['form.read','form.submit','lead.create'])`, [ids.legacy, ids.workspace]);
+        values($1,$2,$3,$4,$5,'novalure_studio','test','training',array['https://studio.example'],array['form.read','form.submit','lead.create','appointment.request'],'{"legacyCompatibility":false,"privateServerConfiguration":"SYNTHETIC-DO-NOT-RETURN"}')`, [ids.legacy, legacyKey, ids.workspace, ids.project, ids.form]);
+      await db.admin.query(`insert into external_integration_widget_configs(integration_id,workspace_id,brand_name,lead_capture_enabled,calendar_enabled,enabled_capabilities)
+        values($1,$2,'SYNTHETIC Studio',true,true,array['form.read','form.submit','lead.create','appointment.request'])`, [ids.legacy, ids.workspace]);
       const before = (await listManagedWebsiteIntegrations(owner, options)).integrations.find(item => item.id === ids.legacy)!;
       assert.equal(before.readiness.ready, false); assert.equal(JSON.stringify(before).includes("SYNTHETIC-DO-NOT-RETURN"), false);
       const bound = await updateManagedWebsiteIntegration(owner, { integrationId: ids.legacy, expectedUpdatedAt: before.updatedAt, knowledgeAssistantId: ids.bot }, options);
       assert.equal(bound.id, ids.legacy); assert.equal(bound.publicSiteKey, legacyKey); assert.equal(bound.formId, ids.form);
       assert.equal(bound.integrationType, "novalure_studio"); assert.equal(bound.widget.brandName, "SYNTHETIC Studio"); assert.equal(bound.widget.leadCaptureEnabled, true);
-      assert.deepEqual(new Set(bound.capabilities), new Set(["form.read", "form.submit", "lead.create", "chat.start", "chat.context", "chat.message"]));
+      assert.deepEqual(new Set(bound.capabilities), new Set(["form.read", "form.submit", "lead.create", "appointment.request", "chat.start", "chat.context", "chat.message"]));
       assert.equal((await db.admin.query("select configuration from external_integrations where id=$1", [ids.legacy])).rows[0].configuration.privateServerConfiguration, "SYNTHETIC-DO-NOT-RETURN");
       const unbound = await updateManagedWebsiteIntegration(owner, { integrationId: ids.legacy, expectedUpdatedAt: bound.updatedAt, knowledgeAssistantId: null }, options);
       assert.equal(unbound.status, "test"); assert.equal(unbound.widget.chatEnabled, false); assert.equal(unbound.widget.leadCaptureEnabled, true);
-      assert.deepEqual(unbound.capabilities, ["form.read", "form.submit", "lead.create"]);
+      assert.deepEqual(unbound.capabilities, ["form.read", "form.submit", "lead.create", "appointment.request"]);
+      assert.ok((unbound.widget.enabledCapabilities as string[]).includes("appointment.request"), "An older appointment-request capability without a chat booking grant is preserved");
+      assert.equal(unbound.widget.calendarEnabled, true, "An older independent calendar capability is preserved too");
       assert.equal((await db.pool.query("select * from crm_external_integration_resolve($1,$2,'form.read',null)", [legacyKey, "https://studio.example"])).rowCount, 1);
       assert.equal((await db.pool.query("select * from crm_external_integration_resolve($1,$2,'chat.context',null)", [legacyKey, "https://studio.example"])).rowCount, 0);
       const rebound = await updateManagedWebsiteIntegration(owner, { integrationId: ids.legacy, expectedUpdatedAt: unbound.updatedAt, knowledgeAssistantId: ids.bot }, options);
@@ -147,7 +150,7 @@ test("Website self-service uses saved tenant/project authority, atomic edits and
         widget: { brandName: rebound.widget.brandName, welcomeMessage: rebound.widget.welcomeMessage } }, options);
       assert.equal(detachedDraft.knowledgeAssistantId, null); assert.equal(detachedDraft.formId, ids.form);
       assert.equal(detachedDraft.widget.chatEnabled, false); assert.equal(detachedDraft.widget.leadCaptureEnabled, true);
-      assert.deepEqual(detachedDraft.capabilities, ["form.read", "form.submit", "lead.create"]);
+      assert.deepEqual(detachedDraft.capabilities, ["form.read", "form.submit", "lead.create", "appointment.request"]);
       await assert.rejects(updateManagedWebsiteIntegration(owner, { integrationId: ids.legacy, expectedUpdatedAt: detachedDraft.updatedAt, status: "active" }, options), errorCode("PUBLISHED_FORM_REQUIRED"));
     });
     await t.test("contract loss blocks further use but never blocks pause, detach or revoke", async () => {
@@ -213,6 +216,103 @@ test("Website self-service uses saved tenant/project authority, atomic edits and
         await closeLocalTestPool();
         for (const key of keys) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; }
       }
+    });
+  } finally { await db.stop(); }
+});
+
+test("website chat booking grants use the current published tenant scope and remain revocable", { timeout: 180_000 }, async t => {
+  const db = await startDesignCIntegrationDatabase({ bookingSetup: true });
+  const options: TenantTransactionOptions = { pool: db.pool as unknown as NonNullable<TenantTransactionOptions["pool"]> };
+  const ids = { workspace: randomUUID(), owner: randomUUID(), project: randomUUID(), bot: randomUUID(), publication: randomUUID(), type: randomUUID() };
+  const owner: AppSession = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read", "crm:write"], productPermissions: [],
+    userId: ids.owner, workspaceId: ids.workspace, workspaceName: "SYNTHETIC Booking chat", name: "SYNTHETIC owner", email: "booking-chat@example.invalid" };
+  const publicId = "synthetic-website-chat-booking", origin = "https://booking-chat.example";
+  const configuration = { publicId, enabled: true, title: "SYNTHETIC appointments", description: "", appearance: "light", language: "en", allowedOrigins: [origin],
+    channels: { link: false, inline: false, popup: false, form: false, chat: true, voice: false }, assignments: [{ id: ids.type, organizerId: ids.owner, kind: "phone", provider: "microsoft" }], legacyMeetingPageIds: [] };
+  try {
+    await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC booking chat','self_service_customer')", [ids.workspace]);
+    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC organizer','booking-chat@example.invalid','owner','customer_owner','active')", [ids.owner, ids.workspace]);
+    await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC project','Bauträger')", [ids.project, ids.workspace]);
+    await db.admin.query("insert into bots(id,workspace_id,project_id,name,role) values($1,$2,$3,'SYNTHETIC booking assistant','Support')", [ids.bot, ids.workspace, ids.project]);
+    await db.admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits)
+      values($1,true,20,2000000,100,'SYNTHETIC-NOT-A-COMMERCIAL-CONTRACT','{"webchatAccess":true}','{"maxAreas":10,"maxWebsites":10,"maxScansPerMonth":1,"maxUsers":10,"maxAssistants":1}')`, [ids.workspace]);
+    const area = await createKnowledgeArea(owner, { name: "SYNTHETIC booking FAQ", kind: "company" }, options);
+    const source = await createKnowledgeSource(owner, { areaId: area.id, name: "SYNTHETIC FAQ", type: "manual", content: "SYNTHETIC opening hours." }, options);
+    await publishKnowledgeSource(owner, { sourceId: source.id, versionId: source.draftVersionId!, expectedVersion: source.revision }, options);
+    await assignKnowledgeAreas(owner, { botId: ids.bot, channel: "webchat", areaIds: [area.id] }, options);
+    let row = await createManagedWebsiteIntegration(owner, { projectId: ids.project, knowledgeAssistantId: ids.bot, allowedOrigins: [origin], mode: "real_customer" }, options);
+    row = await updateManagedWebsiteIntegration(owner, { integrationId: row.id, expectedUpdatedAt: row.updatedAt, status: "active" }, options);
+    await db.admin.query("insert into booking_publications(id,workspace_id,owner_id,public_id,enabled,config,published_at) values($1,$2,$3,$4,true,$5::jsonb,now())", [ids.publication, ids.workspace, ids.owner, publicId, JSON.stringify(configuration)]);
+    await db.admin.query("insert into booking_publication_assignments(id,workspace_id,publication_id,organizer_id,kind,provider) values($1,$2,$3,$4,'phone','microsoft')", [ids.type, ids.workspace, ids.publication, ids.owner]);
+    const grant = { enabled: true, publicId, typeIds: [ids.type] };
+    const patch = (booking: unknown) => ({ integrationId: row.id, expectedUpdatedAt: row.updatedAt, booking });
+    await t.test("calendar-off leaves the ordinary website list available and cannot add booking authority", async () => {
+      assert.equal((await listManagedWebsiteIntegrations(owner, options)).bookingOptions.canManage, false);
+      await assert.rejects(updateManagedWebsiteIntegration(owner, patch(grant), options), errorCode("BOOKING_MANAGEMENT_FORBIDDEN"));
+      await db.admin.query("insert into workspace_module_settings(workspace_id,module_key,enabled) values($1,'calendar',true) on conflict(workspace_id,module_key) do update set enabled=true", [ids.workspace]);
+    });
+    await t.test("only current published types and approved origins can be granted; client channels are never authority", async () => {
+      const available = (await listManagedWebsiteIntegrations(owner, options)).bookingOptions;
+      assert.deepEqual(available, { canManage: true, publication: { publicId, types: [{ id: ids.type, kind: "phone", organizerName: "SYNTHETIC organizer" }] } });
+      for (const invalid of [{ ...grant, publicId: "synthetic-foreign-publication" }, { ...grant, typeIds: [randomUUID()] }]) await assert.rejects(updateManagedWebsiteIntegration(owner, patch(invalid), options), errorCode("BOOKING_PUBLICATION_REQUIRED"));
+      await assert.rejects(updateManagedWebsiteIntegration(owner, patch({ ...grant, channels: ["voice"] }), options), errorCode("UNKNOWN_FIELD"));
+      await db.admin.query("update booking_publications set config=jsonb_set(config,'{channels,chat}','false'::jsonb) where id=$1", [ids.publication]);
+      await assert.rejects(updateManagedWebsiteIntegration(owner, patch(grant), options), errorCode("BOOKING_PUBLICATION_REQUIRED"));
+      await db.admin.query("update booking_publications set config=$2::jsonb where id=$1", [ids.publication, JSON.stringify({ ...configuration, allowedOrigins: [] })]);
+      await assert.rejects(updateManagedWebsiteIntegration(owner, patch(grant), options), errorCode("BOOKING_ORIGIN_REQUIRED"));
+      await db.admin.query("update booking_publications set config=$2::jsonb where id=$1", [ids.publication, JSON.stringify(configuration)]);
+      row = await updateManagedWebsiteIntegration(owner, patch(grant), options);
+      assert.deepEqual(row.booking, { ...grant, channels: ["chat"] }); assert.equal("configuration" in row, false);
+      assert.ok(row.capabilities.includes("appointment.request")); assert.equal(row.widget.calendarEnabled, true);
+      assert.equal((await db.pool.query("select * from crm_external_integration_resolve($1,$2,'appointment.request',null)", [row.publicSiteKey, origin])).rowCount, 1);
+    });
+    await t.test("changing website origins rechecks the retained booking grant in the same transaction", async () => {
+      await assert.rejects(updateManagedWebsiteIntegration(owner, { integrationId: row.id, expectedUpdatedAt: row.updatedAt, allowedOrigins: ["https://new-booking-chat.example"] }, options), errorCode("BOOKING_ORIGIN_REQUIRED"));
+      const saved = (await listManagedWebsiteIntegrations(owner, options)).integrations.find(item => item.id === row.id)!;
+      assert.equal(saved.updatedAt, row.updatedAt); assert.deepEqual(saved.allowedOrigins, [origin]);
+    });
+    await t.test("the normal saved grant reaches the actual chat-session and bounded booking-configuration routes", async () => {
+      const keys = ["DATABASE_URL", "CRM_LOCAL_TEST_DATABASE", "NODE_ENV", "NOVALURE_ABUSE_SECRET", "NOVALURE_TRUSTED_CLIENT_IP_HEADER", "VERCEL", "VERCEL_ENV", "VERCEL_URL"];
+      const prior = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+      const originalFetch = globalThis.fetch; let externalFetches = 0;
+      try {
+        globalThis.fetch = async () => { externalFetches++; throw new Error("External HTTP is blocked in the local chat configuration test"); };
+        for (const key of keys) delete process.env[key];
+        Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/${db.database}`, CRM_LOCAL_TEST_DATABASE: "1", NODE_ENV: "test",
+          NOVALURE_ABUSE_SECRET: "SYNTHETIC-CHAT-BOOKING-ROUTE-SECRET-00001", NOVALURE_TRUSTED_CLIENT_IP_HEADER: "x-test-client-ip" });
+        const sessions = await import("../src/app/api/public/integrations/chat/sessions/route"), booking = await import("../src/app/api/public/integrations/chat/booking/route");
+        const request = (path: string, body: unknown, token?: string) => new Request(`https://crm.example.invalid/api/public/integrations/chat/${path}`, {
+          method: "POST", headers: { origin, "content-type": "application/json", "x-novalure-site-key": row.publicSiteKey, "x-test-client-ip": "203.0.113.91", ...(token ? { "x-novalure-session-token": token } : {}) }, body: JSON.stringify(body) });
+        const started = await sessions.POST(request("sessions", { idempotencyKey: randomUUID(), language: "en" }));
+        assert.equal(started.status, 201, await started.clone().text());
+        const active = await started.json(); assert.equal(active.bookingAvailable, true); assert.equal(active.status, "active");
+        const configured = await booking.POST(request("booking", { operation: "configuration", sessionId: active.sessionId }, active.sessionToken));
+        assert.equal(configured.status, 200, await configured.clone().text());
+        const safe = await configured.json(); assert.equal(safe.title, configuration.title); assert.equal(safe.language, "en");
+        assert.equal(safe.types.length, 1); assert.equal(safe.types[0].id, ids.type); assert.equal(safe.types[0].kind, "phone");
+        for (const field of ["workspaceId", "organizerId", "provider", "accountId", "calendarId"]) assert.equal(field in safe.types[0], false);
+        const counts = (await db.admin.query("select (select count(*) from booking_channel_sessions)::int as sessions,(select count(*) from booking_reservations)::int as reservations,(select count(*) from booking_message_jobs)::int as messages")).rows[0];
+        assert.deepEqual(counts, { sessions: 0, reservations: 0, messages: 0 }, "Discovery does not create a booking session, hold or message");
+        assert.equal(externalFetches, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+        await closeLocalTestPool();
+        for (const key of keys) { if (prior[key] === undefined) delete process.env[key]; else process.env[key] = prior[key]; }
+      }
+    });
+    await t.test("detaching the assistant removes its saved chat-booking grant without readding its widget capability", async () => {
+      row = await updateManagedWebsiteIntegration(owner, { integrationId: row.id, expectedUpdatedAt: row.updatedAt, knowledgeAssistantId: null }, options);
+      assert.equal(row.booking, null); assert.equal(row.widget.calendarEnabled, false); assert.equal(row.capabilities.includes("appointment.request"), false);
+      assert.equal((row.widget.enabledCapabilities as string[]).includes("appointment.request"), false);
+      row = await updateManagedWebsiteIntegration(owner, { integrationId: row.id, expectedUpdatedAt: row.updatedAt, knowledgeAssistantId: ids.bot, status: "active", booking: grant }, options);
+      assert.deepEqual(row.booking, { ...grant, channels: ["chat"] });
+    });
+    await t.test("booking can be removed after calendar or knowledge entitlement loss without enabling another capability", async () => {
+      await db.admin.query("update workspace_module_settings set enabled=false where workspace_id=$1 and module_key='calendar'", [ids.workspace]);
+      await db.admin.query("update knowledge_center_entitlements set enabled=false where workspace_id=$1", [ids.workspace]);
+      row = await updateManagedWebsiteIntegration(owner, patch({ enabled: false }), options);
+      assert.equal(row.booking, null); assert.equal(row.widget.calendarEnabled, false); assert.equal(row.capabilities.includes("appointment.request"), false);
+      assert.equal((await db.pool.query("select * from crm_external_integration_resolve($1,$2,'appointment.request',null)", [row.publicSiteKey, origin])).rowCount, 0);
     });
   } finally { await db.stop(); }
 });
