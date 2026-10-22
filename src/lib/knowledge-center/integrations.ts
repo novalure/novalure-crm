@@ -98,6 +98,39 @@ export const assistantKnowledgeLimits = Object.freeze({
 export const assistantKnowledgeFallback = "Dazu liegen mir keine freigegebenen Informationen vor. Bitte wenden Sie sich an das zuständige Team.";
 const savedChannels = new Set<string>(["webchat", "whatsapp", "instagram", "messenger", "email", "internal", "voice", "telephone"]);
 
+function boundedAssistantExcerpt(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const clipped = text.slice(0, limit);
+  return (/\s/u.test(text[limit]) ? clipped : clipped.replace(/\S+$/u, "")).trimEnd();
+}
+
+function assistantExcerpt(match: KnowledgeQueryResult["matches"][number], limit: number): string {
+  const original = match.excerpt;
+  if (original.length <= limit || !match.relevantExcerpt) return boundedAssistantExcerpt(original, limit);
+  // Headlines locate relevant text, but may drop trailing numeric tokens. Copy
+  // the original fragment through a nearby sentence/line end to keep facts intact.
+  const ranges: { start: number; end: number }[] = [];
+  let searchFrom = 0;
+  for (const fragment of match.relevantExcerpt.split(" … ").slice(0, 3)) {
+    const start = original.indexOf(fragment, searchFrom);
+    if (!fragment || start < 0) continue;
+    let end = start + fragment.length;
+    searchFrom = end;
+    const tail = original.slice(end);
+    const boundary = tail.search(/[.!?](?=\s|$)|\n/u);
+    if (boundary >= 0 && boundary < 120) end += boundary + 1;
+    else {
+      const tokenTail = tail.match(/^\S*/u)?.[0] ?? "";
+      if (tokenTail.length <= 120) end += tokenTail.length;
+    }
+    const previous = ranges.at(-1);
+    if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
+    else ranges.push({ start, end });
+  }
+  const selected = ranges.map(({ start, end }) => original.slice(start, end)).join(" … ");
+  return boundedAssistantExcerpt(selected || original, limit);
+}
+
 function emptyKnowledge(): KnowledgeQueryResult {
   return { grounded: false, matches: [], usage: { sources: 0, storageBytes: 0, queriesThisMonth: 0 } };
 }
@@ -137,7 +170,7 @@ export async function retrieveKnowledgeForSavedChannel(
       if (requiresLivePropertyFacts(query, match.projectDivision) || requiresLivePropertyFacts(match.excerpt, match.projectDivision) || remaining <= 0) continue;
       // Keep the original chunk above for policy checks; select useful facts for
       // the bounded assistant context instead of always clipping its beginning.
-      const excerpt = (match.relevantExcerpt ?? match.excerpt).slice(0, Math.min(assistantKnowledgeLimits.excerptCharacters, remaining));
+      const excerpt = assistantExcerpt(match, Math.min(assistantKnowledgeLimits.excerptCharacters, remaining));
       if (!excerpt.trim()) continue;
       remaining -= excerpt.length;
       matches.push({ ...match, excerpt });
