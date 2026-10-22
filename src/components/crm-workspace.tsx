@@ -6,6 +6,7 @@ import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavaila
 import { Notice as CommandNotice } from "../../design-c/components/ui";
 import { getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
 import { CrmCommandSearch } from "@/components/crm-command-search";
+import { LanguagePreferenceSelect, type LanguagePreferenceSaveState } from "@/components/language-preference-select";
 import { EvelynCommandCenter, type EvelynCommandSection } from "@/components/evelyn-command-center";
 const {
   automations, botCallInsights, botLeadWorkflows, botLanguageRules,
@@ -94,6 +95,7 @@ import {
 import {
   defaultLanguage,
   getDashboardCopy,
+  getLanguagePreferenceCopy,
   getCrmConsentChannelLabel,
   getCrmConsentStatusLabel,
   getCrmEnumLabel,
@@ -104,12 +106,10 @@ import {
   getCrmStatusLabel,
   getCrmSystemTextLabel,
   getLocale,
-  languageStorageKeys,
-  resolveLanguage,
-  supportedLanguages,
   type LanguageCode,
 } from "@/lib/i18n";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
+import { isLanguagePreference, type LanguagePreference } from "@/lib/crm-language";
 
 type DashboardSection =
   | "dashboard"
@@ -1120,6 +1120,9 @@ function SidebarToggleGlyph({ collapsed }: { collapsed: boolean }) {
 type CrmWorkspaceProps = {
   coreData: CoreCrmDataResult;
   initialLanguage?: LanguageCode;
+  initialLanguagePreference?: LanguagePreference;
+  automaticLanguage?: LanguageCode;
+  languagePreferenceAvailable?: boolean;
   sessionProductRole: ProductRole;
   sessionRole: WorkspaceRole;
   sessionUserId: string;
@@ -1136,14 +1139,6 @@ type CrmWorkspaceProps = {
   };
 };
 
-function readStoredLanguage(storageKey: string, fallback = defaultLanguage) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  return resolveLanguage(window.localStorage.getItem(storageKey), fallback);
-}
-
 function getBrowserCrmScopeStorage(): Storage | null {
   if (typeof window === "undefined") return null;
 
@@ -1152,25 +1147,6 @@ function getBrowserCrmScopeStorage(): Storage | null {
   } catch {
     return null;
   }
-}
-
-function readUrlLanguage(): LanguageCode | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const queryLanguage = new URLSearchParams(window.location.search).get("lang");
-  if (!queryLanguage) return null;
-
-  return resolveLanguage(queryLanguage, defaultLanguage);
-}
-
-function getBrowserLanguageFallback(): LanguageCode {
-  if (typeof window === "undefined") {
-    return defaultLanguage;
-  }
-
-  return window.navigator.language.toLowerCase().startsWith("de") ? "de" : defaultLanguage;
 }
 
 function isNavigationPresetId(value: unknown): value is NavigationPresetId {
@@ -2991,6 +2967,9 @@ function InternalWorkspaceView({
 export function CrmWorkspace({
   coreData: suppliedCoreData,
   initialLanguage = defaultLanguage,
+  initialLanguagePreference = "auto",
+  automaticLanguage = initialLanguage,
+  languagePreferenceAvailable = true,
   sessionProductRole,
   sessionRole,
   sessionUserId,
@@ -3078,7 +3057,9 @@ export function CrmWorkspace({
   const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
   const [isProjectSaving, setIsProjectSaving] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(initialLanguage);
-  const [languageHydrated, setLanguageHydrated] = useState(false);
+  const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguagePreference);
+  const [languageSaveState, setLanguageSaveState] = useState<LanguagePreferenceSaveState>(languagePreferenceAvailable ? "idle" : "unavailable");
+  const languageSavePending = useRef(false);
   const copy = getDashboardCopy(language);
   const importSourceOptions = copy.dialogs.import.sources;
   const projectTypeOptions = copy.dialogs.project.projectTypes;
@@ -3828,22 +3809,10 @@ export function CrmWorkspace({
   }, [activeNavigationEntryId, activePresetId, navigationPreferenceKey, normalizedActivePreset, normalizedActivePresetId, sessionProductRole]);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setLanguage(readUrlLanguage() ?? readStoredLanguage(languageStorageKeys.system, getBrowserLanguageFallback()));
-      setLanguageHydrated(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (!languageHydrated) return;
-
-    window.localStorage.setItem(languageStorageKeys.system, language);
     document.documentElement.lang = language;
     document.title = `${activeAreaLabel} | Novalure CRM`;
     window.dispatchEvent(new CustomEvent("novalure:language-change", { detail: { language } }));
-  }, [activeAreaLabel, language, languageHydrated]);
+  }, [activeAreaLabel, language]);
 
   useEffect(() => {
     if (!mobileNavigationOpen) return;
@@ -3925,8 +3894,29 @@ export function CrmWorkspace({
     return () => window.cancelAnimationFrame(focusFrame);
   }, [mobileNavigationOpen, visibleActiveNavigationEntry.id]);
 
-  function handleLanguageChange(nextLanguage: LanguageCode) {
-    setLanguage(nextLanguage);
+  async function handleLanguageChange(preference: LanguagePreference) {
+    if (languageSavePending.current) return;
+    languageSavePending.current = true;
+    setLanguageSaveState("saving");
+    try {
+      const response = await csrfFetch("/api/settings/language", {
+        cache: "no-store",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preference, expectedUserId: sessionUserId }),
+      });
+      const result = await response.json() as { preference?: unknown; persisted?: boolean };
+      if (!response.ok || result.persisted !== true || !isLanguagePreference(result.preference) || result.preference !== preference) {
+        throw new Error("Language was not saved");
+      }
+      setLanguagePreference(result.preference);
+      setLanguage(result.preference === "auto" ? automaticLanguage : result.preference);
+      setLanguageSaveState("saved");
+    } catch {
+      setLanguageSaveState("error");
+    } finally {
+      languageSavePending.current = false;
+    }
   }
 
   function handleWorkspaceSetupChange<Key extends keyof WorkspaceSetupState>(
@@ -4163,7 +4153,7 @@ export function CrmWorkspace({
   }
 
   return (
-    <main className="crm-app design-c min-h-screen max-w-full bg-[#f4f6fa] text-slate-950" lang={language} data-design="c" data-crm-audience={hasProductCapability(sessionProductRole, "novalure:internal") ? "internal" : "customer"}>
+    <main className="crm-app design-c min-h-screen max-w-full bg-[#f4f6fa] text-slate-950" lang={language} data-crm-language-preference={languagePreference} data-design="c" data-crm-audience={hasProductCapability(sessionProductRole, "novalure:internal") ? "internal" : "customer"}>
       <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]" data-crm-shell>
         <aside
           aria-hidden={mobileNavigationOpen ? true : undefined}
@@ -4490,17 +4480,7 @@ export function CrmWorkspace({
                   </section>
 
                   <section>
-                    <h2 data-crm-mobile-section-label>{copy.language.systemLabel}</h2>
-                    <select
-                      aria-label={copy.language.systemLabel}
-                      className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-                      onChange={(event) => handleLanguageChange(event.target.value as LanguageCode)}
-                      value={language}
-                    >
-                      {supportedLanguages.map((item) => (
-                        <option key={item.code} value={item.code}>{item.nativeName}</option>
-                      ))}
-                    </select>
+                    <LanguagePreferenceSelect language={language} preference={languagePreference} saveState={languageSaveState} onChange={preference => void handleLanguageChange(preference)} />
                   </section>
 
                   <section>
@@ -4600,20 +4580,7 @@ export function CrmWorkspace({
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-end" data-crm-header-actions>
                 <CrmCommandSearch key={`${activeWorkspace.id}-${activeProjectId}`} language={language} entries={focusedNavigationItems.map(item => ({ id: item.id, label: item.label, section: item.section }))} contacts={visibleContacts} leads={visibleLeads} projects={allProjects.filter(project => isProjectInActiveScope(project.id))} onNavigate={entry => handleNavigationChange(entry as NavigationEntryId)} />
                 <span data-crm-current-user>{sessionUserName}<small>{sessionProductRole}</small></span>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600">
-                  {copy.language.systemLabel}
-                  <select
-                    className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
-                    onChange={(event) => handleLanguageChange(event.target.value as LanguageCode)}
-                    value={language}
-                  >
-                    {supportedLanguages.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.nativeName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <LanguagePreferenceSelect language={language} preference={languagePreference} saveState={languageSaveState} onChange={preference => void handleLanguageChange(preference)} />
                 <WorkspaceOnboardingTour
                   language={language}
                   productRole={sessionProductRole}
@@ -4915,14 +4882,22 @@ export function CrmWorkspace({
             {visibleActiveSection === "settings" &&
             visibleActiveNavigationEntry.id !== "systemReleases" &&
             visibleActiveNavigationEntry.id !== "governanceCompliance" ? (
-              <SettingsCommandCenter
-                context={workspaceContext}
-                copy={copy}
-                dataSource={liveCoreData.source}
-                missingTables={liveCoreData.missingTables ?? []}
-                moduleSources={liveCoreData.moduleSources}
-                profileLabel={activePresetProfile.label}
-              />
+              <>
+                <section className="min-w-0 rounded-lg border border-stone-200 bg-white p-5" aria-labelledby="personal-language-title" id="language-settings">
+                  <h2 className="mb-3 text-lg font-semibold text-slate-950" id="personal-language-title">{getLanguagePreferenceCopy(language).label}</h2>
+                  <div className="max-w-md">
+                    <LanguagePreferenceSelect language={language} preference={languagePreference} saveState={languageSaveState} onChange={preference => void handleLanguageChange(preference)} showDescription />
+                  </div>
+                </section>
+                <SettingsCommandCenter
+                  context={workspaceContext}
+                  copy={copy}
+                  dataSource={liveCoreData.source}
+                  missingTables={liveCoreData.missingTables ?? []}
+                  moduleSources={liveCoreData.moduleSources}
+                  profileLabel={activePresetProfile.label}
+                />
+              </>
             ) : null}
 
             {visibleActiveNavigationEntry.id === "systemReleases" ? (

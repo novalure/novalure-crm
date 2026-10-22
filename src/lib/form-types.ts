@@ -23,6 +23,7 @@ export type FormTarget = "contact" | "lead" | "deal" | "ticket";
 export type FormProgressMode = "none" | "steps" | "percent";
 
 export type FormFieldType =
+  | "booking"
   | "checkbox"
   | "company"
   | "consent"
@@ -49,6 +50,8 @@ export type FormStep = {
 };
 
 export type FormField = {
+  bookingPublicId?: string;
+  bookingRequired?: boolean;
   conditionalFieldId: string;
   conditionalValue: string;
   crmField: string;
@@ -71,6 +74,8 @@ export type FormField = {
 };
 
 export function createFormField(input: {
+  bookingPublicId?: string;
+  bookingRequired?: boolean;
   conditionalFieldId?: string;
   conditionalValue?: string;
   crmField: string;
@@ -92,6 +97,8 @@ export function createFormField(input: {
   validationPattern?: string;
 }): FormField {
   return {
+    ...(input.bookingPublicId ? { bookingPublicId: input.bookingPublicId } : {}),
+    ...(typeof input.bookingRequired === "boolean" ? { bookingRequired: input.bookingRequired } : {}),
     conditionalFieldId: input.conditionalFieldId ?? "",
     conditionalValue: input.conditionalValue ?? "",
     crmField: input.crmField,

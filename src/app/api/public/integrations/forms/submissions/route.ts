@@ -37,6 +37,7 @@ import {
   readBoundedJsonObject,
 } from "@/lib/external-api-response";
 import type { WebsiteForm } from "@/lib/form-types";
+import { prepareFormBookingFields, attachFormBookingFields } from "@/lib/booking/form-field";
 
 const idempotencyPattern = /^[A-Za-z0-9_-]{32,128}$/u;
 
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
           duplicate: false,
           snapshot: await complete(hashes, jsonSnapshot("rate_limited", 429)),
         };
+        const bookingProofs = prepareFormBookingFields(lookup.form, formData);
         const persistence = await persistWebsiteFormSubmission({
           actorUserId: resolution.publicActorId,
           formData,
@@ -145,6 +147,7 @@ export async function POST(request: Request) {
             snapshot: await complete(hashes, jsonSnapshot(normalizePersistenceReason(persistence.reason), 422)),
           };
         }
+        await attachFormBookingFields(bookingProofs, { workspaceId: resolution.workspaceId, formId: resolution.formId!, ids: persistence.ids });
         const durableAcceptedReceipt: PublicSubmissionResponseSnapshot = {
           body: { accepted: true, reference: randomUUID() },
           kind: "json",
@@ -224,6 +227,10 @@ function readFields(value: unknown, form: WebsiteForm) {
     throw new ExternalIntegrationError("invalid_fields", 400);
   }
   const permitted = new Map(form.fields.map((field) => [field.crmField || field.id, field]));
+  for (const field of form.fields.filter(field => field.type === "booking")) {
+    permitted.set(`booking_${field.id}_id`, field);
+    permitted.set(`booking_${field.id}_token`, field);
+  }
   const result: Record<string, string | string[]> = {};
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
     const field = permitted.get(key);
@@ -243,6 +250,10 @@ function readFields(value: unknown, form: WebsiteForm) {
     }
   }
   for (const field of form.fields) {
+    if (field.type === "booking") {
+      if ((field.bookingRequired ?? field.required) && (!result[`booking_${field.id}_id`] || !result[`booking_${field.id}_token`])) throw new ExternalIntegrationError("booking_confirmation_required", 422);
+      continue;
+    }
     const key = field.crmField || field.id;
     if (field.required && (!Object.hasOwn(result, key) || !result[key]?.length)) {
       throw new ExternalIntegrationError(`required_field_missing:${key}`, 422);

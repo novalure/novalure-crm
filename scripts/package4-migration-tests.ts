@@ -122,7 +122,7 @@ test("Package 4 unchanged 091–096 → 100–106 combined migration acceptance"
     evidence.applied = sourceMigrations.map(({ file, sourceCommit, checksum }) => ({ file, sourceCommit, normalizedSha256: checksum }));
 
     await check("runner validates checksums, manual order, predecessor ledger and safe replay", async () => {
-      const { createMigrationPlan } = await import("./db-migrate.mjs");
+      const { createMigrationPlan, reviewedNumber108Coexistence } = await import("./db-migrate.mjs");
       const state = await ledger();
       for (const migration of sourceMigrations) assert.equal(state.find(row => row.version === migration.version)?.checksum, migration.checksum);
       const file = "090_property_media_delete_runtime.sql";
@@ -136,16 +136,27 @@ test("Package 4 unchanged 091–096 → 100–106 combined migration acceptance"
       assert.throws(() => plan(pre100, files[6].slice(0, -4), true), /required predecessor/);
       assert.throws(() => plan(state, files[0].slice(0, -4)), /manual cutover/);
       const allForward = (await readdir("migrations")).filter(name => /^\d{3}_.*\.sql$/.test(name) && !name.includes("_rollback"));
-      const numbers = allForward.filter(name => Number(name.slice(0, 3)) >= 91).map(name => name.slice(0, 3));
-      assert.equal(new Set(numbers).size, numbers.length, "duplicate forward migration numbers in the combined upgrade");
+      const forward = allForward.filter(name => Number(name.slice(0, 3)) >= 91);
+      const forwardCollisions = forward.filter(name => forward.some(other => other !== name && other.slice(0, 3) === name.slice(0, 3))).sort();
+      const canonical108 = ["108_knowledge_connected_assistant_quota.sql", "108_universal_booking.sql"];
+      assert.deepEqual(forwardCollisions, canonical108, "only the exact reviewed 108 pair may share a forward migration number");
+      const reviewed108 = await Promise.all(canonical108.map(async file => {
+        const content = await readFile(`migrations/${file}`, "utf8"), version = file.slice(0, -4);
+        return { file, version, name: version.slice(4), path: `migrations/${file}`, content,
+          number: 108, checksum: digest(content), rollback: false };
+      }));
+      assert.equal(reviewedNumber108Coexistence({ ledgerRows: state, migrations: reviewed108 }), true,
+        "both canonical 108 sources must retain the runner's exact names, paths and reviewed hashes");
       // This pre-existing historical collision is covered by baseline041 and
       // canonical full version names; renumbering published SQL would be unsafe.
-      const historicalCollisions = allForward.filter(name => allForward.some(other => other !== name && other.slice(0, 3) === name.slice(0, 3))).sort();
+      const historicalCollisions = allForward.filter(name => Number(name.slice(0, 3)) < 91 && allForward.some(other => other !== name && other.slice(0, 3) === name.slice(0, 3))).sort();
       assert.deepEqual(historicalCollisions, ["013_analysis_bot_70_sprint.sql", "013_newsletter_suppressions.sql"]);
       for (const file of historicalCollisions) assert.equal(await readFile(`migrations/${file}`, "utf8"), execFileSync("git", ["show", `${designSource}:migrations/${file}`], { encoding: "utf8" }));
       evidence.runner = { checksummedReplaySkipsAll: true, missing105Planned: true, tampered104Rejected: true,
         missing090Rejected: true, manual100Before096Rejected: true, explicitManualCutoverRequired: true,
-        uniqueForwardMigrationNumbersFrom091: true, unchangedHistoricalNumber013Collision: historicalCollisions };
+        uniqueForwardMigrationNumbersFrom091ExceptReviewed108: true,
+        reviewedCanonical108Coexistence: reviewed108.map(({ file, checksum }) => ({ file, checksum })),
+        unchangedHistoricalNumber013Collision: historicalCollisions };
     });
 
     await check("direct 104/105/106 replays fail atomically and preserve all committed state", async () => {

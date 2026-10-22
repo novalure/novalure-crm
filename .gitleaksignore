@@ -34,3 +34,8 @@ scripts/studio-enquiry-tests.ts:generic-api-key:178
 # The current fixture is constructed explicitly. Retain all scanner rules and
 # full-history/current-tree scanning; this exception matches only this finding.
 164fa582b27358250a123325c664bfbcb1485066:scripts/website-widget-tests.mjs:generic-api-key:8
+
+# Independently reviewed isolated AES-GCM fixture in a synthetic legacy race test.
+# The current test generates its fixture key randomly; retain every scanner rule
+# and allow only this exact historical finding, which cannot authenticate anywhere.
+d9734433397d9a831ceb735091e5117995fa884c:scripts/booking-channel-adapter-tests.ts:generic-api-key:69

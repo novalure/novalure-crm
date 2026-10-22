@@ -44,7 +44,7 @@ const output = path.resolve(".npm-cache/qa/design-c-integration");
 assert.equal(
   fixture.fixtureMode,
   "design-c-actual-predecessors",
-  "Start qa:sales:server with --built --design-c to preserve the actual 091–106 predecessor contracts",
+  "Start qa:sales:server with --built --design-c to preserve the actual 091–106 predecessor contracts and additive account-language schema",
 );
 assert.equal(fixture.database.database, "neondb");
 await mkdir(output, { recursive: true });
@@ -846,10 +846,9 @@ async function api(
 }
 
 async function login(page, account, negatives = false) {
-  await page.goto(new URL("/login?lang=de", base).href);
+  await page.goto(new URL("/login", base).href);
   const consent = page.getByRole("button", {
-    name: "Nur essentielle",
-    exact: true,
+    name: /^(Nur essenzielle|Only necessary)$/,
   });
   if (await consent.isVisible()) await consent.click();
   async function password(value) {
@@ -884,7 +883,7 @@ async function login(page, account, negatives = false) {
   if (requiresMfa) {
     const key = page
       .locator("p")
-      .filter({ has: page.locator("strong", { hasText: "TOTP-Schlüssel:" }) })
+      .filter({ has: page.locator("strong", { hasText: /TOTP-Schlüssel:|TOTP key:/ }) })
       .locator("code");
     await expect(key).toBeVisible();
     const secret = (await key.innerText()).trim();
@@ -905,7 +904,7 @@ async function login(page, account, negatives = false) {
       await Promise.all([
         page.waitForNavigation({ waitUntil: "domcontentloaded" }),
         page
-          .getByRole("button", { name: "Sicher bestätigen", exact: true })
+          .getByRole("button", { name: /^(Sicher bestätigen|Verify securely)$/ })
           .click(),
       ]);
       await expect(page.locator('p[role="alert"]')).toBeVisible();
@@ -916,11 +915,22 @@ async function login(page, account, negatives = false) {
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       page
-        .getByRole("button", { name: "Sicher bestätigen", exact: true })
+        .getByRole("button", { name: /^(Sicher bestätigen|Verify securely)$/ })
         .click(),
     ]);
   }
   await expect(page).not.toHaveURL(/\/login/);
+  await expect(page.locator(".crm-app")).toBeVisible();
+  // The regression's German selectors follow a real personal account choice,
+  // independent of country headers or obsolete query/browser preferences.
+  const language = await api(page, "/api/settings/language", undefined, {
+    preference: "de",
+    expectedUserId: account.userId,
+  });
+  assert.equal(language.status, 200, "The ordinary session must save its own account language");
+  assert.equal(language.body.persisted, true);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await expect(page.locator(".crm-app")).toBeVisible();
   const cookie = (await page.context().cookies()).find(
     (cookie) => cookie.name === "novalure_session",
@@ -1192,7 +1202,7 @@ async function runIntegration() {
       ? "Anonymous operational readers deny access"
       : "Anonymous CRM and Knowledge APIs deny access",
     async () => {
-      await operatorPage.goto(new URL("/login?lang=de", base).href);
+      await operatorPage.goto(new URL("/login", base).href);
       for (const endpoint of [
         "/api/crm/core",
         "/api/knowledge-center",
@@ -2208,7 +2218,7 @@ try {
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
       "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
-      "The isolated fixture applies unchanged pinned 091–096 and 100–106, including package-3 workflow/monitoring and operational readers; optional pgvector, historical manual media migration 062 and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
+      "The isolated fixture applies unchanged pinned 091–096 and 100–106, including package-3 workflow/monitoring and operational readers, plus additive account-language migration 110 for the current browser runtime; optional pgvector, historical manual media migration 062 and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
       "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
     ],
   };

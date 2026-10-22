@@ -4,6 +4,7 @@ import { readStudioCalendarPolicy } from "@/lib/integrations/studio-microsoft-ca
 import { studioQaDatabaseMatches } from "@/lib/studio-sales-qa-readiness";
 import { StudioBookingFailure, studioBook, studioBookingAvailability,
   studioBookingStatus } from "@/lib/studio-sales-booking";
+import { handleStudioBookingChannelRequest } from "@/lib/booking/studio-channel";
 
 const version = "website-sales-booking-v1";
 const headers = { "cache-control": "private, no-store" };
@@ -28,6 +29,7 @@ function verifyStudioBookingSignature(input: {
 }
 
 export async function POST(request: Request) {
+  if (request.headers.get("x-novalure-booking-version") === "booking-tools-v1") return handleStudioBookingChannelRequest(request);
   if (!request.headers.get("content-type")?.includes("application/json")) {
     return reply(415, { status: "failed", code: "unsupported_content_type" });
   }

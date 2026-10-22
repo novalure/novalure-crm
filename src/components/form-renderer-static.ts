@@ -92,10 +92,16 @@ function renderStaticField(field: FormField, copy: FormRuntimeCopy) {
   const help = field.helpText ? `<span class="novalure-help" id="${escapeHtml(describedBy)}">${escapeHtml(field.helpText)}</span>` : "";
   const control = renderStaticControl(field, name, describedBy);
 
+  if (field.type === "booking") return `<div class="novalure-field" data-field-id="${escapeHtml(field.id)}" data-field-type="booking"${conditionAttrs}>${label}${control}${help}</div>`;
+
   return `<label class="novalure-field" data-field-id="${escapeHtml(field.id)}" data-field-type="${escapeHtml(field.type)}"${conditionAttrs}>${label}${control}${help}</label>`;
 }
 
 function renderStaticControl(field: FormField, name: string, describedBy: string) {
+  if (field.type === "booking") {
+    if (!field.bookingPublicId || !/^[a-z0-9][a-z0-9-]{10,79}$/.test(field.bookingPublicId)) return '<p role="status">Booking is unavailable. Your form can still be an appointment request when booking is optional.</p>';
+    return `<div data-novalure-booking-field="${escapeHtml(field.id)}" data-booking-public-id="${escapeHtml(field.bookingPublicId)}" data-booking-required="${(field.bookingRequired ?? field.required) ? "1" : "0"}"><p role="status" data-booking-status>No appointment has been booked.</p><input name="booking_${escapeHtml(field.id)}_id" type="hidden" value=""><input name="booking_${escapeHtml(field.id)}_token" type="hidden" value=""></div>`;
+  }
   const describedByAttr = describedBy ? ` aria-describedby="${escapeHtml(describedBy)}"` : "";
   const required = field.required ? " required" : "";
   const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";

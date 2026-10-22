@@ -5,9 +5,11 @@ import {
   consumeOAuthState,
   exchangeOAuthCode,
   fetchCalendarAccountLabel,
+  parseOAuthState,
   upsertCalendarOAuthConnection,
   type CalendarOAuthProvider,
 } from "@/lib/integrations/calendar-connections";
+import { bookingMicrosoftAuthority, consumeBookingOAuthState, saveBookingOAuthConnection } from "@/lib/booking/connections";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
 
 type RouteContext = {
@@ -20,12 +22,14 @@ function getProvider(value: string): CalendarOAuthProvider | null {
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  const auth = await requirePermissionAndProductCapability(request, "calendar:sync", "calendar:manage");
-  if (!auth.ok) return auth.response;
-
   const { provider: providerParam } = await context.params;
   const provider = getProvider(providerParam);
   const url = new URL(request.url);
+  let bookingMode = false;
+  try { bookingMode = Boolean(provider && parseOAuthState(url.searchParams.get("state"),provider)?.returnTo === "/booking"); }
+  catch { /* Invalid state cannot select the booking callback. */ }
+  const auth = await requirePermissionAndProductCapability(request, bookingMode ? "crm:write" : "calendar:sync", "calendar:manage");
+  if (!auth.ok) return auth.response;
   const trustedOrigin = getTrustedAppOrigin();
   const fallbackRedirect = new URL("/#calendar", trustedOrigin);
 
@@ -36,7 +40,8 @@ export async function GET(request: Request, context: RouteContext) {
 
   let state: Awaited<ReturnType<typeof consumeOAuthState>> = null;
   try {
-    state = await consumeOAuthState({
+    state = bookingMode ? await consumeBookingOAuthState({workspaceId:auth.session.workspaceId,actorId:auth.session.userId},provider,
+      url.searchParams.get("state")) : await consumeOAuthState({
       expectedProvider: provider,
       sessionUserId: auth.session.userId,
       sessionWorkspaceId: auth.session.workspaceId,
@@ -63,7 +68,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   const providerError = url.searchParams.get("error");
   if (providerError) {
-    redirectUrl.searchParams.set("calendar_error", providerError);
+    redirectUrl.searchParams.set("calendar_error", bookingMode ? "calendar_consent_denied" : providerError);
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -79,15 +84,13 @@ export async function GET(request: Request, context: RouteContext) {
       codeVerifier: state.codeVerifier,
       provider,
       requestUrl: trustedOrigin,
+      ...(bookingMode ? {trustedOrigin,...(provider === "microsoft" ? {microsoftAuthority:bookingMicrosoftAuthority()} : {})} : {}),
     });
-    const accountLabel = await fetchCalendarAccountLabel(provider, token.access_token ?? "");
-    await upsertCalendarOAuthConnection({
-      accountLabel,
-      provider,
-      token,
-      userId: state.userId,
-      workspaceId: state.workspaceId,
-    });
+    if (bookingMode) await saveBookingOAuthConnection({workspaceId:state.workspaceId,actorId:state.userId},provider,token);
+    else {
+      const accountLabel = await fetchCalendarAccountLabel(provider, token.access_token ?? "");
+      await upsertCalendarOAuthConnection({accountLabel,provider,token,userId:state.userId,workspaceId:state.workspaceId});
+    }
 
     redirectUrl.searchParams.set("calendar_connected", provider);
     return NextResponse.redirect(redirectUrl);

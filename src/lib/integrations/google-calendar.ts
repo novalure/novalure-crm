@@ -49,6 +49,7 @@ function getMeetUrl(data: {
 }
 
 export async function syncGoogleCalendarEvent(input: {
+  beforeWrite?: () => Promise<void>;
   attendees?: string[];
   body?: string;
   createOnlineMeeting?: boolean;
@@ -78,6 +79,7 @@ export async function syncGoogleCalendarEvent(input: {
     if (input.createOnlineMeeting) url.searchParams.set("conferenceDataVersion", "1");
     url.searchParams.set("sendUpdates", "all");
 
+    await input.beforeWrite?.();
     const response = await fetch(url, {
       body: JSON.stringify({
         attendees: input.attendees?.map((email) => ({ email: email.trim() })),
@@ -170,6 +172,7 @@ export async function listGoogleBusyTimes(input: {
 }
 
 export async function updateGoogleCalendarEvent(input: {
+  beforeWrite?: () => Promise<void>;
   body?: string;
   endsAt: string;
   eventId: string;
@@ -197,6 +200,7 @@ export async function updateGoogleCalendarEvent(input: {
     );
     url.searchParams.set("sendUpdates", "all");
 
+    await input.beforeWrite?.();
     const response = await fetch(url, {
       body: JSON.stringify({
         description: input.body ?? "",

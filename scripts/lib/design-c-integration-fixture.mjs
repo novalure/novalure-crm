@@ -19,7 +19,7 @@ import {
  * production-predecessor test. Every pinned migration runs unchanged; these
  * local role names satisfy its real guard without weakening production SQL.
  */
-export async function startDesignCIntegrationDatabase() {
+export async function startDesignCIntegrationDatabase({ accountLanguagePreference = false } = {}) {
   const cluster = await startLocalSalesDb();
   let owner, bootstrap, runtime;
   try {
@@ -69,6 +69,9 @@ export async function startDesignCIntegrationDatabase() {
       "105_knowledge_website_monitoring.sql",
       "106_crm_operational_readers.sql",
       "108_knowledge_connected_assistant_quota.sql",
+      // Current browser acceptance needs the additive personal-language table;
+      // predecessor-only database tests keep their original schema by default.
+      ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),
     ]) {
       const sql = await readFile(path.resolve("migrations", filename), "utf8");
       const client = await owner.connect();

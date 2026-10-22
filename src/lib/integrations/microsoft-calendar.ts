@@ -182,6 +182,7 @@ export async function getMicrosoftCalendarAppToken(expectedOrganizerId: string):
 }
 
 export async function syncMicrosoftCalendarEvent(input: {
+  beforeWrite?: () => Promise<void>;
   subject: string;
   startsAt: string;
   endsAt: string;
@@ -213,6 +214,7 @@ export async function syncMicrosoftCalendarEvent(input: {
     }
 
     const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
+    await input.beforeWrite?.();
     const response = await fetch(graph.eventEndpoint, {
       method: "POST",
       headers: {
@@ -332,6 +334,7 @@ export async function listMicrosoftBusyTimes(input: {
 }
 
 export async function updateMicrosoftCalendarEvent(input: {
+  beforeWrite?: () => Promise<void>;
   body?: string;
   endsAt: string;
   eventId: string;
@@ -363,6 +366,7 @@ export async function updateMicrosoftCalendarEvent(input: {
 
     const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
     const eventUrl = graph.eventEndpoint.replace(/\/events$/, `/events/${encodeURIComponent(input.eventId)}`);
+    await input.beforeWrite?.();
     const response = await fetch(eventUrl, {
       method: "PATCH",
       headers: {

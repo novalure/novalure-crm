@@ -106,6 +106,37 @@ function createEmbedScript({
 
     var form = root.querySelector("[data-novalure-runtime='form']");
     if (!form) return;
+    var crmOrigin = currentScript && currentScript.src ? new URL(currentScript.src).origin : null;
+    Array.prototype.slice.call(form.querySelectorAll("[data-novalure-booking-field]")).forEach(function (field) {
+      var publicId = field.getAttribute("data-booking-public-id");
+      var fieldId = field.getAttribute("data-novalure-booking-field");
+      var status = field.querySelector("[data-booking-status]");
+      if (!crmOrigin || !window.crypto || !window.crypto.randomUUID) { status.textContent = "Booking is unavailable. No appointment has been booked."; return; }
+      var instanceId = window.crypto.randomUUID();
+      var frame = document.createElement("iframe");
+      frame.title = "Book an appointment";
+      frame.style.width = "100%"; frame.style.minHeight = "480px"; frame.style.border = "0";
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      var url = new URL("/appointments/" + encodeURIComponent(publicId), crmOrigin);
+      url.search = new URLSearchParams({ channel: "form", embed: "1", parentOrigin: window.location.origin, instanceId: instanceId, lang: "de" }).toString();
+      var idInput = Array.prototype.slice.call(field.querySelectorAll("input")).find(function (input) { return input.name === "booking_" + fieldId + "_id"; });
+      var tokenInput = Array.prototype.slice.call(field.querySelectorAll("input")).find(function (input) { return input.name === "booking_" + fieldId + "_token"; });
+      window.addEventListener("message", function (event) {
+        var data = event.data;
+        if (!field.isConnected || event.origin !== crmOrigin || event.source !== frame.contentWindow || !data || data.version !== 1 || data.instanceId !== instanceId) return;
+        if (data.type === "novalure.booking.hello") {
+          frame.contentWindow.postMessage({ type: "novalure.booking.initialize", version: 1, instanceId: instanceId }, crmOrigin);
+        } else if (data.type === "novalure.booking.resize" && Number.isFinite(data.height)) {
+          frame.style.height = Math.max(320, Math.min(2400, data.height)) + "px";
+        } else if (data.publicId === publicId && data.type === "novalure.booking.confirmed" && /^[0-9a-f-]{36}$/i.test(data.bookingId) && /^[A-Za-z0-9_-]{43}$/.test(data.sessionToken)) {
+          idInput.value = data.bookingId; tokenInput.value = data.sessionToken;
+          status.textContent = "Appointment confirmed. Submitting the form links this booking to your enquiry.";
+        } else if (data.publicId === publicId && data.type === "novalure.booking.cleared") {
+          idInput.value = ""; tokenInput.value = ""; status.textContent = "No confirmed appointment is linked.";
+        }
+      });
+      frame.src = url.href; field.appendChild(frame);
+    });
     setHiddenValue(form, "page_url", window.location.href);
     setHiddenValue(form, "referrer", document.referrer || "");
     var steps = Array.prototype.slice.call(form.querySelectorAll("[data-step-index]"));
@@ -156,6 +187,10 @@ function createEmbedScript({
 
     function validateStep(step) {
       var valid = true;
+      Array.prototype.slice.call(step.querySelectorAll("[data-novalure-booking-field][data-booking-required='1']")).forEach(function (field) {
+        if (field.closest(".novalure-hidden")) return;
+        if (!field.querySelector("input").value) { valid = false; field.querySelector("[data-booking-status]").textContent = "Confirm an appointment before submitting this required booking field."; }
+      });
       visibleRequiredControls(step).forEach(function (control) {
         var field = control.closest("[data-field-id]");
         var groupName = control.name;

@@ -1,5 +1,7 @@
 "use client";
 
+import { FormBookingFieldSettings } from "@/components/form-booking-field";
+
 import { useEffect, useState } from "react";
 import { FormRuntimeClient } from "@/components/form-runtime-client";
 import type { CalendarEvent, Contact, Funnel, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-types";
@@ -66,6 +68,7 @@ const formTemplateIds: FormTemplate[] = [
 const formTargetIds: FormTarget[] = ["contact", "deal", "lead", "ticket"];
 
 const fieldTypeIds = [
+  "booking",
   "text",
   "email",
   "phone",
@@ -110,6 +113,7 @@ function defaultFieldOptions(type: FormFieldType) {
 
 function defaultCrmField(type: FormFieldType) {
   const fields: Record<FormFieldType, string> = {
+    booking: "booking",
     checkbox: "consent_detail",
     company: "company",
     consent: "privacy_consent",
@@ -139,6 +143,7 @@ function createField(
   patch: Partial<FormField> = {},
 ): FormField {
   const labels: Record<FormFieldType, string> = {
+    booking: copy.fieldTypes.booking,
     checkbox: copy.fieldTypes.checkbox,
     company: copy.fieldTypes.company,
     consent: copy.fields.consentLabel,
@@ -160,6 +165,8 @@ function createField(
   };
 
   return createFormField({
+    bookingPublicId: patch.bookingPublicId,
+    bookingRequired: patch.bookingRequired,
     crmField: patch.crmField ?? defaultCrmField(type),
     defaultValue: patch.defaultValue ?? "",
     errorMessage: patch.errorMessage ?? "",
@@ -986,6 +993,7 @@ export function FormCommandCenter({
                     </div>
                   ) : null}
                   <FormRuntimeClient
+                    language={language}
                     copy={copy.runtime}
                     form={selectedForm}
                     mode="editor"
@@ -1036,6 +1044,7 @@ export function FormCommandCenter({
                     {fieldTypes.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
                   </select>
                 </label>
+                {selectedField.type === "booking" ? <FormBookingFieldSettings field={selectedField} language={language} onChange={patch => updateField(selectedField.id, patch)} /> : null}
                 {selectedField.type !== "hidden" ? (
                   <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {copy.fields.step}
@@ -1134,7 +1143,7 @@ export function FormCommandCenter({
                   ) : null}
                 </div>
                 <label className="flex items-center gap-2 text-sm font-semibold">
-                  <input checked={selectedField.required} onChange={(event) => updateField(selectedField.id, { required: event.target.checked })} type="checkbox" />
+                  <input checked={selectedField.required} onChange={(event) => updateField(selectedField.id, { required: event.target.checked, ...(selectedField.type === "booking" ? { bookingRequired: event.target.checked } : {}) })} type="checkbox" />
                   {copy.fields.required}
                 </label>
                 <button
@@ -1426,6 +1435,7 @@ export function FormCommandCenter({
                     </div>
                   ) : null}
                   <FormRuntimeClient
+                    language={language}
                     copy={copy.runtime}
                     form={selectedForm}
                     mode="editor"

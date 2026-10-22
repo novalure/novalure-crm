@@ -65,7 +65,7 @@ async function passwordLogin(password) {
 }
 async function submitMfa(code) {
  await page.locator('#login-mfa-code').fill(code);
- await submitLoginForm(page.getByRole('button',{name:'Sicher bestätigen',exact:true}));
+ await submitLoginForm(page.getByRole('button',{name:/^(Sicher bestätigen|Verify securely)$/}));
 }
 async function assertProtectedDenied() {
  const response=await page.request.get(fixture.baseUrl+'/api/crm/core');
@@ -77,7 +77,7 @@ let enrollmentVerified=false,loginCredentialExchangeVerified=false;
 
 let contact,lead,deal,buyer,buyerLead,unit;
 try{
- await step('anonymous login renders and protected CRM denies anonymous access',async()=>{await page.goto(fixture.baseUrl+'/login?lang=de');await expect(page.locator('body')).toContainText(/anmelden|login/i);const r=await page.request.get(fixture.baseUrl+'/api/crm/core');assert.ok([401,403].includes(r.status()));});
+ await step('anonymous login renders and protected CRM denies anonymous access',async()=>{await page.goto(fixture.baseUrl+'/login?lang=de');await expect(page.locator('body')).toContainText(/anmelden|login|sign in/i);const consent=page.getByRole('button',{name:/^(Nur essenzielle|Only necessary)$/});if(await consent.isVisible())await consent.click();const r=await page.request.get(fixture.baseUrl+'/api/crm/core');assert.ok([401,403].includes(r.status()));});
  await step('actual login rejects an incorrect password without granting a session',async()=>{
   await passwordLogin(fixture.password+'-incorrect');
   await expect(page.getByRole('alert')).toBeVisible();
@@ -87,7 +87,7 @@ try{
  await step('correct password requires real TOTP enrollment before CRM access',async()=>{
   await passwordLogin(fixture.password);
   await expect(page.locator('#login-mfa-code')).toBeVisible();
-  const key = page.locator('p').filter({has:page.locator('strong', {hasText:'TOTP-Schlüssel:'})}).locator('code');
+  const key = page.locator('p').filter({has:page.locator('strong', {hasText:/TOTP-Schlüssel:|TOTP key:/})}).locator('code');
   await expect(key).toBeVisible();
   totpSecret = (await key.innerText()).trim();
   assert.ok(/^[A-Z2-7]{16,}$/.test(totpSecret), 'Login UI must provide a valid enrollment key');
@@ -112,6 +112,12 @@ try{
   assert.ok(session?.httpOnly && session.value.startsWith('v2.'), 'Server must issue an opaque HttpOnly session');
   firstSession = session.value;
   assert.equal((await page.request.get(fixture.baseUrl+'/api/crm/core')).status(),200);
+  // German workflow selectors follow the authenticated account's real choice.
+  const language = await api('/api/settings/language',{preference:'de',expectedUserId:fixture.userId});
+  assert.equal(language.persisted,true);
+  assert.equal(language.preference,'de');
+  await page.reload({waitUntil:'domcontentloaded'});
+  await expect(page.locator('html')).toHaveAttribute('lang','de');
   enrollmentVerified = true;
  });
  await step('persisted real password and MFA session loads CRM after reload without framework errors',async()=>{

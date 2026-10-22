@@ -13,6 +13,35 @@ export type NewsletterProviderStatus = {
   reason: string | null;
 };
 
+/** A transactional acceptance result is deliberately distinct from delivery. */
+export type TransactionalEmailResult =
+  | { outcome: "accepted"; messageId: string }
+  | { outcome: "rejected" | "retryable" | "uncertain" | "unconfigured"; error: string };
+
+export async function sendTransactionalEmail(input: {
+  to: string; subject: string; html: string; text: string; idempotencyKey: string; replyTo?: string; bookingJobId?: string;
+}, transport: typeof fetch = fetch): Promise<TransactionalEmailResult> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM?.trim() || process.env.NOVALURE_EMAIL_FROM?.trim();
+  if (!apiKey || !from) return { outcome: "unconfigured", error: "MAIL_PROVIDER_NOT_CONFIGURED" };
+  try {
+    const response = await transport("https://api.resend.com/emails", {
+      method: "POST", signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
+      body: JSON.stringify({ from, to: [input.to], subject: input.subject, html: input.html, text: input.text, ...(input.replyTo ? { reply_to: input.replyTo } : {}), ...(input.bookingJobId ? { tags: [{ name: "booking_job_id", value: input.bookingJobId }] } : {}) }),
+    });
+    if (response.status === 429) return { outcome: "retryable", error: "MAIL_PROVIDER_RATE_LIMIT" };
+    if (response.status >= 500) return { outcome: "uncertain", error: `MAIL_PROVIDER_HTTP_${response.status}` };
+    if (!response.ok) return { outcome: "rejected", error: `MAIL_PROVIDER_HTTP_${response.status}` };
+    const data = await response.json().catch(() => null) as { id?: unknown } | null;
+    if (!data || typeof data.id !== "string" || !data.id) return { outcome: "uncertain", error: "MAIL_PROVIDER_ACCEPTANCE_UNKNOWN" };
+    return { outcome: "accepted", messageId: data.id };
+  } catch {
+    // Request may have reached the provider. A durable reconciler must decide what follows.
+    return { outcome: "uncertain", error: "MAIL_PROVIDER_OUTCOME_UNKNOWN" };
+  }
+}
+
 export function getNewsletterProviderStatus(): NewsletterProviderStatus {
   const apiKey = process.env.RESEND_API_KEY;
   const from =

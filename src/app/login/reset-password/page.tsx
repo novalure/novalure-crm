@@ -10,9 +10,9 @@ import {
   createPasswordResetFormToken,
   hasValidPasswordResetExchange,
 } from "@/lib/auth/password-reset";
-import { getLoginPageCopy } from "@/lib/i18n";
+import { getLoginPageCopy, languageRequestHeaderName, resolveLanguage } from "@/lib/i18n";
 import { withPublicLanguage } from "@/lib/public-language";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { buildPublicPageMetadata } from "@/lib/page-metadata";
 
 type ResetPasswordPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -20,8 +20,8 @@ type ResetPasswordPageProps = {
 
 export async function generateMetadata({ searchParams }: ResetPasswordPageProps): Promise<Metadata> {
   const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  void searchParams;
+  const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   return buildPublicPageMetadata({
     description: language === "de"
       ? "Legen Sie ein neues, starkes Passwort für Ihren Novalure CRM Zugang fest."
@@ -47,7 +47,7 @@ function getResetErrorText(error: string, reset: ReturnType<typeof getLoginPageC
 }
 
 function getResetLanguageHref(language: "de" | "en", error: string) {
-  const params = new URLSearchParams({ lang: language });
+  const params = new URLSearchParams({ lang: language, languagePreference: language });
   if (error) params.set("error", error);
   return `/login/reset-password?${params.toString()}`;
 }
@@ -59,7 +59,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
 
   if (session) redirect("/");
 
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   const login = getLoginPageCopy(language);
   const reset = login.passwordReset;
   const hasExchange = await hasValidPasswordResetExchange(requestHeaders);
@@ -88,7 +88,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
         en: getResetLanguageHref("en", errorCode),
       }}
     >
-      <div className={subpageStyles.authLayout}>
+      <div className={subpageStyles.authLayout} data-crm-login-language lang={language}>
         <section className={subpageStyles.authIntro}>
           <p className={subpageStyles.eyebrow}>{intro.eyebrow}</p>
           <h1>{intro.title}</h1>

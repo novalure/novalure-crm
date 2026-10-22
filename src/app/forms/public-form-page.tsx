@@ -116,6 +116,7 @@ export async function renderPublicFormPage({
           ) : null}
           {form ? (
             <FormRuntimeClient
+              language={language}
               copy={copy.runtime}
               form={form}
               publicKey={`${workspacePublicKey}/${slug}`}

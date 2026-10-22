@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,12 +11,18 @@ import test from "node:test";
 import {
   applyCommittedMigrationPlan,
   assertMigrationCommitted,
+  assertBookingMigrationRuntimeRole,
+  bookingProductionCutoverProfile,
   compatibilityProfileMatchesTarget,
   createMigrationPlanToken,
   createMigrationPlan,
+  migrationExecutionProfile,
+  numberCollisions,
+  reviewedNumber108Coexistence,
   resolveMigrationLedgerState,
   validateMigrationPlan,
 } from "./db-migrate.mjs";
+import { configureMigrationNeonTransport, createMigrationPool, resolveMigrationTransport } from "./lib/migration-pool.mjs";
 
 const runner = await readFile(new URL("./db-migrate.mjs", import.meta.url), "utf8");
 const workflow = await readFile(
@@ -68,6 +74,146 @@ function ledgerRow(version, checksum) {
     version,
   };
 }
+
+const reviewed108 = await Promise.all([
+  ["108_knowledge_connected_assistant_quota", "4738538ac4a74bb571b1baf6b5c41583ba77e23d55acdec9489e8979189470aa"],
+  ["108_universal_booking", "97c2ce591e021467262e1ed5b54485e985f9cb0004f0df52dd8caf77e6ab6b56"],
+].map(async ([version, expected]) => {
+  const content = await readFile(new URL(`../migrations/${version}.sql`, import.meta.url), "utf8");
+  const digest = createHash("sha256").update(content).digest("hex");
+  assert.equal(digest, expected, `Immutable reviewed source hash: ${version}`);
+  return migration(version, digest, { content, name: version.slice(4), path: `migrations/${version}.sql`,
+    manualCutover: version === "108_universal_booking" });
+}));
+
+function reviewed108Fixture() {
+  const predecessors = [migration("101_knowledge_center", "sha-101"), migration("106_crm_operational_readers", "sha-106")];
+  return {
+    quota: reviewed108[0], booking: reviewed108[1],
+    migrations: [...predecessors, ...reviewed108],
+    ledgerRows: predecessors.map((item) => ledgerRow(item.version, item.checksum)),
+  };
+}
+
+function temporaryReviewed108Repository() {
+  const cwd = mkdtempSync(join(tmpdir(), "novalure-reviewed-108-"));
+  mkdirSync(join(cwd, "migrations"));
+  for (const item of reviewed108) writeFileSync(join(cwd, item.path), item.content);
+  execFileSync("git", ["init", "--quiet"], { cwd });
+  execFileSync("git", ["add", ...reviewed108.map((item) => item.path)], { cwd });
+  return cwd;
+}
+
+test("reviewed canonical 108 files upgrade safely in both existing-ledger orders", () => {
+  for (const reversed of [false, true]) {
+    const { quota, booking, ledgerRows, migrations: original } = reviewed108Fixture();
+    const migrations = reversed ? [...original].reverse() : original;
+    const productionLedger = [...ledgerRows, ledgerRow(quota.version, quota.checksum)];
+    assert.throws(() => createMigrationPlan({ ledgerRows: productionLedger, migrations, only: booking.version }), /manual cutover/);
+    const productionPlan = createMigrationPlan({ allowManualCutover: true, ledgerRows: productionLedger, migrations, only: booking.version });
+    assert.deepEqual(productionPlan, [booking]);
+    assert.doesNotThrow(() => validateMigrationPlan({ ledgerRows: productionLedger, migrations, plan: productionPlan }));
+    assert.deepEqual(createMigrationPlan({ ledgerRows: productionLedger, migrations, only: "" }), [], "Booking remains manual");
+
+    const qaLedger = [...ledgerRows, ledgerRow(booking.version, booking.checksum)];
+    const qaPlan = createMigrationPlan({ ledgerRows: qaLedger, migrations, only: "" });
+    assert.deepEqual(qaPlan, [quota]);
+    assert.doesNotThrow(() => validateMigrationPlan({ ledgerRows: qaLedger, migrations, plan: qaPlan }));
+    for (const initial of [productionLedger, qaLedger]) {
+      assert.deepEqual(numberCollisions(initial, migrations), [], "Reviewed pair is not a status collision");
+      const completed = [...initial, ledgerRow(initial === productionLedger ? booking.version : quota.version,
+        initial === productionLedger ? booking.checksum : quota.checksum)];
+      const plan = createMigrationPlan({ ledgerRows: completed, migrations, only: "" });
+      assert.deepEqual(plan, []);
+      assert.doesNotThrow(() => validateMigrationPlan({ ledgerRows: completed, migrations, plan }));
+      assert.deepEqual(numberCollisions(completed, migrations), []);
+      assert.equal(resolveMigrationLedgerState({ ledgerRows: completed, migrations }).appliedVersions.size, 4);
+    }
+  }
+});
+
+test("reviewed 108 coexistence rejects tampered canonical metadata and source content", () => {
+  const { quota, booking, migrations, ledgerRows } = reviewed108Fixture();
+  const existing = [...ledgerRows, ledgerRow(quota.version, quota.checksum)];
+  for (const change of [
+    { version: "108_universal_booking_alias" }, { name: "different_name" },
+    { file: "108_booking.sql" }, { path: "migrations/108_booking.sql" },
+    { checksum: "0".repeat(64) }, { content: `${booking.content}\n` },
+  ]) {
+    const changed = { ...booking, ...change };
+    const local = migrations.map((item) => item === booking ? changed : item);
+    assert.throws(() => validateMigrationPlan({ ledgerRows: existing, migrations: local, plan: [changed] }), /unreviewed number 108/);
+    assert.equal(numberCollisions(existing, local).length, 1, "Status must not hide the unreviewed same-number pair");
+  }
+  assert.throws(() => validateMigrationPlan({ ledgerRows: existing, migrations: migrations.filter((item) => item !== quota), plan: [booking] }),
+    /both canonical source files/);
+});
+
+test("reviewed 108 coexistence requires both physical canonical files to be unchanged and tracked", () => {
+  const { quota, booking, migrations, ledgerRows } = reviewed108Fixture();
+  const existing = [...ledgerRows, ledgerRow(quota.version, quota.checksum)];
+  for (const damage of ["missing", "changed", "untracked"]) {
+    const cwd = temporaryReviewed108Repository();
+    try {
+      assert.doesNotThrow(() => validateMigrationPlan({ cwd, ledgerRows: existing, migrations, plan: [booking] }));
+      if (damage === "missing") rmSync(join(cwd, quota.path));
+      if (damage === "changed") writeFileSync(join(cwd, quota.path), `${quota.content}\n`);
+      if (damage === "untracked") execFileSync("git", ["rm", "--cached", "--quiet", quota.path], { cwd });
+      assert.throws(() => validateMigrationPlan({ cwd, ledgerRows: existing, migrations, plan: [booking] }), /canonical source/);
+      assert.equal(numberCollisions(existing, migrations, [], cwd).length, 1);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+});
+
+test("reviewed 108 coexistence rejects unknown ledger names, numeric aliases and missing or wrong checksums", () => {
+  const { quota, booking, migrations, ledgerRows } = reviewed108Fixture();
+  for (const changed of [
+    ledgerRow("108_knowledge_quota_alias", quota.checksum),
+    ledgerRow("108", quota.checksum),
+    ledgerRow(quota.version, null), ledgerRow(quota.version, ""),
+    ledgerRow(quota.version, "0".repeat(64)),
+    { ...ledgerRow(quota.version, quota.checksum), name: "wrong_name" },
+  ]) {
+    const existing = [...ledgerRows, changed];
+    assert.throws(() => validateMigrationPlan({ ledgerRows: existing, migrations, plan: [booking] }),
+      /unreviewed number 108|Checksum mismatch/);
+    assert.equal(numberCollisions(existing, migrations).length, 1);
+  }
+});
+
+test("reviewed 108 coexistence never permits a third source, ledger row or planned migration", () => {
+  const { quota, booking, migrations, ledgerRows } = reviewed108Fixture();
+  const third = migration("108_unreviewed_third", quota.checksum);
+  const existing = [...ledgerRows, ledgerRow(quota.version, quota.checksum)];
+  assert.throws(() => validateMigrationPlan({ ledgerRows: existing, migrations: [...migrations, third], plan: [booking] }), /no third 108/);
+  const thirdLedger = [...existing, ledgerRow(third.version, third.checksum)];
+  assert.throws(() => validateMigrationPlan({ ledgerRows: thirdLedger, migrations, plan: [booking] }), /unreviewed number 108/);
+  assert.equal(numberCollisions(thirdLedger, migrations).length, 2, "Status reports every affected ledger row");
+  assert.throws(() => validateMigrationPlan({ ledgerRows, migrations, plan: [third] }), /planned migration is not one of the reviewed/);
+  assert.throws(() => validateMigrationPlan({ ledgerRows: existing, migrations: [...migrations, booking], plan: [] }), /no third 108/);
+});
+
+test("status collision reporting keeps unrelated unknown numeric collisions visible", () => {
+  const local = migration("051_private_media_access", "sha-051");
+  assert.deepEqual(numberCollisions([ledgerRow("051_unknown_legacy", "sha-051")], [local]),
+    [{ ledger: "051_unknown_legacy", number: 51, codeVersions: [local.version] }]);
+});
+
+test("empty-ledger status only announces coexistence after the actual source pair is verified", () => {
+  const { migrations, booking } = reviewed108Fixture();
+  assert.equal(reviewedNumber108Coexistence({ ledgerRows: [], migrations }), true);
+  for (const local of [
+    migrations.filter((item) => item !== booking),
+    migrations.map((item) => item === booking ? { ...item, checksum: "0".repeat(64) } : item),
+    [...migrations, migration("108_unknown_third", booking.checksum)],
+  ]) {
+    assert.deepEqual(numberCollisions([], local), [], "There are no ledger rows to report as collisions");
+    assert.equal(reviewedNumber108Coexistence({ ledgerRows: [], migrations: local }), false,
+      "An empty collision list cannot establish a reviewed source pair");
+  }
+});
 
 test("matching numeric 051/052/053 aliases count their canonical files as applied", () => {
   const migrations = [
@@ -326,6 +472,126 @@ test("migration plan tokens bind commit, connected target, ledger and checksums"
     }),
     token,
   );
+});
+
+const bookingVersions = ["108_universal_booking", "109_booking_setup_communications", "110_account_ui_language_preference",
+  "111_booking_public_channels", "112_booking_production_activation", "113_meeting_reminder_admission"];
+const bookingActivation = "11111111-2222-4333-8444-555555555555";
+const bookingEnvironment = { MIGRATION_TARGET: "prod", BOOKING_PRODUCTION_ENABLED: "1", BOOKING_PRODUCTION_ACTIVATION_ID: bookingActivation };
+
+test("booking production cutover requires explicit bounded scope and independent production activation", () => {
+  const input = { enabled: true, command: "dry-run", allowManualCutover: true, target: "prod", env: bookingEnvironment };
+  for (const version of bookingVersions) {
+    for (const only of [version, `${version}.sql`]) {
+      assert.deepEqual(bookingProductionCutoverProfile({ ...input, only }), { mode: "booking-production-cutover-v1", activationId: bookingActivation });
+    }
+  }
+  for (const change of [{ only: "" }, { only: "107_other" }, { only: "114_other" }, { only: "108_wrong_name" },
+    { only: "109_booking_setup_communications_rollback" }, { allowManualCutover: false }, { command: "status" },
+    { target: "test" }, { env: { ...bookingEnvironment, MIGRATION_TARGET: "test" } },
+    { env: { ...bookingEnvironment, BOOKING_PRODUCTION_ENABLED: "0" } },
+    { env: { ...bookingEnvironment, BOOKING_PRODUCTION_ACTIVATION_ID: "" } },
+    { env: { ...bookingEnvironment, BOOKING_PRODUCTION_ACTIVATION_ID: "not-an-activation" } }]) {
+    assert.throws(() => bookingProductionCutoverProfile({ ...input, only: bookingVersions[1], ...change }));
+  }
+});
+
+test("without the production mode, booking109-113 remain blocked in prod and QA keeps its existing path", () => {
+  for (const version of bookingVersions.slice(1)) {
+    for (const only of [version, `${version}.sql`]) {
+      assert.throws(() => bookingProductionCutoverProfile({ target: "prod", only }), /QA-only without --booking-production-cutover/);
+      assert.equal(bookingProductionCutoverProfile({ target: "test", only }), null);
+    }
+  }
+});
+
+test("all booking migrations stay manual and require the exact checksummed predecessor", () => {
+  const actualManual = new Set([...runner.match(/const manualCutoverVersions = new Set\(\[([\s\S]*?)\]\)/)[1].matchAll(/"([^"]+)"/g)].map(match => match[1]));
+  const versions = ["106_crm_operational_readers", ...bookingVersions];
+  const migrations = versions.map(version => migration(version, `sha-${version}`, { manualCutover: actualManual.has(version) }));
+  for (let index = 1; index < versions.length; index++) {
+    assert.equal(actualManual.has(versions[index]), true);
+    const ledgerRows = migrations.slice(0, index).map(item => ledgerRow(item.version, item.checksum));
+    assert.deepEqual(createMigrationPlan({ ledgerRows, migrations, only: "" }), []);
+    assert.throws(() => createMigrationPlan({ ledgerRows, migrations, only: versions[index] }), /Refusing manual cutover/);
+    assert.throws(() => createMigrationPlan({ allowManualCutover: true, ledgerRows: ledgerRows.slice(0, -1), migrations, only: versions[index] }), /required predecessor/);
+    assert.deepEqual(createMigrationPlan({ allowManualCutover: true, ledgerRows, migrations, only: versions[index] }), [migrations[index]]);
+  }
+});
+
+test("plan tokens distinguish booking activation, transport, mode and declared runtime role", () => {
+  const base = { connectedTarget: { branchId: "br-synthetic", databaseName: "neondb", projectId: "synthetic-project",
+    roleName: "migration_owner", serverVersionNum: 170011, target: "prod" }, headCommit: "a".repeat(40), ledgerRows: [], plan: [] };
+  const bookingProduction = bookingProductionCutoverProfile({ enabled: true, command: "dry-run", only: bookingVersions[0],
+    allowManualCutover: true, target: "prod", env: bookingEnvironment });
+  const profile = migrationExecutionProfile({ bookingProduction, hostFingerprint: "host-one", runtimeRole: "novalure_app", transport: "neon-websocket" });
+  const token = createMigrationPlanToken({ ...base, executionProfile: profile });
+  for (const change of [{ activationId: "22222222-2222-4333-8444-555555555555" }, { transport: "pg" }, { mode: "other" }, { hostFingerprint: "host-two" }, { runtimeRole: "other_runtime" }]) {
+    assert.notEqual(createMigrationPlanToken({ ...base, executionProfile: { ...profile, ...change } }), token);
+  }
+  assert.notEqual(createMigrationPlanToken(base), token);
+  assert.equal(migrationExecutionProfile({ compatibility: "qa" }), "qa", "Existing native profiles retain their token representation");
+});
+
+test("booking production cutover verifies an existing nonprivileged application runtime role", async () => {
+  const ordinary = { rolcanlogin: true, rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolreplication: false, rolbypassrls: false };
+  const calls = [];
+  const client = { query: async query => { calls.push(query); return { rows: [ordinary] }; } };
+  await assertBookingMigrationRuntimeRole(client, "novalure_app");
+  assert.deepEqual(calls[0].values, ["novalure_app"]);
+  await assert.rejects(assertBookingMigrationRuntimeRole(client, ""), /declared normal runtime role/);
+  for (const key of ["rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"]) {
+    await assert.rejects(assertBookingMigrationRuntimeRole({ query: async () => ({ rows: [{ ...ordinary, [key]: true }] }) }, "novalure_app"), /without elevated privileges/);
+  }
+  await assert.rejects(assertBookingMigrationRuntimeRole({ query: async () => ({ rows: [] }) }, "missing"), /existing normal runtime role/);
+});
+
+function migrationPoolEnvironment() {
+  return { NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: "ep-synthetic-production.eu-central-1.aws.neon.tech",
+    NOVALURE_PRODUCTION_PROJECT_ID: "synthetic-project", NEON_PROJECT_ID: "synthetic-project", HTTPS_PROXY: "http://proxy.invalid:8080" };
+}
+
+test("native migration transport stays default and both drivers reject wrong targets before pool construction", () => {
+  const env = migrationPoolEnvironment(), databaseUrl = `postgresql://synthetic_owner@${env.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST}/neondb`;
+  const constructed = [];
+  class NativePool { constructor(options) { constructed.push({ driver: "pg", options }); } }
+  class NeonPool { constructor(options) { constructed.push({ driver: "neon-websocket", options }); } }
+  let configured = 0;
+  const dependencies = { NativePool, NeonPool, configureNeonTransport: () => { configured++; } };
+  assert.equal(resolveMigrationTransport({}), "pg");
+  createMigrationPool({ databaseUrl, target: "prod", env, options: { query_timeout: 960000 } }, dependencies);
+  assert.equal(constructed[0].driver, "pg"); assert.equal(configured, 0);
+  assert.equal(constructed[0].options.connectionString, databaseUrl);
+  for (const transport of ["pg", "neon-websocket"]) {
+    const scoped = { ...env, MIGRATION_TRANSPORT: transport };
+    assert.throws(() => createMigrationPool({ databaseUrl: databaseUrl.replace("ep-synthetic-production", "ep-foreign"), target: "prod", env: scoped }, dependencies), /active database host/);
+    assert.throws(() => createMigrationPool({ databaseUrl, target: "prod", env: { ...scoped, NEON_PROJECT_ID: "foreign-project" } }, dependencies), /active Neon project/);
+  }
+  assert.equal(constructed.length, 1); assert.equal(configured, 0);
+  assert.throws(() => createMigrationPool({ databaseUrl, target: "prod", env: { ...env, MIGRATION_TRANSPORT: "unexpected" } }, dependencies), /MIGRATION_TRANSPORT/);
+  createMigrationPool({ databaseUrl, target: "prod", env: { ...env, MIGRATION_TRANSPORT: "neon-websocket" } }, dependencies);
+  assert.equal(constructed.at(-1).driver, "neon-websocket"); assert.equal(configured, 1);
+});
+
+test("explicit WebSocket transport enforces WSS, HTTPS proxy and verified default plus system CAs", () => {
+  const constructions = [], certificateKinds = [];
+  class Socket { constructor(address, protocols, options) { constructions.push({ address, protocols, options }); } }
+  class Agent { constructor(proxy) { this.proxy = proxy; } }
+  const config = {};
+  const dependencies = { WebSocket: Socket, HttpsProxyAgent: Agent, neonConfig: config,
+    getCACertificates: kind => { certificateKinds.push(kind); return [`synthetic-${kind}-ca`]; } };
+  for (const HTTPS_PROXY of [undefined, "", "ftp://proxy.invalid", "not-a-proxy"]) {
+    assert.throws(() => configureMigrationNeonTransport({ HTTPS_PROXY }, dependencies), /requires a valid HTTPS_PROXY/);
+  }
+  configureMigrationNeonTransport({ HTTPS_PROXY: "http://proxy.invalid:8080" }, dependencies);
+  assert.equal(config.useSecureWebSocket, true);
+  new config.webSocketConstructor("wss://ep-synthetic.neon.tech/v2", [], { rejectUnauthorized: false, ca: ["untrusted"], agent: "other" });
+  assert.deepEqual(certificateKinds, ["default", "system"]);
+  const { options } = constructions[0];
+  assert.equal(options.rejectUnauthorized, true);
+  assert.deepEqual(options.ca, ["synthetic-default-ca", "synthetic-system-ca"]);
+  assert(options.agent instanceof Agent);
+  assert.equal(options.agent.proxy, "http://proxy.invalid:8080");
 });
 
 test("060 and 061 remain manual even when alias handling is active", () => {

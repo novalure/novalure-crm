@@ -76,7 +76,7 @@ try {
   }
   checkStop();
   db = designCIntegration
-    ? await (await import("./lib/design-c-integration-fixture.mjs")).startDesignCIntegrationDatabase()
+    ? await (await import("./lib/design-c-integration-fixture.mjs")).startDesignCIntegrationDatabase({ accountLanguagePreference: true })
     : await startLocalSalesDb();
   checkStop();
   if (!designCIntegration) await applySalesSchema(db);

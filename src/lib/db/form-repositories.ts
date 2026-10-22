@@ -1,4 +1,5 @@
 import type { AppSession } from "@/lib/auth/session";
+import { lookupActiveWorkspaceBookingPublication } from "@/lib/booking/publication";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasBoundTenantTransaction, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import {
@@ -256,6 +257,13 @@ export async function upsertWebsiteForm(input: {
 
 async function upsertWebsiteFormInTenant(input: { session: AppSession; form: WebsiteForm }) {
   const form = normalizeWebsiteForm(input.form);
+  const bookingFields = form.fields.filter(field => field.type === "booking" && field.bookingPublicId);
+  if (bookingFields.length) {
+    const publication = await lookupActiveWorkspaceBookingPublication(input.session.workspaceId);
+    if (!publication?.channels.form || bookingFields.some(field => field.bookingPublicId !== publication.publicId)) {
+      return { form: null, persisted: false, reason: "Form booking configuration is not available in this workspace" };
+    }
+  }
   const existing = await resolveExistingForm(input.session.workspaceId, form);
   if (isUuid(form.id) && !existing) {
     return { form: null, persisted: false, reason: "Form not found" };
@@ -1398,6 +1406,8 @@ function normalizeFields(value: unknown, fallbackStepId = defaultSteps[0].id): F
     const type = normalizeFieldType(object.type);
     if (!type) return [];
     return [createFormField({
+      bookingPublicId: type === "booking" && typeof object.bookingPublicId === "string" && /^[a-z0-9][a-z0-9-]{10,79}$/.test(object.bookingPublicId) ? object.bookingPublicId : undefined,
+      bookingRequired: type === "booking" && typeof object.bookingRequired === "boolean" ? object.bookingRequired : undefined,
       conditionalFieldId: typeof object.conditionalFieldId === "string" ? object.conditionalFieldId : "",
       conditionalValue: typeof object.conditionalValue === "string" ? object.conditionalValue : "",
       crmField: typeof object.crmField === "string" && object.crmField ? object.crmField : defaultCrmField(type),
@@ -1500,7 +1510,7 @@ function normalizeTarget(value: unknown): FormTarget {
 }
 
 function normalizeFieldType(value: unknown): FormFieldType | null {
-  return value === "checkbox" ||
+  return value === "booking" || value === "checkbox" ||
     value === "company" ||
     value === "consent" ||
     value === "date" ||
@@ -1553,6 +1563,7 @@ function defaultCrmField(type: FormFieldType) {
 
 function defaultLabel(type: FormFieldType) {
   const labels: Record<FormFieldType, string> = {
+    booking: "Terminbuchung",
     checkbox: "Einwilligung",
     company: "Firma",
     consent: "Datenschutz akzeptieren",
