@@ -1,4 +1,4 @@
-// Auftrag 2: customer setup through real UI → HTTP/CSRF → disposable PostgreSQL.
+// Customer setup and disabled publication drafts through real UI → HTTP/CSRF → disposable PostgreSQL.
 // No hosted fixture reset, provider calls, live messages or scheduler proof.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -83,7 +83,7 @@ try {
   const client = await owner.connect();
   try {
     await client.query("begin");
-    for (const name of ["108_universal_booking.sql", "109_booking_setup_communications.sql", "110_account_ui_language_preference.sql"]) {
+    for (const name of ["108_universal_booking.sql", "109_booking_setup_communications.sql", "110_account_ui_language_preference.sql", "111_booking_public_channels.sql"]) {
       const sql = await readFile(`migrations/${name}`, "utf8");
       await client.query(sql);
     }
@@ -123,6 +123,7 @@ try {
   await check("Anonymous setup API is denied", async () => {
     await operator.goto(`${base}/booking`);
     assert.equal((await request(operator, setupPath)).status,401);
+    assert.equal((await request(operator, "/api/booking/publication")).status,401);
   });
   await check("Real password and MFA open the five-step DE setup", async () => {
     await login(operator,base,accounts.operator);
@@ -257,7 +258,8 @@ try {
     await operator.getByRole("combobox",{name:/^Vorlagensprache/}).selectOption("en");
     await expect(operator.getByRole("textbox",{name:/^Betreff/}).first()).toHaveValue("QA appointment for {{firstName}}");
     await expect(operator.getByLabel("Minuten vor dem Termin",{exact:true})).toHaveCount(3);
-    await expect(operator.getByRole("button",{name:"Testmail an hello@novalure.eu",exact:true})).toBeDisabled();
+    await expect(operator.getByText("Für eine Testmail zuerst eine eigene bestätigte Buchung mit Ihrer Konto-E-Mail als Empfänger im Bereich Kalender öffnen. Deren echte Buchungsdaten werden verwendet.",{exact:true})).toBeVisible();
+    await expect(operator.getByRole("button",{name:"Testmail an eigene Konto-E-Mail",exact:true})).toBeDisabled();
   });
   await check("Template preview renders allowed placeholders and rejects executable content", async () => {
     await operator.getByRole("combobox",{name:/^Vorlagensprache/}).selectOption("de");
@@ -275,6 +277,69 @@ try {
     await operator.getByRole("button",{name:"Vorschau",exact:true}).click();
     await expect(operator.getByRole("alert").filter({hasText:"Die Vorlage kann nicht angezeigt werden"})).toBeVisible();
   });
+  await check("Publication saves and reloads a disabled draft with auth, CSRF and PostgreSQL readback", async () => {
+    const publicationPath="/api/booking/publication";
+    await openStep(operator,"Veröffentlichen");
+    await expect(operator.getByRole("heading",{name:"Buchungskanäle veröffentlichen",exact:true})).toBeVisible();
+    const initial=await request(operator,publicationPath);
+    assert.equal(initial.status,200);
+    assert.match(initial.cacheControl,/no-store/);
+    assert.equal(initial.body.publication.enabled,false);
+    assert(initial.body.employees.some(employee=>employee.id===accounts.operator.userId));
+    assert.equal((await request(operator,publicationPath,"PUT",{publication:initial.body.publication,expectedRevision:initial.body.revision},false)).status,403);
+    assert.equal((await db.admin.query("select count(*)::int as count from booking_publications where workspace_id=$1",[accounts.operator.workspaceId])).rows[0].count,0);
+    await expect(operator.getByRole("checkbox",{name:"Ausgewählte Buchungskanäle veröffentlichen",exact:true})).not.toBeChecked();
+    await operator.getByLabel("Name der Buchungsseite",{exact:true}).fill("SYNTHETIC QA booking page");
+    await operator.getByLabel("Beschreibung",{exact:true}).fill("SYNTHETIC disabled publication draft\nNo provider or customer booking.");
+    await operator.getByRole("combobox",{name:/^Darstellung(?:\s|$)/}).selectOption("dark");
+    await operator.getByRole("combobox",{name:/^Sprache der Buchungsseite(?:\s|$)/}).selectOption("en");
+    await operator.getByRole("button",{name:"Terminart hinzufügen",exact:true}).click();
+    await operator.getByRole("combobox",{name:/^Mitarbeiter 1(?:\s|$)/}).selectOption(accounts.operator.userId);
+    await operator.getByRole("checkbox",{name:"Eigenständiger Buchungslink",exact:true}).check();
+    await operator.getByRole("checkbox",{name:"Inline-Widget",exact:true}).check();
+    await operator.getByLabel(/^Freigegebene Website-Ursprünge/).fill("https://booking.example.com");
+    await Promise.all([
+      operator.waitForResponse(response=>new URL(response.url()).pathname===publicationPath&&response.request().method()==="PUT"&&response.status()===200),
+      operator.getByRole("button",{name:"Veröffentlichung speichern",exact:true}).click(),
+    ]);
+    await expect(operator.getByText("Veröffentlichung gespeichert und erneut geladen.",{exact:true})).toBeVisible();
+    const saved=await request(operator,publicationPath);
+    assert.equal(saved.status,200);
+    assert.equal(saved.body.revision,1);
+    assert.equal(saved.body.publication.title,"SYNTHETIC QA booking page");
+    assert.equal(saved.body.publication.description,"SYNTHETIC disabled publication draft\nNo provider or customer booking.");
+    assert.equal(saved.body.publication.appearance,"dark");
+    assert.equal(saved.body.publication.language,"en");
+    assert.equal(saved.body.publication.enabled,false);
+    assert.deepEqual(saved.body.publication.allowedOrigins,["https://booking.example.com"]);
+    assert.deepEqual(saved.body.publication.channels,{link:true,inline:true,popup:false,form:false,chat:false,voice:false});
+    assert.equal(saved.body.publication.assignments.length,1);
+    assert.equal(saved.body.publication.assignments[0].organizerId,accounts.operator.userId);
+    assert.equal(saved.body.publication.assignments[0].kind,"phone");
+    assert.equal(saved.body.readiness.canPublish,false);
+    assert.equal(saved.body.readiness.assignments[0].calendar,false);
+    const stored=await db.admin.query("select enabled,config,revision::int from booking_publications where workspace_id=$1",[accounts.operator.workspaceId]);
+    assert.equal(stored.rowCount,1);
+    assert.equal(stored.rows[0].enabled,false);
+    assert.equal(stored.rows[0].revision,saved.body.revision);
+    assert.deepEqual(stored.rows[0].config,saved.body.publication);
+    assert.equal((await db.admin.query("select count(*)::int as count from booking_publication_assignments where workspace_id=$1 and organizer_id=$2",[accounts.operator.workspaceId,accounts.operator.userId])).rows[0].count,1);
+    await reloadBooking(operator);
+    await openStep(operator,"Veröffentlichen");
+    await expect(operator.getByLabel("Name der Buchungsseite",{exact:true})).toHaveValue("SYNTHETIC QA booking page");
+    await expect(operator.getByRole("combobox",{name:/^Darstellung(?:\s|$)/})).toHaveValue("dark");
+    await expect(operator.getByRole("combobox",{name:/^Sprache der Buchungsseite(?:\s|$)/})).toHaveValue("en");
+    await expect(operator.getByRole("checkbox",{name:"Eigenständiger Buchungslink",exact:true})).toBeChecked();
+    await expect(operator.getByRole("checkbox",{name:"Inline-Widget",exact:true})).toBeChecked();
+    await expect(operator.getByRole("checkbox",{name:"Ausgewählte Buchungskanäle veröffentlichen",exact:true})).not.toBeChecked();
+    await expect(operator.getByRole("link",{name:"Öffentliche Vorschau & Testbuchung öffnen",exact:true})).toHaveCount(0);
+    await expect(operator.getByRole("button",{name:"Kopieren: Buchungslink",exact:true})).toBeDisabled();
+    await expect(operator.getByLabel("Buchungslink",{exact:true})).toHaveValue("");
+    assert.equal((await request(operator,`/api/public/booking/${saved.body.publication.publicId}`)).status,404);
+    assert.equal((await db.admin.query("select count(*)::int as count from booking_reservations")).rows[0].count,0);
+    assert.equal((await db.admin.query("select count(*)::int as count from booking_message_jobs")).rows[0].count,0);
+    assert.equal((await db.admin.query("select count(*)::int as count from booking_calendar_connections")).rows[0].count,0);
+  });
   await reloadBooking(operator);
   await openStep(operator,"Standorte & Fahrtzeiten");
   await operator.getByRole("combobox",{name:/^Terminart/}).first().selectOption("phone");
@@ -289,6 +354,11 @@ try {
     await customer.setViewportSize({width:390,height:844});
     for (const name of ["Calendar","Appointment types & hours","Locations & travel","Emails & reminders","Publish"]) {
       await openStep(customer,name);
+      if(name==="Publish") {
+        await expect(customer.getByRole("heading",{name:"Publish booking channels",exact:true})).toBeVisible();
+        await expect(customer.getByLabel("Booking page name",{exact:true})).toHaveValue("Terminbuchung");
+        await expect(customer.getByRole("checkbox",{name:"Publish selected booking channels",exact:true})).not.toBeChecked();
+      }
       assert.equal(await customer.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
     }
     await reloadBooking(customer);
@@ -316,6 +386,7 @@ try {
     await expect(viewer.getByText("Für diesen Bereich benötigen Sie das Kalendermodul und die Berechtigung zur Kalenderverwaltung.",{exact:true})).toBeVisible();
     assert.equal((await request(viewer,setupPath)).status,403);
     assert.equal((await request(viewer,"/api/booking/settings")).status,403);
+    assert.equal((await request(viewer,"/api/booking/publication")).status,403);
   });
   await check("No browser exception or external request",async()=>{assert.deepEqual(pageErrors,[]);assert.deepEqual(outbound,[]);});
 } catch (error) {
