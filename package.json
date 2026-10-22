@@ -118,7 +118,7 @@
     "ai": "^7.0.148",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.4.0",
+    "next": "16.4.2",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.4.299",
     "pdfkit": "0.20.2",
@@ -141,7 +141,7 @@
     "@types/react-dom": "^19",
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
     "tsx": "4.23.13",
     "typescript": "^5"
