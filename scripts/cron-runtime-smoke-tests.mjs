@@ -39,12 +39,12 @@ test("cron run exposes a bounded soft deadline and run metadata", () => {
   assert.ok(run.durationMs() >= 0);
 });
 
-test("production schedules are staggered and workers use shared guards", async () => {
+test("production schedules pin the approved booking cadence and workers use shared guards", async () => {
   const vercel = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
   assert.deepEqual(
     vercel.crons.map((entry) => [entry.path, entry.schedule]),
     [
-      ["/api/cron/meeting-reminders", "2 * * * *"],
+      ["/api/cron/meeting-reminders", "* * * * *"],
       ["/api/cron/teams-alerts", "4,19,34,49 * * * *"],
       ["/api/cron/google-alerts", "9,24,39,54 * * * *"],
       ["/api/cron/property-reservations", "7 * * * *"],
