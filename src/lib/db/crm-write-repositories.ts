@@ -3142,6 +3142,10 @@ async function createProjectRecordInTransaction(input: {
   project: Partial<Project>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Project>> {
+  if (input.project.workspaceId !== undefined && input.project.workspaceId !== input.session.workspaceId) {
+    return { persisted: false, reason: "Project workspace permission mismatch" };
+  }
+
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }

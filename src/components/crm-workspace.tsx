@@ -3651,7 +3651,7 @@ export function CrmWorkspace({
     setProjectNotice("");
     let saved = false;
     try {
-      const response = await csrfFetch("/api/crm/projects", {
+      const response = await csrfFetch(`/api/crm/projects?workspaceId=${encodeURIComponent(activeWorkspace.id)}`, {
         body: JSON.stringify({
           project: {
             ...nextProject,
