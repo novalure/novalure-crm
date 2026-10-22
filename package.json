@@ -99,7 +99,7 @@
     "qa:booking:browser": "node scripts/qa-booking-browser.mjs",
     "test:booking:setup": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-setup-tests.ts scripts/booking-travel-tests.ts scripts/booking-travel-service-tests.ts",
     "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts",
-    "test:booking:language": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts scripts/crm-language-preference-db-tests.ts",
+    "test:booking:language": "node --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-db-tests.ts",
     "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs"
   },
   "dependencies": {
