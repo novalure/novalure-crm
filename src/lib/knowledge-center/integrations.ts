@@ -135,7 +135,9 @@ export async function retrieveKnowledgeForSavedChannel(
       // The repository derives policy context in the same SQL snapshot as the
       // authorized hits, so a concurrent project change cannot mix profiles.
       if (requiresLivePropertyFacts(query, match.projectDivision) || requiresLivePropertyFacts(match.excerpt, match.projectDivision) || remaining <= 0) continue;
-      const excerpt = match.excerpt.slice(0, Math.min(assistantKnowledgeLimits.excerptCharacters, remaining));
+      // Keep the original chunk above for policy checks; select useful facts for
+      // the bounded assistant context instead of always clipping its beginning.
+      const excerpt = (match.relevantExcerpt ?? match.excerpt).slice(0, Math.min(assistantKnowledgeLimits.excerptCharacters, remaining));
       if (!excerpt.trim()) continue;
       remaining -= excerpt.length;
       matches.push({ ...match, excerpt });

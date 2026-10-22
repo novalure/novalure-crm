@@ -18,7 +18,7 @@ export type UpdateKnowledgeSourceInput = Partial<KnowledgeContentInput> & { sour
 export type AssignKnowledgeAreasInput = { botId: string; channel: KnowledgeChannel; areaIds: string[] };
 export type QueryKnowledgeCenterInput = { query: string; botId?: string; channel?: KnowledgeChannel; areaIds?: string[]; limit?: number };
 // projectDivision is repository-derived policy context, never a request selector.
-export type KnowledgeMatch = { sourceId: string; versionId: string; chunkId: string; areaId: string; title: string; excerpt: string; citationUrl: string | null; score: number; projectDivision?: import("../crm-division").CrmDivision };
+export type KnowledgeMatch = { sourceId: string; versionId: string; chunkId: string; areaId: string; title: string; excerpt: string; relevantExcerpt?: string; citationUrl: string | null; score: number; projectDivision?: import("../crm-division").CrmDivision };
 export type KnowledgeQueryResult = { matches: KnowledgeMatch[]; grounded: boolean; usage: KnowledgeUsage };
 export type KnowledgeDocument = { assetId: string; name: string; mimeType: string; sizeBytes: number; downloadPath: string };
 

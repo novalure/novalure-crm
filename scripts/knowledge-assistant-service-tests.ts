@@ -204,6 +204,25 @@ test("saved project division permits Studio service knowledge while property, te
     assert.match(contacts.excerpts[0].text, /real-estate marketing and CRM services separately/);
     assert.doesNotMatch(JSON.stringify([prices, contacts]), /DRAFT_PACKAGE_SECRET|projectDivision|WEB_DESIGN/);
   });
+  await t.test("relevant contact details beyond the first 600 characters reach the bounded assistant context", async () => {
+    const introduction = "SYNTHETIC general company background and delivery guidance. ".repeat(15);
+    assert.ok(introduction.length > 600 && introduction.length < 1000);
+    const detailedContact = await published(session(), area.id, "SYNTHETIC long contact source",
+      introduction + "\nlatecontactanchor Email: support@example.invalid. Telephone: SYNTHETIC_PHONE_001.");
+    const result = await context(webBot, "latecontactanchor");
+    assert.equal(result.answerStatus, "grounded");
+    assert.equal(result.excerpts.length, 1);
+    assert.equal(result.excerpts[0].sourceId, detailedContact.id);
+    assert.equal(result.excerpts[0].versionId, detailedContact.approvedVersionId);
+    assert.match(result.excerpts[0].text, /support@example\.invalid/);
+    assert.match(result.excerpts[0].text, /SYNTHETIC_PHONE_001/);
+    assert.ok(result.excerpts[0].text.length <= 600);
+    assert.doesNotMatch(JSON.stringify(result), /relevantExcerpt|projectDivision/);
+    // The helpful excerpt must not replace the original chunk for safety policy.
+    await published(session(), area.id, "SYNTHETIC property claim outside relevant fragment",
+      "Apartment A01 is available for EUR 450000. " + introduction + "\nlatepropertyanchor Contact support@example.invalid.");
+    assertEmpty(await context(webBot, "latepropertyanchor"));
+  });
   await t.test("REAL_ESTATE_GROWTH and an unassigned assistant retain the conservative policy", async () => {
     for (const botId of [estateBot, unassignedBot]) {
       assertEmpty(await context(botId, "studioquoteanchor price"));

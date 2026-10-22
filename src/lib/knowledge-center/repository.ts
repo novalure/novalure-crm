@@ -285,6 +285,8 @@ export async function queryKnowledgeCenter(session: AppSession, input: QueryKnow
     if (current.queriesThisMonth >= contract.maxQueriesPerMonth) fail("LIMIT_EXCEEDED", "Monthly knowledge query limit reached", 409);
     await tx.execute(`insert into knowledge_query_usage(workspace_id,month,query_count) values($1::uuid,date_trunc('month',now() at time zone 'UTC')::date,1) on conflict(workspace_id,month) do update set query_count=knowledge_query_usage.query_count+1`, [fresh.workspaceId]);
     const matches = await tx.query<KnowledgeQueryResult["matches"][number]>(`select s.id as "sourceId",v.id as "versionId",c.id as "chunkId",a.id as "areaId",v.name as title,left(c.content,1600) as excerpt,
+      ts_headline('simple',c.content,websearch_to_tsquery('simple',$2),
+        'StartSel="",StopSel="",MaxWords=35,MinWords=10,MaxFragments=3,FragmentDelimiter=" … "') as "relevantExcerpt",
       v.source_url as "citationUrl",ts_rank_cd(to_tsvector('simple',c.content),websearch_to_tsquery('simple',$2))::float8 as score,
       case when exists(select 1 from bots policy_bot join projects policy_project
         on policy_project.id=policy_bot.project_id and policy_project.workspace_id=policy_bot.workspace_id
