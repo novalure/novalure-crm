@@ -1900,6 +1900,9 @@ export async function reschedulePublicMeetingBooking(input: {
   if (externalSync.status === "failed") {
     return { error: "calendar_sync_failed", ok: false };
   }
+  if (externalSync.status === "pending" && booking.meetingPageId && await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId)) {
+    return { error: "booking_reschedule_requires_organizer", ok: false };
+  }
 
   const actionMetadata = {
     externalCalendarAction: {

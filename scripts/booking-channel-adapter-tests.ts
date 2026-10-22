@@ -21,6 +21,7 @@ import type { PublicBookingRecord } from "../src/lib/booking/publication-types";
 import { getLegacyBookingReplacement } from "../src/lib/booking/legacy-routing";
 import { syncGoogleCalendarEvent, updateGoogleCalendarEvent } from "../src/lib/integrations/google-calendar";
 import { syncMicrosoftCalendarEvent, updateMicrosoftCalendarEvent } from "../src/lib/integrations/microsoft-calendar";
+import { reschedulePublicMeetingBooking } from "../src/lib/db/meeting-repositories";
 
 const typeId = randomUUID(), publicId = "synthetic-booking-adapter";
 const grant = () => ({ booking: { enabled: true, publicId, channels: ["voice"], typeIds: [typeId] } });
@@ -57,6 +58,62 @@ test("form proof is kept in request memory and never enters the persistent raw p
   assert.equal(data.has("booking_appointment_token"), false); assert.equal(data.has("booking_appointment_id"), false);
   assert.equal(JSON.stringify(Object.fromEntries(data)).includes(token), false);
   assert.throws(() => prepareFormBookingFields(form, new FormData()), /FORM_BOOKING_CONFIRMATION_REQUIRED/);
+});
+
+test("legacy reschedule rechecks a pending calendar result but persists a known successful result", async () => {
+  const workspaceId = randomUUID(), actorId = randomUUID(), pageId = randomUUID(), bookingId = randomUUID(), token = randomUUID();
+  const day = new Date(Date.now() + 3 * 86400000), originalAt = new Date(Date.now() + 5 * 86400000).toISOString();
+  const selectedDate = day.toISOString().slice(0, 10);
+  const names = ["OAUTH_TOKEN_ENCRYPTION_KEY", "MICROSOFT_GRAPH_ACCESS_TOKEN", "MICROSOFT_TENANT_ID", "MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "MICROSOFT_CALENDAR_USER_ID", "MICROSOFT_GRAPH_USER_ID"];
+  const originalEnv = Object.fromEntries(names.map(name => [name, process.env[name]])), originalFetch = globalThis.fetch;
+  const secret = "SYNTHETIC-legacy-pending-regression-1234567890", iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", createHash("sha256").update(secret).digest(), iv);
+  const encrypted = Buffer.concat([cipher.update("SYNTHETIC-access", "utf8"), cipher.final()]);
+  const accessToken = ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), encrypted.toString("base64url")].join(".");
+  for (const name of names) delete process.env[name];
+  process.env.OAUTH_TOKEN_ENCRYPTION_KEY = secret;
+  try {
+    for (const provider of ["google", "microsoft"] as const) for (const scenario of ["pending_cutover", "pending_unchanged", "synced_cutover"] as const) {
+      let cutover = false, bookingWrites = 0, providerWrites = 0, tokenReads = 0;
+      const booking = { id: bookingId, workspaceId, meetingPageId: pageId, slug: "synthetic-pending", pageSlug: "synthetic-pending", title: "SYNTHETIC existing appointment", pageTitle: "SYNTHETIC existing appointment", contactName: "SYNTHETIC visitor", contactEmail: "synthetic@example.invalid", contactNote: "", startsAt: originalAt, endsAt: originalAt, status: "confirmed", calendarProvider: provider, meetingProvider: "phone", workspacePublicKey: "synthetic-workspace", metadata: { publicToken: token, externalCalendarId: "SYNTHETIC-existing-event" }, automation: { confirmationEnabled: false },
+        calendarIntegrations: { defaultProvider: "none", availability: { timeZone: "UTC", weeklyHours: Array.from({ length: 7 }, (_, index) => ({ day: index, start: "09:00", end: "17:00" })) } } };
+      // Bounded synthetic legacy repository: production privileges and RLS remain unchanged.
+      const legacy: TenantTransaction = {
+        async query<Row>(sql: string, params: readonly unknown[] = []) {
+          if (sql.includes("to_regprocedure")) return [{ installed: true }] as Row[];
+          if (sql.includes("booking_workspace_publication_lookup")) return [{ publication: cutover ? { config: { publicId, enabled: true } } : null }] as Row[];
+          if (/from meeting_bookings b/.test(sql)) { assert.equal(params[0], bookingId); return [booking] as Row[]; }
+          if (/select starts_at[\s\S]+from meeting_bookings/.test(sql)) return [];
+          if (/from provider_connections/.test(sql)) {
+            tokenReads++; assert.deepEqual(params, [workspaceId, `${provider}-calendar`]);
+            if (scenario !== "synced_cutover") { cutover = scenario === "pending_cutover"; return []; }
+            return [{ status: "connected", expiresAt: "2099-01-01T00:00:00.000Z", config: { accessToken } }] as Row[];
+          }
+          if (/update meeting_bookings/.test(sql)) { bookingWrites++; return [{ id: bookingId }] as Row[]; }
+          if (/update meeting_notification_jobs/.test(sql)) return [];
+          throw new Error("unexpected synthetic legacy repository statement");
+        },
+        async queryOne() { throw new Error("unexpected synthetic legacy queryOne"); },
+        async execute() { throw new Error("unexpected synthetic legacy execute"); },
+      };
+      globalThis.fetch = async (input, init) => {
+        assert.equal(scenario, "synced_cutover"); assert.equal(init?.method, "PATCH");
+        assert.match(String(input), provider === "google" ? /^https:\/\/www.googleapis.com\/calendar\/v3\// : /^https:\/\/graph.microsoft.com\/v1.0\//);
+        providerWrites++; cutover = true;
+        return Response.json({ id: "SYNTHETIC-existing-event" });
+      };
+      const result = await runWithTenantTransaction({ workspaceId, actorId }, legacy, () => reschedulePublicMeetingBooking({ bookingId, token, selectedDate, slot: "10:00", requestUrl: "https://crm.example.invalid/book/synthetic-pending" }));
+      assert.equal(tokenReads, 1, `${provider}/${scenario} reached the calendar context`);
+      if (scenario === "pending_cutover") {
+        assert.deepEqual(result, { error: "booking_reschedule_requires_organizer", ok: false });
+        assert.equal(bookingWrites, 0, `${provider} preserves the original local appointment`);
+      } else { assert.equal(result.ok, true, `${provider}/${scenario}`); assert.equal(bookingWrites, 1); }
+      assert.equal(providerWrites, scenario === "synced_cutover" ? 1 : 0);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const name of names) if (originalEnv[name] === undefined) delete process.env[name]; else process.env[name] = originalEnv[name];
+  }
 });
 
 test("machine booking authority uses actual PostgreSQL principal, actor and independent assistant grant", { timeout: 180000 }, async t => {
