@@ -75,8 +75,13 @@ export async function publicBookingPublication(stored: StoredBookingPublication,
   const types: PublicBookingPublication["types"] = [];
   for (const assignment of config.assignments) {
     try {
-      const setup = await withBookingTransaction(serverBookingSession(stored.workspaceId, assignment.organizerId), (tx, fresh) => readBookingSetup(tx, fresh, assignment.kind), options);
-      types.push({ id: assignment.id, kind: assignment.kind, durationMinutes: setup.rules.durationMinutes, timeZone: setup.rules.timeZone, locationRequired: assignment.kind === "onsite", location: assignment.kind === "office" ? assignment.publicLocation ?? "" : "" });
+      const { setup, organizerName } = await withBookingTransaction(serverBookingSession(stored.workspaceId, assignment.organizerId), async (tx, fresh) => {
+        const member = await tx.queryOne<{ name: string }>(`select name from public.workspace_users
+          where workspace_id=$1::uuid and id=$2::uuid and status='active'`, [fresh.workspaceId, fresh.userId]);
+        return { setup: await readBookingSetup(tx, fresh, assignment.kind), organizerName: member?.name.trim() ?? "" };
+      }, options);
+      if (!organizerName || organizerName.length > 120 || /[@\u0000-\u001f\u007f]/.test(organizerName)) continue;
+      types.push({ id: assignment.id, kind: assignment.kind, organizerName, durationMinutes: setup.rules.durationMinutes, timeZone: setup.rules.timeZone, locationRequired: assignment.kind === "onsite", location: assignment.kind === "office" ? assignment.publicLocation ?? "" : "" });
     } catch { /* An inactive organizer is never offered publicly. */ }
   }
   return { publicId: config.publicId, title: config.title, description: config.description, appearance: config.appearance, language: config.language, allowedOrigins: config.allowedOrigins, channels: config.channels, types };
