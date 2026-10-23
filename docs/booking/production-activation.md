@@ -50,6 +50,26 @@ including credentials. A cohort can approve many distinct customer/employee
 resources. The runtime role cannot insert/update the registry or execute either
 administrative function.
 
+The signed Studio `booking-tools-v1` gateway accepts `recipientPhone` on a
+phone-kind `hold` only. It verifies the current trusted chat session and the
+accepted Studio enquiry again, then stores the validated callback number on
+the exact lead-linked CRM contact inside the fixed Novalure Growth tenant after
+the hold is claimed and before the signed gateway returns it. A failed contact
+write fails closed; retrying the same hold key can complete that write while the
+reservation is still held. A terminal hold replay does not change the contact.
+Phone confirmation checks the signed callback against the canonical contact
+again in the booking authorization path before the provider call. The callback is included in the
+Studio hold's idempotency hash, so a changed-number replay is refused.
+An existing valid contact number can be reused when Studio sends no number;
+otherwise a phone hold is refused. Teams holds do not require or accept this
+field. The gateway removes it before calling the shared booking channel, so
+other public or machine channels gain no phone-field authority. The confirmed
+booking retains its existing CRM lead/contact relation; its calendar event
+does not carry a separate callback-number snapshot.
+Each public appointment type exposes the active assigned CRM user's bounded
+display name as `organizerName` for the visitor's pre-confirmation summary;
+email, user ID and calendar identifiers stay private.
+
 Activation checks reject QA workspaces and marked synthetic identities, inactive
 members or central identities, disabled Calendar modules, disconnected or changed
 account/calendar bindings, missing write scopes, protected calendars, and

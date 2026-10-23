@@ -13,7 +13,7 @@ import { bookingChannels, type BookingChannel, type PublicBookingRecord } from "
 
 export type BookingChannelRelation = { source: "studio_handoff" | "external_chat" | "machine" | "form_submission"; sourceId: string; leadId?: string; contactId?: string };
 export type TrustedBookingBinding = { expectedChannel: "chat" | "voice" | "form"; expectedWorkspaceId: string; expectedPublicId: string; expectedBindingId: string; expectedTypeIds: string[] };
-export type BookingChannelOptions = BookingServiceOptions & { trustedBinding?: TrustedBookingBinding };
+export type BookingChannelOptions = BookingServiceOptions & { trustedBinding?: TrustedBookingBinding; studioHoldPhone?: string; studioConfirmAuthorize?: () => Promise<void> };
 type SessionInput = { publicId: string; channel: BookingChannel; typeId: string; language: "de" | "en" };
 type ChannelSession = { id:string; workspaceId:string; organizerId:string; publicationId:string; assignmentId:string; channel:BookingChannel; language:"de"|"en"; bindingId:string|null; relation:BookingChannelRelation|Record<string,never>; origin:string; ipHash:string; expiresAt:string; provider:BookingProviderName; kind:BookingKind; publication:StoredBookingPublication };
 type ChannelOperation = {id:string; coreKey:string; bookingId:string|null; state:"attempting"|"succeeded"|"unknown"|"rejected"; requestHash:string; errorCode:string|null};
@@ -46,6 +46,21 @@ export async function issueTrustedBookingChannelSession(request:Request,input:Se
   if(!["chat","voice","form"].includes(input.channel))throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
   uuid(input.workspaceId);bounded(input.bindingId,200);
   return issue(request,validateSessionInput({publicId:input.publicId,channel:input.channel,typeId:input.typeId,language:input.language}),options,{workspaceId:input.workspaceId,bindingId:input.bindingId,relation:input.relation});
+}
+/** Resolve only a signed Studio session after its current binding and publication are rechecked. */
+export async function trustedStudioBookingKind(token:string,relation:BookingChannelRelation,options:BookingChannelOptions):Promise<BookingKind>{
+  const expected=options.trustedBinding;
+  if(!expected||expected.expectedChannel!=="chat")throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
+  const session=await loadSession(token,undefined,options);
+  if(session.relation.source!=="studio_handoff"||session.relation.sourceId!==expected.expectedBindingId||
+     session.relation.leadId!==relation.leadId||session.relation.contactId!==relation.contactId)
+    throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
+  await withBookingTransaction(actor(session),async tx=>{
+    await sessionGuard(tx,session,false);
+    const allowed=await tx.queryOne<{allowed:boolean}>("select booking_channel_authorize_session($1) as allowed",[session.id]);
+    if(!allowed?.allowed)throw new BookingError("BOOKING_SESSION_INVALID",401);
+  },options);
+  return session.kind;
 }
 async function loadSession(token:string,request:Request|undefined,options:BookingChannelOptions,receipt=false):Promise<ChannelSession>{
   if(typeof token!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(token))throw new BookingError("BOOKING_SESSION_INVALID",401);
@@ -83,7 +98,8 @@ async function status(session:ChannelSession,body:Record<string,unknown>,options
   const row=await getBookingStatus(actor(session),id,options);if(row.state==="confirmed")await attachRelation(session,id,options);return {booking:publicRecord(row,session)};
 }
 async function claim(session:ChannelSession,action:Exclude<BookingChannelAction,"availability"|"status">,body:Record<string,unknown>,options:BookingChannelOptions){
-  const clientKey=action==="confirm"?uuid(body.bookingId):uuid(body.idempotencyKey),requestHash=crmPayloadDigest(body);
+  const clientKey=action==="confirm"?uuid(body.bookingId):uuid(body.idempotencyKey),
+    requestHash=crmPayloadDigest(action==="hold"&&options.studioHoldPhone?{...body,recipientPhone:options.studioHoldPhone}:body);
   return withBookingTransaction(actor(session),async(tx,fresh)=>{
     await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`booking-channel:${session.id}`]);await sessionGuard(tx,session);
     if(action!=="hold")await ownBooking(tx,session,uuid(body.bookingId));
@@ -108,6 +124,7 @@ export async function dispatchBookingChannelAction(token:string,action:BookingCh
     const allowed=await tx.queryOne<{allowed:boolean}>("select booking_channel_authorize_session($1) as allowed",[session.id]);
     if(!allowed?.allowed)throw new BookingError("BOOKING_SESSION_INVALID",401);
     await sessionGuard(tx,session,false);
+    if(action==="confirm")await options.studioConfirmAuthorize?.();
     if(session.kind==="office"&&action!=="cancel"){
       const setup=await readBookingSetup(tx,fresh,"office"),published=session.publication.config.assignments.find(item=>item.id===session.assignmentId)?.publicLocation;
       if(!published||published.trim()!==setup.rules.location.trim())throw new BookingError("PUBLIC_OFFICE_LOCATION_REQUIRED",409);

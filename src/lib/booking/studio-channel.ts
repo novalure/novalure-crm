@@ -6,6 +6,7 @@ import { readKnowledgeBytes } from "@/lib/knowledge-center/http";
 import { websiteSalesActorId, websiteSalesWorkspaceId } from "@/lib/website-sales-ingestion";
 import { bookingChannelError, bookingChannelJson, dispatchTrustedBookingTool } from "./channel-http";
 import { getPublicBookingPublication } from "./publication";
+import { trustedStudioBookingKind } from "./channels";
 import type { BookingChannelOptions } from "./channels";
 import type { BookingChannelAuthority } from "./channel-bindings";
 import { BookingError } from "./types";
@@ -13,6 +14,66 @@ import { BookingError } from "./types";
 const version = "booking-tools-v1";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Options = BookingChannelOptions & { env?: NodeJS.ProcessEnv };
+const studioHoldFields = ["token", "startsAt", "recipientEmail", "recipientName", "location", "locationConfirmed", "idempotencyKey", "recipientPhone"];
+
+export function validateStudioCallbackPhone(value: unknown): string {
+  if (typeof value !== "string") throw new BookingError("BOOKING_CALLBACK_PHONE_REQUIRED", 400);
+  const phone = value.trim();
+  if (phone.length > 100 || !/^\+?[0-9() .\/-]+$/.test(phone) || (phone.match(/\d/g) ?? []).length < 6)
+    throw new BookingError("BOOKING_CALLBACK_PHONE_REQUIRED", 400);
+  return phone;
+}
+export function assertStudioCallbackPhoneMatches(current: string, expected: unknown) {
+  if (current !== validateStudioCallbackPhone(expected)) throw new BookingError("BOOKING_CALLBACK_PHONE_CHANGED", 409);
+}
+
+export function prepareStudioHoldPayload(kind: "phone" | "teams" | "meet" | "office" | "onsite", payload: Record<string, unknown>) {
+  if (Object.keys(payload).some(key => !studioHoldFields.includes(key)) || typeof payload.token !== "string")
+    throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+  if (kind !== "phone" && payload.recipientPhone !== undefined)
+    throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+  const callbackPhone = kind === "phone" && payload.recipientPhone !== undefined
+    ? validateStudioCallbackPhone(payload.recipientPhone) : undefined;
+  const channelPayload = { ...payload };
+  delete channelPayload.recipientPhone;
+  return { callbackPhone, channelPayload };
+}
+
+/** The accepted enquiry, lead and canonical contact are looked up again inside the fixed tenant. */
+export async function readStudioCallbackPhone(proof: Record<string, unknown>, contactId: string | undefined,
+  supplied: unknown, options: BookingChannelOptions = {}) {
+  if (!contactId) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
+  return withTenantTransaction({ actorId: websiteSalesActorId, workspaceId: websiteSalesWorkspaceId }, async tx => {
+    const contact = await tx.queryOne<{ id: string; phone: string | null }>(
+      `select contact.id,contact.phone from public.studio_enquiry_transfers transfer
+       join public.leads lead on lead.id=transfer.lead_id and lead.workspace_id=transfer.workspace_id
+       join public.contacts contact on contact.id=lead.contact_id and contact.workspace_id=lead.workspace_id
+       where transfer.workspace_id=$1::uuid and transfer.operation_id=$2::uuid and transfer.revision=$3
+         and transfer.payload_hash=$4 and transfer.reference=$5 and transfer.state='accepted'
+         and contact.id=$6::uuid`,
+      [websiteSalesWorkspaceId, proof.operationId, proof.revision, proof.payloadHash, proof.crmReference, contactId]);
+    if (!contact) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
+    return validateStudioCallbackPhone(supplied === undefined ? contact.phone : supplied);
+  }, options);
+}
+
+export async function persistStudioCallbackPhone(proof: Record<string, unknown>, contactId: string | undefined,
+  phone: string, options: BookingChannelOptions = {}) {
+  if (!contactId) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
+  phone = validateStudioCallbackPhone(phone);
+  return withTenantTransaction({ actorId: websiteSalesActorId, workspaceId: websiteSalesWorkspaceId }, async tx => {
+    const changed = await tx.queryOne<{ id: string }>(`update public.contacts contact set phone=$7,updated_at=now()
+      where contact.workspace_id=$1::uuid and contact.id=$6::uuid
+        and exists(select 1 from public.studio_enquiry_transfers transfer
+          join public.leads lead on lead.id=transfer.lead_id and lead.workspace_id=transfer.workspace_id
+          where transfer.workspace_id=$1::uuid and transfer.operation_id=$2::uuid and transfer.revision=$3
+            and transfer.payload_hash=$4 and transfer.reference=$5 and transfer.state='accepted'
+            and lead.contact_id=contact.id)
+      returning contact.id`,
+      [websiteSalesWorkspaceId, proof.operationId, proof.revision, proof.payloadHash, proof.crmReference, contactId, phone]);
+    if (!changed) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
+  }, options);
+}
 
 export function verifyStudioChannelSignature(raw: string, headers: Headers, secret: string | undefined, now = Date.now()) {
   const timestamp = headers.get("x-novalure-timestamp") ?? "";
@@ -68,6 +129,44 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     const forwarded = new Headers(request.headers);
     forwarded.set("x-vercel-forwarded-for", body.clientIp);
     const scopedRequest = new Request(request.url, { method: "POST", headers: forwarded });
+    if (body.operation === "confirm") {
+      const payload = body.payload as Record<string, unknown>;
+      if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+      const binding: BookingChannelOptions = { ...options, trustedBinding: {
+        expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
+        expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
+      const kind = await trustedStudioBookingKind(payload.token, relation, binding);
+      let confirmAuthorize: (() => Promise<void>) | undefined;
+      if (kind === "phone") {
+        const expectedPhone = validateStudioCallbackPhone(payload.recipientPhone);
+        confirmAuthorize = async () => {
+          const currentPhone = await readStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId, undefined, options);
+          assertStudioCallbackPhoneMatches(currentPhone, expectedPhone);
+        };
+        await confirmAuthorize();
+      } else if (payload.recipientPhone !== undefined) throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+      const channelPayload = { ...payload };
+      delete channelPayload.recipientPhone;
+      return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
+        { ...channelPayload, operation: body.operation }, { ...options, studioConfirmAuthorize: confirmAuthorize }));
+    }
+    if (body.operation === "hold") {
+      const payload = body.payload as Record<string, unknown>;
+      if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+      const binding: BookingChannelOptions = { ...options, trustedBinding: {
+        expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
+        expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
+      const kind = await trustedStudioBookingKind(payload.token, relation, binding);
+      const { callbackPhone, channelPayload } = prepareStudioHoldPayload(kind, payload);
+      const checkedPhone = kind === "phone" ? await readStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId,
+        callbackPhone, options) : undefined;
+      const result = await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
+        { ...channelPayload, operation: body.operation }, { ...options, studioHoldPhone: checkedPhone });
+      if (checkedPhone && result && typeof result === "object" && "booking" in result &&
+          result.booking && typeof result.booking === "object" && "state" in result.booking && result.booking.state === "held")
+        await persistStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId, checkedPhone, options);
+      return bookingChannelJson(result);
+    }
     return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
       { ...(body.payload as Record<string, unknown>), operation: body.operation }, options));
   } catch (error) { return bookingChannelError(error); }
