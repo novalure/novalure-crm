@@ -302,7 +302,7 @@ test("invalid or absent server cosmetic fields retain explicit safe website pres
   assert.equal(state.byClass("brand").textContent, embedPresentation["data-brand-name"]);
   assert.ok(state.byClass("log").textContent.includes(embedPresentation["data-welcome-message"]));
   assert.equal(state.byClass("avatar").src, "https://crm.example.invalid/chat/avatars/synthetic-hanna.webp");
-  assert.equal(state.nodes.filter(node => node.tag === "img").length, 1);
+  assert.equal(state.nodes.filter(node => node.tag === "img").length, 2, "the same safe portrait is shown in the header and personalized launcher");
 });
 
 test("typing status follows real pending requests, blocks duplicate sends, and recovers after failure", async t => {
