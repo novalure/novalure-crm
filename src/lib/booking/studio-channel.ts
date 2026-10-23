@@ -7,7 +7,7 @@ import { websiteSalesActorId, websiteSalesWorkspaceId } from "@/lib/website-sale
 import { bookingChannelError, bookingChannelJson, dispatchTrustedBookingTool } from "./channel-http";
 import { getPublicBookingPublication } from "./publication";
 import { trustedStudioBookingKind } from "./channels";
-import type { BookingChannelOptions } from "./channels";
+import type { BookingChannelOptions, BookingChannelRelation } from "./channels";
 import type { BookingChannelAuthority } from "./channel-bindings";
 import { BookingError } from "./types";
 
@@ -37,6 +37,13 @@ export function prepareStudioHoldPayload(kind: "phone" | "teams" | "meet" | "off
   const channelPayload = { ...payload };
   delete channelPayload.recipientPhone;
   return { callbackPhone, channelPayload };
+}
+
+export async function assertStudioEnglishMutation(operation: unknown, payload: Record<string, unknown>,
+  relation: BookingChannelRelation, binding: BookingChannelOptions) {
+  if (operation !== "reschedule" && operation !== "cancel") return;
+  if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+  await trustedStudioBookingKind(payload.token, relation, binding);
 }
 
 /** The accepted enquiry, lead and canonical contact are looked up again inside the fixed tenant. */
@@ -129,6 +136,9 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     const forwarded = new Headers(request.headers);
     forwarded.set("x-vercel-forwarded-for", body.clientIp);
     const scopedRequest = new Request(request.url, { method: "POST", headers: forwarded });
+    const binding: BookingChannelOptions = { ...options, trustedBinding: {
+      expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
+      expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
     if (body.operation === "session") {
       return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
         { ...(body.payload as Record<string, unknown>), operation: "session", language: "en" }, options));
@@ -136,9 +146,6 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     if (body.operation === "confirm") {
       const payload = body.payload as Record<string, unknown>;
       if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
-      const binding: BookingChannelOptions = { ...options, trustedBinding: {
-        expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
-        expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
       const kind = await trustedStudioBookingKind(payload.token, relation, binding);
       let confirmAuthorize: (() => Promise<void>) | undefined;
       if (kind === "phone") {
@@ -157,9 +164,6 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     if (body.operation === "hold") {
       const payload = body.payload as Record<string, unknown>;
       if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
-      const binding: BookingChannelOptions = { ...options, trustedBinding: {
-        expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
-        expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
       const kind = await trustedStudioBookingKind(payload.token, relation, binding);
       const { callbackPhone, channelPayload } = prepareStudioHoldPayload(kind, payload);
       const checkedPhone = kind === "phone" ? await readStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId,
@@ -171,6 +175,7 @@ export async function handleStudioBookingChannelRequest(request: Request, option
         await persistStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId, checkedPhone, options);
       return bookingChannelJson(result);
     }
+    await assertStudioEnglishMutation(body.operation, body.payload as Record<string, unknown>, relation, binding);
     return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
       { ...(body.payload as Record<string, unknown>), operation: body.operation }, options));
   } catch (error) { return bookingChannelError(error); }
