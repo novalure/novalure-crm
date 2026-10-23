@@ -68,7 +68,10 @@
   // works with a customer CSP that allows the central host in style-src.
   host.hidden = true;
   stylesheet.addEventListener("load", () => { host.hidden = false; });
-  const launcher = element("button", words.open, "launcher");
+  const launcher = element("button", "", "launcher");
+  const launcherLabel = element("span", words.open, "launcher-label");
+  launcher.append(launcherLabel);
+  if (presentation.assistantName) launcher.setAttribute("data-personalized", "");
   launcher.type = "button";
   launcher.setAttribute("aria-expanded", "false");
   launcher.setAttribute("aria-controls", "novalure-chat-panel");
@@ -80,24 +83,35 @@
   const heading = element("header", "", "heading"), title = element("h2", words.title, "title");
   const profile = element("div", "", "profile"), identity = element("div", "", "identity");
   const subtitle = element("p", "", "subtitle"), brand = element("p", "", "brand");
-  let avatar = null;
+  let avatar = null, launcherAvatar = null;
   brand.hidden = true;
   identity.append(title, subtitle, brand);
   profile.append(identity);
+  function createAvatar(className, size) {
+    const image = element("img", "", className);
+    image.alt = "";
+    image.width = size;
+    image.height = size;
+    image.referrerPolicy = "no-referrer";
+    image.decoding = "async";
+    image.addEventListener("error", () => { image.hidden = true; });
+    image.addEventListener("load", () => { image.hidden = false; });
+    return image;
+  }
   function showAvatar(url) {
     if (!url) return;
     if (!avatar) {
-      avatar = element("img", "", "avatar");
-      avatar.alt = "";
-      avatar.width = 48;
-      avatar.height = 48;
-      avatar.referrerPolicy = "no-referrer";
-      avatar.decoding = "async";
-      avatar.addEventListener("error", () => { avatar.hidden = true; });
-      avatar.addEventListener("load", () => { avatar.hidden = false; });
+      avatar = createAvatar("avatar", 48);
       profile.append(avatar);
     }
     if (avatar.src !== url) { avatar.hidden = false; avatar.src = url; }
+    if (presentation.assistantName) {
+      if (!launcherAvatar) {
+        launcherAvatar = createAvatar("launcher-avatar", 44);
+        launcher.append(launcherAvatar);
+      }
+      if (launcherAvatar.src !== url) { launcherAvatar.hidden = false; launcherAvatar.src = url; }
+    }
   }
   const close = element("button", "×", "close");
   close.type = "button";
@@ -174,7 +188,9 @@
       words = translations[language];
     }
     host.setAttribute("lang", language);
-    launcher.textContent = words.open;
+    launcherLabel.textContent = presentation.assistantName
+      ? `${{ de: "Frag", en: "Ask", es: "Pregunta a" }[language]} ${presentation.assistantName}`
+      : words.open;
     title.textContent = presentation.assistantName || boundedText(widget.assistantName, 120) || words.title;
     subtitle.textContent = presentation.subtitle || words.ai;
     showAvatar(presentation.avatar || avatarUrl(widget.assistantAvatarReference));
