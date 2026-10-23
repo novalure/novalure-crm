@@ -11,9 +11,9 @@
   const locale = (document.documentElement.lang || navigator.language || "en").toLowerCase().split("-")[0];
   let language = ["de", "es"].includes(locale) ? locale : "en";
   const translations = {
-    en: { open: "Ask a question", title: "Website assistant", close: "Close chat", label: "Your question", placeholder: "What would you like to know?", send: "Send", working: "Preparing an answer…", welcome: "Ask a question about our published information. AI answers can contain mistakes; check the listed sources.", sources: "Sources", error: "The assistant is temporarily unavailable. Please try again later or contact the team directly.", denied: "This chat is no longer available. Please reopen it or contact the team directly.", limited: "Too many requests. Please wait a few minutes before trying again.", training: "Test mode", you: "You", assistant: "Assistant" },
-    de: { open: "Frage stellen", title: "Website-Assistent", close: "Chat schließen", label: "Deine Frage", placeholder: "Was möchtest du wissen?", send: "Senden", working: "Antwort wird vorbereitet…", welcome: "Stelle eine Frage zu unseren veröffentlichten Informationen. KI-Antworten können Fehler enthalten; prüfe die angegebenen Quellen.", sources: "Quellen", error: "Der Assistent ist gerade nicht erreichbar. Bitte versuche es später erneut oder kontaktiere das Team direkt.", denied: "Dieser Chat ist nicht mehr verfügbar. Öffne ihn erneut oder kontaktiere das Team direkt.", limited: "Zu viele Anfragen. Bitte warte einige Minuten und versuche es erneut.", training: "Testmodus", you: "Du", assistant: "Assistent" },
-    es: { open: "Hacer una pregunta", title: "Asistente web", close: "Cerrar chat", label: "Tu pregunta", placeholder: "¿Qué te gustaría saber?", send: "Enviar", working: "Preparando la respuesta…", welcome: "Pregunta sobre nuestra información publicada. Las respuestas de IA pueden contener errores; consulta las fuentes indicadas.", sources: "Fuentes", error: "El asistente no está disponible temporalmente. Inténtalo más tarde o contacta directamente con el equipo.", denied: "Este chat ya no está disponible. Ábrelo de nuevo o contacta directamente con el equipo.", limited: "Demasiadas solicitudes. Espera unos minutos antes de intentarlo de nuevo.", training: "Modo de prueba", you: "Tú", assistant: "Asistente" },
+    en: { open: "Ask a question", title: "Website assistant", close: "Close chat", label: "Your question", placeholder: "What would you like to know?", send: "Send", ai: "AI assistant", privacy: "Privacy", privacyNote: "AI-powered answers.", typing: "is typing…", working: "Preparing an answer…", welcome: "Ask a question about our published information. AI answers can contain mistakes; check the listed sources.", sources: "Sources", error: "The assistant is temporarily unavailable. Please try again later or contact the team directly.", denied: "This chat is no longer available. Please reopen it or contact the team directly.", limited: "Too many requests. Please wait a few minutes before trying again.", training: "Test mode", you: "You", assistant: "Assistant" },
+    de: { open: "Frage stellen", title: "Website-Assistent", close: "Chat schließen", label: "Deine Frage", placeholder: "Was möchtest du wissen?", send: "Senden", ai: "KI-Assistenz", privacy: "Datenschutz", privacyNote: "KI-gestützte Antworten.", typing: "tippt …", working: "Antwort wird vorbereitet…", welcome: "Stelle eine Frage zu unseren veröffentlichten Informationen. KI-Antworten können Fehler enthalten; prüfe die angegebenen Quellen.", sources: "Quellen", error: "Der Assistent ist gerade nicht erreichbar. Bitte versuche es später erneut oder kontaktiere das Team direkt.", denied: "Dieser Chat ist nicht mehr verfügbar. Öffne ihn erneut oder kontaktiere das Team direkt.", limited: "Zu viele Anfragen. Bitte warte einige Minuten und versuche es erneut.", training: "Testmodus", you: "Du", assistant: "Assistent" },
+    es: { open: "Hacer una pregunta", title: "Asistente web", close: "Cerrar chat", label: "Tu pregunta", placeholder: "¿Qué te gustaría saber?", send: "Enviar", ai: "Asistente de IA", privacy: "Privacidad", privacyNote: "Respuestas generadas por IA.", typing: "está escribiendo…", working: "Preparando la respuesta…", welcome: "Pregunta sobre nuestra información publicada. Las respuestas de IA pueden contener errores; consulta las fuentes indicadas.", sources: "Fuentes", error: "El asistente no está disponible temporalmente. Inténtalo más tarde o contacta directamente con el equipo.", denied: "Este chat ya no está disponible. Ábrelo de nuevo o contacta directamente con el equipo.", limited: "Demasiadas solicitudes. Espera unos minutos antes de intentarlo de nuevo.", training: "Modo de prueba", you: "Tú", assistant: "Asistente" },
   };
   const disclaimers = {
     en: "AI answers can contain mistakes; check the listed sources.",
@@ -21,6 +21,37 @@
     es: "Las respuestas de IA pueden contener errores; consulta las fuentes indicadas.",
   };
   let words = translations[language];
+  // Explicit embed values customize this website's presentation over the server
+  // defaults. They never enter API requests or change the server's session,
+  // assistant or tenant binding.
+  function boundedText(value, maximum) {
+    return typeof value === "string" && !value.includes("\0") ? value.trim().slice(0, maximum) : "";
+  }
+  function avatarUrl(value) {
+    if (typeof value !== "string" || value.length > 500) return "";
+    try {
+      const url = new URL(value, apiOrigin);
+      return url.protocol === "https:" && url.origin === apiOrigin && !url.username && !url.password && !url.search && !url.hash
+        && /^\/chat\/avatars\/[a-z0-9][a-z0-9._-]{0,100}\.(?:webp|png|jpe?g|avif)$/i.test(url.pathname)
+        ? url.href : "";
+    } catch { return ""; }
+  }
+  function privacyUrl(value) {
+    if (typeof value !== "string" || !value.trim() || value.length > 2048 || typeof location === "undefined") return "";
+    try {
+      const url = new URL(value, location.origin);
+      return ["https:", "http:"].includes(url.protocol) && url.origin === location.origin && !url.username && !url.password
+        ? url.href : "";
+    } catch { return ""; }
+  }
+  const presentation = {
+    assistantName: boundedText(script.getAttribute("data-assistant-name"), 120),
+    brandName: boundedText(script.getAttribute("data-brand-name"), 120),
+    welcomeMessage: boundedText(script.getAttribute("data-welcome-message"), 500),
+    subtitle: boundedText(script.getAttribute("data-assistant-subtitle"), 160),
+    avatar: avatarUrl(script.getAttribute("data-assistant-avatar")),
+    privacy: privacyUrl(script.getAttribute("data-privacy-url")),
+  };
   function element(tag, text, className) {
     const node = document.createElement(tag);
     if (text) node.textContent = text;
@@ -47,13 +78,31 @@
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", words.title);
   const heading = element("header", "", "heading"), title = element("h2", words.title, "title");
-  const identity = element("div"), brand = element("p", "", "brand");
+  const profile = element("div", "", "profile"), identity = element("div", "", "identity");
+  const subtitle = element("p", "", "subtitle"), brand = element("p", "", "brand");
+  let avatar = null;
   brand.hidden = true;
-  identity.append(title, brand);
+  identity.append(title, subtitle, brand);
+  profile.append(identity);
+  function showAvatar(url) {
+    if (!url) return;
+    if (!avatar) {
+      avatar = element("img", "", "avatar");
+      avatar.alt = "";
+      avatar.width = 48;
+      avatar.height = 48;
+      avatar.referrerPolicy = "no-referrer";
+      avatar.decoding = "async";
+      avatar.addEventListener("error", () => { avatar.hidden = true; });
+      avatar.addEventListener("load", () => { avatar.hidden = false; });
+      profile.append(avatar);
+    }
+    if (avatar.src !== url) { avatar.hidden = false; avatar.src = url; }
+  }
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", words.close);
-  heading.append(identity, close);
+  heading.append(profile, close);
   const mode = element("div", "", "mode");
   const log = element("div", "", "log");
   log.setAttribute("role", "log");
@@ -64,16 +113,36 @@
   const input = element("textarea");
   input.id = "novalure-chat-question";
   input.maxLength = 2000;
-  input.rows = 2;
+  input.rows = 1;
   input.required = true;
   input.placeholder = words.placeholder;
   label.htmlFor = input.id;
-  const status = element("p", "", "status");
-  status.setAttribute("role", "status");
-  const send = element("button", words.send, "send");
+  const typing = element("div", "", "typing"), status = element("p", "", "status");
+  typing.hidden = true;
+  typing.setAttribute("role", "status");
+  typing.setAttribute("aria-live", "polite");
+  typing.setAttribute("aria-atomic", "true");
+  const dots = element("span", "", "typing-dots");
+  dots.setAttribute("aria-hidden", "true");
+  dots.append(element("span"), element("span"), element("span"));
+  typing.append(dots, status);
+  const send = element("button", "", "send"), sendLabel = element("span", words.send, "visually-hidden");
   send.type = "submit";
-  form.append(label, input, status, send);
-  panel.append(heading, mode, log, form);
+  send.append(sendLabel);
+  const composerField = element("div", "", "composer-field");
+  composerField.append(input, send);
+  const privacy = element("p", "", "privacy"), privacyNote = element("span", "", "privacy-note");
+  const privacyLink = presentation.privacy ? element("a") : null;
+  privacy.append(privacyNote);
+  if (privacyLink) {
+    privacyLink.href = presentation.privacy;
+    privacyLink.target = "_blank";
+    privacyLink.rel = "noopener noreferrer";
+    privacy.append(privacyLink);
+  }
+  form.setAttribute("aria-busy", "false");
+  form.append(label, composerField, privacy);
+  panel.append(heading, mode, log, typing, form);
   shadow.append(stylesheet, launcher, panel);
   (document.body || document.documentElement).append(host);
   // Tokens never enter attributes, globals, storage, cookies or URLs.
@@ -81,7 +150,7 @@
   const renderedMessages = [];
   function message(text, user = false, citations = []) {
     const bubble = element("div", "", `message${user ? " user" : ""}`);
-    const speaker = element("span", user ? words.you : words.assistant, "speaker"), body = element("span", text.slice(0, 2400));
+    const speaker = element("span", user ? words.you : title.textContent || words.assistant, "speaker"), body = element("span", text.slice(0, 2400));
     bubble.append(speaker, body);
     if (citations.length) {
       const list = element("ul", "", "citations");
@@ -106,20 +175,24 @@
     }
     host.setAttribute("lang", language);
     launcher.textContent = words.open;
-    title.textContent = typeof widget.assistantName === "string" && widget.assistantName.trim()
-      ? widget.assistantName.trim().slice(0, 120) : words.title;
+    title.textContent = presentation.assistantName || boundedText(widget.assistantName, 120) || words.title;
+    subtitle.textContent = presentation.subtitle || words.ai;
+    showAvatar(presentation.avatar || avatarUrl(widget.assistantAvatarReference));
     panel.setAttribute("aria-label", title.textContent);
     log.setAttribute("aria-label", title.textContent);
     close.setAttribute("aria-label", words.close);
     label.textContent = words.label;
     input.placeholder = words.placeholder;
-    send.textContent = words.send;
-    if (pending) status.textContent = words.working;
-    for (const item of renderedMessages) item.speaker.textContent = item.user ? words.you : words.assistant;
-    brand.textContent = typeof widget.brandName === "string" ? widget.brandName.trim().slice(0, 120) : "";
-    brand.hidden = !brand.textContent;
-    welcome.body.textContent = typeof widget.welcomeMessage === "string" && widget.welcomeMessage.trim()
-      ? `${widget.welcomeMessage.trim().slice(0, 500)}\n\n${disclaimers[language]}` : words.welcome;
+    sendLabel.textContent = words.send;
+    send.setAttribute("aria-label", words.send);
+    if (pending) status.textContent = `${title.textContent} ${words.typing}`;
+    for (const item of renderedMessages) item.speaker.textContent = item.user ? words.you : title.textContent;
+    brand.textContent = presentation.brandName || boundedText(widget.brandName, 120);
+    brand.hidden = !brand.textContent || subtitle.textContent.includes(brand.textContent);
+    const greeting = presentation.welcomeMessage || boundedText(widget.welcomeMessage, 500);
+    welcome.body.textContent = greeting ? `${greeting}\n\n${disclaimers[language]}` : words.welcome;
+    privacyNote.textContent = words.privacyNote;
+    if (privacyLink) privacyLink.textContent = words.privacy;
     if (widget.widgetPosition === "bottom_left" || widget.widgetPosition === "bottom_right") host.setAttribute("data-position", widget.widgetPosition);
     if (typeof widget.primaryColor === "string" && /^#[0-9a-f]{6}$/i.test(widget.primaryColor)) {
       // Only validated colors enter CSSOM properties; no style text, URLs or
@@ -130,6 +203,7 @@
       host.style.setProperty("--novalure-button-text", brightness >= 160 ? "#182431" : "#ffffff");
     }
   }
+  applyWidget({});
   function hide() {
     panel.hidden = true;
     launcher.hidden = false;
@@ -146,7 +220,7 @@
   panel.addEventListener("keydown", event => {
     if (event.key === "Escape") { event.preventDefault(); hide(); }
     if (event.key === "Tab") {
-      const focusable = [close, input, send].filter(node => !node.disabled);
+      const focusable = [close, input, send, ...(privacyLink ? [privacyLink] : [])].filter(node => !node.disabled);
       const first = focusable[0], last = focusable[focusable.length - 1];
       if (event.shiftKey && shadow.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && shadow.activeElement === last) { event.preventDefault(); first.focus(); }
@@ -169,7 +243,9 @@
     if (pending || !question || question.length > 2000) return;
     pending = true;
     send.disabled = true;
-    status.textContent = words.working;
+    form.setAttribute("aria-busy", "true");
+    status.textContent = `${title.textContent} ${words.typing}`;
+    typing.hidden = false;
     message(question, true);
     input.value = "";
     try {
@@ -177,8 +253,8 @@
         const started = await post("sessions", { language }, { "idempotency-key": crypto.randomUUID() });
         if (typeof started.sessionId !== "string" || typeof started.sessionToken !== "string" || started.status !== "active") throw new Error("invalid_session");
         session = { id: started.sessionId, token: started.sessionToken };
-        // The existing public gateway returns configuration with the lazy
-        // session. Before the first question, the widget uses generic defaults.
+        // Session defaults fill any presentation fields not explicitly customized
+        // by the website. Presentation never selects the server-side assistant.
         applyWidget(started.widget);
         mode.textContent = started.mode === "training" ? words.training : "";
       }
@@ -191,6 +267,8 @@
     } finally {
       pending = false;
       send.disabled = false;
+      form.setAttribute("aria-busy", "false");
+      typing.hidden = true;
       status.textContent = "";
       if (!panel.hidden) input.focus();
     }
