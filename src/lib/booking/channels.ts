@@ -52,6 +52,7 @@ export async function trustedStudioBookingKind(token:string,relation:BookingChan
   const expected=options.trustedBinding;
   if(!expected||expected.expectedChannel!=="chat")throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
   const session=await loadSession(token,undefined,options);
+  if(session.language!=="en")throw new BookingError("BOOKING_CHANNEL_LANGUAGE_REQUIRED",409);
   if(session.relation.source!=="studio_handoff"||session.relation.sourceId!==expected.expectedBindingId||
      session.relation.leadId!==relation.leadId||session.relation.contactId!==relation.contactId)
     throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);

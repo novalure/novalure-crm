@@ -119,7 +119,7 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     if (!publicId || !/^[a-z0-9][a-z0-9-]{10,79}$/.test(publicId)) throw new BookingError("BOOKING_CHANNEL_NOT_CONFIGURED", 503);
     const relation = await verifyStudioChannelEnquiry(body.enquiry, options);
     const publication = await getPublicBookingPublication(publicId, "chat", options);
-    if (!publication) throw new BookingError("BOOKING_CHANNEL_NOT_CONFIGURED", 503);
+    if (!publication || publication.language !== "en") throw new BookingError("BOOKING_CHANNEL_NOT_CONFIGURED", 503);
     const authority: BookingChannelAuthority = { publicId, workspaceId: websiteSalesWorkspaceId, bindingId: relation.sourceId,
       typeIds: publication.types.map(type => type.id), relation };
     if (body.operation === "publication") {
@@ -129,6 +129,10 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     const forwarded = new Headers(request.headers);
     forwarded.set("x-vercel-forwarded-for", body.clientIp);
     const scopedRequest = new Request(request.url, { method: "POST", headers: forwarded });
+    if (body.operation === "session") {
+      return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
+        { ...(body.payload as Record<string, unknown>), operation: "session", language: "en" }, options));
+    }
     if (body.operation === "confirm") {
       const payload = body.payload as Record<string, unknown>;
       if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");

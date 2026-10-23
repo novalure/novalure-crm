@@ -69,6 +69,14 @@ does not carry a separate callback-number snapshot.
 Each public appointment type exposes the active assigned CRM user's bounded
 display name as `organizerName` for the visitor's pre-confirmation summary;
 email, user ID and calendar identifiers stay private.
+For the Novalure Growth Studio publication, save `language: en`, an English
+appointment title and English message templates, and `Europe/Dublin` rules for
+each offered type before activation. The signed Studio gateway refuses a
+non-English publication, forces English when issuing a session, and rejects
+older German Studio sessions on a phone hold or confirmation. The booking
+engine persists the resulting session language on the reservation, which
+selects English notification templates. Other booking channels retain their
+configured language behavior.
 
 Activation checks reject QA workspaces and marked synthetic identities, inactive
 members or central identities, disabled Calendar modules, disconnected or changed
