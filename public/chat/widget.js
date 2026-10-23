@@ -12,7 +12,7 @@
   let language = ["de", "es"].includes(locale) ? locale : "en";
   const translations = {
     en: { open: "Ask a question", title: "Website assistant", close: "Close chat", label: "Your question", placeholder: "What would you like to know?", send: "Send", ai: "AI assistant", privacy: "Privacy", privacyNote: "AI-powered answers.", typing: "is typing…", working: "Preparing an answer…", welcome: "Ask a question about our published information. AI answers can contain mistakes; check the listed sources.", sources: "Sources", error: "The assistant is temporarily unavailable. Please try again later or contact the team directly.", denied: "This chat is no longer available. Please reopen it or contact the team directly.", limited: "Too many requests. Please wait a few minutes before trying again.", training: "Test mode", you: "You", assistant: "Assistant" },
-    de: { open: "Frage stellen", title: "Website-Assistent", close: "Chat schließen", label: "Deine Frage", placeholder: "Was möchtest du wissen?", send: "Senden", ai: "KI-Assistenz", privacy: "Datenschutz", privacyNote: "KI-gestützte Antworten.", typing: "schreibt…", working: "Antwort wird vorbereitet…", welcome: "Stelle eine Frage zu unseren veröffentlichten Informationen. KI-Antworten können Fehler enthalten; prüfe die angegebenen Quellen.", sources: "Quellen", error: "Der Assistent ist gerade nicht erreichbar. Bitte versuche es später erneut oder kontaktiere das Team direkt.", denied: "Dieser Chat ist nicht mehr verfügbar. Öffne ihn erneut oder kontaktiere das Team direkt.", limited: "Zu viele Anfragen. Bitte warte einige Minuten und versuche es erneut.", training: "Testmodus", you: "Du", assistant: "Assistent" },
+    de: { open: "Frage stellen", title: "Website-Assistent", close: "Chat schließen", label: "Deine Frage", placeholder: "Was möchtest du wissen?", send: "Senden", ai: "KI-Assistenz", privacy: "Datenschutz", privacyNote: "KI-gestützte Antworten.", typing: "tippt …", working: "Antwort wird vorbereitet…", welcome: "Stelle eine Frage zu unseren veröffentlichten Informationen. KI-Antworten können Fehler enthalten; prüfe die angegebenen Quellen.", sources: "Quellen", error: "Der Assistent ist gerade nicht erreichbar. Bitte versuche es später erneut oder kontaktiere das Team direkt.", denied: "Dieser Chat ist nicht mehr verfügbar. Öffne ihn erneut oder kontaktiere das Team direkt.", limited: "Zu viele Anfragen. Bitte warte einige Minuten und versuche es erneut.", training: "Testmodus", you: "Du", assistant: "Assistent" },
     es: { open: "Hacer una pregunta", title: "Asistente web", close: "Cerrar chat", label: "Tu pregunta", placeholder: "¿Qué te gustaría saber?", send: "Enviar", ai: "Asistente de IA", privacy: "Privacidad", privacyNote: "Respuestas generadas por IA.", typing: "está escribiendo…", working: "Preparando la respuesta…", welcome: "Pregunta sobre nuestra información publicada. Las respuestas de IA pueden contener errores; consulta las fuentes indicadas.", sources: "Fuentes", error: "El asistente no está disponible temporalmente. Inténtalo más tarde o contacta directamente con el equipo.", denied: "Este chat ya no está disponible. Ábrelo de nuevo o contacta directamente con el equipo.", limited: "Demasiadas solicitudes. Espera unos minutos antes de intentarlo de nuevo.", training: "Modo de prueba", you: "Tú", assistant: "Asistente" },
   };
   const disclaimers = {
@@ -21,8 +21,9 @@
     es: "Las respuestas de IA pueden contener errores; consulta las fuentes indicadas.",
   };
   let words = translations[language];
-  // Optional embed values describe this website's presentation only. They never
-  // enter API requests or change the server's session, assistant or tenant binding.
+  // Explicit embed values customize this website's presentation over the server
+  // defaults. They never enter API requests or change the server's session,
+  // assistant or tenant binding.
   function boundedText(value, maximum) {
     return typeof value === "string" && !value.includes("\0") ? value.trim().slice(0, maximum) : "";
   }
@@ -174,9 +175,9 @@
     }
     host.setAttribute("lang", language);
     launcher.textContent = words.open;
-    title.textContent = boundedText(widget.assistantName, 120) || presentation.assistantName || words.title;
+    title.textContent = presentation.assistantName || boundedText(widget.assistantName, 120) || words.title;
     subtitle.textContent = presentation.subtitle || words.ai;
-    showAvatar(avatarUrl(widget.assistantAvatarReference) || presentation.avatar);
+    showAvatar(presentation.avatar || avatarUrl(widget.assistantAvatarReference));
     panel.setAttribute("aria-label", title.textContent);
     log.setAttribute("aria-label", title.textContent);
     close.setAttribute("aria-label", words.close);
@@ -186,9 +187,9 @@
     send.setAttribute("aria-label", words.send);
     if (pending) status.textContent = `${title.textContent} ${words.typing}`;
     for (const item of renderedMessages) item.speaker.textContent = item.user ? words.you : title.textContent;
-    brand.textContent = boundedText(widget.brandName, 120) || presentation.brandName;
+    brand.textContent = presentation.brandName || boundedText(widget.brandName, 120);
     brand.hidden = !brand.textContent || subtitle.textContent.includes(brand.textContent);
-    const greeting = boundedText(widget.welcomeMessage, 500) || presentation.welcomeMessage;
+    const greeting = presentation.welcomeMessage || boundedText(widget.welcomeMessage, 500);
     welcome.body.textContent = greeting ? `${greeting}\n\n${disclaimers[language]}` : words.welcome;
     privacyNote.textContent = words.privacyNote;
     if (privacyLink) privacyLink.textContent = words.privacy;
@@ -252,8 +253,8 @@
         const started = await post("sessions", { language }, { "idempotency-key": crypto.randomUUID() });
         if (typeof started.sessionId !== "string" || typeof started.sessionToken !== "string" || started.status !== "active") throw new Error("invalid_session");
         session = { id: started.sessionId, token: started.sessionToken };
-        // The verified session's saved appearance supersedes the embed fallbacks.
-        // Embed presentation never selects or changes the server-side assistant.
+        // Session defaults fill any presentation fields not explicitly customized
+        // by the website. Presentation never selects the server-side assistant.
         applyWidget(started.widget);
         mode.textContent = started.mode === "training" ? words.training : "";
       }

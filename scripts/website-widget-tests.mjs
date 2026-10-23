@@ -138,6 +138,7 @@ test("strict-CSP layout uses the central external stylesheet and no inline style
 test("saved widget appearance and language replace generic defaults at the first session", async () => {
   const state = browser({ language: "en", responses: [{ body: { ...started.body, widget: {
     assistantName: "SYNTHETIC help", brandName: "SYNTHETIC company", welcomeMessage: "Willkommen beim Testunternehmen.",
+    assistantAvatarReference: "/chat/avatars/synthetic-saved.png",
     primaryColor: "#f5eedd", widgetPosition: "bottom_left", language: "de",
   } } }, answered] });
   assert.match(state.byClass("log").textContent, /Ask a question/);
@@ -151,6 +152,7 @@ test("saved widget appearance and language replace generic defaults at the first
   assert.equal(state.byClass("title").textContent, "SYNTHETIC help");
   assert.equal(state.byClass("brand").textContent, "SYNTHETIC company");
   assert.equal(state.byClass("brand").hidden, false);
+  assert.equal(state.byClass("avatar").src, "https://crm.example.invalid/chat/avatars/synthetic-saved.png");
   assert.equal(state.byClass("send").textContent, "Senden");
   assert.equal(state.byClass("label").textContent, "Deine Frage");
   assert.equal(state.byClass("mode").textContent, "Testmodus");
@@ -264,20 +266,20 @@ test("avatars accept only central static raster assets and privacy stays on the 
   assert.equal(local.find("a").href, "http://customer.example.invalid/privacy#chat");
 });
 
-test("saved server presentation overrides embed fallbacks without changing request contracts", async () => {
+test("explicit website presentation remains stable after the session without changing request contracts", async () => {
   const state = browser({ attributes: embedPresentation, responses: [{ body: { ...started.body, widget: {
     assistantName: "SYNTHETIC saved assistant", brandName: "SYNTHETIC saved company", welcomeMessage: "SYNTHETIC saved greeting",
     assistantAvatarReference: "/chat/avatars/synthetic-saved.png", language: "es",
   } } }, answered] });
   assert.equal(state.byClass("title").textContent, embedPresentation["data-assistant-name"]);
   await submit(state);
-  assert.equal(state.byClass("title").textContent, "SYNTHETIC saved assistant");
-  assert.equal(state.byClass("brand").textContent, "SYNTHETIC saved company");
+  assert.equal(state.byClass("title").textContent, embedPresentation["data-assistant-name"]);
+  assert.equal(state.byClass("brand").textContent, embedPresentation["data-brand-name"]);
   assert.equal(state.byClass("subtitle").textContent, embedPresentation["data-assistant-subtitle"]);
-  assert.match(state.byClass("log").textContent, /SYNTHETIC saved greeting/);
-  assert.ok(!state.byClass("log").textContent.includes(embedPresentation["data-welcome-message"]));
+  assert.ok(state.byClass("log").textContent.includes(embedPresentation["data-welcome-message"]));
+  assert.doesNotMatch(state.byClass("log").textContent, /SYNTHETIC saved greeting/);
   assert.match(state.byClass("log").textContent, /Las respuestas de IA pueden contener errores/);
-  assert.equal(state.byClass("avatar").src, "https://crm.example.invalid/chat/avatars/synthetic-saved.png");
+  assert.equal(state.byClass("avatar").src, "https://crm.example.invalid/chat/avatars/synthetic-hanna.webp");
   assert.equal(state.byClass("send").textContent, "Enviar");
   assert.equal(state.byClass("send").getAttribute("aria-label"), "Enviar");
   assert.equal(state.byClass("mode").textContent, "Modo de prueba");
@@ -290,7 +292,7 @@ test("saved server presentation overrides embed fallbacks without changing reque
   }
 });
 
-test("invalid or absent server cosmetic fields retain safe embed fallbacks", async () => {
+test("invalid or absent server cosmetic fields retain explicit safe website presentation", async () => {
   const state = browser({ attributes: embedPresentation, responses: [{ body: { ...started.body, widget: {
     assistantName: "   ", brandName: 42, welcomeMessage: null,
     assistantAvatarReference: "https://attacker.invalid/chat/avatars/portrait.png",
@@ -306,7 +308,7 @@ test("invalid or absent server cosmetic fields retain safe embed fallbacks", asy
 test("typing status follows real pending requests, blocks duplicate sends, and recovers after failure", async t => {
   const sessionReply = deferred(), answerReply = deferred(), failedReply = deferred();
   t.after(() => { sessionReply.resolve(started); answerReply.resolve(answered); failedReply.resolve({ status: 503 }); });
-  const state = browser({ responses: [sessionReply.promise, answerReply.promise, failedReply.promise, answered] });
+  const state = browser({ attributes: embedPresentation, responses: [sessionReply.promise, answerReply.promise, failedReply.promise, answered] });
   const input = state.find("textarea"), form = state.find("form"), send = state.byClass("send"), typing = state.byClass("typing");
   state.byClass("launcher").listeners.click();
   assert.equal(typing.hidden, true);
@@ -325,9 +327,10 @@ test("typing status follows real pending requests, blocks duplicate sends, and r
   assert.equal(state.requests.length, 1, "a second submit cannot create another session or answer request");
   assert.equal(input.value, "Prepared next question");
   assert.equal(state.nodes.filter(node => node.className === "message user").length, 1);
-  sessionReply.resolve({ body: { ...started.body, widget: { language: "de" } } });
+  sessionReply.resolve({ body: { ...started.body, widget: { assistantName: "SYNTHETIC saved assistant", language: "de" } } });
   await waitForRequests(state, 2);
   assert.equal(typing.hidden, false, "typing remains visible between session creation and the answer");
+  assert.equal(state.byClass("status").textContent, "SYNTHETIC Hanna tippt …");
   assert.equal(form.getAttribute("aria-busy"), "true");
   assert.equal(send.disabled, true);
   answerReply.resolve(answered);

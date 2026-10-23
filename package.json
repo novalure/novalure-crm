@@ -147,7 +147,7 @@
     "typescript": "^5"
   },
   "overrides": {
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.17",
     "undici": "6.28.1"
   }
 }
