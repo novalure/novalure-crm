@@ -1,0 +1,64 @@
+// EV2 public contact preservation: synthetic data only, through the real enquiry service.
+for (const scenario of ["same-email", "same-phone", "conflicting-identifiers", "foreign-workspace"] as const) {
+  test(`EV2 public contact preservation: ${scenario}`, async () => {
+    const email = `ev2-${randomUUID()}@example.invalid`;
+    const phone = `+353${Date.now().toString().slice(-9)}${Math.floor(Math.random()*90+10)}`;
+    const oldEmails = process.env.STUDIO_ENQUIRY_QA_EMAILS_JSON;
+    const oldPhones = process.env.STUDIO_ENQUIRY_QA_PHONES_JSON;
+    process.env.STUDIO_ENQUIRY_QA_EMAILS_JSON = JSON.stringify([qaEmail,email]);
+    process.env.STUDIO_ENQUIRY_QA_PHONES_JSON = JSON.stringify([qaPhone,phone]);
+    const ownProject = "f7d83c6b-d08d-4d73-b822-1f1c0b4733d2";
+    const firstId=randomUUID(), secondId=randomUUID();
+    const protectedIds: string[] = [firstId];
+    let foreignWorkspace: string | null = null;
+    try {
+      if(scenario === "foreign-workspace") {
+        foreignWorkspace=randomUUID();
+        await db.admin.query("insert into workspaces(id,name) values($1,'SYNTHETIC EV2 unrelated workspace')",[foreignWorkspace]);
+      }
+      await db.admin.query(`insert into contacts(id,workspace_id,project_id,owner_user_id,name,role,source,intent,consent_label,email,phone,metadata)
+        values($1,$2,$3,$4,'Original protected name','Bestandskunde','Original source','Original intent','Opt-out',$5,$6,'{"privateNote":"keep unchanged"}')`,
+        [firstId,foreignWorkspace??websiteSalesWorkspaceId,foreignWorkspace?null:ownProject,foreignWorkspace?null:websiteSalesActorId,
+         scenario === "same-phone" ? `original-${randomUUID()}@example.invalid` : email,
+         scenario === "same-phone" || scenario === "foreign-workspace" ? phone : '+353000000001']);
+      if(scenario === "conflicting-identifiers") {
+        protectedIds.push(secondId);
+        await db.admin.query(`insert into contacts(id,workspace_id,project_id,name,role,source,intent,consent_label,email,phone,metadata)
+          values($1,$2,$3,'Different protected person','Bestandskunde','Other source','Other intent','Opt-out',$4,$5,'{"keep":true}')`,
+          [secondId,websiteSalesWorkspaceId,ownProject,`other-${randomUUID()}@example.invalid`,phone]);
+      }
+      const readProtected = async () => (await db.admin.query("select row_to_json(c) as value from contacts c where id=any($1::uuid[]) order by id",[protectedIds])).rows;
+      const beforeProtected=await readProtected();
+      const beforeConsents=(await db.admin.query("select count(*)::int as count from consent_records where contact_id=any($1::uuid[])",[protectedIds])).rows[0].count;
+      const s=snapshot(false);
+      s.brief.values={goals:'Synthetic site enquiry only',name:'Incoming unverified QA name',email,phone,contactMethod:'email'};
+      const r=request(s);
+      await executeStudioEnquiry(r,{store});
+      const result=await executeStudioEnquiry(withAction(r,'finalize'),{store});
+      const receipt=accepted(result);
+      assert.deepEqual(await readProtected(),beforeProtected,'Every existing master field, metadata and timestamp remains unchanged');
+      const afterConsents=(await db.admin.query("select count(*)::int as count from consent_records where contact_id=any($1::uuid[])",[protectedIds])).rows[0].count;
+      assert.equal(afterConsents,beforeConsents,'Anonymous address match grants no consent on an existing contact');
+      const lead=(await db.admin.query("select contact_id,metadata from leads where id=$1",[receipt.crmLeadId])).rows[0];
+      assert.equal(lead.metadata.answers.name,'Incoming unverified QA name');
+      assert.equal(lead.metadata.answers.email,email);
+      assert.equal(lead.metadata.answers.phone,phone);
+      assert.equal(lead.metadata.contactResolution.identityVerified,false);
+      if(scenario === 'same-email' || scenario === 'same-phone') {
+        assert.equal(lead.contact_id,firstId,'A unique project-scoped match is reused without overwriting');
+        assert.equal(lead.metadata.contactResolution.status,'unverified_unique_match');
+      } else {
+        assert.ok(!protectedIds.includes(lead.contact_id),'No arbitrary merge or cross-tenant reuse');
+        assert.equal(lead.metadata.contactResolution.status,scenario==='conflicting-identifiers'?'ambiguous_match_review_required':'new_contact');
+      }
+      const beforeReplay=await counts();
+      const replay=await executeStudioEnquiry(withAction(r,'finalize'),{store});
+      assert.deepEqual(accepted(replay),receipt);
+      assert.deepEqual(await counts(),beforeReplay,'Replay adds no second contact or enquiry');
+      assert.deepEqual(await readProtected(),beforeProtected);
+    } finally {
+      if(oldEmails===undefined)delete process.env.STUDIO_ENQUIRY_QA_EMAILS_JSON;else process.env.STUDIO_ENQUIRY_QA_EMAILS_JSON=oldEmails;
+      if(oldPhones===undefined)delete process.env.STUDIO_ENQUIRY_QA_PHONES_JSON;else process.env.STUDIO_ENQUIRY_QA_PHONES_JSON=oldPhones;
+    }
+  });
+}
