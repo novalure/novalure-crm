@@ -52,3 +52,27 @@ Für die folgende Entwicklungsaufgabe den konkreten Vorschlag im
 [Projektkontext](../../../.agents/skills/PROJECT.md) gegen den aktuellen Stand prüfen
 und mit `$novalure-spec` begrenzen. Keine Studio-Webchat-Reparatur, Datenbank-,
 Kalender-, Telefonanschluss- oder Produktionseinstellungen in diesen Einrichtungsauftrag aufnehmen.
+
+## Fortsetzung: reguläre Integration vom 24.10.2026
+
+Der Folgeauftrag erlaubt die konkret festgestellten Integrationshindernisse und
+den regulären Merge nach den bestehenden Gates. Die begrenzte
+[Abhängigkeitsdiagnose](../crm-audit-compat/diagnosis.md) wurde auf dem getrennten
+Zweig `codex/crm-audit-compat` bearbeitet und als Paketkorrektur in diesen
+Skill-Branch übernommen (beim Schreiben beobachteter integrierter Commit
+`64f624ce22852e865bad3816d6c4b2566d580afd`; den tatsächlichen aktuellen PR-Head
+über den PR lesen). Vorhandene Paketarbeit aus PR #109 wurde abgeglichen und
+wiederverwendet, ohne dessen Kontakt-/Webchatänderungen zu übernehmen.
+
+[Gezielte Prüfnachweise](../crm-audit-compat/verification.json) zeigen einen
+Production-Audit ohne Befunde und kompatible getrennte Undici-Hauptversionen
+für Blob und AI-Provider-Utils. Die eingebettete Zod-Kopie in CLI-Config bleibt
+als Nachweisgrenze dokumentiert. Die historischen Audit-FAILs oben bleiben
+erhalten; sie werden nicht als heutiger PASS umbenannt.
+
+Offen vor Merge: vollständige CI auf dem endgültigen integrierten Head sowie
+der echte exakte Check von App `5228093`. Der derzeitige live bereitgestellte
+Reviewer unterstützt #110 noch nicht als festes Prüfziel; die notwendige additive
+Routingkorrektur wird getrennt vom Skill-Branch vorbereitet. Kein lokaler Bericht
+ersetzt diese Prüfung. Nächster Schritt: finalen Head pushen, reguläre CI und
+Review-App-Prüfung verfolgen und erst nach allen anwendbaren Gates normal mergen.
