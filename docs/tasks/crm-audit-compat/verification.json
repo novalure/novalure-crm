@@ -1,0 +1,140 @@
+{
+  "repository": "novalure/novalure-crm",
+  "branch": "codex/crm-audit-compat",
+  "recorded_at_utc": "2026-10-24T09:19:55.754578+00:00",
+  "observed_base_commit": "93f442853483862712451aeeb0b6e3f0ffcfec41",
+  "scope": "Package resolution and local synthetic compatibility only; final integrated PR CI and trusted App review remain required.",
+  "changed_file_hashes": {
+    "package.json": "e6ada7f7b68ff1ccccee61f341281f4b271bc61093be16994e1281c01ebbf849",
+    "package-lock.json": "a9be984678121961b2ce9fa99586bcf5e83f6531406d3824b92d38a6aee90ec1",
+    "docs/tasks/crm-audit-compat/consumer-smoke.mjs": "86e03493b016a23abf46d8f338b2a6ed1fbd2527fec6bcc58787c1940a9a5d8a"
+  },
+  "prior_correction": {
+    "pull_request": 109,
+    "reused_commit": "e8c6673c2cc38960f335121abaac1b12730c5e74",
+    "reused_resolutions": [
+      "Blob undici6.29.1",
+      "Zod4.6.7"
+    ],
+    "necessary_adjustment": "Replace global Undici6 override with scoped6/7 consumer resolutions; do not import unrelated PR109 changes."
+  },
+  "audit": {
+    "command": "npm audit --omit=dev --audit-level=moderate --json",
+    "baseline": {
+      "exit_code": 1,
+      "metadata": {
+        "info": 0,
+        "low": 0,
+        "moderate": 3,
+        "high": 5,
+        "critical": 0,
+        "total": 8
+      }
+    },
+    "rejected_candidate": {
+      "provider_utils_undici": "7.29.0",
+      "exit_code": 1,
+      "reason": "Restores declared major but current advisories affect versions below7.30.1",
+      "metadata": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 1,
+        "critical": 0,
+        "total": 1
+      }
+    },
+    "final": {
+      "exit_code": 0,
+      "metadata": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      }
+    },
+    "repository_command": "npm run security:production: PASS, found0 vulnerabilities"
+  },
+  "resolved_consumers": [
+    {
+      "consumer": "@vercel/blob@2.8.0",
+      "declared_undici": "^6.23.0",
+      "resolved_undici": "6.29.1"
+    },
+    {
+      "consumer": "@ai-sdk/provider-utils@5.0.65",
+      "declared_undici": "^7.29.0",
+      "resolved_undici": "7.30.1"
+    },
+    {
+      "consumer": "@vercel/cli-config@0.2.7",
+      "declared_zod": "4.1.11",
+      "scoped_override": "4.6.7",
+      "bundled_runtime_zod": "4.1.11",
+      "limitation": "Override patches external dependency graph, not bundled source; parser compatibility verified, no blanket bundled-runtime remediation claim"
+    },
+    {
+      "consumers": [
+        "ai@7.0.148",
+        "@ai-sdk/gateway@4.0.121",
+        "@ai-sdk/provider-utils@5.0.65"
+      ],
+      "declared_zod_peer": "^3.25.76 || ^4.1.8",
+      "resolved_zod": "4.6.7"
+    }
+  ],
+  "checks": [
+    {
+      "command": "npm ci --ignore-scripts --no-audit",
+      "exit_code": 0
+    },
+    {
+      "command": "npm ls undici zod --omit=dev --all",
+      "exit_code": 0,
+      "result": "Separate valid6.x/7.x Undici trees and Zod4.6.7"
+    },
+    {
+      "command": "node docs/tasks/crm-audit-compat/consumer-smoke.mjs",
+      "exit_code": 0,
+      "result": "Declared Undici ranges, both actual MockAgent transports, AI SDK/Zod schema generation and negative validation, CLI parser compatibility pass"
+    },
+    {
+      "command": "node --conditions=react-server --import tsx --test scripts/knowledge-private-upload-framing-tests.ts",
+      "exit_code": 0,
+      "tests": 9,
+      "pass": 9,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run lint",
+      "exit_code": 0
+    },
+    {
+      "command": "node --conditions=react-server --import tsx --test scripts/website-chat-tests.ts scripts/crm-machine-auth-tests.ts",
+      "exit_code": 0,
+      "tests": 15,
+      "pass": 15,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "setup_attempt_note": "Initial DB-consumer test attempt after ignore-scripts install failed before application startup because embedded-postgres library symlinks were not hydrated (libicuuc.so.60 missing). Ran existing package postinstall with npm rebuild @embedded-postgres/linux-x64, then same unchanged15 tests passed. No test disabled or threshold changed.",
+  "top_level_dependencies_dev_dependencies_scripts_unchanged": true,
+  "not_claimed": [
+    "Full repository regression before final integration",
+    "Trusted App review",
+    "Production or live provider verification",
+    "Replacement of CLI-config bundled Zod implementation"
+  ]
+}
