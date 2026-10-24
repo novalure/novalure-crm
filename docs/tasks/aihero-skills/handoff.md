@@ -36,6 +36,18 @@ beheben. Diese Übergabe wird im normalen Dokumentations-Folgecommit festgehalte
 Lokale Struktur-/Agentenprüfung ersetzt keinen vertrauenswürdigen Review-App-Check.
 Bestehende Freigaben und Produktprioritäten bleiben im jeweiligen gültigen Scope erhalten.
 
+Nachtrag zum geprüften PR-Head `38fe1b610875312c31c6a6d853f48237217b60c0`:
+Der [Production-Abhängigkeitsaudit](https://github.com/novalure/novalure-crm/actions/runs/40080431637/job/120832697449)
+ist fehlgeschlagen. `npm run security:production` meldete acht Befunde
+(drei moderate, fünf high), unter anderem für `undici` und `zod`.
+`package.json` und `package-lock.json` sind gegenüber der PR-Basis
+`93f442853483862712451aeeb0b6e3f0ffcfec41` bytegleich; dieser Auftrag ändert keine
+Abhängigkeiten. Der [Secret-Scan](https://github.com/novalure/novalure-crm/actions/runs/40080431657/job/120832651105)
+bestand auf diesem Head; die weitere Repository-CI lief beim Abruf noch.
+Der Auditbefund bleibt als bestehender Merge-Blocker offen. Als getrennte nächste
+Entwicklungsaufgabe eignet sich `$novalure-diagnose`: den unveränderten Auditfehler
+reproduzieren und einen begrenzten, verträglichen Korrekturscope bestimmen.
+
 Für die folgende Entwicklungsaufgabe den konkreten Vorschlag im
 [Projektkontext](../../../.agents/skills/PROJECT.md) gegen den aktuellen Stand prüfen
 und mit `$novalure-spec` begrenzen. Keine Studio-Webchat-Reparatur, Datenbank-,
