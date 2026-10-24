@@ -1,0 +1,56 @@
+name: EV2 public-contact protection repair
+on:
+  push:
+    branches: [codex/ev2-public-contact-preservation-20261024]
+    paths: [.github/workflows/ev2-contact-preservation-repair.yml]
+permissions:
+  contents: write
+concurrency:
+  group: ev2-public-contact-repair
+  cancel-in-progress: false
+jobs:
+  repair-and-test:
+    if: github.repository == 'novalure/novalure-crm' && github.ref == 'refs/heads/codex/ev2-public-contact-preservation-20261024'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.14.0'
+      - name: Use repository npm version
+        run: npm install --global npm@11.9.0 --ignore-scripts --no-audit --no-fund
+      - name: Apply pinned public-intake protection
+        run: node scripts/ev2-apply-contact-preservation.mjs
+      - name: Install dependencies
+        run: npm ci
+      - name: Genuine isolated PostgreSQL enquiry regressions
+        env:
+          STUDIO_ENQUIRY_TEST_SCHEMA: production
+        run: node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/studio-enquiry-tests.ts
+      - name: Typecheck and targeted lint
+        run: |
+          npm run typecheck
+          npx eslint src/lib/db/form-repositories.ts scripts/studio-enquiry-tests.ts --max-warnings=0
+          git diff --check
+      - name: Commit only reviewed source and regression additions
+        env:
+          GH_REPAIR_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import subprocess
+          paths=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          if paths != {'src/lib/db/form-repositories.ts','scripts/studio-enquiry-tests.ts'}:
+              raise SystemExit('Unexpected changed files; no push')
+          PY
+          git add src/lib/db/form-repositories.ts scripts/studio-enquiry-tests.ts
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Preserve existing contact records and consents on public enquiries'
+          ASKPASS="$RUNNER_TEMP/ev2-crm-askpass.sh"
+          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token";; *Password*) printf "%s\n" "$GH_REPAIR_TOKEN";; esac' > "$ASKPASS"
+          chmod 700 "$ASKPASS"
+          trap 'rm -f "$ASKPASS"' EXIT
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 git -c credential.helper= push origin HEAD:refs/heads/codex/ev2-public-contact-preservation-20261024
