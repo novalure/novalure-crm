@@ -14,6 +14,8 @@ import { BookingError, type BookingKind } from "./types";
 import { bookingChannels, type BookingChannel, type BookingPublicationConfig, type BookingPublicationReadiness, type PublicBookingPublication } from "./publication-types";
 
 export type StoredBookingPublication = { id: string; workspaceId: string; ownerId: string; config: BookingPublicationConfig; revision: number };
+/** Request-local presentation data, never a substitute for transactional authorization. */
+export type PreparedBookingPublication = { stored: StoredBookingPublication; channel?: BookingChannel; publication: PublicBookingPublication };
 export const publicationUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function serverBookingSession(workspaceId: string, organizerId: string): AppSession {
   return { authenticated: true, workspaceId, userId: organizerId, workspaceName: "", email: "", name: "", role: "agent", productRole: "team_member", permissions: [], productPermissions: [], source: "database" };
@@ -69,22 +71,33 @@ export async function lookupActiveWorkspaceBookingPublication(workspaceId: strin
   return row?.config ?? null;
 }
 
-export async function publicBookingPublication(stored: StoredBookingPublication, channel?: BookingChannel, options: TenantTransactionOptions = {}): Promise<PublicBookingPublication> {
+export async function prepareBookingPublication(stored: StoredBookingPublication, channel?: BookingChannel, options: TenantTransactionOptions = {}, selectedKinds?: readonly BookingKind[]): Promise<PreparedBookingPublication> {
   const config = stored.config;
   if (!config.enabled || channel && !config.channels[channel]) throw new BookingError("PUBLICATION_NOT_FOUND", 404);
   const types: PublicBookingPublication["types"] = [];
-  for (const assignment of config.assignments) {
+  const assignments = config.assignments.filter(assignment => !selectedKinds || selectedKinds.includes(assignment.kind));
+  const prepare = async (assignment: typeof assignments[number]) => {
     try {
       const { setup, organizerName } = await withBookingTransaction(serverBookingSession(stored.workspaceId, assignment.organizerId), async (tx, fresh) => {
         const member = await tx.queryOne<{ name: string }>(`select name from public.workspace_users
           where workspace_id=$1::uuid and id=$2::uuid and status='active'`, [fresh.workspaceId, fresh.userId]);
         return { setup: await readBookingSetup(tx, fresh, assignment.kind), organizerName: member?.name.trim() ?? "" };
       }, options);
-      if (!organizerName || organizerName.length > 120 || /[@\u0000-\u001f\u007f]/.test(organizerName)) continue;
-      types.push({ id: assignment.id, kind: assignment.kind, organizerName, durationMinutes: setup.rules.durationMinutes, timeZone: setup.rules.timeZone, locationRequired: assignment.kind === "onsite", location: assignment.kind === "office" ? assignment.publicLocation ?? "" : "" });
-    } catch { /* An inactive organizer is never offered publicly. */ }
+      if (!organizerName || organizerName.length > 120 || /[@\u0000-\u001f\u007f]/.test(organizerName)) return null;
+      return { id: assignment.id, kind: assignment.kind, organizerName, durationMinutes: setup.rules.durationMinutes, timeZone: setup.rules.timeZone, locationRequired: assignment.kind === "onsite", location: assignment.kind === "office" ? assignment.publicLocation ?? "" : "" };
+    } catch { return null; /* An inactive organizer is never offered publicly. */ }
+  };
+  // Studio's independent type reads use separate tenant transactions, bounded to two.
+  const width = selectedKinds ? 2 : 1;
+  for (let offset = 0; offset < assignments.length; offset += width) {
+    for (const prepared of await Promise.all(assignments.slice(offset, offset + width).map(prepare))) if (prepared) {
+      types.push(prepared);
+    }
   }
-  return { publicId: config.publicId, title: config.title, description: config.description, appearance: config.appearance, language: config.language, allowedOrigins: config.allowedOrigins, channels: config.channels, types };
+  return { stored, channel, publication: { publicId: config.publicId, title: config.title, description: config.description, appearance: config.appearance, language: config.language, allowedOrigins: config.allowedOrigins, channels: config.channels, types } };
+}
+export async function publicBookingPublication(stored: StoredBookingPublication, channel?: BookingChannel, options: TenantTransactionOptions = {}): Promise<PublicBookingPublication> {
+  return (await prepareBookingPublication(stored, channel, options)).publication;
 }
 export async function getPublicBookingPublication(publicId: string, channel?: BookingChannel, options: TenantTransactionOptions = {}) {
   return publicBookingPublication(await lookupBookingPublication(publicId, options), channel, options);

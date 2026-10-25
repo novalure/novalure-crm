@@ -100,7 +100,7 @@
     "test:booking:setup": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-setup-tests.ts scripts/booking-travel-tests.ts scripts/booking-travel-service-tests.ts",
     "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts scripts/booking-message-production-tests.ts",
     "test:booking:language": "node --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-db-tests.ts",
-    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts",
+    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts scripts/studio-booking-offer-tests.ts",
     "qa:booking:public-ui": "node --import tsx scripts/booking-public-ui-browser.mjs",
     "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs",
     "test:knowledge-assistant-quota": "node --conditions=react-server --import tsx --test scripts/knowledge-connected-assistant-quota-tests.ts",

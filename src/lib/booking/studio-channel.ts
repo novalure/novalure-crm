@@ -5,16 +5,25 @@ import { withTenantTransaction } from "@/lib/db/tenant-client";
 import { readKnowledgeBytes } from "@/lib/knowledge-center/http";
 import { websiteSalesActorId, websiteSalesWorkspaceId } from "@/lib/website-sales-ingestion";
 import { bookingChannelError, bookingChannelJson, dispatchTrustedBookingTool } from "./channel-http";
-import { getPublicBookingPublication } from "./publication";
+import { lookupBookingPublication, prepareBookingPublication } from "./publication";
 import { trustedStudioBookingKind } from "./channels";
 import type { BookingChannelOptions, BookingChannelRelation } from "./channels";
 import type { BookingChannelAuthority } from "./channel-bindings";
+import type { PublicBookingPublication } from "./publication-types";
 import { BookingError } from "./types";
 
 const version = "booking-tools-v1";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Options = BookingChannelOptions & { env?: NodeJS.ProcessEnv };
 const studioHoldFields = ["token", "startsAt", "recipientEmail", "recipientName", "location", "locationConfirmed", "idempotencyKey", "recipientPhone"];
+const studioKinds = ["teams", "phone"] as const;
+
+/** Studio creates only Teams/phone appointments; existing grants keep their management path. */
+export function studioPublicationForOperation(publication: PublicBookingPublication, operation: unknown): PublicBookingPublication {
+  if (operation === "status" || operation === "cancel") return publication;
+  return { ...publication, types: publication.types.filter(type => type.kind === "teams" || type.kind === "phone")
+    .sort((left, right) => Number(left.kind !== "teams") - Number(right.kind !== "teams")) };
+}
 
 export function validateStudioCallbackPhone(value: unknown): string {
   if (typeof value !== "string") throw new BookingError("BOOKING_CALLBACK_PHONE_REQUIRED", 400);
@@ -125,13 +134,15 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     const publicId = env.STUDIO_BOOKING_PUBLIC_ID;
     if (!publicId || !/^[a-z0-9][a-z0-9-]{10,79}$/.test(publicId)) throw new BookingError("BOOKING_CHANNEL_NOT_CONFIGURED", 503);
     const relation = await verifyStudioChannelEnquiry(body.enquiry, options);
-    const publication = await getPublicBookingPublication(publicId, "chat", options);
-    if (!publication || publication.language !== "en") throw new BookingError("BOOKING_CHANNEL_NOT_CONFIGURED", 503);
+    const stored = await lookupBookingPublication(publicId, options);
+    if (stored.workspaceId !== websiteSalesWorkspaceId || !stored.config.enabled || !stored.config.channels.chat || stored.config.language !== "en") throw new BookingError("BOOKING_CHANNEL_NOT_CONFIGURED", 503);
+    const manageLegacy = body.operation === "status" || body.operation === "cancel";
     const authority: BookingChannelAuthority = { publicId, workspaceId: websiteSalesWorkspaceId, bindingId: relation.sourceId,
-      typeIds: publication.types.map(type => type.id), relation };
+      typeIds: stored.config.assignments.filter(type => manageLegacy || studioKinds.some(kind => kind === type.kind)).map(type => type.id), relation };
     if (body.operation === "publication") {
       if (Object.keys(body.payload as object).length) throw new BookingError("INVALID_BOOKING_REQUEST");
-      return bookingChannelJson({ publication });
+      const prepared = await prepareBookingPublication(stored, "chat", options, studioKinds);
+      return bookingChannelJson({ publication: studioPublicationForOperation(prepared.publication, "publication") });
     }
     const forwarded = new Headers(request.headers);
     forwarded.set("x-vercel-forwarded-for", body.clientIp);
@@ -140,8 +151,31 @@ export async function handleStudioBookingChannelRequest(request: Request, option
       expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
       expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
     if (body.operation === "session") {
+      const payload = { ...(body.payload as Record<string, unknown>) }, initialDate = payload.initialDate, findNext = payload.findNext;
+      if (initialDate !== undefined && (typeof initialDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(initialDate) || !Number.isFinite(Date.parse(`${initialDate}T12:00:00Z`)) || new Date(`${initialDate}T12:00:00Z`).toISOString().slice(0, 10) !== initialDate) || findNext !== undefined && (typeof findNext !== "boolean" || initialDate === undefined)) throw new BookingError("INVALID_DATE");
+      delete payload.initialDate; delete payload.findNext;
+      const prepared = await prepareBookingPublication(stored, "chat", options, studioKinds);
+      prepared.publication = studioPublicationForOperation(prepared.publication, "session");
+      const session = await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
+        { ...payload, operation: "session", language: "en" }, { ...options, preparedPublication: prepared });
+      if (!("publication" in session) || !("token" in session)) throw new BookingError("BOOKING_CHANNEL_UNAVAILABLE", 503);
+      if (initialDate === undefined) return bookingChannelJson(session);
+      try {
+        const availability = await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
+          { operation: "availability", token: session.token, date: initialDate }, { ...options, findNextAvailability: findNext === true });
+        return bookingChannelJson({ ...session, initialAvailability: { ...availability, typeId: payload.typeId } });
+      } catch (error) {
+        const failure = bookingChannelError(error);
+        if (failure.status < 500) throw error;
+        return bookingChannelJson({ ...session, initialAvailabilityError: { date: initialDate, typeId: payload.typeId, code: (await failure.json()).code } });
+      }
+    }
+    if (body.operation === "availability") {
+      const payload = { ...(body.payload as Record<string, unknown>) }, findNext = payload.findNext;
+      if (findNext !== undefined && typeof findNext !== "boolean") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
+      delete payload.findNext;
       return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
-        { ...(body.payload as Record<string, unknown>), operation: "session", language: "en" }, options));
+        { ...payload, operation: "availability" }, { ...options, findNextAvailability: findNext === true }));
     }
     if (body.operation === "confirm") {
       const payload = body.payload as Record<string, unknown>;
