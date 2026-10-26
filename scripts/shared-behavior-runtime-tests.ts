@@ -107,7 +107,7 @@ test("Evelyn runtime: CEO, departments and shared workload retain private knowle
    assert.equal((await handleEvelynRuntimeRequest(request(),"context",{...httpOptions,machineAuth:{...auth,verifier:async()=>{throw new Error("invalid signature");}}})).status,401);
   });
   await t.test("native principal revocation blocks the route without an identity fallback",async()=>{
-   await db.admin.query("update crm_service_principals set kill_switch_active=true where id=$1",[native.id]);
+   await db.admin.query("update crm_service_principals set kill_switch_active=true,kill_switch_reason='SYNTHETIC runtime revocation test' where id=$1",[native.id]);
    assert.equal((await handleEvelynRuntimeRequest(request(),"context",httpOptions)).status,401);
    await db.admin.query("update crm_service_principals set kill_switch_active=false where id=$1",[native.id]);
   });
