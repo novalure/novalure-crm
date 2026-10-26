@@ -1,0 +1,36 @@
+name: Shared behavior isolation
+
+on:
+  push:
+    branches: [codex/shared-behavior-foundation-20261026]
+  pull_request:
+    paths:
+      - src/lib/shared-behavior/**
+      - scripts/shared-behavior-*.ts
+      - migrations/staged/shared_behavior_foundation.sql
+      - .github/workflows/shared-behavior.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-behavior-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: npm ci
+      - name: Fixed catalog and private data rejection
+        run: node --import tsx --test scripts/shared-behavior-tests.ts
+      - name: Real disposable PostgreSQL under a nonprivileged OS user
+        run: node --conditions=react-server --import tsx --test scripts/shared-behavior-db-tests.ts

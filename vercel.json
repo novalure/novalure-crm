@@ -1,6 +1,7 @@
 {
   "git": {
     "deploymentEnabled": {
+      "codex/shared-behavior-foundation-20261026": false,
       "main": false,
       "codex/universal-booking": false,
       "codex/studio-preview-crm-handoff": false,

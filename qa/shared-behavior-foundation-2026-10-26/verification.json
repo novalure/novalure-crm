@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-26",
+  "scope": "shared-behavior-foundation-package-1",
+  "implementationCommit": "7646ec018e76677da4a9fa4516b22fd022f136d8",
+  "baseCommit": "761e7edf3b070b044fea507871ac9ae4c61c7eb2",
+  "localNodeVersion": "24.22.1",
+  "repositoryNodeVersion": "24.14.0",
+  "dependencySource": "existing-local-audit-worktree-node_modules-no-fresh-lockfile-install",
+  "catalogTests": { "status": "PASS", "passed": 7, "failed": 0, "skipped": 0 },
+  "typecheck": { "status": "PASS", "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false" },
+  "changedFileEslint": { "status": "PASS" },
+  "databaseTests": {
+    "status": "BLOCKED_AT_CLUSTER_START",
+    "suiteExitCode": 1,
+    "databaseCasesExecuted": 0,
+    "reason": "initdb cannot be run as root; local OS user switching is not permitted"
+  },
+  "migrationApplied": false,
+  "githubUpload": "OWNER_AUTHORIZED_PENDING_PUBLICATION",
+  "githubCi": "NOT_RUN",
+  "draftPr": null,
+  "runtimeAdaptersConnected": [],
+  "autonomousPublicationImplemented": false,
+  "productionChanges": false,
+  "modelCalls": 0
+}
