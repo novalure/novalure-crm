@@ -1,6 +1,7 @@
 {
   "git": {
     "deploymentEnabled": {
+      "codex/shared-behavior-package3-20261026": false,
       "codex/shared-behavior-package2-20261026": false,
       "codex/shared-behavior-foundation-20261026": false,
       "main": false,
