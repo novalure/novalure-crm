@@ -2,7 +2,7 @@ name: Shared behavior isolation
 
 on:
   push:
-    branches: [codex/shared-behavior-foundation-20261026, codex/shared-behavior-package2-20261026]
+    branches: [codex/shared-behavior-foundation-20261026, codex/shared-behavior-package2-20261026, codex/shared-behavior-package3-20261026]
   pull_request:
     paths:
       - src/lib/shared-behavior/**
@@ -36,3 +36,5 @@ jobs:
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-db-tests.ts
       - name: Candidate evaluation, publisher isolation, concurrency and rollback
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-lifecycle-tests.ts
+      - name: CEO and department runtime, compartment RLS and scoped transport
+        run: node --conditions=react-server --import tsx --test scripts/shared-behavior-runtime-tests.ts
