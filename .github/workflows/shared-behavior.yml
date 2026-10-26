@@ -2,12 +2,12 @@ name: Shared behavior isolation
 
 on:
   push:
-    branches: [codex/shared-behavior-foundation-20261026]
+    branches: [codex/shared-behavior-foundation-20261026, codex/shared-behavior-package2-20261026]
   pull_request:
     paths:
       - src/lib/shared-behavior/**
       - scripts/shared-behavior-*.ts
-      - migrations/staged/shared_behavior_foundation.sql
+      - migrations/staged/shared_behavior*.sql
       - .github/workflows/shared-behavior.yml
 
 permissions:
@@ -34,3 +34,5 @@ jobs:
         run: node --import tsx --test scripts/shared-behavior-tests.ts
       - name: Real disposable PostgreSQL under a nonprivileged OS user
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-db-tests.ts
+      - name: Candidate evaluation, publisher isolation, concurrency and rollback
+        run: node --conditions=react-server --import tsx --test scripts/shared-behavior-lifecycle-tests.ts
