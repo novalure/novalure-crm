@@ -1,6 +1,6 @@
 # Studio shared methods and private signal adapter — local candidate
 
-Status: prepared locally, default OFF; no deployment, provider changes, source publication, runtime binding or customer/model call is evidenced here. Base is `61d1671949297dae0d6e05583bcc0e86f2e1291e`, including the independently reviewed late-authority correction. This does not complete Package 3 live acceptance.
+Status: prepared locally, default OFF; no deployment, provider changes, source publication, runtime binding or customer/model call is evidenced here. Base is `2886568fba16eeaab851fe4a5214e98bbd329752`, including the independently reviewed late-authority and strict entitlement-boolean corrections. This does not complete Package 3 live acceptance.
 
 ## Existing knowledge route
 
@@ -24,4 +24,6 @@ Both own Git branches have only their own auto-deploy exclusion. CRM defaults re
 
 ## Local evidence
 
-`scripts/shared-behavior-studio-tests.ts` uses disposable local PostgreSQL and synthetic content only. Actual handlers test fixed method metadata, no second knowledge charge, source-grant/method/session revocation, RS256 native claims, private signal RLS, event idempotency, expiry, integration revocation and context denial. Four tests PASS, including the parent test. The inherited `native-assistant-late-authority-tests.ts` also passes: 13 combined tests total. These are local consumption/auth tests, not a live publication or customer-traffic claim. The shared-behavior CI adds this suite; existing CI and independent review remain separate gates.
+The source check and both inherited native chat checks require the actual JSON boolean `true`; a JSON string `"true"` is denied exactly as in the original repository retrieval. The external handler test mutates a formerly permitted entitlement after retrieval and proves the check refuses it without a second query charge. The inherited native suite covers the equivalent website and bot delivery fence.
+
+`scripts/shared-behavior-studio-tests.ts` uses disposable local PostgreSQL and synthetic content only. Actual handlers test fixed method metadata, no second knowledge charge, source-grant/method/session revocation, RS256 native claims, private signal RLS, event idempotency, expiry, integration revocation and context denial. Four tests cover this boundary, including the parent test. The inherited `native-assistant-late-authority-tests.ts` adds eleven tests, including both actual handler JSON-string entitlement withdrawals. The combined 15-case run is recorded separately from earlier 13-case evidence. These are local consumption/auth tests, not a live publication or customer-traffic claim. The shared-behavior CI adds this suite; existing CI and independent review remain separate gates.
