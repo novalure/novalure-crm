@@ -8,7 +8,7 @@ import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
 import { withCrmRead } from "../src/lib/crm-command";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
-import type { TenantTransactionOptions } from "../src/lib/db/tenant-client";
+import { withTenantTransaction, type TenantTransactionOptions } from "../src/lib/db/tenant-client";
 import { assignKnowledgeAreas, createKnowledgeArea, createKnowledgeSource, publishKnowledgeSource } from "../src/lib/knowledge-center/repository";
 import { handleExternalAssistantKnowledgeRequest } from "../src/lib/knowledge-center/external-assistant-http";
 import { handleEvelynRuntimeRequest } from "../src/lib/shared-behavior/runtime-http";
@@ -30,9 +30,11 @@ test("Studio native signatures and existing knowledge/signal handlers stay in on
       await db.admin.query("insert into novalure_schema_migrations(version,name,checksum) values($1,$2,$3) on conflict(version) do nothing", [file.replace(/\.sql$/u, ""), file, createHash("sha256").update(sql).digest("hex")]);
     }
     const owner = randomUUID(), actor = randomUUID(), visitor = randomUUID(), capability = randomBytes(32).toString("base64url"), sessionToken = randomBytes(32).toString("base64url");
-    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'SYNTHETIC admin','admin@example.invalid','admin','novalureAdmin','active'),($2,$3,'SYNTHETIC signal actor','private@example.invalid','agent','novalure_operator','active')", [owner, actor, fixed.workspaceId]);
+    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'SYNTHETIC admin','admin@example.invalid','admin','novalureAdmin','active'),($2,$3,'SYNTHETIC signal actor','private@example.invalid','agent','project_sales_member','active')", [owner, actor, fixed.workspaceId]);
     await db.admin.query("update auth_identities set credential_state='disabled',disabled_at=now(),password_hash=null where id=(select auth_identity_id from workspace_users where id=$1)", [actor]);
     await db.admin.query("insert into projects(id,workspace_id,name,type,division) values($1,$2,'SYNTHETIC web project','synthetic','WEB_DESIGN')", [fixed.crmProjectId, fixed.workspaceId]);
+    const otherProject = randomUUID();
+    await db.admin.query("insert into projects(id,workspace_id,name,type,division) values($1,$2,'SYNTHETIC other project','synthetic','WEB_DESIGN')", [otherProject, fixed.workspaceId]);
     await db.admin.query("insert into bots(id,workspace_id,project_id,name,role,status) values($1,$2,$3,'SYNTHETIC assistant','advisor','inactive')", [fixed.botId, fixed.workspaceId, fixed.crmProjectId]);
     await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,100,20000000,1000,'SYNTHETIC-ONLY','{\"webchatAccess\":true}','{\"maxAreas\":100,\"maxUsers\":20,\"maxAssistants\":20}')", [fixed.workspaceId]);
     const session: AppSession = { authenticated: true, source: "database", userId: owner, workspaceId: fixed.workspaceId, workspaceName: "SYNTHETIC", name: "SYNTHETIC", email: "admin@example.invalid", role: "admin", productRole: "novalureAdmin", permissions: getRolePermissions("admin"), productPermissions: getProductRoleCapabilities("novalureAdmin") };
@@ -101,14 +103,92 @@ test("Studio native signatures and existing knowledge/signal handlers stay in on
       assert.notEqual((await handleEvelynRuntimeRequest(signal({ query: "studioanchor" }), "context", http)).status, 200);
       for (const request of [signal({ ...value, transcript: "PRIVATE" }), signal({ ...value, issue: "unclear_goal" }), signal(value, token, randomBytes(32).toString("base64url")), signal(value, token, capability, { origin: fixed.publicOrigin }), signal(value, token, capability, { cookie: "owner=forged" })]) assert.notEqual((await handleEvelynRuntimeRequest(request, "signal", http)).status, 200);
       assert.equal((await withCrmRead(session, tx => tx.query("select * from behavior_learning_signals"), options)).length, 0);
-      const privateSession: AppSession = { ...session, userId: actor, role: "agent", productRole: "novalure_operator" };
-      const rows = await withCrmRead(privateSession, tx => tx.query("select actor_id,event_id,issue,outcome from behavior_learning_signals"), options); assert.equal(rows.length, 1); assert.equal(rows[0].event_id, eventId); assert.equal(rows[0].actor_id, actor);
-      assert.equal((await withCrmRead(privateSession, tx => tx.query("select id from knowledge_sources"), options)).length, 0);
+      const privateSession: AppSession = { ...session, userId: actor, role: "agent", productRole: "project_sales_member" };
+      await assert.rejects(withCrmRead(privateSession, tx => tx.query("select id from projects"), options), { code: "DATA_SCOPE_DENIED" });
+      await withTenantTransaction({ workspaceId: fixed.workspaceId, actorId: actor }, async tx => {
+        const rows = await tx.query("select actor_id,event_id,issue,outcome from behavior_learning_signals"); assert.equal(rows.length, 1); assert.equal(rows[0].event_id, eventId); assert.equal(rows[0].actor_id, actor);
+        assert.equal((await tx.query("select id from knowledge_sources")).length, 0);
+        assert.equal((await tx.query("select id from projects")).length, 0);
+        assert.equal((await tx.query("select id from bots")).length, 0);
+        assert.equal((await tx.queryOne<{ manager: boolean }>("select crm_workspace_manager($1::uuid) as manager", [fixed.workspaceId]))?.manager, false);
+        assert.deepEqual(await tx.queryOne("select crm_project_access($1::uuid,$2::uuid,false) as read,crm_project_access($1::uuid,$2::uuid,true) as write", [fixed.workspaceId, otherProject]), { read: false, write: false });
+        assert.equal((await tx.query("update projects set name='SYNTHETIC forbidden write' where id=$1::uuid returning id", [otherProject])).length, 0);
+      }, options);
+      await assert.rejects(withTenantTransaction({ workspaceId: fixed.workspaceId, actorId: actor }, tx => tx.query("insert into projects(id,workspace_id,name,type,division) values($1,$2,'SYNTHETIC forbidden insert','synthetic','WEB_DESIGN')", [randomUUID(), fixed.workspaceId]), options), { code: "42501" });
+    });
+    await t.test("expiry, revoke, actor suspension, credentials and unexpected project grants cannot grant signal authority", async () => {
+      const before = await signalCount(), value = () => ({ eventId: randomUUID(), issue: "unclear_next_step", outcome: "pass" });
       await db.admin.query("update behavior_runtime_bindings set expires_at=now()-interval '1 second'");
-      const expired = await handleEvelynRuntimeRequest(signal({ ...value, eventId: randomUUID() }), "signal", http); assert.equal(expired.status, 403); assert.equal(await signalCount(), 1);
+      assert.equal((await handleEvelynRuntimeRequest(signal(value()), "signal", http)).status, 403);
       await db.admin.query("update behavior_runtime_bindings set expires_at=now()+interval '1 hour'");
+      await db.admin.query("update behavior_runtime_bindings set enabled=false,revoked_at=now()");
+      assert.equal((await handleEvelynRuntimeRequest(signal(value()), "signal", http)).status, 403);
+      await db.admin.query("update behavior_runtime_bindings set enabled=true,revoked_at=null");
+      await db.admin.query("update workspace_users set status='suspended' where id=$1", [actor]);
+      assert.equal((await handleEvelynRuntimeRequest(signal(value()), "signal", http)).status, 403);
+      await db.admin.query("update workspace_users set status='active' where id=$1", [actor]);
+      await db.admin.query("update auth_identities set credential_state='active',disabled_at=null where id=(select auth_identity_id from workspace_users where id=$1)", [actor]);
+      assert.equal((await handleEvelynRuntimeRequest(signal(value()), "signal", http)).status, 403);
+      await db.admin.query("update auth_identities set credential_state='disabled',disabled_at=now() where id=(select auth_identity_id from workspace_users where id=$1)", [actor]);
+      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false)", [fixed.workspaceId, fixed.crmProjectId, actor]);
+      assert.equal((await handleEvelynRuntimeRequest(signal(value()), "signal", http)).status, 403);
+      await db.admin.query("delete from project_pipeline_permissions where user_id=$1", [actor]);
+      assert.equal(await signalCount(), before);
+    });
+    await t.test("actual private COMMIT keeps outer integration, bot, binding and actor fences; lost confirmation stays unknown without retry", async () => {
+      const before = await signalCount(); let inserted = 0, replyLost = false, probes = 0;
+      const pool = { connect: async () => {
+        const client = await db.pool.connect(); let privateInsert = false;
+        return new Proxy(client, { get(target, property) {
+          if (property === "release") return target.release.bind(target);
+          if (property !== "query") return Reflect.get(target, property);
+          return async (query: string, params?: unknown[]) => {
+            if (/insert into behavior_learning_signals/u.test(query)) { privateInsert = true; inserted++; }
+            const result = await target.query(query, params);
+            if (query === "commit" && privateInsert && !replyLost) {
+              replyLost = true;
+              for (const [sql, id] of [
+                ["update external_integrations set status=status where id=$1", fixed.integrationId],
+                ["update bots set name=name where id=$1", fixed.botId],
+                ["update behavior_runtime_bindings set enabled=enabled where actor_id=$1", actor],
+                ["update workspace_users set status=status where id=$1", actor],
+              ]) {
+                const competitor = await db.admin.connect();
+                try {
+                  await competitor.query("begin"); await competitor.query("set local lock_timeout='100ms'");
+                  await assert.rejects(competitor.query(sql, [id]), { code: "55P03" }); probes++;
+                } finally { await competitor.query("rollback"); competitor.release(); }
+              }
+              throw new Error("SYNTHETIC_PRIVATE_COMMIT_REPLY_LOST");
+            }
+            return result;
+          };
+        } });
+      } };
+      const result = await handleEvelynRuntimeRequest(signal({ eventId: randomUUID(), issue: "unclear_next_step", outcome: "pass" }), "signal", { ...http, pool: pool as unknown as NonNullable<TenantTransactionOptions["pool"]> });
+      assert.equal(result.status, 503); assert.deepEqual(await result.json(), { code: "SIGNAL_UNCONFIRMED" });
+      assert.equal(probes, 4); assert.equal(inserted, 1); assert.equal(replyLost, true); assert.equal(await signalCount(), before + 1);
+    });
+    await t.test("bounded acquisition admits at most two operations and releases late real clients without SQL", async () => {
+      let connects = 0, releases = 0, queries = 0;
+      const pool = { connect: async () => {
+        connects++; const client = await db.pool.connect();
+        return new Promise(resolve => setTimeout(() => resolve(new Proxy(client, { get(target, property) {
+          if (property === "release") return () => { releases++; return target.release(); };
+          if (property === "query") return (...args: Parameters<typeof client.query>) => { queries++; return client.query(...args); };
+          return Reflect.get(target, property);
+        } })), 700));
+      } };
+      const bounded = { ...http, pool: pool as unknown as NonNullable<TenantTransactionOptions["pool"]> }, value = () => signal({ eventId: randomUUID(), issue: "unclear_next_step", outcome: "pass" });
+      const responses = await Promise.all([handleEvelynRuntimeRequest(value(), "signal", bounded), handleEvelynRuntimeRequest(value(), "signal", bounded), handleEvelynRuntimeRequest(value(), "signal", bounded)]);
+      assert.ok(responses.every(response => response.status === 503)); assert.equal(connects, 2);
+      await new Promise(resolve => setTimeout(resolve, 300)); assert.equal(releases, 2); assert.equal(queries, 0);
+      assert.equal((await handleEvelynRuntimeRequest(value(), "signal", http)).status, 200, "the admission latch is released after timeout without retrying the failed events");
+    });
+    await t.test("known integration withdrawal is reported separately from optional signal uncertainty", async () => {
+      const before = await signalCount();
       await db.admin.query("update external_integrations set status='disabled' where id=$1", [fixed.integrationId]);
-      const revoked = await handleEvelynRuntimeRequest(signal({ ...value, eventId: randomUUID() }), "signal", http); assert.equal(revoked.status, 409); assert.equal((await revoked.json()).authorityCurrent, false); assert.equal(await signalCount(), 1);
+      const revoked = await handleEvelynRuntimeRequest(signal({ eventId: randomUUID(), issue: "unclear_next_step", outcome: "pass" }), "signal", http); assert.equal(revoked.status, 409); assert.equal((await revoked.json()).authorityCurrent, false); assert.equal(await signalCount(), before);
     });
   } finally { await closeLocalTestPool(); await db.stop(); const writableEnv: Record<string, string | undefined> = process.env; for (const key of keys) { if (prior[key] === undefined) delete writableEnv[key]; else writableEnv[key] = prior[key]; } }
 });

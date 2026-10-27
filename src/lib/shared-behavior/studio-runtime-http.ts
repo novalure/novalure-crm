@@ -1,15 +1,12 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { AppSession } from "../auth/session";
-import { getRolePermissions } from "../auth/permissions";
-import { getProductRoleCapabilities } from "../product-model";
 import { getCrmMachineBearer, CrmMachineAuthError } from "../crm-machine-auth";
 import { resolveExternalIntegration, type ExternalIntegrationResolution } from "../db/external-integration-gateway";
 import { knowledgeJson, readKnowledgeJson } from "../knowledge-center/http";
 import { KnowledgeCenterError } from "../knowledge-center/policy";
 import { behaviorEnum, SharedBehaviorError } from "./catalog";
 import { findNativeAssistantSignalBinding, type NativeAssistantOptions } from "./native-assistant";
-import { recordEvelynRuntimeSignal } from "./runtime";
+import { recordBoundAssistantFormatSignal } from "./bound-private-signal";
 import { studioRuntimeIdentity as fixed, verifyStudioRuntimeToken, type StudioRuntimeAuthOptions } from "./studio-auth";
 
 export type StudioSignalOptions = NativeAssistantOptions & { env?: NodeJS.ProcessEnv; studioAuth?: StudioRuntimeAuthOptions };
@@ -38,24 +35,14 @@ export async function handleStudioRuntimeSignal(request: Request, options: Studi
     const capability = request.headers.get("x-evelyn-runtime-token");
     if (!binding || typeof capability !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(capability) ||
       !timingSafeEqual(createHash("sha256").update(capability).digest(), createHash("sha256").update(binding.capability).digest())) throw new CrmMachineAuthError("RUNTIME_AUTH_DENIED");
-    const broker: AppSession = { authenticated: true, source: "database", workspaceId: fixed.workspaceId, userId: resolution.publicActorId,
-      workspaceName: "Verified Studio scope", name: "Verified Studio broker", email: "studio-broker@service.invalid", role: "owner", productRole: "customer_owner",
-      permissions: getRolePermissions("owner"), productPermissions: getProductRoleCapabilities("customer_owner") };
-    const receipt = await recordEvelynRuntimeSignal(broker, capability, { eventId: body.eventId, issue: "unclear_next_step", outcome }, { ...options,
-      statementTimeoutMs: 2000, verifyWorkload: async tx => {
-        const current = await tx.queryOne<ExternalIntegrationResolution>(`select integration_id as "integrationId",workspace_id as "workspaceId",project_id as "projectId",
-          public_actor_id as "publicActorId",configuration,widget_configuration as "widgetConfiguration"
-          from public.crm_external_integration_resolve($1,$2,'chat.context',null::uuid)`, [fixed.publicSiteKey, fixed.publicOrigin]);
-        if (!exactStudioScope(current) || current.publicActorId !== binding.brokerActorId) throw new StudioAuthorityChanged();
-        const actual = await tx.queryOne<{ actor_id: string; bot_id: string; workspace_id: string }>("select * from public.behavior_lock_runtime($1::uuid,$2)",
-          [binding.brokerActorId, createHash("sha256").update(capability).digest("hex")]);
-        if (!actual || actual.actor_id !== binding.actorId || actual.bot_id !== fixed.botId || actual.workspace_id !== fixed.workspaceId) throw new CrmMachineAuthError("RUNTIME_AUTH_DENIED");
-        const bot = await tx.queryOne<{ projectId: string | null }>('select project_id as "projectId" from bots where id=$1::uuid and workspace_id=$2::uuid', [fixed.botId, fixed.workspaceId]);
-        if (!bot || bot.projectId !== fixed.crmProjectId) throw new StudioAuthorityChanged();
-      } });
+    const receipt = await recordBoundAssistantFormatSignal(binding, { kind: "website", origin: fixed.publicOrigin, publicSiteKey: fixed.publicSiteKey },
+      { eventId: body.eventId, issue: "unclear_next_step", outcome }, options);
     return knowledgeJson({ recorded: receipt.recorded === true, replayed: receipt.replayed });
   } catch (error) {
     if (error instanceof StudioAuthorityChanged) return knowledgeJson({ code: "STUDIO_AUTHORITY_CHANGED", authorityCurrent: false }, 409);
+    if (error instanceof SharedBehaviorError && error.code === "NATIVE_INTEGRATION_DENIED") return knowledgeJson({ code: "STUDIO_AUTHORITY_CHANGED", authorityCurrent: false }, 409);
+    if (error instanceof SharedBehaviorError && error.code === "NATIVE_SIGNAL_ACCESS_DENIED") return knowledgeJson({ code: "RUNTIME_AUTH_DENIED" }, 403);
+    if (error instanceof SharedBehaviorError && error.code === "NATIVE_SIGNAL_BUSY") return knowledgeJson({ code: "SIGNAL_UNCONFIRMED" }, 503);
     if (error instanceof CrmMachineAuthError) return knowledgeJson({ code: "RUNTIME_AUTH_DENIED" }, error.status);
     if (error instanceof SharedBehaviorError && error.code === "LEARNING_IDEMPOTENCY_CONFLICT") return knowledgeJson({ code: "SIGNAL_CONFLICT" }, 409);
     if (error instanceof KnowledgeCenterError && error.code === "RUNTIME_ACCESS_DENIED") return knowledgeJson({ code: "RUNTIME_AUTH_DENIED" }, 403);

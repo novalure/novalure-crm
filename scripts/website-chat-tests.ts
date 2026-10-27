@@ -225,9 +225,9 @@ test("website answers use bounded published context and revalidate authority aft
       const capability1 = randomBytes(32).toString("base64url"), capability2 = randomBytes(32).toString("base64url");
       const siteKey2 = `nov_pk_${randomBytes(24).toString("base64url")}`, token2 = randomBytes(32).toString("base64url");
       await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'SYNTHETIC private1','private1@example.invalid','agent','project_sales_member','active'),($2,$3,'SYNTHETIC private2','private2@example.invalid','agent','project_sales_member','active')", [actor1, actor2, workspace]);
-      // Read-only access to the exact bot's project metadata; zero source/area
-      // assignments for either private actor or the internal knowledge channel.
-      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false),($1,$2,$4,true,false)", [workspace, project, actor1, actor2]);
+      // Private actors have no login, project or knowledge grants. Only the
+      // unchanged public broker reads and locks bot/project metadata.
+      await db.admin.query("update auth_identities set credential_state='disabled',disabled_at=now(),password_hash=null where id in(select auth_identity_id from workspace_users where id=any($1::uuid[]))", [[actor1, actor2]]);
       await db.admin.query("insert into behavior_runtime_bindings(workspace_id,broker_actor_id,actor_id,bot_id,department,token_hash,enabled,expires_at) values($1,$2,$3,$4,'support',$5,true,now()+interval '1 hour'),($1,$2,$6,$7,'support',$8,true,now()+interval '1 hour')", [workspace, owner, actor1, bot, createHash("sha256").update(capability1).digest("hex"), actor2, alternateBot, createHash("sha256").update(capability2).digest("hex")]);
       await db.admin.query("insert into external_integrations(id,public_site_key,workspace_id,project_id,integration_type,status,mode,allowed_origins,capabilities,configuration,created_by) values($1,$2,$3,$4,'website_chat','active','training',array[$5],array['chat.start','chat.context'],$6::jsonb,$7)", [integration2, siteKey2, workspace, project, origin, JSON.stringify({ knowledgeAssistantId: alternateBot }), owner]);
       await db.admin.query("insert into external_integration_widget_configs(integration_id,workspace_id,chat_enabled,enabled_capabilities) values($1,$2,true,array['chat.start','chat.context'])", [integration2, workspace]);
@@ -263,9 +263,9 @@ test("website answers use bounded published context and revalidate authority aft
         configure(); await db.admin.query("update behavior_runtime_bindings set enabled=false where actor_id=$1", [actor1]);
         await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() }); assert.equal(await count(), before + 2);
         await db.admin.query("update behavior_runtime_bindings set enabled=true where actor_id=$1", [actor1]);
-        await db.admin.query("update project_pipeline_permissions set can_read=false where user_id=$1", [actor1]);
-        await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() }); assert.equal(await count(), before + 2, "missing private bot metadata scope does not borrow the owner's rights");
-        await db.admin.query("update project_pipeline_permissions set can_read=true where user_id=$1", [actor1]);
+        await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false)", [workspace, project, actor1]);
+        await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() }); assert.equal(await count(), before + 2, "an unexpected private project grant is rejected, never borrowed for signal authority");
+        await db.admin.query("delete from project_pipeline_permissions where user_id=$1", [actor1]);
         await assert.rejects(answerWebsiteChat(input, { ...nativeOptions(), model: model(undefined, async () => { await db.admin.query("update external_integrations set status='disabled' where id=$1", [integration]); }) }));
         assert.equal(await count(), before + 2);
         await db.admin.query("update external_integrations set status='active' where id=$1", [integration]);

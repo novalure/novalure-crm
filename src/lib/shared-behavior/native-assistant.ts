@@ -1,16 +1,14 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { AppSession } from "../auth/session";
-import { getRolePermissions } from "../auth/permissions";
 import { withCrmRead } from "../crm-command";
 import type { ExternalIntegrationResolution } from "../db/external-integration-gateway";
-import type { TenantTransaction, TenantTransactionOptions } from "../db/tenant-client";
+import type { TenantTransactionOptions } from "../db/tenant-client";
 import { resolveBotConversationContext } from "../db/runtime-repositories";
-import { getProductRoleCapabilities } from "../product-model";
 import { behaviorEnum, exactBehaviorObject, SharedBehaviorError, type LearningOutcome } from "./catalog";
 import { loadSharedBehavior } from "./repository";
-import { recordEvelynRuntimeSignal } from "./runtime";
+import { recordBoundAssistantFormatSignal, type BoundPrivateSignalProof } from "./bound-private-signal";
 
 export type NativeAssistantOptions = TenantTransactionOptions & {
   /** Explicit host-only test port, like pool/model. Never read from HTTP input. */
@@ -151,23 +149,8 @@ export async function verifyNativeBotReply(session: AppSession, scope: NativeBot
   catch { return false; }
 }
 
-async function privateSignal(binding: SignalBinding, outcome: LearningOutcome, verify: (tx: TenantTransaction) => Promise<void>, options: NativeAssistantOptions): Promise<NativeSignalReceipt> {
-  const broker: AppSession = { authenticated: true, source: "database", workspaceId: binding.workspaceId, userId: binding.brokerActorId,
-    workspaceName: "Verified native workspace", name: "Verified native broker", email: "native-broker@service.invalid",
-    role: "owner", productRole: "customer_owner", permissions: getRolePermissions("owner"), productPermissions: getProductRoleCapabilities("customer_owner") };
-  const hash = createHash("sha256").update(binding.capability).digest("hex");
-  const result = await recordEvelynRuntimeSignal(broker, binding.capability, { eventId: randomUUID(), issue: "unclear_next_step", outcome }, {
-    ...options, statementTimeoutMs: 2000, verifyWorkload: async tx => {
-      await verify(tx);
-      const actual = await tx.queryOne<{ workspace_id: string; actor_id: string; bot_id: string }>(
-        "select * from public.behavior_lock_runtime($1::uuid,$2)", [binding.brokerActorId, hash]);
-      if (!actual || actual.workspace_id !== binding.workspaceId || actual.actor_id !== binding.actorId || actual.bot_id !== binding.botId) deny();
-      // Existing resolver already holds this bot row's SHARE lock. SELECT
-      // requires only exact-project read, never bot-edit rights for the actor.
-      const bot = await tx.queryOne<{ projectId: string | null }>('select project_id as "projectId" from bots where id=$1::uuid and workspace_id=$2::uuid', [binding.botId, binding.workspaceId]);
-      if (!bot || bot.projectId !== binding.projectId) deny();
-    },
-  });
+async function privateSignal(binding: SignalBinding, outcome: LearningOutcome, proof: BoundPrivateSignalProof, options: NativeAssistantOptions): Promise<NativeSignalReceipt> {
+  const result = await recordBoundAssistantFormatSignal(binding, proof, { eventId: randomUUID(), issue: "unclear_next_step", outcome }, options);
   if (result.recorded !== true || typeof result.replayed !== "boolean") deny();
   return { status: "recorded", replayed: result.replayed };
 }
@@ -193,16 +176,7 @@ export async function recordNativeWebsiteFormat(input: Readonly<{
       row.botId === botId && row.integrationId === expected.integrationId && row.brokerActorId === expected.publicActorId);
     if (!binding) return { status: "not_configured" };
     if (!await input.revalidateCompletedTurn()) return { status: "authority_changed" };
-    return await privateSignal(binding, behaviorEnum(input.outcome, ["pass", "fail"] as const), async tx => {
-        // Reuse the established native integration resolver and lock. It does
-        // not retrieve customer knowledge or expose the private capability.
-        const current = await tx.queryOne<ExternalIntegrationResolution>(`select integration_id as "integrationId",workspace_id as "workspaceId",
-          project_id as "projectId",public_actor_id as "publicActorId",configuration,widget_configuration as "widgetConfiguration"
-          from public.crm_external_integration_resolve($1,$2,'chat.context',null::uuid)`, [input.publicSiteKey, input.origin]);
-        if (!current || current.workspaceId !== binding.workspaceId || current.integrationId !== binding.integrationId ||
-          current.projectId !== binding.projectId || current.publicActorId !== binding.brokerActorId ||
-          current.configuration.knowledgeAssistantId !== binding.botId || current.widgetConfiguration.chatEnabled !== true) throw new SharedBehaviorError("NATIVE_INTEGRATION_DENIED");
-    }, options);
+    return await privateSignal(binding, behaviorEnum(input.outcome, ["pass", "fail"] as const), { kind: "website", origin: input.origin, publicSiteKey: input.publicSiteKey }, options);
   } catch (error) {
     if (error instanceof SharedBehaviorError && error.code === "NATIVE_INTEGRATION_DENIED")
       return { status: "authority_changed" };
@@ -223,6 +197,9 @@ export async function recordNativeBotChatFormat(session: AppSession, scope: Nati
     if (!await inspectNativeBotReplyAuthority(session, scope, before, references, options)) return { status: "authority_changed" };
     const binding = signalBindings(options).find(row => row.workspaceId === session.workspaceId && row.workspaceId === scope.workspaceId && row.botId === scope.botId && row.projectId === scope.projectId);
     if (!binding) return { status: "not_configured" };
-    return await privateSignal(binding, behaviorEnum(outcome, ["pass", "fail"] as const), async () => {}, options);
-  } catch { return { status: "unconfirmed" }; }
+    return await privateSignal(binding, behaviorEnum(outcome, ["pass", "fail"] as const), { kind: "bot" }, options);
+  } catch (error) {
+    if (error instanceof SharedBehaviorError && error.code === "NATIVE_INTEGRATION_DENIED") return { status: "authority_changed" };
+    return { status: "unconfirmed" };
+  }
 }
