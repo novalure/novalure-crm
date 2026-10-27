@@ -13,6 +13,7 @@ import { assignKnowledgeAreas, createKnowledgeArea, createKnowledgeSource, publi
 import { handleWebsiteChatRequest } from "../src/lib/knowledge-center/website-chat";
 import { runBotChat } from "../src/lib/bots/chat-runtime";
 import { behaviorRuleIds } from "../src/lib/shared-behavior/catalog";
+import { recordBoundAssistantFormatSignal } from "../src/lib/shared-behavior/bound-private-signal";
 import type { NativeRuntimeStatus } from "../src/lib/shared-behavior/native-assistant";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
@@ -183,6 +184,45 @@ test("native final authority gates actual handler delivery while optional signal
       assert.match(JSON.stringify(result), /EUR 499/); assert.equal(statuses.at(-1)?.signal.status, "unconfirmed");
       if (target === "website") assert.equal(result.answerStatus, "grounded"); else assert.equal(result.autonomy.replyBlocked, false);
       assert.equal(await counts(), count + 1, "actual committed receipt survives, and is not retried or claimed absent");
+    });
+    await t.test("a nonmanager broker's exact read grant remains locked through the private signal COMMIT", async () => {
+      const limitedBroker = randomUUID();
+      await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC limited broker','limited-broker@example.invalid','agent','project_sales_member','active')", [limitedBroker, workspace]);
+      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false)", [workspace, project, limitedBroker]);
+      await db.admin.query("update behavior_runtime_bindings set broker_actor_id=$1 where actor_id=$2", [limitedBroker, actor]);
+      let lockProven = false;
+      const pool = { connect: async () => {
+        const client = await db.pool.connect(); let privateInsert = false;
+        return new Proxy(client, { get(target, property) {
+          if (property === "release") return target.release.bind(target);
+          if (property !== "query") return Reflect.get(target, property);
+          return async (query: string, parameters?: unknown[]) => {
+            if (/insert into behavior_learning_signals/u.test(query)) privateInsert = true;
+            const result = await target.query(query, parameters);
+            if (query === "commit" && privateInsert) {
+              const competitor = await db.admin.connect();
+              try {
+                await competitor.query("begin"); await competitor.query("set local lock_timeout='100ms'");
+                await assert.rejects(competitor.query("update project_pipeline_permissions set can_read=false where workspace_id=$1 and project_id=$2 and user_id=$3", [workspace, project, limitedBroker]), { code: "55P03" });
+                lockProven = true;
+              } finally { await competitor.query("rollback"); competitor.release(); }
+            }
+            return result;
+          };
+        } });
+      } };
+      try {
+        const before = await counts();
+        const receipt = await recordBoundAssistantFormatSignal({ workspaceId: workspace, projectId: project, botId: bot,
+          brokerActorId: limitedBroker, actorId: actor, capability, integrationId: null }, { kind: "bot" },
+          { eventId: randomUUID(), issue: "unclear_next_step", outcome: "pass" }, { pool: pool as unknown as NonNullable<TenantTransactionOptions["pool"]> });
+        assert.equal(receipt.recorded, true); assert.equal(lockProven, true); assert.equal(await counts(), before + 1);
+        await db.admin.query("update project_pipeline_permissions set can_read=false where user_id=$1", [limitedBroker]);
+        await assert.rejects(recordBoundAssistantFormatSignal({ workspaceId: workspace, projectId: project, botId: bot,
+          brokerActorId: limitedBroker, actorId: actor, capability, integrationId: null }, { kind: "bot" },
+          { eventId: randomUUID(), issue: "unclear_next_step", outcome: "pass" }, options));
+        assert.equal(await counts(), before + 1);
+      } finally { await db.admin.query("update behavior_runtime_bindings set broker_actor_id=$1 where actor_id=$2", [owner, actor]); }
     });
   } finally {
     await closeLocalTestPool(); await db.stop();

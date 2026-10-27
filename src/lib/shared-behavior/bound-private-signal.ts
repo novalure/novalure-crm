@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { AppSession } from "../auth/session";
-import { crmPayloadDigest, withCrmRead } from "../crm-command";
+import { assertProjectGrant, crmPayloadDigest, withCrmRead } from "../crm-command";
 import type { ExternalIntegrationResolution } from "../db/external-integration-gateway";
 import { withTenantTransaction, type TenantTransaction, type TenantTransactionOptions } from "../db/tenant-client";
 import { SharedBehaviorError } from "./catalog";
@@ -56,6 +56,7 @@ export async function recordBoundAssistantFormatSignal(scope: BoundPrivateSignal
       // The broker reads bot/project metadata; the private actor never does.
       const bot = await outer.queryOne<{ projectId: string | null }>('select project_id as "projectId" from bots where id=$1::uuid and workspace_id=$2::uuid', [scope.botId, scope.workspaceId]);
       if (!bot || bot.projectId !== scope.projectId) changed();
+      if (scope.projectId) await assertProjectGrant(outer, member, scope.projectId);
       if (await outer.queryOne("select 1 from knowledge_area_grants where workspace_id=$1::uuid and bot_id=$2::uuid and channel='internal' limit 1", [scope.workspaceId, scope.botId])) denied();
       // Explicit private tx, independent of the broker's AsyncLocal context.
       // It deliberately cannot call generic withCrmRead or acquire internal
