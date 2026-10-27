@@ -88,7 +88,7 @@ export async function checkExternalAssistantContext(input: ExternalAssistantInpu
     if (versions.length) {
       await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`knowledge-center:${member.workspaceId}`]);
       const entitled = await tx.queryOne<{ allowed: boolean }>(`select e.enabled and length(trim(coalesce(e.contract_reference,'')))>0
-        and e.features->>'webchatAccess'='true' and not exists(select 1 from workspace_module_settings m
+        and e.features->'webchatAccess'='true'::jsonb and not exists(select 1 from workspace_module_settings m
           where m.workspace_id=e.workspace_id and m.module_key in ('knowledge','bots') and m.enabled=false) as allowed
         from knowledge_center_entitlements e where e.workspace_id=$1::uuid`, [member.workspaceId]);
       const current = await tx.query(`select s.id from jsonb_to_recordset($1::jsonb) as r("sourceId" uuid,"versionId" uuid)

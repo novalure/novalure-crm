@@ -75,6 +75,12 @@ test("Studio native signatures and existing knowledge/signal handlers stay in on
       await db.admin.query("delete from knowledge_area_grants where bot_id=$1", [fixed.botId]);
       const revoked = await handleExternalAssistantKnowledgeRequest(knowledge(body, true), { ...options, nativeBehaviorEnv: nativeEnv }); assert.equal((await revoked.json()).current, false);
       await assignKnowledgeAreas(session, { botId: fixed.botId, channel: "webchat", areaIds: [area.id] }, options);
+      // A JSON string is not the boolean entitlement accepted by retrieval.
+      await db.admin.query("update knowledge_center_entitlements set features=jsonb_set(features,'{webchatAccess}',$2::jsonb) where workspace_id=$1", [fixed.workspaceId, JSON.stringify("true")]);
+      const featureRevoked = await handleExternalAssistantKnowledgeRequest(knowledge(body, true), { ...options, nativeBehaviorEnv: nativeEnv }); assert.equal((await featureRevoked.json()).current, false);
+      const normalDenied = await handleExternalAssistantKnowledgeRequest(knowledge({ sessionId: visitor, query: "studioanchor", maxResults: 5 }), { ...options, nativeBehaviorEnv: nativeEnv }); assert.equal((await normalDenied.json()).answerStatus, "insufficient_knowledge");
+      assert.equal((await db.admin.query("select sum(query_count)::int as queries from knowledge_query_usage")).rows[0].queries, before);
+      await db.admin.query("update knowledge_center_entitlements set features=jsonb_set(features,'{webchatAccess}','true'::jsonb) where workspace_id=$1", [fixed.workspaceId]);
       await db.admin.query("update behavior_release_head set version=null,revision=revision+1");
       const methodsRevoked = await handleExternalAssistantKnowledgeRequest(knowledge(body, true), { ...options, nativeBehaviorEnv: nativeEnv }); assert.equal((await methodsRevoked.json()).current, false);
       await db.admin.query("update behavior_release_head set version=1,revision=revision+1");
