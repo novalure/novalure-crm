@@ -78,7 +78,7 @@ async function validateCurrentAuthority(input: Input, expected: ExternalIntegrat
     if (!bot || bot.projectId !== current.projectId) throw new ExternalIntegrationError("assistant_not_configured", 403);
     if (bot.projectId) await assertProjectGrant(tx, member, bot.projectId);
     const entitled = await tx.queryOne<{ allowed: boolean }>(`select e.enabled and length(trim(coalesce(e.contract_reference,'')))>0
-      and e.features->>'webchatAccess'='true' and not exists(select 1 from workspace_module_settings m
+      and e.features->'webchatAccess'='true'::jsonb and not exists(select 1 from workspace_module_settings m
         where m.workspace_id=e.workspace_id and m.module_key in ('knowledge','bots') and m.enabled=false) as allowed
       from knowledge_center_entitlements e where e.workspace_id=$1::uuid`, [member.workspaceId]);
     const references = [...new Map(excerpts.map(item => [`${item.sourceId}:${item.versionId}`, { sourceId: item.sourceId, versionId: item.versionId }])).values()];

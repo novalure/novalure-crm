@@ -65,14 +65,21 @@ test("native final authority gates actual handler delivery while optional signal
     const request = () => new Request(`https://crm.example.invalid/api/public/integrations/chat/answers?site_key=${publicSiteKey}`, { method: "POST", headers: { "content-type": "application/json", origin, "x-novalure-session-token": token, "x-test-client-ip": "203.0.113.91" }, body: JSON.stringify({ sessionId: visitor, message: "studioanchor" }) });
     const chatInput = { session, language: "en" as const, payload: { botId: bot, channel: "webchat", prompt: "studioanchor", testMode: true } };
     const generated = async () => ({ text: "Website package price is EUR 499. Next step: Contact the team.", model: "SYNTHETIC", provider: "SYNTHETIC", external: false });
-    function phasePool(change?: () => Promise<void>, failRead = false, loseCommit = false, revokeIntegrationFence = false) {
-      let referenceChecks = 0, changed = false, replyLost = false, inserts = 0, fenceRevoked = false, fenceReads = 0;
+    function phasePool(change?: () => Promise<void>, failRead = false, loseCommit = false, revokeIntegrationFence = false, stringFeatureOnCheck = 0) {
+      let referenceChecks = 0, changed = false, replyLost = false, inserts = 0, fenceRevoked = false, fenceReads = 0, entitlementChecks = 0, featureReplaced = false;
       const pool = { connect: async () => {
         const client = await db.pool.connect(); let inserted = false, checkedReferences = false;
         return new Proxy(client, { get(target, property) {
           if (property === "release") return target.release.bind(target);
           if (property !== "query") return Reflect.get(target, property);
           return async (query: string, parameters?: unknown[]) => {
+            if (/select e\.enabled and length\(trim\(coalesce\(e\.contract_reference/u.test(query)) {
+              entitlementChecks++;
+              if (entitlementChecks === stringFeatureOnCheck) {
+                featureReplaced = true;
+                await db.admin.query("update knowledge_center_entitlements set features=jsonb_set(features,'{webchatAccess}',to_jsonb('true'::text)) where workspace_id=$1", [workspace]);
+              }
+            }
             if (/select s\.id(?: as "sourceId")? from jsonb_to_recordset/u.test(query)) {
               referenceChecks++; checkedReferences = true;
               if (referenceChecks === 2) { changed = true; await change?.(); if (failRead) throw new Error("SYNTHETIC_OPTIONAL_SIGNAL_READ_UNAVAILABLE"); }
@@ -92,7 +99,7 @@ test("native final authority gates actual handler delivery while optional signal
           };
         } });
       } };
-      return { pool: pool as unknown as NonNullable<TenantTransactionOptions["pool"]>, state: () => ({ referenceChecks, changed, replyLost, inserts, fenceRevoked, fenceReads }) };
+      return { pool: pool as unknown as NonNullable<TenantTransactionOptions["pool"]>, state: () => ({ referenceChecks, changed, replyLost, inserts, fenceRevoked, fenceReads, entitlementChecks, featureReplaced }) };
     }
     for (const target of ["website", "bot"] as const) for (const kind of ["grant", "method"] as const) {
       await t.test(`${target}: known ${kind} withdrawal only at final signal recheck removes knowledge and citations`, async () => {
@@ -119,6 +126,31 @@ test("native final authority gates actual handler delivery while optional signal
         }
       });
     }
+    for (const target of ["website", "bot"] as const) await t.test(`${target}: strict webchat boolean changed to a JSON string only at final signal recheck removes knowledge and citations`, async () => {
+      const initial = (await db.admin.query("select features->'webchatAccess' as feature from knowledge_center_entitlements where workspace_id=$1", [workspace])).rows[0];
+      assert.equal(initial.feature, true, "normal repository retrieval starts with an actual JSON boolean");
+      // Website additionally checks authority before retrieval. Both paths keep
+      // boolean true through retrieval and the first post-model reference check.
+      const finalCheck = target === "website" ? 3 : 2;
+      const phase = phasePool(undefined, false, false, false, finalCheck), count = await counts();
+      try {
+        const result = target === "website"
+          ? await (await handleWebsiteChatRequest(request(), { ...configured(false), pool: phase.pool, model: syntheticModel() })).json()
+          : await runBotChat(chatInput, { ...configured(true), pool: phase.pool, generateReply: generated });
+        assert.equal(phase.state().referenceChecks, 2, "initial retrieval and the first post-model guard passed before the final entitlement change");
+        assert.equal(phase.state().entitlementChecks, finalCheck); assert.equal(phase.state().featureReplaced, true);
+        const changed = (await db.admin.query("select features->'webchatAccess' as feature,jsonb_typeof(features->'webchatAccess') as type from knowledge_center_entitlements where workspace_id=$1", [workspace])).rows[0];
+        assert.equal(changed.feature, "true"); assert.equal(changed.type, "string");
+        assert.equal(statuses.at(-1)?.signal.status, "authority_changed"); assert.equal(statuses.at(-1)?.methodsCurrent, false);
+        assert.doesNotMatch(JSON.stringify(result), /EUR 499|SYNTHETIC protected price/);
+        assert.doesNotMatch(JSON.stringify(result), new RegExp(`${source.id}|${source.approvedVersionId}`));
+        if (target === "website") { assert.equal(result.answerStatus, "insufficient_knowledge"); assert.deepEqual(result.citations, []); }
+        else { assert.equal(result.autonomy.replyBlocked, true); assert.equal(result.runSummary.humanHandoffRequired, true); }
+        assert.equal(phase.state().inserts, 0); assert.equal(await counts(), count, "a string-valued entitlement never records a private signal");
+      } finally {
+        await db.admin.query("update knowledge_center_entitlements set features=jsonb_set(features,'{webchatAccess}','true'::jsonb) where workspace_id=$1", [workspace]);
+      }
+    });
     await t.test("website integration fence invalidated after a valid completed-turn callback removes grounded disclosure", async () => {
       const phase = phasePool(undefined, false, false, true), count = await counts();
       try {
