@@ -1569,7 +1569,11 @@ export async function runBotChat(input: {
   const signal = !controls.killSwitch && !promptViolations.length && !modelBlockedForLiveFacts && nativeReplyCurrent
     ? await recordNativeBotChatFormat(session, nativeScope, sharedBehavior, nativeReferences, nativeNextStepOutcome(finalReplyText), options)
     : { status: "not_requested" as const };
-  observeNativeBehavior({ target: "agent", methodVersion: sharedBehavior?.version ?? null, methodsCurrent: nativeReplyCurrent, signal }, options);
+  const authorityChanged = signal.status === "authority_changed";
+  if (authorityChanged) {
+    knowledge.chunks.splice(0); knowledge.sources.splice(0);
+  }
+  observeNativeBehavior({ target: "agent", methodVersion: sharedBehavior?.version ?? null, methodsCurrent: nativeReplyCurrent && !authorityChanged, signal }, options);
 
   return {
     approvalId,
@@ -1578,21 +1582,24 @@ export async function runBotChat(input: {
       decisions: policyDecisions,
       documentDelivery: recordedDocumentDelivery?.delivery ?? null,
       meetingBooking,
-      replyBlocked: safeReply.blocked,
+      replyBlocked: safeReply.blocked || authorityChanged,
     },
     botName,
     conversationId,
     externalModelCall: modelReply.external,
     humanApprovalRequired: Boolean(approvalId),
     message: {
-      content: finalReplyText,
+      // Preserve independently confirmed business results, never stale model
+      // knowledge or its citations after an explicitly failed final recheck.
+      content: authorityChanged ? meetingReply ?? policyBlockedReply().text : finalReplyText,
       role: "assistant" as const,
     },
     model: modelReply.model,
     persisted: Boolean(knowledgeToolCallId || qualificationToolCallId),
     provider: modelReply.provider,
     providerStatus: getModelProviderStatus(),
-    runSummary,
+    runSummary: authorityChanged ? { ...runSummary, humanHandoffRequired: true,
+      nextAction: language === "de" ? "Anfrage an das Team übergeben: Kontext hat sich geändert" : "Hand the enquiry to the team: context changed" } : runSummary,
     toolResults: [knowledge, qualification, customerData, meetingSlots, documentSend, meetingBooking, recordedDocumentDelivery?.delivery].filter(Boolean),
   } satisfies BotChatRunResult;
 }

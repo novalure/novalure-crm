@@ -1,7 +1,10 @@
-# Paket3: vorbereitete native CRM-Chatanschlüsse
+# Paket3: native CRM-Chatanschlüsse – geprüfter Quellstand, Aktivierung ausstehend
 
-Dieser getrennte Entwurf basiert unverändert auf CRM116/c1a9c2d535d5b46c77c81d77dd5ec43baac145b3.
-Er ist lokal vorbereitet und standardmäßig ausgeschaltet. Keine Bereitstellung,
+Dieser getrennte PR117-Quellstand baut auf CRM116/c1a9c2d535d5b46c77c81d77dd5ec43baac145b3
+und dem historischen Hooksstand d3cc3bcf7892aab25425b2f88b015a9a9bdd3460 auf.
+Die abschließende Widerrufsbehandlung ist implementiert und gezielt lokal geprüft;
+die native und produktive Abnahme bleiben ausstehend. Die Hooks bleiben
+standardmäßig ausgeschaltet. Keine Bereitstellung,
 Konfiguration, Migration, Methodenveröffentlichung, Botaktivierung oder produktive
 Signalaufzeichnung wurde hierfür ausgeführt. Die persönliche Evelyn-Abnahme geht
 einer späteren Aktivierung voraus. Studio und Telefonie bleiben gesonderter Scope.
@@ -20,14 +23,14 @@ Der vorhandene öffentliche Runtimepfad ist `answerWebsiteChat` über
 `/api/public/integrations/chat/answers`. Er verlangt Origin, Sitekey und aktive
 Besuchersession; Workspace, Projekt, PublicActor und Bot stammen aus dem aktuellen
 Registryeintrag. Derselbe PublicActor ist deshalb **kein** pro Assistent privater
-Lernactor. Der vorhandene Botstatus wird durch diesen Entwurf nicht umgedeutet.
+Lernactor. Der vorhandene Botstatus wird durch diesen Quellstand nicht umgedeutet.
 
 `runBotChat` bedient `/api/bots/chat` und bestehende Kanalwebhooks. Sein eingeloggter
 oder bereits verifizierter Kanalcaller bleibt unverändert. `/api/bots/agent` ist
 der vorhandene Tool-/Knowledgeaufruf und besitzt keinen eigenen Modellchat.
 Ihm wird kein fingierter Modellinstruction-Verbrauch zugeschrieben.
 
-## Vorbereiteter tatsächlicher Anschluss
+## Implementierter Gesprächsanschluss
 
 `native-assistant.ts` verwendet den vorhandenen `loadSharedBehavior` mit konstantem
 Ziel webchat beziehungsweise agent. Die veröffentlichte unveränderliche Auswahl
@@ -46,7 +49,7 @@ neuen Berechtigungen aus diesen Methoden.
 Production-v1 ist gegenwärtig nur für ceo veröffentlicht. Für webchat/agent
 liefert dieser Stand Versionsmetadaten1 und lediglich die drei Basisregeln.
 Die sechs Methoden für neue Ziele verlangen später eine eigene bewertete Auswahl
-über den vorhandenen Lifecycle. Dieser Entwurf veröffentlicht keine Version2;
+über den vorhandenen Lifecycle. Diese Implementierung veröffentlicht keine Version2;
 synthetische Headfixtures in den Consumptiontests sind keine Releasezulassung.
 
 ## Enges privates Signal
@@ -106,7 +109,12 @@ benötigt deshalb nur SELECT und kein Botedit. Die zusätzliche Signaltransaktio
 hat2s Statement-/Lockbudget. Fehler oder unklare Zuordnung unterdrücken dieses
 optionale Signal und verändern keine bisherige sichere Antwort; keine Rohfehler
 oder Konfigurationen werden geloggt. Das interne Receipt unterscheidet disabled,
-not_configured, not_requested, recorded und unconfirmed. Auch ein tatsächlicher
+not_configured, not_requested, recorded, unconfirmed und authority_changed. Ein
+explizit ungültiger abschließender Knowledge-/Methodencheck oder die ausdrücklich
+ungültige Website-Integration am Workloadfence ergibt authority_changed: Die
+aktuelle Ausgabe verwirft Modellwissen und Quellen; bestätigte Buchungs- und
+Versandergebnisse bleiben erhalten. Andere private Capability-/Actor-/DBfehler
+bleiben optional unconfirmed und löschen keine autorisierte Antwort. Auch ein tatsächlicher
 Commit mit verlorener Bestätigung heißt unconfirmed und wird nie als abwesend
 behauptet oder automatisch wiederholt. Ein optionaler Hostobserver erhält nur
 Methodenversion, Bestätigungsstatus und diese feste Kategorie; keine privaten IDs,
@@ -185,7 +193,7 @@ wird deshalb nicht eingebaut. Der tatsächliche Gesprächspfad ist `runBotChat`.
 
 ## Lokale Nachweise
 
-- Bestehende Websiteantworttests und die neuen tatsächlichen Hooks:12/12 PASS
+- Historischer d3-Nachweis: bestehende Websiteantworttests und Hooks12/12 PASS
   auf ausschließlich lokalem eingebettetem PostgreSQL, mit AI-SDK-Mockmodell.
   Kein externer Modellaufruf, kein Neon-/Providerwrite.
 - Neue Fälle: defaultOFF-Prompt unverändert; CEO-only-v1 liefert keine sechs
@@ -220,3 +228,36 @@ wird deshalb nicht eingebaut. Der tatsächliche Gesprächspfad ist `runBotChat`.
 - TypeScript und gezielter ESLint-/Whitespacecheck sind Teil der lokalen Prüfung.
   Kein unabhängiger Review-, CI-, Merge-, Release- oder Liveabnahme-PASS wird aus
   diesen lokalen Tests abgeleitet.
+
+## Abschließender Widerrufsfix und gezielte Regression
+
+Ein ausdrücklich negativer letzter Autoritätscheck ist von einem optionalen
+Signalfehler getrennt. `authority_changed` entfernt die aktuelle Knowledgeantwort
+und deren Quellen auch dann, wenn der erste Postmodellcheck noch bestanden war.
+Der öffentliche Kanal verwirft außerdem eine Antwort, wenn erst der anschließende
+Integrationfence `NATIVE_INTEGRATION_DENIED` bestätigt. Nur dieser ausdrücklich
+bekannte geschäftliche Fencefehler wird entsprechend klassifiziert; ein privates
+Runtimebinding-/Actorproblem oder ein DB-/Commitfehler bleibt `unconfirmed`.
+Beim Bot bleiben bereits bestätigte Buchungs-/Versandergebnisse erhalten. Die
+bestehenden Geschäfts-/Archivoperationen werden nicht neu ausgeführt oder gelöscht.
+
+`scripts/native-assistant-late-authority-tests.ts` benutzt tatsächliche Handler und
+einen isolierten lokalen PostgreSQL-Cluster mit synthetischen Daten und Mockmodell:
+
+- Website und Bot: Quellen- sowie Methodenwiderruf erst beim letzten Signalcheck,
+  nachdem die erste Postmodellprüfung erfolgreich war; keine Knowledgeausgabe,
+  Quellen oder privaten Erfolgssignale.
+- Website: gültiger Completed-turn-Callback einschließlich tatsächlichem Commit,
+  danach ungültiger Integrationfence; ebenfalls kein Groundedinhalt oder Signal.
+- Optional nicht verfügbarer später Bot-Signalread bewahrt die autorisierte Antwort.
+- Tatsächlich committete Signale mit künstlich verlorener Commitantwort bewahren
+  die Website-/Botantwort; genau eine Signalrow, kein Retry oder Abwesenheitsclaim.
+
+Der erste gezielte Lauf bestand8/8 einschließlich Elternfall. Nach der ergänzten
+Fencekorrektur bestand der gezielte Integrationfence-Lauf2/2 einschließlich
+Elternfall; die vorherigen Fälle wurden nicht als neue Gesamtrunde ausgeführt.
+Aktuelle TypeScript-, gezielte ESLint- und Whitespaceprüfungen sind bestanden.
+Der neue Test ist in `test:website-self-service` eingebunden und wird damit vom
+normalen Linux-CI-Aufruf erfasst. Die d3-CI-/Rohbelege bleiben historische Belege;
+die neue commitgenaue CI und die tatsächliche native/produktive Abnahme sind
+gesonderte Nachweise und werden hier nicht vorweggenommen.

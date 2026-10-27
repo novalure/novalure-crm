@@ -17,7 +17,7 @@ export type NativeAssistantOptions = TenantTransactionOptions & {
   nativeBehaviorEnv?: Readonly<Record<string, string | undefined>>;
   observeNativeBehavior?: (status: NativeRuntimeStatus) => void;
 };
-export type NativeSignalReceipt = Readonly<{ status: "disabled" | "not_configured" | "not_requested" | "recorded" | "unconfirmed"; replayed?: boolean }>;
+export type NativeSignalReceipt = Readonly<{ status: "disabled" | "not_configured" | "not_requested" | "recorded" | "unconfirmed" | "authority_changed"; replayed?: boolean }>;
 export type NativeRuntimeStatus = Readonly<{ target: "webchat" | "agent"; methodVersion: number | null; methodsCurrent: boolean; signal: NativeSignalReceipt }>;
 const enabled = (key: string, options: NativeAssistantOptions) => {
   const env = options.nativeBehaviorEnv ?? process.env;
@@ -94,7 +94,7 @@ export function observeNativeBehavior(status: NativeRuntimeStatus, options: Nati
     const target = behaviorEnum(value.target, ["webchat", "agent"] as const);
     if ((value.methodVersion !== null && (!Number.isSafeInteger(value.methodVersion) || Number(value.methodVersion) < 0 || Number(value.methodVersion) > 2147483647)) || typeof value.methodsCurrent !== "boolean") return;
     const receipt = exactBehaviorObject(value.signal, Object.hasOwn(value.signal as object, "replayed") ? ["status", "replayed"] : ["status"]);
-    const signalStatus = behaviorEnum(receipt.status, ["disabled", "not_configured", "not_requested", "recorded", "unconfirmed"] as const);
+    const signalStatus = behaviorEnum(receipt.status, ["disabled", "not_configured", "not_requested", "recorded", "unconfirmed", "authority_changed"] as const);
     if (Object.hasOwn(receipt, "replayed") && typeof receipt.replayed !== "boolean") return;
     const safe: NativeRuntimeStatus = Object.freeze({ target, methodVersion: value.methodVersion as number | null, methodsCurrent: value.methodsCurrent,
       signal: Object.freeze({ status: signalStatus, ...(typeof receipt.replayed === "boolean" ? { replayed: receipt.replayed } : {}) }) });
@@ -106,12 +106,11 @@ export function observeNativeBehavior(status: NativeRuntimeStatus, options: Nati
 }
 
 /** Revalidate all sources exposed to the model, without consuming another query. */
-export async function verifyNativeBotReply(session: AppSession, scope: NativeBotScope, before: Behavior | null,
+async function inspectNativeBotReplyAuthority(session: AppSession, scope: NativeBotScope, before: Behavior | null,
   references: readonly { sourceId: string; versionId: string }[], options: NativeAssistantOptions = {}): Promise<boolean> {
   if (!enabled("NOVALURE_SHARED_NATIVE_METHODS_ENABLED", options) && !enabled("NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED", options)) return before === null;
   if (["voice", "telephone"].includes(scope.channel)) return before === null;
-  try {
-    return await withCrmRead(session, async (tx, member) => {
+  return withCrmRead(session, async (tx, member) => {
       if (member.workspaceId !== scope.workspaceId || !member.permissions.includes("bots:run")) return false;
       const saved = await resolveBotConversationContext({ session: member, ...scope }, options);
       if (saved.projectId !== scope.projectId) return false;
@@ -137,7 +136,13 @@ export async function verifyNativeBotReply(session: AppSession, scope: NativeBot
       const current = await loadNativeBotChatBehavior(member, scope, options);
       return knowledgeCurrent && sameNativeBehavior(before, current);
     }, options);
-  } catch { return false; }
+}
+
+/** The required post-model guard stays fail-closed on an unavailable read. */
+export async function verifyNativeBotReply(session: AppSession, scope: NativeBotScope, before: Behavior | null,
+  references: readonly { sourceId: string; versionId: string }[], options: NativeAssistantOptions = {}): Promise<boolean> {
+  try { return await inspectNativeBotReplyAuthority(session, scope, before, references, options); }
+  catch { return false; }
 }
 
 async function privateSignal(binding: SignalBinding, outcome: LearningOutcome, verify: (tx: TenantTransaction) => Promise<void>, options: NativeAssistantOptions): Promise<NativeSignalReceipt> {
@@ -181,7 +186,7 @@ export async function recordNativeWebsiteFormat(input: Readonly<{
     const binding = signalBindings(options).find(row => row.workspaceId === expected.workspaceId && row.projectId === expected.projectId &&
       row.botId === botId && row.integrationId === expected.integrationId && row.brokerActorId === expected.publicActorId);
     if (!binding) return { status: "not_configured" };
-    if (!await input.revalidateCompletedTurn()) return { status: "unconfirmed" };
+    if (!await input.revalidateCompletedTurn()) return { status: "authority_changed" };
     return await privateSignal(binding, behaviorEnum(input.outcome, ["pass", "fail"] as const), async tx => {
         // Reuse the established native integration resolver and lock. It does
         // not retrieve customer knowledge or expose the private capability.
@@ -192,7 +197,9 @@ export async function recordNativeWebsiteFormat(input: Readonly<{
           current.projectId !== binding.projectId || current.publicActorId !== binding.brokerActorId ||
           current.configuration.knowledgeAssistantId !== binding.botId || current.widgetConfiguration.chatEnabled !== true) throw new SharedBehaviorError("NATIVE_INTEGRATION_DENIED");
     }, options);
-  } catch {
+  } catch (error) {
+    if (error instanceof SharedBehaviorError && error.code === "NATIVE_INTEGRATION_DENIED")
+      return { status: "authority_changed" };
     // Optional private telemetry never weakens an answer guard or changes the
     // existing response. No raw configuration, credential or SQL error log.
     return { status: "unconfirmed" };
@@ -205,7 +212,9 @@ export async function recordNativeBotChatFormat(session: AppSession, scope: Nati
   references: readonly { sourceId: string; versionId: string }[], outcome: LearningOutcome, options: NativeAssistantOptions = {}): Promise<NativeSignalReceipt> {
   if (!enabled("NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED", options) || ["voice", "telephone"].includes(scope.channel)) return { status: "disabled" };
   try {
-    if (!await verifyNativeBotReply(session, scope, before, references, options)) return { status: "unconfirmed" };
+    // A known false authority result must retract knowledge. An unavailable
+    // optional signal read/write is different and retains the business reply.
+    if (!await inspectNativeBotReplyAuthority(session, scope, before, references, options)) return { status: "authority_changed" };
     const binding = signalBindings(options).find(row => row.workspaceId === session.workspaceId && row.workspaceId === scope.workspaceId && row.botId === scope.botId && row.projectId === scope.projectId);
     if (!binding) return { status: "not_configured" };
     return await privateSignal(binding, behaviorEnum(outcome, ["pass", "fail"] as const), async () => {}, options);

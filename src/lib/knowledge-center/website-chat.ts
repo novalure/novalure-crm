@@ -129,7 +129,7 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
         const current = await validateCurrentAuthority(input, expected, [], options);
         return current.valid && sameNativeBehavior(before.behavior, current.behavior);
       } }, options);
-    observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: before.behavior === null || signal.status === "recorded", signal }, options);
+    observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: signal.status !== "authority_changed" && (before.behavior === null || signal.status === "recorded"), signal }, options);
     return answer;
   };
   const knowledge = await retrieveExternalAssistantKnowledge({ ...input, query: websiteKnowledgeQuery(input.message), maxResults: 5 }, options);
@@ -166,8 +166,8 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
       const latest = await validateCurrentAuthority(input, expected, knowledge.excerpts, options);
       return latest.valid && sameNativeBehavior(before.behavior, latest.behavior);
     } }, options);
-  observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: signal.status !== "unconfirmed", signal }, options);
-  return answer;
+  observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: signal.status !== "unconfirmed" && signal.status !== "authority_changed", signal }, options);
+  return signal.status === "authority_changed" ? fallback(current.language, "insufficient_knowledge") : answer;
 }
 
 export function websiteChatSiteKey(request: Request) {
