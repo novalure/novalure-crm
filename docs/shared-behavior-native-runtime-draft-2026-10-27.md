@@ -261,3 +261,21 @@ Der neue Test ist in `test:website-self-service` eingebunden und wird damit vom
 normalen Linux-CI-Aufruf erfasst. Die d3-CI-/Rohbelege bleiben historische Belege;
 die neue commitgenaue CI und die tatsächliche native/produktive Abnahme sind
 gesonderte Nachweise und werden hier nicht vorweggenommen.
+
+## Strikte Webchat-Featureparität
+
+Der vorhandene Knowledge-Center-Guard `assistantChannelEnabled` verlangt
+`contract.features?.[feature] === true`. Die erneuten Website- und Botprüfungen
+vergleichen deshalb den JSONB-Wert mit `'true'::jsonb`; der JSON-Text `"true"`
+erteilt keinen Zugriff. Das gleicht die spätere Prüfung an den ursprünglichen
+Wissensabruf an und führt keine neue Berechtigungspolitik ein.
+
+Zwei gezielte tatsächliche Handlerfälle beginnen mit Boolean `true`, durchlaufen
+den Wissensabruf und die erste Postmodellprüfung und ersetzen erst vor dem letzten
+Signalcheck das Feature durch den JSON-String `"true"`. Beide müssen Knowledge,
+Quellen und privates Signal verwerfen. Auf `61d167` meldeten diese Fälle unerlaubt
+`recorded` und schlugen fehl; nach den beiden JSONB-Vergleichen bestanden 3/3
+einschließlich Elternfall. Nur diese zwei neuen Fälle wurden lokal ausgeführt.
+Die übrigen lokalen Fälle und die grüne `61d167`-CI bleiben historische Belege;
+der neue Quellstand benötigt eine eigene commitgenaue CI. Tatsächliche native
+und produktive Abnahme bleiben ausstehend.
