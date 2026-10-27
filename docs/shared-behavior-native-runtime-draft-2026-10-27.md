@@ -110,7 +110,15 @@ not_configured, not_requested, recorded und unconfirmed. Auch ein tatsächlicher
 Commit mit verlorener Bestätigung heißt unconfirmed und wird nie als abwesend
 behauptet oder automatisch wiederholt. Ein optionaler Hostobserver erhält nur
 Methodenversion, Bestätigungsstatus und diese feste Kategorie; keine privaten IDs,
-Capabilities, Gesprächsinhalte oder Rohfehler. Die Publicresponse bleibt unverändert.
+Capabilities, Gesprächsinhalte oder Rohfehler. Ohne injizierten Observer schreibt
+der aktive tatsächliche Serverpfad standardmäßig ausschließlich das geschlossene
+Metadatenereignis native_shared_behavior_runtime: target (webchat/agent),
+methodVersion (Integer/NULL), methodCheck (not_loaded/confirmed/unconfirmed) und
+signalStatus aus der festen Liste. Keine IDs, Texte, Outcomeinhalte oder Rohfehler.
+Unbekannte Felder/Targets werden nicht geloggt; bei ausgeschalteten Hooks entsteht
+kein Ereignis. Die Publicresponse und das Widget bleiben unverändert. Dies erlaubt
+eine spätere echte Endpoint-/Methodenversionprüfung zusätzlich zum privaten DB-
+Signalreadback; ein Head-/Envread allein wird nicht als Verbrauchsnachweis gewertet.
 
 Die Methoden werden um den Modellaufruf erneut geladen und Version/Instruction
 verglichen. Veränderte Methoden geben keine veraltete gelernte Antwort frei. Der
@@ -147,6 +155,11 @@ Referenzen, Channelgrants, Entitlement/Modulstatus und Methodenversion werden oh
 zweite Quotaabfrage revalidiert. Erst danach wird aus dem serververifizierten
 Bot-/Workspace-/Projekttuple der feste private Broker/Actor gewählt. Es gibt keine
 Umsetzung einer Benutzer-/Modellrolle auf die Knowledge- oder Toolsession.
+Die Knowledge-/Entitlementprüfung und ihr Knowledge-Lock gelten nur, wenn
+tatsächlich Source-/Versionreferenzen an das Modell übergeben wurden. Bestehende
+generische Gespräche mit strictKnowledge=false und leerem Kontext erhalten durch
+die gemeinsamen Codekonstanten keine zusätzliche Knowledge-Center-Vertragspflicht.
+Caller-, Bot-, Projekt- und Methodenprüfung gelten weiterhin für diese Antworten.
 
 `withRuntime` sperrt weiterhin Broker, Actor, Binding und den exakten Bot. Der
 private Actor muss den eigenen Botprojekt-Metadatensatz sehen; er erhält keine
@@ -196,6 +209,14 @@ wird deshalb nicht eingebaut. Der tatsächliche Gesprächspfad ist `runBotChat`.
   Caller hat null private Signale. Ein Quellenwiderruf während der Generierung
   verwirft Modelltext und Compatibilityauszüge. Fehlendes Caller-Projektrecht
   verhindert den Aufruf; keine privaten Rechte werden geliehen.
+- Ein tatsächlicher Baseline-/Hookvergleich bei deaktiviertem Knowledge Center,
+  strictKnowledge=false und refs=[] erhält dieselbe erlaubte generische Antwort.
+  Gemeinsame Methoden und die private reine Formatmetrik verlangen dort keinen
+  zusätzlichen Knowledgevertrag.
+- Der tatsächliche grounded Endpointpfad erzeugt ohne Testobserver das feste
+  Methodenversion2-/targetwebchat-Ereignis. Künstliche Besucherdaten/IDs/Capability
+  erscheinen nicht darin; zusätzliche private Felder und ein falscher Targetwert
+  werden vor der Ausgabe abgewiesen. Publicresponsefelder bleiben identisch.
 - TypeScript und gezielter ESLint-/Whitespacecheck sind Teil der lokalen Prüfung.
   Kein unabhängiger Review-, CI-, Merge-, Release- oder Liveabnahme-PASS wird aus
   diesen lokalen Tests abgeleitet.

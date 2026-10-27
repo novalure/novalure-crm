@@ -13,7 +13,7 @@ import type { TenantTransactionOptions } from "../src/lib/db/tenant-client";
 import { assignKnowledgeAreas, createKnowledgeArea, createKnowledgeSource, publishKnowledgeSource } from "../src/lib/knowledge-center/repository";
 import { answerWebsiteChat, handleWebsiteChatRequest, websiteChatLimits, websiteChatOptions, websiteKnowledgeQuery } from "../src/lib/knowledge-center/website-chat";
 import { behaviorRuleIds } from "../src/lib/shared-behavior/catalog";
-import { loadNativeBotChatBehavior } from "../src/lib/shared-behavior/native-assistant";
+import { loadNativeBotChatBehavior, observeNativeBehavior } from "../src/lib/shared-behavior/native-assistant";
 import type { NativeRuntimeStatus } from "../src/lib/shared-behavior/native-assistant";
 import { runBotChat } from "../src/lib/bots/chat-runtime";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
@@ -272,6 +272,23 @@ test("website answers use bounded published context and revalidate authority aft
 
         const statuses: NativeRuntimeStatus[] = [];
         const fullOptions = () => ({ ...nativeOptions(), nativeBehaviorEnv: { ...nativeOptions().nativeBehaviorEnv, NOVALURE_SHARED_NATIVE_METHODS_ENABLED: "1" }, observeNativeBehavior: (status: NativeRuntimeStatus) => { statuses.push(status); } });
+        const { observeNativeBehavior: unusedObserver, ...defaultObservationOptions } = fullOptions();
+        assert.equal(typeof unusedObserver, "function");
+        const logRows: string[] = [], originalInfo = console.info;
+        console.info = (...values: unknown[]) => { logRows.push(values.join(" ")); };
+        try {
+          const actual = await answerWebsiteChat({ ...input, message: "studioanchor PRIVATE_VISITOR_TEXT person@example.invalid" }, { ...defaultObservationOptions, model: model() });
+          assert.equal(actual.answerStatus, "grounded");
+          assert.deepEqual(Object.keys(actual).sort(), ["contractVersion", "answerStatus", "answer", "citations"].sort());
+          assert.equal(logRows.length, 1);
+          const observed = JSON.parse(logRows[0]);
+          assert.deepEqual(Object.keys(observed).sort(), ["event", "target", "methodVersion", "methodCheck", "signalStatus"].sort());
+          assert.deepEqual(observed, { event: "native_shared_behavior_runtime", target: "webchat", methodVersion: 2, methodCheck: "confirmed", signalStatus: "recorded" });
+          assert.doesNotMatch(logRows[0], new RegExp(`${capability1}|${actor1}|${owner}|${workspace}|${source.id}|PRIVATE_VISITOR_TEXT|person@example`));
+          observeNativeBehavior({ target: "webchat", methodVersion: 2, methodsCurrent: true, signal: { status: "recorded", outcome: "PRIVATE" } } as never, defaultObservationOptions);
+          observeNativeBehavior({ target: actor1, methodVersion: 2, methodsCurrent: true, signal: { status: "recorded" } } as never, defaultObservationOptions);
+          assert.equal(logRows.length, 1, "invalid target or extra private observation fields never enter the default server log");
+        } finally { console.info = originalInfo; }
         const normalBase = await count();
         for (const [answerText, expectedOutcome] of [["Website package price is EUR 499. Next step: Contact the team.", "pass"], ["Website package price is EUR 499.", "fail"]]) {
           const answer = await answerWebsiteChat(input, { ...fullOptions(), model: model({ answerable: true, answer: answerText, sourceIndices: [0] }) });
@@ -329,9 +346,21 @@ test("website answers use bounded published context and revalidate authority aft
         assert.equal(stale.autonomy.replyBlocked, true); assert.doesNotMatch(JSON.stringify(stale), /EUR 499|SYNTHETIC Studio packages/);
         assert.equal(await count(), internalBase + 1); assert.equal(statuses.at(-1)?.signal.status, "not_requested");
         await assignKnowledgeAreas(session, { botId: bot, channel: "webchat", areaIds: [area.id] }, options);
+        await db.admin.query("update knowledge_center_entitlements set enabled=false where workspace_id=$1", [workspace]);
+        try {
+          const genericInput = { ...chatInput, payload: { ...chatInput.payload, prompt: "Hello", strictKnowledge: false, customerFacing: false } };
+          const genericText = "Next step: Describe your goal to the team.";
+          const genericModel = async () => ({ text: genericText, model: "SYNTHETIC", provider: "SYNTHETIC", external: false });
+          const baseline = await runBotChat(genericInput, { ...options, generateReply: genericModel });
+          const methodOnly = await runBotChat(genericInput, { ...fullOptions(), generateReply: genericModel });
+          assert.equal(baseline.message.content, genericText); assert.equal(baseline.autonomy.replyBlocked, false);
+          assert.equal(methodOnly.message.content, baseline.message.content); assert.equal(methodOnly.autonomy.replyBlocked, false);
+          assert.equal(statuses.at(-1)?.methodsCurrent, true); assert.equal(statuses.at(-1)?.signal.status, "recorded");
+          assert.equal(await count(), internalBase + 2, "no Knowledge Center entitlement is added to an existing refs=[] conversation");
+        } finally { await db.admin.query("update knowledge_center_entitlements set enabled=true where workspace_id=$1", [workspace]); }
         await db.admin.query("update project_pipeline_permissions set can_read=false where user_id=$1", [caller]);
         await assert.rejects(runBotChat(chatInput, { ...fullOptions(), generateReply: async () => { throw new Error("MUST_NOT_GENERATE"); } }));
-        assert.equal(await count(), internalBase + 1);
+        assert.equal(await count(), internalBase + 2);
       } finally {
         await db.admin.query("update external_integrations set status='active' where id=$1", [integration]);
         delete process.env.NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS; delete process.env.NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED; delete process.env.VERCEL_ENV;

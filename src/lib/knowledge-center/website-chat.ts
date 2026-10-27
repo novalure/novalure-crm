@@ -129,7 +129,7 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
         const current = await validateCurrentAuthority(input, expected, [], options);
         return current.valid && sameNativeBehavior(before.behavior, current.behavior);
       } }, options);
-    observeNativeBehavior({ methodVersion: before.behavior?.version ?? null, methodsCurrent: before.behavior === null || signal.status === "recorded", signal }, options);
+    observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: before.behavior === null || signal.status === "recorded", signal }, options);
     return answer;
   };
   const knowledge = await retrieveExternalAssistantKnowledge({ ...input, query: websiteKnowledgeQuery(input.message), maxResults: 5 }, options);
@@ -151,7 +151,7 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
   // Revalidate all context exposed to the model, not only the references it chose.
   const current = await validateCurrentAuthority(input, expected, knowledge.excerpts, options);
   if (!sameNativeBehavior(before.behavior, current.behavior)) {
-    observeNativeBehavior({ methodVersion: before.behavior?.version ?? null, methodsCurrent: false, signal: { status: "not_requested" } }, options);
+    observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: false, signal: { status: "not_requested" } }, options);
     return fallback(current.language, "temporarily_unavailable");
   }
   if (!current.valid || !output.answerable || !output.answer.trim() || !output.sourceIndices.length ||
@@ -166,7 +166,7 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
       const latest = await validateCurrentAuthority(input, expected, knowledge.excerpts, options);
       return latest.valid && sameNativeBehavior(before.behavior, latest.behavior);
     } }, options);
-  observeNativeBehavior({ methodVersion: before.behavior?.version ?? null, methodsCurrent: signal.status !== "unconfirmed", signal }, options);
+  observeNativeBehavior({ target: "webchat", methodVersion: before.behavior?.version ?? null, methodsCurrent: signal.status !== "unconfirmed", signal }, options);
   return answer;
 }
 

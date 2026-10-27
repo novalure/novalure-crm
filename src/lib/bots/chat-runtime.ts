@@ -1569,7 +1569,7 @@ export async function runBotChat(input: {
   const signal = !controls.killSwitch && !promptViolations.length && !modelBlockedForLiveFacts && nativeReplyCurrent
     ? await recordNativeBotChatFormat(session, nativeScope, sharedBehavior, nativeReferences, nativeNextStepOutcome(finalReplyText), options)
     : { status: "not_requested" as const };
-  observeNativeBehavior({ methodVersion: sharedBehavior?.version ?? null, methodsCurrent: nativeReplyCurrent, signal }, options);
+  observeNativeBehavior({ target: "agent", methodVersion: sharedBehavior?.version ?? null, methodsCurrent: nativeReplyCurrent, signal }, options);
 
   return {
     approvalId,

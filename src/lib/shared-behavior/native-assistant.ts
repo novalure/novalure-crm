@@ -18,7 +18,7 @@ export type NativeAssistantOptions = TenantTransactionOptions & {
   observeNativeBehavior?: (status: NativeRuntimeStatus) => void;
 };
 export type NativeSignalReceipt = Readonly<{ status: "disabled" | "not_configured" | "not_requested" | "recorded" | "unconfirmed"; replayed?: boolean }>;
-export type NativeRuntimeStatus = Readonly<{ methodVersion: number | null; methodsCurrent: boolean; signal: NativeSignalReceipt }>;
+export type NativeRuntimeStatus = Readonly<{ target: "webchat" | "agent"; methodVersion: number | null; methodsCurrent: boolean; signal: NativeSignalReceipt }>;
 const enabled = (key: string, options: NativeAssistantOptions) => {
   const env = options.nativeBehaviorEnv ?? process.env;
   return env.VERCEL_ENV === "production" && env[key] === "1";
@@ -88,7 +88,20 @@ export function nativeNextStepOutcome(answer: string): LearningOutcome {
 }
 
 export function observeNativeBehavior(status: NativeRuntimeStatus, options: NativeAssistantOptions) {
-  try { void Promise.resolve(options.observeNativeBehavior?.(Object.freeze(status))).catch(() => {}); }
+  if (!enabled("NOVALURE_SHARED_NATIVE_METHODS_ENABLED", options) && !enabled("NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED", options)) return;
+  try {
+    const value = exactBehaviorObject(status, ["target", "methodVersion", "methodsCurrent", "signal"]);
+    const target = behaviorEnum(value.target, ["webchat", "agent"] as const);
+    if ((value.methodVersion !== null && (!Number.isSafeInteger(value.methodVersion) || Number(value.methodVersion) < 0 || Number(value.methodVersion) > 2147483647)) || typeof value.methodsCurrent !== "boolean") return;
+    const receipt = exactBehaviorObject(value.signal, Object.hasOwn(value.signal as object, "replayed") ? ["status", "replayed"] : ["status"]);
+    const signalStatus = behaviorEnum(receipt.status, ["disabled", "not_configured", "not_requested", "recorded", "unconfirmed"] as const);
+    if (Object.hasOwn(receipt, "replayed") && typeof receipt.replayed !== "boolean") return;
+    const safe: NativeRuntimeStatus = Object.freeze({ target, methodVersion: value.methodVersion as number | null, methodsCurrent: value.methodsCurrent,
+      signal: Object.freeze({ status: signalStatus, ...(typeof receipt.replayed === "boolean" ? { replayed: receipt.replayed } : {}) }) });
+    if (options.observeNativeBehavior) void Promise.resolve(options.observeNativeBehavior(safe)).catch(() => {});
+    else console.info(JSON.stringify({ event: "native_shared_behavior_runtime", target, methodVersion: safe.methodVersion,
+      methodCheck: safe.methodVersion === null ? "not_loaded" : safe.methodsCurrent ? "confirmed" : "unconfirmed", signalStatus }));
+  }
   catch { /* A status observer cannot erase a business reply. */ }
 }
 
@@ -102,21 +115,27 @@ export async function verifyNativeBotReply(session: AppSession, scope: NativeBot
       if (member.workspaceId !== scope.workspaceId || !member.permissions.includes("bots:run")) return false;
       const saved = await resolveBotConversationContext({ session: member, ...scope }, options);
       if (saved.projectId !== scope.projectId) return false;
-      await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`knowledge-center:${member.workspaceId}`]);
-      const entitled = await tx.queryOne<{ allowed: boolean }>(`select e.enabled and length(trim(coalesce(e.contract_reference,'')))>0
+      const refs = [...new Map(references.map(ref => [`${ref.sourceId}:${ref.versionId}`, ref])).values()];
+      // Shared code constants do not require a Knowledge Center contract. Only
+      // knowledge actually exposed to the model needs this existing authority.
+      let knowledgeCurrent = true;
+      if (refs.length) {
+        await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`knowledge-center:${member.workspaceId}`]);
+        const entitled = await tx.queryOne<{ allowed: boolean }>(`select e.enabled and length(trim(coalesce(e.contract_reference,'')))>0
         and ($2<>'webchat' or e.features->>'webchatAccess'='true') and not exists(select 1 from workspace_module_settings m
           where m.workspace_id=e.workspace_id and m.module_key in ('knowledge','bots') and m.enabled=false) as allowed
         from knowledge_center_entitlements e where e.workspace_id=$1::uuid`, [member.workspaceId, scope.channel]);
-      const refs = [...new Map(references.map(ref => [`${ref.sourceId}:${ref.versionId}`, ref])).values()];
-      const valid = refs.length ? await tx.query(`select s.id from jsonb_to_recordset($1::jsonb) as r("sourceId" uuid,"versionId" uuid)
+        const valid = await tx.query(`select s.id from jsonb_to_recordset($1::jsonb) as r("sourceId" uuid,"versionId" uuid)
         join knowledge_sources s on s.id=r."sourceId" and s.approved_version_id=r."versionId" and s.workspace_id=$2::uuid and s.archived_at is null
         join knowledge_source_versions v on v.id=r."versionId" and v.source_id=s.id and v.workspace_id=s.workspace_id and v.status='approved'
         join knowledge_areas a on a.id=s.knowledge_area_id and a.workspace_id=s.workspace_id and a.archived_at is null
         join knowledge_area_grants g on g.area_id=a.id and g.workspace_id=a.workspace_id and g.bot_id=$3::uuid and g.channel=$5
         where (a.project_id is null or a.project_id=$4::uuid) and (s.project_id is null or crm_project_access(s.workspace_id,s.project_id,false))
-        `, [JSON.stringify(refs), member.workspaceId, scope.botId, scope.projectId, scope.channel]) : [];
+        `, [JSON.stringify(refs), member.workspaceId, scope.botId, scope.projectId, scope.channel]);
+        knowledgeCurrent = entitled?.allowed === true && valid.length === refs.length;
+      }
       const current = await loadNativeBotChatBehavior(member, scope, options);
-      return entitled?.allowed === true && valid.length === refs.length && sameNativeBehavior(before, current);
+      return knowledgeCurrent && sameNativeBehavior(before, current);
     }, options);
   } catch { return false; }
 }
