@@ -211,6 +211,7 @@ test("website answers use bounded published context and revalidate authority aft
         const prompt = JSON.stringify(shared.doGenerateCalls[0].prompt);
         assert.equal(answer.answerStatus, "grounded"); assert.match(prompt, /method version 2/);
         assert.match(prompt, /When the goal is ambiguous/); assert.match(prompt, /You have NO tools/);
+        assert.match(prompt, /configured language, knowledge, tool and output restrictions remain mandatory/);
         assert.deepEqual(shared.doGenerateCalls[0].tools ?? [], []);
         const botBehavior = await loadNativeBotChatBehavior(session, { workspaceId: workspace, projectId: project, botId: bot, channel: "internal" }, nativeOptions);
         assert.equal(botBehavior?.version, 2);

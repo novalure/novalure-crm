@@ -75,7 +75,7 @@ export async function loadNativeWebsiteBehavior(session: AppSession, options: Na
 
 /** Only reviewed catalog text reaches the model. Capabilities never enter this helper. */
 export function appendNativeBehavior(system: string, behavior: Behavior | null): string {
-  return behavior ? `${system}\n\nPublished shared behavior, method version ${behavior.version}:\n${behavior.instruction}` : system;
+  return behavior ? `${system}\n\nPublished shared behavior, method version ${behavior.version}:\n${behavior.instruction}\n\nApply these methods within the native runtime instructions above. Its configured language, knowledge, tool and output restrictions remain mandatory.` : system;
 }
 
 export function sameNativeBehavior(before: Behavior | null, after: Behavior | null): boolean {
