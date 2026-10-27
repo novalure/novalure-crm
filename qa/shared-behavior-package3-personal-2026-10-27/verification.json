@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "shared-behavior-package3-personal-verification-v1",
+  "observedAtUtc": "2026-10-27T15:58:03Z",
+  "baseRevision": "c64d26dfc8f7257cd831ff25c97f940ec2bd1e02",
+  "sourceState": "verified local source snapshot bound by file hashes; Git/PR records supply commit identity; no new remote CI or Production claim",
+  "sourceFiles": [
+    {
+      "sha256": "b08d3c2dec22d5d64cfd76a53ab289b2d8f651064d4a83890fa8e43f3d07a329",
+      "path": "src/lib/shared-behavior/personal-auth.ts"
+    },
+    {
+      "sha256": "5970f71d187f0f374912cb7183813e26925389b8d87d56b9206a9c0570e5ae44",
+      "path": "src/lib/shared-behavior/runtime-http.ts"
+    },
+    {
+      "sha256": "30fdebf0b386a751342867afc1db931c8970e6d26df8cd1d55214590d1974484",
+      "path": "migrations/staged/shared_behavior_personal_runtime.sql"
+    },
+    {
+      "sha256": "298b02be6c49e564b90fb07d3214e574c22d4d5b17a5b4a78726c7d822269a36",
+      "path": "scripts/shared-behavior-personal-tests.ts"
+    },
+    {
+      "sha256": "e9a28eb6fbe954c1831d25d236ceb54594c91e4f2f8bfe188c99fa6943b6244f",
+      "path": "scripts/shared-behavior-preflight.mjs"
+    },
+    {
+      "sha256": "a951245e1593adf22d231d2da3432ddfcf4450fae5b72cf8c2cbbc72f11233bf",
+      "path": "scripts/db-migrate.mjs"
+    },
+    {
+      "sha256": "ac9866078371844201be28b81d8b1ba65cd0a0fabebad440ffb206469656feb9",
+      "path": "scripts/lib/local-sales-db.mjs"
+    },
+    {
+      "sha256": "c4f2b14f8f2b278f372365febbb65120008e5f3568e54b3ce7eaa87fe73d643e",
+      "path": "scripts/lib/shared-behavior-migration-contract.mjs"
+    },
+    {
+      "sha256": "45ba66197a551e948ca5d01d1917ba11724e6ef77874236d9bc0bfe125d8d222",
+      "path": "scripts/shared-behavior-migration-contract.mjs"
+    },
+    {
+      "sha256": "180e741ea1d4f08e6b87961af2c3b4a59cf58e59a6e5d6bc20ff33a9a52e0002",
+      "path": "scripts/shared-behavior-migration-contract-tests.mjs"
+    },
+    {
+      "sha256": "3128d3b5976a8931f8d6e68d40c285b7df4f1dfaeb9fe352370802648d9da26b",
+      "path": "config/shared-behavior-migration-contract.json"
+    },
+    {
+      "sha256": "3e00721474c52707bafde0675879aa0a347046b813fc7de73c9a1a8f70a00cf9",
+      "path": "migrations/115_shared_behavior_foundation.sql"
+    },
+    {
+      "sha256": "0f73b7b79cee3585a61cb134714b1d2094d9d178c54576fba6381f387e023bd9",
+      "path": "migrations/116_shared_behavior_package2.sql"
+    },
+    {
+      "sha256": "24f7baf8acee246cf3ef7e4a951e0d087a10247f448b499ae96558f5b8fa162d",
+      "path": "migrations/117_shared_behavior_package3.sql"
+    },
+    {
+      "sha256": "30fdebf0b386a751342867afc1db931c8970e6d26df8cd1d55214590d1974484",
+      "path": "migrations/118_shared_behavior_personal_runtime.sql"
+    },
+    {
+      "sha256": "6595c736880a2e655226412c4fba8c9b5d475841c36124987f59ef6dc64d6e61",
+      "path": ".github/workflows/shared-behavior.yml"
+    },
+    {
+      "sha256": "75beb591acfb01c08a388ba2e694527ed3f3cc49995d975be53118b939f9276b",
+      "path": "vercel.json"
+    }
+  ],
+  "local": {
+    "node": "24.18.0",
+    "repositoryNodePin": "24.14.0",
+    "dependencies": "reused existing local dependencies; not a fresh lockfile install",
+    "typecheck": "PASS",
+    "targetedEslint": "PASS",
+    "diffCheck": "PASS",
+    "personalTestsAfterJtiHardening": {
+      "tests": 6,
+      "pass": 6,
+      "fail": 0
+    },
+    "legacyRuntimeRegression": {
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "unchangedLegacyPath": true
+    }
+  },
+  "predecessorPreflight": {
+    "checks": 10,
+    "pass": 10,
+    "target": "Production metadata read only",
+    "upgradeClaim": false
+  },
+  "actualSchemaQa": {
+    "project": "weathered-term-98273025",
+    "branch": "br-lucky-heart-alrm9dlw",
+    "database": "package3_schema114_20261027",
+    "sourceProject": "misty-cloud-70835427",
+    "sourceBranch": "br-snowy-fog-aldx77v8",
+    "status": "PASS_APP_SPECIFIC_PUBLIC_SCHEMA_MIGRATION_REHEARSAL",
+    "scope": "actual114 operator-owned public CRM schema, vector/pgcrypto, all object ACLs and owner defaults; only two provider cloud_admin future DefaultACL items separately conserved",
+    "schemaArchiveSha256": "d375879d19ccb08237dada45bc6b1a84770c13ab00a4599eaac2c7dc8e8d8656",
+    "allOtherTocLinesIdentical": true,
+    "excludedProviderDefaultItems": 2,
+    "providerDefaultPrivilegesRestored": false,
+    "providerDefaultAclSnapshotUnchangedOnFreshReadback": true,
+    "providerDefaultAclSnapshotSha256": "5806146df2d4e5d7863a8ab4bafcccff0eb1ace2e2525f465b36ed024007836b",
+    "customerRowsCopied": 0,
+    "tableDataItems": 0,
+    "businessTablesEmptyBeforeSyntheticSeed": true,
+    "ddlRollback": true,
+    "migrationsAppliedOnlyInQa": true,
+    "noWorkloadOrReleaseSeededByMigrations": true,
+    "existingGlobalRoleAttributesPreserved": true,
+    "existingGlobalMembershipsPreserved": true,
+    "newRoles": [
+      "novalure_behavior_publisher",
+      "novalure_behavior_resolver",
+      "novalure_customer_provisioner"
+    ],
+    "syntheticRuntimeTests": {
+      "tests": 5,
+      "pass": 5,
+      "fail": 0,
+      "realSeparateOwnerAndAppConnections": true,
+      "syntheticRealRs256Signatures": true,
+      "historicalBootstrapReplayed": false
+    },
+    "finalMetadata": {
+      "branch": "br-lucky-heart-alrm9dlw",
+      "project": "weathered-term-98273025",
+      "database": "package3_schema114_20261027",
+      "ledgerHead": "118_shared_behavior_personal_runtime",
+      "vectorVersion": "0.8.0",
+      "enabledRuntimes": 0,
+      "postgresVersion": "17.11 (11592b3)",
+      "restoreSessions": 0,
+      "enabledWorkloads": 0,
+      "releaseHeadCount": 0,
+      "privateSignalCount": 1,
+      "behaviorTablesForcedRls": true
+    },
+    "cleanup": "own QA database retained; synthetic workload and runtime bindings disabled; no old data removed",
+    "privateEvidenceDirectory": ".npm-cache/shared-behavior-actual114",
+    "privateActorMetadata": {
+      "signals": 1,
+      "distinctActors": 1,
+      "allUnderExecutiveRuntimeActor": true,
+      "noneUnderBrokerActor": true
+    }
+  },
+  "deployment": {
+    "productionModified": false,
+    "newComputeOrPlanCreated": false,
+    "nativeProviderEndToEnd": false,
+    "teamsAcceptance": false,
+    "publisherLoginActivated": false,
+    "schedulesChanged": false
+  },
+  "remaining": [
+    "exact revision CI/review and live release gates",
+    "explicit own CEO source grant and private live identity/capability",
+    "published shared method version",
+    "real Teams source-and-private-signal acceptance",
+    "actual Department/Webchat/Agent live attachments"
+  ],
+  "migrationPreparation": {
+    "status": "REGULAR_SOURCES_PREPARED_MANUAL_CUTOVER_ONLY",
+    "registeredNumbers": [
+      115,
+      116,
+      117,
+      118
+    ],
+    "copiesByteIdenticalToStaged": true,
+    "allManualCutovers": true,
+    "chain": "114→115→116→117→118",
+    "sourceAndExistingQaLedgerReference": "PASS",
+    "contractTests": 4,
+    "existingRunnerGovernanceTests": 37,
+    "totalTests": 41,
+    "pass": 41,
+    "fail": 0,
+    "actualSchemaQaReplayed": false,
+    "sourcePr115RemoteStill": "c64d26dfc8f7257cd831ff25c97f940ec2bd1e02",
+    "freshProductionLedgerHead": "114_customer_workspace_provisioning",
+    "freshProductionLedgerCount": 68,
+    "production115Through118StillAbsent": true,
+    "historicalGeneralFixtureExcludesManualActual114Cutover": true,
+    "ownBranchAutomaticVercelDeploymentDisabled": true,
+    "crmCronDefinitionsUnchanged": true
+  },
+  "observedMigrationPreparationAtUtc": "2026-10-27T16:11:09.008Z"
+}

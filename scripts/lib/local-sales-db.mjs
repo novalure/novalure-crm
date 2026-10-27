@@ -135,7 +135,15 @@ export async function applySalesSchema(db, {
       // 111 requires the deliberately omitted 096 gateway and 100 Studio
       // tables. Dedicated Design-C/booking and production-upgrade fixtures
       // apply those predecessors and then the unchanged 111 SQL explicitly.
-      name === "111_booking_public_channels.sql"
+      name === "111_booking_public_channels.sql" ||
+      // Shared behavior is a manual actual114 cutover. Its unchanged SQL and
+      // private runtime are covered by explicit shared tests and the actual
+      // PG17 public-schema rehearsal; this historical sales fixture omits
+      // required 091-100 predecessors and must not claim that upgrade.
+      name === "115_shared_behavior_foundation.sql" ||
+      name === "116_shared_behavior_package2.sql" ||
+      name === "117_shared_behavior_package3.sql" ||
+      name === "118_shared_behavior_personal_runtime.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;

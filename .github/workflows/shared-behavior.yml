@@ -7,7 +7,17 @@ on:
     paths:
       - src/lib/shared-behavior/**
       - scripts/shared-behavior-*.ts
+      - scripts/shared-behavior-*.mjs
       - migrations/staged/shared_behavior*.sql
+      - migrations/115_shared_behavior_foundation.sql
+      - migrations/116_shared_behavior_package2.sql
+      - migrations/117_shared_behavior_package3.sql
+      - migrations/118_shared_behavior_personal_runtime.sql
+      - config/shared-behavior-migration-contract.json
+      - qa/shared-behavior-package3-personal-2026-10-27/**
+      - scripts/lib/shared-behavior-migration-contract.mjs
+      - scripts/db-migrate.mjs
+      - scripts/lib/local-sales-db.mjs
       - .github/workflows/shared-behavior.yml
 
 permissions:
@@ -32,9 +42,13 @@ jobs:
       - run: npm ci
       - name: Fixed catalog and private data rejection
         run: node --import tsx --test scripts/shared-behavior-tests.ts
+      - name: Immutable migration sources, actual predecessor and manual runner chain
+        run: node --test scripts/shared-behavior-migration-contract-tests.mjs
       - name: Real disposable PostgreSQL under a nonprivileged OS user
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-db-tests.ts
       - name: Candidate evaluation, publisher isolation, concurrency and rollback
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-lifecycle-tests.ts
       - name: CEO and department runtime, compartment RLS and scoped transport
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-runtime-tests.ts
+      - name: Exact native personal signature, private context and workload revocation
+        run: node --conditions=react-server --import tsx --test scripts/shared-behavior-personal-tests.ts

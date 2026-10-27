@@ -8,17 +8,20 @@ import { verifyCrmMachineToken, getCrmMachineBearer, type CrmMachineAuthOptions,
 import { knowledgeErrorResponse, knowledgeJson, readKnowledgeJson } from "../knowledge-center/http";
 import { KnowledgeCenterError } from "../knowledge-center/policy";
 import { loadEvelynRuntimeContext, recordEvelynRuntimeSignal } from "./runtime";
+import { selectsPersonalRuntimeVerifier, verifyPersonalRuntimeToken, type PersonalRuntimeAuthOptions } from "./personal-auth";
 type Principal = { id: string; workspace_id: string; actor_user_id: string; identity_id: string };
-export type RuntimeHttpOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions; env?: NodeJS.ProcessEnv };
-const authSql = "select * from public.crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)";
+export type RuntimeHttpOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions; personalAuth?: PersonalRuntimeAuthOptions; env?: NodeJS.ProcessEnv };
+const machineAuthSql = "select * from public.crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)";
 export async function handleEvelynRuntimeRequest(request: Request, action: "context" | "signal", options: RuntimeHttpOptions = {}) {
   try {
     if ((options.env ?? process.env).EVELYN_SHARED_RUNTIME_ENABLED !== "1") return knowledgeJson({ code: "RUNTIME_DISABLED" }, 503);
     if (request.method !== "POST" || request.headers.has("cookie") || request.headers.has("origin") || new URL(request.url).searchParams.size) throw new CrmMachineAuthError("RUNTIME_AUTH_DENIED");
     const token = getCrmMachineBearer(request.headers);
     if (!token) throw new CrmMachineAuthError("RUNTIME_AUTH_DENIED");
-    const claims = await verifyCrmMachineToken(token, options.machineAuth);
-    const params = [claims.identityId,claims.subject,claims.issuer,claims.audience,claims.projectId,claims.ownerId,claims.workspaceId,claims.environment,claims.role];
+    const personal = selectsPersonalRuntimeVerifier(token);
+    const claims = personal ? await verifyPersonalRuntimeToken(token, options.personalAuth) : await verifyCrmMachineToken(token, options.machineAuth);
+    const authSql = personal ? "select * from public.behavior_authenticate_personal_workload()" : machineAuthSql;
+    const params = personal ? [] : [claims.identityId,claims.subject,claims.issuer,claims.audience,claims.projectId,claims.ownerId,claims.workspaceId,claims.environment,claims.role];
     const principal = (await queryAuthenticationRows<Principal>(authSql, params, options))[0];
     if (!principal || principal.workspace_id !== claims.workspaceId || principal.identity_id !== claims.identityId) throw new CrmMachineAuthError("RUNTIME_AUTH_DENIED");
     const body = await readKnowledgeJson(request, action === "context" ? ["query"] : ["eventId","issue","outcome"], 8192);
@@ -26,7 +29,8 @@ export async function handleEvelynRuntimeRequest(request: Request, action: "cont
       workspaceName: "Verified workload", name: "Verified workload", email: "workload@service.invalid", role: "agent", productRole: "novalure_operator",
       permissions: getRolePermissions("agent"), productPermissions: getProductRoleCapabilities("novalure_operator") };
     const guarded = { ...options, verifyWorkload: async (tx: import("../crm-command").TenantTransaction) => {
-      const locked = await tx.queryOne<{ allowed: boolean }>("select public.behavior_lock_workload($1::uuid,$2::uuid) as allowed", [principal.id, principal.actor_user_id]);
+      const lockSql = personal ? "select public.behavior_lock_personal_workload($1::uuid,$2::uuid) as allowed" : "select public.behavior_lock_workload($1::uuid,$2::uuid) as allowed";
+      const locked = await tx.queryOne<{ allowed: boolean }>(lockSql, [principal.id, principal.actor_user_id]);
       const current = await tx.queryOne<Principal>(authSql, params);
       if (!locked?.allowed || !current || crmPayloadDigest(current) !== crmPayloadDigest(principal))
         throw new KnowledgeCenterError("RUNTIME_ACCESS_DENIED", "Runtime access is not granted.", 403);
