@@ -23,6 +23,7 @@ import {
 import { applyNeon061Compatibility } from "./lib/neon-061-compat.mjs";
 import { applyMedia062Compatibility } from "./lib/media-062-compat.mjs";
 import { applyCrm080Compatibility } from "./lib/crm-080-compat.mjs";
+import { assertSharedBehaviorMigrationSources } from "./lib/shared-behavior-migration-contract.mjs";
 import { createMigrationPool, resolveMigrationTransport } from "./lib/migration-pool.mjs";
 
 const targetEnvFiles = Object.freeze({
@@ -57,6 +58,10 @@ const manualCutoverVersions = new Set([
   "098_studio_enquiry_handoff",
   "099_studio_enquiry_public_launch",
   "100_studio_enquiry_production",
+  "115_shared_behavior_foundation",
+  "116_shared_behavior_package2",
+  "117_shared_behavior_package3",
+  "118_shared_behavior_personal_runtime",
   "108_universal_booking",
   "109_booking_setup_communications",
   "110_account_ui_language_preference",
@@ -82,6 +87,10 @@ const migrationDependencies = new Map([
   ["098_studio_enquiry_handoff", "097_studio_sales_calendar_bridge"],
   ["099_studio_enquiry_public_launch", "098_studio_enquiry_handoff"],
   ["100_studio_enquiry_production", "096_public_integration_gateway"],
+  ["115_shared_behavior_foundation", "114_customer_workspace_provisioning"],
+  ["116_shared_behavior_package2", "115_shared_behavior_foundation"],
+  ["117_shared_behavior_package3", "116_shared_behavior_package2"],
+  ["118_shared_behavior_personal_runtime", "117_shared_behavior_package3"],
   ["108_knowledge_connected_assistant_quota", "101_knowledge_center"],
   ["108_universal_booking", "106_crm_operational_readers"],
   ["109_booking_setup_communications", "108_universal_booking"],
@@ -446,8 +455,12 @@ function consumeMigrationPlanToken(path, expectedToken) {
   }
 }
 
+export function isManualCutoverVersion(version) { return manualCutoverVersions.has(version); }
+
 function readMigrations() {
   const migrationsDir = join(process.cwd(), "migrations");
+  if (readdirSync(migrationsDir).some(file => /^11[5-8]_shared_behavior_/.test(file)))
+    assertSharedBehaviorMigrationSources({ cwd: process.cwd() });
 
   return readdirSync(migrationsDir)
     .filter((file) => file.endsWith(".sql"))
@@ -464,7 +477,7 @@ function readMigrations() {
         content,
         checksum: checksum(content),
         file,
-        manualCutover: manualCutoverVersions.has(version),
+        manualCutover: isManualCutoverVersion(version),
         name: match[2],
         number: Number(match[1]),
         path: gitPath,
