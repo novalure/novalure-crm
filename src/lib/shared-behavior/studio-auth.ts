@@ -10,7 +10,7 @@ export const studioRuntimeIdentity = Object.freeze({
   projectId: "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp",
   project: "novalure-web-design", ownerId: "team_sjD78IkSicXJK6TAOR1JC7Wv", owner: "novalure", environment: "production",
   publicOrigin: "https://novalurestudio.ie",
-  publicSiteKey: "nov_pk_mO7d0pjmZ4N3OFNfK2vzsCVazDbxdtFc",
+  publicSiteKey: "nov_pk_mO7d0pjmZ4N3OFNfK2vzsCVazDbxdtFc", // gitleaks:allow -- Public browser selector; visitor session and Origin still authorize knowledge.
   integrationId: "09c83732-ead0-4bea-9fa6-a49de88e23d2",
   workspaceId: "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
   crmProjectId: "be5ff97d-69ce-4fc1-a35d-a8fe4a0ffb6c",
