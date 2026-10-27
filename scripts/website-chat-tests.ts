@@ -12,6 +12,10 @@ import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { TenantTransactionOptions } from "../src/lib/db/tenant-client";
 import { assignKnowledgeAreas, createKnowledgeArea, createKnowledgeSource, publishKnowledgeSource } from "../src/lib/knowledge-center/repository";
 import { answerWebsiteChat, handleWebsiteChatRequest, websiteChatLimits, websiteChatOptions, websiteKnowledgeQuery } from "../src/lib/knowledge-center/website-chat";
+import { behaviorRuleIds } from "../src/lib/shared-behavior/catalog";
+import { loadNativeBotChatBehavior } from "../src/lib/shared-behavior/native-assistant";
+import type { NativeRuntimeStatus } from "../src/lib/shared-behavior/native-assistant";
+import { runBotChat } from "../src/lib/bots/chat-runtime";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 function model(answer: unknown = { answerable: true, answer: "Website package price is EUR 499.", sourceIndices: [0] }, during?: () => Promise<void>) {
@@ -24,7 +28,7 @@ function model(answer: unknown = { answerable: true, answer: "Website package pr
 
 test("website answers use bounded published context and revalidate authority after a synthetic model call", { timeout: 240_000 }, async t => {
   const db = await startLocalSalesDb();
-  const keys = ["DATABASE_URL", "CRM_LOCAL_TEST_DATABASE", "NODE_ENV", "NOVALURE_ABUSE_SECRET", "NOVALURE_TRUSTED_CLIENT_IP_HEADER", "VERCEL", "VERCEL_ENV", "VERCEL_URL"] as const;
+  const keys = ["DATABASE_URL", "CRM_LOCAL_TEST_DATABASE", "NODE_ENV", "NOVALURE_ABUSE_SECRET", "NOVALURE_TRUSTED_CLIENT_IP_HEADER", "VERCEL", "VERCEL_ENV", "VERCEL_URL", "NOVALURE_SHARED_NATIVE_METHODS_ENABLED", "NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED", "NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS"] as const;
   const prior = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
     await applySalesSchema(db, { maxMigrationNumber: 90 });
@@ -184,6 +188,153 @@ test("website answers use bounded published context and revalidate authority aft
       }
       assert.equal(status, 429);
       assert.equal(provider.doGenerateCalls.length, 0);
+    });
+    await t.test("native default-OFF hooks preserve answers; enabled methods obey the published target", async () => {
+      const off = model();
+      await answerWebsiteChat(input, { ...options, model: off });
+      assert.doesNotMatch(JSON.stringify(off.doGenerateCalls[0].prompt), /Published shared behavior/);
+      // Synthetic head fixtures test consumption only. They do not exercise or
+      // authorize publication; actual publisher lifecycle has separate tests.
+      for (const file of ["115_shared_behavior_foundation.sql", "116_shared_behavior_package2.sql", "117_shared_behavior_package3.sql", "118_shared_behavior_personal_runtime.sql"]) {
+        await db.admin.query(await readFile(`migrations/${file}`, "utf8"));
+      }
+      await db.admin.query("insert into behavior_releases values(1,$1,array['ceo'])", [behaviorRuleIds]);
+      await db.admin.query("insert into behavior_release_head(singleton,version,revision) values(true,1,1)");
+      const nativeOptions = { ...options, nativeBehaviorEnv: { VERCEL_ENV: "production", NOVALURE_SHARED_NATIVE_METHODS_ENABLED: "1" } };
+      try {
+        const ceoOnly = model(); await answerWebsiteChat(input, { ...nativeOptions, model: ceoOnly });
+        const ceoPrompt = JSON.stringify(ceoOnly.doGenerateCalls[0].prompt);
+        assert.match(ceoPrompt, /method version 1/); assert.doesNotMatch(ceoPrompt, /When the goal is ambiguous/);
+        await db.admin.query("insert into behavior_releases values(2,$1,array['ceo','webchat','agent'])", [behaviorRuleIds]);
+        await db.admin.query("update behavior_release_head set version=2,revision=2");
+        const shared = model(); const answer = await answerWebsiteChat(input, { ...nativeOptions, model: shared });
+        const prompt = JSON.stringify(shared.doGenerateCalls[0].prompt);
+        assert.equal(answer.answerStatus, "grounded"); assert.match(prompt, /method version 2/);
+        assert.match(prompt, /When the goal is ambiguous/); assert.match(prompt, /You have NO tools/);
+        assert.deepEqual(shared.doGenerateCalls[0].tools ?? [], []);
+        const botBehavior = await loadNativeBotChatBehavior(session, { workspaceId: workspace, projectId: project, botId: bot, channel: "internal" }, nativeOptions);
+        assert.equal(botBehavior?.version, 2);
+        assert.equal(await loadNativeBotChatBehavior(session, { workspaceId: workspace, projectId: project, botId: bot, channel: "telephone" }, nativeOptions), null);
+        await assert.rejects(loadNativeBotChatBehavior(session, { workspaceId: workspace, projectId: null, botId: bot, channel: "internal" }, nativeOptions));
+        await assert.rejects(loadNativeBotChatBehavior(session, { workspaceId: foreignWorkspace, projectId: project, botId: bot, channel: "internal" }, nativeOptions));
+      } finally { delete process.env.NOVALURE_SHARED_NATIVE_METHODS_ENABLED; delete process.env.VERCEL_ENV; }
+    });
+    await t.test("real fallback hook records only per-assistant private format signals and fails closed on mismatches or revocation", async () => {
+      const actor1 = randomUUID(), actor2 = randomUUID(), integration2 = randomUUID(), visitor2 = randomUUID();
+      const capability1 = randomBytes(32).toString("base64url"), capability2 = randomBytes(32).toString("base64url");
+      const siteKey2 = `nov_pk_${randomBytes(24).toString("base64url")}`, token2 = randomBytes(32).toString("base64url");
+      await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'SYNTHETIC private1','private1@example.invalid','agent','project_sales_member','active'),($2,$3,'SYNTHETIC private2','private2@example.invalid','agent','project_sales_member','active')", [actor1, actor2, workspace]);
+      // Read-only access to the exact bot's project metadata; zero source/area
+      // assignments for either private actor or the internal knowledge channel.
+      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false),($1,$2,$4,true,false)", [workspace, project, actor1, actor2]);
+      await db.admin.query("insert into behavior_runtime_bindings(workspace_id,broker_actor_id,actor_id,bot_id,department,token_hash,enabled,expires_at) values($1,$2,$3,$4,'support',$5,true,now()+interval '1 hour'),($1,$2,$6,$7,'support',$8,true,now()+interval '1 hour')", [workspace, owner, actor1, bot, createHash("sha256").update(capability1).digest("hex"), actor2, alternateBot, createHash("sha256").update(capability2).digest("hex")]);
+      await db.admin.query("insert into external_integrations(id,public_site_key,workspace_id,project_id,integration_type,status,mode,allowed_origins,capabilities,configuration,created_by) values($1,$2,$3,$4,'website_chat','active','training',array[$5],array['chat.start','chat.context'],$6::jsonb,$7)", [integration2, siteKey2, workspace, project, origin, JSON.stringify({ knowledgeAssistantId: alternateBot }), owner]);
+      await db.admin.query("insert into external_integration_widget_configs(integration_id,workspace_id,chat_enabled,enabled_capabilities) values($1,$2,true,array['chat.start','chat.context'])", [integration2, workspace]);
+      await db.admin.query("insert into external_chat_sessions(id,integration_id,workspace_id,project_id,session_token_hash,idempotency_hash,mode,language,synthetic) values($1,$2,$3,$4,$5,$6,'training','en',true)", [visitor2, integration2, workspace, project, createHash("sha256").update(token2).digest("hex"), createHash("sha256").update(randomUUID()).digest("hex")]);
+      const bindings = [
+        { workspaceId: workspace, projectId: project, botId: bot, integrationId: integration, brokerActorId: owner, actorId: actor1, capability: capability1 },
+        { workspaceId: workspace, projectId: project, botId: alternateBot, integrationId: integration2, brokerActorId: owner, actorId: actor2, capability: capability2 },
+      ];
+      const configure = (rows: unknown = bindings) => { process.env.NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS = JSON.stringify({ version: 1, bindings: rows }); };
+      const count = async () => Number((await db.admin.query("select count(*) from behavior_learning_signals")).rows[0].count);
+      const fallbackInput = { ...input, message: "unmatchedanchor" };
+      Object.assign(process.env, { NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED: "1" }); configure();
+      const nativeOptions = () => ({ ...options, nativeBehaviorEnv: { VERCEL_ENV: "production", NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED: "1", NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS: process.env.NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS } });
+      try {
+        const before = await count(), archiveBefore = await counters();
+        const one = await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() });
+        const two = await answerWebsiteChat({ ...fallbackInput, publicSiteKey: siteKey2, sessionId: visitor2, sessionToken: token2 }, { ...nativeOptions(), model: model() });
+        assert.equal(one.answerStatus, "insufficient_knowledge"); assert.match(one.answer, /contact the team/);
+        assert.equal(two.answerStatus, "insufficient_knowledge"); assert.equal(await count(), before + 2);
+        const rows = (await db.admin.query("select workspace_id,actor_id,event_id,issue,outcome from behavior_learning_signals order by actor_id")).rows;
+        assert.deepEqual(new Set(rows.map(row => row.actor_id)), new Set([actor1, actor2]));
+        for (const row of rows) { assert.equal(row.issue, "unclear_next_step"); assert.equal(row.outcome, "fail", "unchanged safe fallback lacks the measured label; this is not a semantic-quality failure"); assert.notEqual(row.event_id, visitor); assert.notEqual(row.event_id, visitor2); }
+        assert.equal((await withCrmRead(session, tx => tx.query("select * from behavior_learning_signals"), options)).length, 0, "shared owner broker cannot read either private actor's signals");
+        const privateSession: AppSession = { ...session, userId: actor1, role: "agent", productRole: "project_sales_member" };
+        assert.equal((await withCrmRead(privateSession, tx => tx.query("select * from behavior_learning_signals"), options)).length, 1);
+        assert.equal((await withCrmRead(privateSession, tx => tx.query("select id from knowledge_sources"), options)).length, 0, "private signal actor receives no source knowledge through the existing restrictive runtime policy");
+        const archiveAfter = await counters(); assert.equal(archiveAfter.messages, archiveBefore.messages); assert.equal(archiveAfter.leads, archiveBefore.leads);
+        for (const invalid of [[], [{ ...bindings[0], actorId: actor2 }], [{ ...bindings[0], capability: capability2 }], [{ ...bindings[0], projectId: null }], [bindings[0], { ...bindings[1], actorId: actor1 }]]) {
+          configure(invalid); const answer = await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() });
+          assert.equal(answer.answerStatus, "insufficient_knowledge"); assert.equal(await count(), before + 2);
+          assert.doesNotMatch(JSON.stringify(answer), new RegExp(`${capability1}|${capability2}|${actor1}|${actor2}`));
+        }
+        configure(); await db.admin.query("update behavior_runtime_bindings set enabled=false where actor_id=$1", [actor1]);
+        await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() }); assert.equal(await count(), before + 2);
+        await db.admin.query("update behavior_runtime_bindings set enabled=true where actor_id=$1", [actor1]);
+        await db.admin.query("update project_pipeline_permissions set can_read=false where user_id=$1", [actor1]);
+        await answerWebsiteChat(fallbackInput, { ...nativeOptions(), model: model() }); assert.equal(await count(), before + 2, "missing private bot metadata scope does not borrow the owner's rights");
+        await db.admin.query("update project_pipeline_permissions set can_read=true where user_id=$1", [actor1]);
+        await assert.rejects(answerWebsiteChat(input, { ...nativeOptions(), model: model(undefined, async () => { await db.admin.query("update external_integrations set status='disabled' where id=$1", [integration]); }) }));
+        assert.equal(await count(), before + 2);
+        await db.admin.query("update external_integrations set status='active' where id=$1", [integration]);
+
+        const statuses: NativeRuntimeStatus[] = [];
+        const fullOptions = () => ({ ...nativeOptions(), nativeBehaviorEnv: { ...nativeOptions().nativeBehaviorEnv, NOVALURE_SHARED_NATIVE_METHODS_ENABLED: "1" }, observeNativeBehavior: (status: NativeRuntimeStatus) => { statuses.push(status); } });
+        const normalBase = await count();
+        for (const [answerText, expectedOutcome] of [["Website package price is EUR 499. Next step: Contact the team.", "pass"], ["Website package price is EUR 499.", "fail"]]) {
+          const answer = await answerWebsiteChat(input, { ...fullOptions(), model: model({ answerable: true, answer: answerText, sourceIndices: [0] }) });
+          assert.equal(answer.answerStatus, "grounded"); assert.equal(answer.answer, answerText);
+          assert.equal(statuses.at(-1)?.signal.status, "recorded"); assert.equal(statuses.at(-1)?.methodVersion, 2);
+          const last = (await db.admin.query("select issue,outcome from behavior_learning_signals order by created_at desc limit 1")).rows[0];
+          assert.equal(last.issue, "unclear_next_step"); assert.equal(last.outcome, expectedOutcome);
+        }
+        assert.equal(await count(), normalBase + 2);
+        const changed = await answerWebsiteChat(input, { ...fullOptions(), model: model(undefined, async () => { await db.admin.query("update behavior_release_head set version=1,revision=3"); }) });
+        assert.equal(changed.answerStatus, "temporarily_unavailable"); assert.deepEqual(changed.citations, []);
+        assert.equal(statuses.at(-1)?.methodsCurrent, false); assert.equal(statuses.at(-1)?.signal.status, "not_requested");
+        assert.equal(await count(), normalBase + 2);
+        await db.admin.query("update behavior_release_head set version=2,revision=4");
+
+        let committedSignalReplyLost = false;
+        const uncertainPool = { connect: async () => {
+          const client = await db.pool.connect(); let inserted = false;
+          return new Proxy(client, { get(target, property) {
+            if (property === "release") return target.release.bind(target);
+            if (property !== "query") return Reflect.get(target, property);
+            return async (query: string, parameters?: unknown[]) => {
+              if (/insert into behavior_learning_signals/u.test(query)) inserted = true;
+              const result = await target.query(query, parameters);
+              if (query === "commit" && inserted && !committedSignalReplyLost) { committedSignalReplyLost = true; throw new Error("SYNTHETIC_COMMIT_RESPONSE_LOST"); }
+              return result;
+            };
+          } });
+        } };
+        const preserved = await answerWebsiteChat(input, { ...fullOptions(), pool: uncertainPool as unknown as NonNullable<TenantTransactionOptions["pool"]>, model: model() });
+        assert.equal(preserved.answerStatus, "grounded"); assert.equal(preserved.answer, "Website package price is EUR 499.");
+        assert.equal(committedSignalReplyLost, true); assert.equal(statuses.at(-1)?.signal.status, "unconfirmed");
+        assert.equal(await count(), normalBase + 3, "committed but unknown signal is not claimed absent and not retried");
+
+        const caller = randomUUID();
+        await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC actual bot caller','caller@example.invalid','agent','project_sales_member','active')", [caller, workspace]);
+        await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)", [workspace, project, caller]);
+        const callerSession: AppSession = { ...session, userId: caller, role: "agent", productRole: "project_sales_member" };
+        const chatInput = { session: callerSession, language: "en" as const, payload: { botId: bot, channel: "webchat", prompt: "studioanchor", testMode: true } };
+        configure([{ ...bindings[0], integrationId: null }, bindings[1]]);
+        const internalBase = await count();
+        const result = await runBotChat(chatInput, { ...fullOptions(), generateReply: async generated => {
+          assert.match(generated.system, /method version 2/);
+          assert.doesNotMatch(JSON.stringify(generated), new RegExp(`${capability1}|${actor1}|${owner}`));
+          return { text: "Website package price is EUR 499. Next step: Contact the team.", model: "SYNTHETIC", provider: "SYNTHETIC", external: false };
+        } });
+        assert.equal(result.autonomy.replyBlocked, false); assert.equal(statuses.at(-1)?.signal.status, "recorded");
+        assert.equal(await count(), internalBase + 1);
+        assert.equal((await db.admin.query("select actor_id from behavior_learning_signals order by created_at desc limit 1")).rows[0].actor_id, actor1);
+        assert.equal((await db.admin.query("select count(*) from behavior_learning_signals where actor_id=$1", [caller])).rows[0].count, "0");
+        const stale = await runBotChat(chatInput, { ...fullOptions(), generateReply: async () => {
+          await db.admin.query("delete from knowledge_area_grants where bot_id=$1", [bot]);
+          return { text: "Website package price is EUR 499. Next step: Contact the team.", model: "SYNTHETIC", provider: "SYNTHETIC", external: false };
+        } });
+        assert.equal(stale.autonomy.replyBlocked, true); assert.doesNotMatch(JSON.stringify(stale), /EUR 499|SYNTHETIC Studio packages/);
+        assert.equal(await count(), internalBase + 1); assert.equal(statuses.at(-1)?.signal.status, "not_requested");
+        await assignKnowledgeAreas(session, { botId: bot, channel: "webchat", areaIds: [area.id] }, options);
+        await db.admin.query("update project_pipeline_permissions set can_read=false where user_id=$1", [caller]);
+        await assert.rejects(runBotChat(chatInput, { ...fullOptions(), generateReply: async () => { throw new Error("MUST_NOT_GENERATE"); } }));
+        assert.equal(await count(), internalBase + 1);
+      } finally {
+        await db.admin.query("update external_integrations set status='active' where id=$1", [integration]);
+        delete process.env.NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS; delete process.env.NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED; delete process.env.VERCEL_ENV;
+      }
     });
   } finally {
     await closeLocalTestPool();
