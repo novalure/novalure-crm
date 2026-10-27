@@ -52,3 +52,5 @@ jobs:
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-runtime-tests.ts
       - name: Exact native personal signature, private context and workload revocation
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-personal-tests.ts
+      - name: Exact Studio signature, existing public knowledge and private assistant signals
+        run: node --conditions=react-server --import tsx --test scripts/shared-behavior-studio-tests.ts

@@ -9,11 +9,16 @@ import { knowledgeErrorResponse, knowledgeJson, readKnowledgeJson } from "../kno
 import { KnowledgeCenterError } from "../knowledge-center/policy";
 import { loadEvelynRuntimeContext, recordEvelynRuntimeSignal } from "./runtime";
 import { selectsPersonalRuntimeVerifier, verifyPersonalRuntimeToken, type PersonalRuntimeAuthOptions } from "./personal-auth";
+import { selectsStudioRuntimeVerifier, type StudioRuntimeAuthOptions } from "./studio-auth";
+import { handleStudioRuntimeSignal } from "./studio-runtime-http";
+import type { NativeAssistantOptions } from "./native-assistant";
 type Principal = { id: string; workspace_id: string; actor_user_id: string; identity_id: string };
-export type RuntimeHttpOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions; personalAuth?: PersonalRuntimeAuthOptions; env?: NodeJS.ProcessEnv };
+export type RuntimeHttpOptions = TenantTransactionOptions & NativeAssistantOptions & { machineAuth?: CrmMachineAuthOptions; personalAuth?: PersonalRuntimeAuthOptions; studioAuth?: StudioRuntimeAuthOptions; env?: NodeJS.ProcessEnv };
 const machineAuthSql = "select * from public.crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)";
 export async function handleEvelynRuntimeRequest(request: Request, action: "context" | "signal", options: RuntimeHttpOptions = {}) {
   try {
+    const studioToken = getCrmMachineBearer(request.headers);
+    if (action === "signal" && studioToken && selectsStudioRuntimeVerifier(studioToken)) return handleStudioRuntimeSignal(request, options);
     if ((options.env ?? process.env).EVELYN_SHARED_RUNTIME_ENABLED !== "1") return knowledgeJson({ code: "RUNTIME_DISABLED" }, 503);
     if (request.method !== "POST" || request.headers.has("cookie") || request.headers.has("origin") || new URL(request.url).searchParams.size) throw new CrmMachineAuthError("RUNTIME_AUTH_DENIED");
     const token = getCrmMachineBearer(request.headers);

@@ -56,6 +56,12 @@ function signalBindings(options: NativeAssistantOptions): readonly SignalBinding
   });
 }
 
+/** Server-only lookup after the caller's concrete native authority is verified. */
+export function findNativeAssistantSignalBinding(scope: Scope & { integrationId: string; brokerActorId: string }, options: NativeAssistantOptions = {}) {
+  return signalBindings(options).find(row => row.workspaceId === scope.workspaceId && row.projectId === scope.projectId && row.botId === scope.botId &&
+    row.integrationId === scope.integrationId && row.brokerActorId === scope.brokerActorId);
+}
+
 /** The caller still reads knowledge and executes existing tools as itself. */
 export async function loadNativeBotChatBehavior(session: AppSession, scope: NativeBotScope, options: NativeAssistantOptions = {}): Promise<Behavior | null> {
   if (!enabled("NOVALURE_SHARED_NATIVE_METHODS_ENABLED", options)) return null;
