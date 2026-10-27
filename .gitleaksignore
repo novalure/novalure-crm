@@ -39,3 +39,5 @@ scripts/studio-enquiry-tests.ts:generic-api-key:178
 # The current test generates its fixture key randomly; retain every scanner rule
 # and allow only this exact historical finding, which cannot authenticate anywhere.
 d9734433397d9a831ceb735091e5117995fa884c:scripts/booking-channel-adapter-tests.ts:generic-api-key:69
+# Historical public browser integration selector; no private runtime capability.
+485850509fbbeb327d1228761774456c9d049003:src/lib/shared-behavior/studio-auth.ts:generic-api-key:13
