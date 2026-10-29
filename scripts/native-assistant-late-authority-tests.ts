@@ -118,7 +118,7 @@ test("native final authority gates actual handler delivery while optional signal
           assert.equal(statuses.at(-1)?.signal.status, "authority_changed"); assert.equal(statuses.at(-1)?.methodsCurrent, false);
           assert.doesNotMatch(JSON.stringify(result), /EUR 499|SYNTHETIC protected price/);
           assert.doesNotMatch(JSON.stringify(result), new RegExp(`${source.id}|${source.approvedVersionId}`));
-          if (target === "website") { assert.equal(result.answerStatus, "insufficient_knowledge"); assert.deepEqual(result.citations, []); }
+          if (target === "website") { assert.equal(result.answerStatus, kind === "grant" ? "temporarily_unavailable" : "insufficient_knowledge"); assert.equal(result.operationalReason, kind === "grant" ? "access_denied" : undefined); assert.deepEqual(result.citations, []); }
           else { assert.equal(result.autonomy.replyBlocked, true); assert.equal(result.runSummary.humanHandoffRequired, true); }
           assert.equal(await counts(), count, "known denial never records a success or private format event");
         } finally {
@@ -145,7 +145,7 @@ test("native final authority gates actual handler delivery while optional signal
         assert.equal(statuses.at(-1)?.signal.status, "authority_changed"); assert.equal(statuses.at(-1)?.methodsCurrent, false);
         assert.doesNotMatch(JSON.stringify(result), /EUR 499|SYNTHETIC protected price/);
         assert.doesNotMatch(JSON.stringify(result), new RegExp(`${source.id}|${source.approvedVersionId}`));
-        if (target === "website") { assert.equal(result.answerStatus, "insufficient_knowledge"); assert.deepEqual(result.citations, []); }
+        if (target === "website") { assert.equal(result.answerStatus, "temporarily_unavailable"); assert.equal(result.operationalReason, "access_denied"); assert.deepEqual(result.citations, []); }
         else { assert.equal(result.autonomy.replyBlocked, true); assert.equal(result.runSummary.humanHandoffRequired, true); }
         assert.equal(phase.state().inserts, 0); assert.equal(await counts(), count, "a string-valued entitlement never records a private signal");
       } finally {
@@ -161,7 +161,7 @@ test("native final authority gates actual handler delivery while optional signal
         assert.equal(phase.state().referenceChecks, 2); assert.equal(phase.state().fenceRevoked, true);
         assert.equal(phase.state().fenceReads, 1, "the private workload integration fence observed invalid authority after the valid callback");
         assert.equal(phase.state().inserts, 0); assert.equal(await counts(), count);
-        assert.equal(answer.answerStatus, "insufficient_knowledge"); assert.deepEqual(answer.citations, []);
+        assert.equal(answer.answerStatus, "temporarily_unavailable"); assert.equal(answer.operationalReason, "access_denied"); assert.deepEqual(answer.citations, []);
         assert.doesNotMatch(JSON.stringify(answer), /EUR 499|SYNTHETIC protected price/);
         assert.equal(statuses.at(-1)?.signal.status, "authority_changed"); assert.equal(statuses.at(-1)?.methodsCurrent, false);
       } finally {
