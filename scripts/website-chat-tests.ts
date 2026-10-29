@@ -3,6 +3,8 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { MockLanguageModelV4 } from "ai/test";
+import { APICallError } from "ai";
+import { GatewayAuthenticationError, GatewayRateLimitError, GatewayResponseError } from "@ai-sdk/gateway";
 import type { AppSession } from "../src/lib/auth/session";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
@@ -12,6 +14,7 @@ import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { TenantTransactionOptions } from "../src/lib/db/tenant-client";
 import { assignKnowledgeAreas, createKnowledgeArea, createKnowledgeSource, publishKnowledgeSource } from "../src/lib/knowledge-center/repository";
 import { answerWebsiteChat, handleWebsiteChatRequest, websiteChatLimits, websiteChatOptions, websiteKnowledgeQuery } from "../src/lib/knowledge-center/website-chat";
+import { handleExternalAssistantKnowledgeRequest } from "../src/lib/knowledge-center/external-assistant-http";
 import { behaviorRuleIds } from "../src/lib/shared-behavior/catalog";
 import { loadNativeBotChatBehavior, observeNativeBehavior } from "../src/lib/shared-behavior/native-assistant";
 import type { NativeRuntimeStatus } from "../src/lib/shared-behavior/native-assistant";
@@ -129,6 +132,43 @@ test("website answers use bounded published context and revalidate authority aft
         assert.equal(provider.doGenerateCalls.length, 1, "no provider retry");
       }
     });
+    await t.test("typed provider 402, auth, rate and service errors expose only a closed operational reason with no retry", async () => {
+      const marker = "SYNTHETIC_PRIVATE_PROVIDER_DETAIL";
+      for (const [error, expected] of [
+        ...([402, 401, 403, 429, 500] as const).map(statusCode => [new APICallError({ message: marker, url: "https://provider.example.invalid", requestBodyValues: { marker }, responseBody: marker, statusCode }), statusCode === 402 ? "budget_limit" : [401, 403].includes(statusCode) ? "access_denied" : statusCode === 429 ? "provider_rate_limit" : "service_unavailable"] as const),
+        [new GatewayResponseError({ message: marker, statusCode: 402 }), "budget_limit"],
+        [new GatewayAuthenticationError({ message: marker }), "access_denied"],
+        [new GatewayRateLimitError({ message: marker }), "provider_rate_limit"],
+        [{ statusCode: 402, message: marker }, "service_unavailable"],
+      ] as const) {
+        const provider = new MockLanguageModelV4({ doGenerate: async () => { throw error; } });
+        const answer = await answerWebsiteChat(input, { ...options, model: provider });
+        assert.equal(answer.answerStatus, "temporarily_unavailable"); assert.equal(answer.operationalReason, expected);
+        assert.deepEqual(answer.citations, []); assert.doesNotMatch(JSON.stringify(answer), new RegExp(marker));
+        assert.equal(provider.doGenerateCalls.length, 1, "the error causes no model retry");
+      }
+    });
+    await t.test("monthly quota, entitlement and SQL timeout are unavailable rather than missing knowledge, including Studio's HTTP context", async () => {
+      const contextRequest = () => new Request(`https://crm.example.invalid/api/public/integrations/chat/knowledge?site_key=${publicSiteKey}`, { method: "POST", headers: { "content-type": "application/json", origin, "x-novalure-session-token": token, "x-test-client-ip": "203.0.113.92" }, body: JSON.stringify({ sessionId: visitor, query: "studioanchor", maxResults: 5 }) });
+      try {
+        await db.admin.query("update knowledge_center_entitlements set max_queries_per_month=1 where workspace_id=$1", [workspace]);
+        const provider = model(), answer = await answerWebsiteChat(input, { ...options, model: provider });
+        assert.equal(answer.answerStatus, "temporarily_unavailable"); assert.equal(answer.operationalReason, "budget_limit"); assert.deepEqual(answer.citations, []); assert.equal(provider.doGenerateCalls.length, 0);
+        const response = await handleExternalAssistantKnowledgeRequest(contextRequest(), options); assert.equal(response.status, 409); assert.doesNotMatch(await response.text(), /insufficient_knowledge|studioanchor/);
+        await db.admin.query("update knowledge_center_entitlements set enabled=false where workspace_id=$1", [workspace]);
+        const denied = await answerWebsiteChat(input, { ...options, model: provider }); assert.equal(denied.answerStatus, "temporarily_unavailable"); assert.equal(denied.operationalReason, "access_denied"); assert.equal(provider.doGenerateCalls.length, 0);
+        assert.equal((await handleExternalAssistantKnowledgeRequest(contextRequest(), options)).status, 403);
+      } finally { await db.admin.query("update knowledge_center_entitlements set enabled=true,max_queries_per_month=1000 where workspace_id=$1", [workspace]); }
+      for (const code of ["57014", "55P03"]) {
+        const faultPool = { connect: async () => { const c = await db.pool.connect(); return new Proxy(c, { get(target, key) {
+          if (key === "query") return async (sql: string, values?: unknown[]) => { if (sql.includes("from knowledge_center_usage(")) throw Object.assign(new Error("SYNTHETIC_PRIVATE_SQL_DETAIL"), { code }); return target.query(sql, values); };
+          const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+        } }); } };
+        const provider = model(), failure = { ...options, pool: faultPool as unknown as NonNullable<TenantTransactionOptions["pool"]>, model: provider };
+        const answer = await answerWebsiteChat(input, failure); assert.equal(answer.answerStatus, "temporarily_unavailable"); assert.equal(answer.operationalReason, "service_unavailable"); assert.deepEqual(answer.citations, []); assert.doesNotMatch(JSON.stringify(answer), /SYNTHETIC_PRIVATE_SQL_DETAIL/); assert.equal(provider.doGenerateCalls.length, 0);
+        assert.equal((await handleExternalAssistantKnowledgeRequest(contextRequest(), failure)).status, 503);
+      }
+    });
     await t.test("grant, publication, entitlement and division changes during generation remove the answer", async () => {
       for (const [change, restore] of [
         ["delete from knowledge_area_grants where bot_id='" + bot + "'", ""],
@@ -146,7 +186,9 @@ test("website answers use bounded published context and revalidate authority aft
             } catch (error) { mutationError = error; throw error; }
           }) });
           assert.equal(mutationError, undefined, `Fixture mutation failed: ${change}`);
-          assert.equal(answer.answerStatus, "insufficient_knowledge", change);
+          const accessChanged = !change.includes("division");
+          assert.equal(answer.answerStatus, accessChanged ? "temporarily_unavailable" : "insufficient_knowledge", change);
+          assert.equal(answer.operationalReason, accessChanged ? "access_denied" : undefined, change);
           assert.deepEqual(answer.citations, []);
         } finally {
           if (restore.includes("approved_version_id")) await withCrmRead(session, tx => tx.execute(restore), options);
