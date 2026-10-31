@@ -1,0 +1,278 @@
+{
+  "format": "knowledge-operational-production-observations-v2",
+  "observedAtUtc": "2026-10-31T21:02:56Z",
+  "supplementedAtUtc": "2026-10-31 21:08:26 UTC",
+  "scope": "Confirm existing production monitoring; reconcile deployment, database, private-storage and recovery evidence; documentation update.",
+  "productionMutationsPerformed": 0,
+  "checksWereReadOnly": true,
+  "testsOrScansTriggered": 0,
+  "production": {
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "deploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+    "readyState": "READY",
+    "target": "production",
+    "sourceRevision": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+    "sourceBranch": "codex/continuous-operation-20261029-crm",
+    "nodeVersion": "24.x",
+    "aliasesBothVerified": [
+      "www.novalure-crm.app",
+      "novalure-crm.vercel.app"
+    ],
+    "cron": {
+      "path": "/api/cron/knowledge-monitoring",
+      "schedule": "0 6 * * *",
+      "timezone": "UTC"
+    }
+  },
+  "monitoring": {
+    "status": "EXISTING_DAILY_OPERATION_VERIFIED",
+    "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+    "sourceId": "eb18dc54-2a00-4bad-840f-1ce45c7eef14",
+    "actorId": "bf34e694-7aba-4359-b027-f43a68255523",
+    "enabled": true,
+    "interval": "daily",
+    "configRevision": 1,
+    "matchingMfaDelegationForCurrentRevision": true,
+    "actorActive": true,
+    "identityActive": true,
+    "identityMfaEnabled": true,
+    "moduleContractWebsiteImportMonitoringEnabled": true,
+    "allowedIntervals": [
+      "manual",
+      "daily"
+    ],
+    "monthlyScansUsed": 13,
+    "monthlyScanLimit": 100,
+    "scheduleSummary": {
+      "scheduled_runs": 10,
+      "first_scheduled_at": "2026-10-22T06:00:54.254Z",
+      "last_completed_at": "2026-10-31T06:00:57.032Z",
+      "completed_successes": 10,
+      "terminal_errors": 0
+    },
+    "nextDueAt": "2026-11-01T06:00:00Z",
+    "nextDueVienna": "2026-11-01 07:00 Europe/Vienna",
+    "dueAtInspection": false,
+    "latestRun": {
+      "id": "9e8143b1-82b0-4fd3-a4bb-4fdabd392a92",
+      "trigger": "scheduled",
+      "status": "changed",
+      "sourceRevision": 3,
+      "configRevision": 1,
+      "attempts": 1,
+      "startedAt": "2026-10-31T06:00:54.030Z",
+      "completedAt": "2026-10-31T06:00:57.032Z",
+      "errorCode": null,
+      "contentHash": "35262edd808a2e846b0b4249459611efeacad0ffd8c06b7229dea1ad7f5ddf17",
+      "proposalId": "d09fb65e-6002-4ace-a7e0-7770b5b71117",
+      "proposalStatus": "open",
+      "acceptedVersionId": null
+    },
+    "audit": {
+      "actions": [
+        "knowledge.website.scan_reserved",
+        "knowledge.website.scan_changed"
+      ],
+      "actorType": "DELEGATED_KNOWLEDGE_JOB",
+      "scope": "knowledge.website.scan_proposal_only",
+      "hostRunId": "857e13cb-85a2-49f4-9c5e-e23b18235efd",
+      "configRevision": 1,
+      "runAndProposalIdsMatch": true
+    },
+    "publicationInvariant": {
+      "currentSourceRevision": 3,
+      "matchesRunSourceRevision": true,
+      "proposalBaselineVersionId": "a111d698-3086-495f-ba6f-4f57b1dc6455",
+      "currentApprovedVersionId": "a111d698-3086-495f-ba6f-4f57b1dc6455",
+      "currentDraftVersionId": null,
+      "approvedAt": "2026-10-21T20:29:02.196Z",
+      "proposalNotAcceptedOrPublished": true
+    }
+  },
+  "database": {
+    "projectId": "misty-cloud-70835427",
+    "branchId": "br-snowy-fog-aldx77v8",
+    "database": "neondb",
+    "serverVersion": "17.11 (11592b3)",
+    "ledgerRows": 73,
+    "forceRlsTables": 118,
+    "ledgerReadRole": "neondb_owner",
+    "freshRuntimeRoleConnection": {
+      "database": "neondb",
+      "current_role": "novalure_app",
+      "session_role": "novalure_app",
+      "neon_project_id": "misty-cloud-70835427",
+      "neon_branch_id": "br-snowy-fog-aldx77v8",
+      "superuser": false,
+      "bypass_rls": false,
+      "create_database": false,
+      "create_role": false,
+      "can_read_admin_ledger": false
+    },
+    "adminLedgerReadAsRuntimeRole": "DENIED_AS_EXPECTED: permission denied for table novalure_schema_migrations",
+    "deployedSourceMigrationChecksums": {
+      "sourceRevision": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+      "normalization": "UTF-8; CRLF normalized to LF, matching existing migration runner",
+      "gitBlobs": [
+        {
+          "name": "101_knowledge_center.sql",
+          "gitBlobSha": "e21c0ef9b4d3f7e238203b85df2909026dc62839"
+        },
+        {
+          "name": "102_knowledge_document_processing.sql",
+          "gitBlobSha": "50b01169d086e3cc4ecc2c45be19895a6fa3175c"
+        },
+        {
+          "name": "103_knowledge_assistant_service.sql",
+          "gitBlobSha": "c93a0bb0d946c68502bbf48440877f44ef927bb8"
+        },
+        {
+          "name": "104_knowledge_publication_workflow.sql",
+          "gitBlobSha": "6868189846a96508d28999e3e0930093facd0127"
+        },
+        {
+          "name": "105_knowledge_website_monitoring.sql",
+          "gitBlobSha": "3a117de3308ac93754ffbabd5ca87aa1bc6c78cd"
+        },
+        {
+          "name": "106_crm_operational_readers.sql",
+          "gitBlobSha": "b6fedeeae3468dc9fe61338a6b43079b767e0325"
+        }
+      ],
+      "comparisons": [
+        {
+          "version": "101_knowledge_center",
+          "source_checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+          "ledger_checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+          "matches": true
+        },
+        {
+          "version": "102_knowledge_document_processing",
+          "source_checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+          "ledger_checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+          "matches": true
+        },
+        {
+          "version": "103_knowledge_assistant_service",
+          "source_checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+          "ledger_checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+          "matches": true
+        },
+        {
+          "version": "104_knowledge_publication_workflow",
+          "source_checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+          "ledger_checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+          "matches": true
+        },
+        {
+          "version": "105_knowledge_website_monitoring",
+          "source_checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+          "ledger_checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+          "matches": true
+        },
+        {
+          "version": "106_crm_operational_readers",
+          "source_checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+          "ledger_checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+          "matches": true
+        }
+      ]
+    },
+    "deploymentConsumedDatabaseCredentialProven": false
+  },
+  "privateStorage": {
+    "scopedWorkspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+    "databaseMetadata": [
+      {
+        "storage_provider": "vercel-blob",
+        "storage_access": "private",
+        "assets": 4,
+        "public_assets": 0,
+        "newest_asset_at": "2026-10-21T18:22:29.362Z"
+      }
+    ],
+    "historicalStoreId": "store_vCn7LiyRocYNC8pM",
+    "historicalStoreGetter": "HTTP404_NOT_FOUND_NOT_PROOF_OF_ABSENCE",
+    "projectConnectorLookup": "HTTP404_Connector_Project_not_found",
+    "integrationConfigurationList": "HTTP403_forbidden",
+    "currentDeployedTokenToStoreBindingProven": false,
+    "authenticatedPrivateByteRoundtripPerformed": false
+  },
+  "recovery": {
+    "historyRetentionSeconds": 21600,
+    "mainProtected": false,
+    "mainSnapshotSchedule": [],
+    "listedSnapshots": [
+      {
+        "id": "snap-delicate-flower-al7dw1fh",
+        "createdAt": "2026-10-12T17:54:59Z"
+      },
+      {
+        "id": "snap-cold-glitter-alpnk21x",
+        "createdAt": "2026-10-11T08:31:58Z"
+      }
+    ],
+    "protectedPackage4Branch": {
+      "id": "br-dark-night-al5bhrvv",
+      "name": "package4-prod-recovery-f8fd6708a3109b05aa574282",
+      "protected": true,
+      "state": "ready",
+      "parentTimestamp": "2026-10-21T07:02:04Z",
+      "parentLsn": "0/9EA61D40",
+      "readOnlyEndpointId": "ep-gentle-sun-alq1m2fe",
+      "endpointDisabled": true,
+      "endpointState": "idle"
+    },
+    "laterUnprotectedPre114Branch": {
+      "id": "br-broad-fire-alme78j0",
+      "parentTimestamp": "2026-10-22T16:53:59Z"
+    },
+    "freshRestorePerformed": false,
+    "currentProductionDbAndPrivateFileRestoreEqualityProven": false,
+    "historicalRestore": {
+      "receipt": "qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+      "status": "PASS",
+      "scope": "Synthetic same-project Neon COW plus separately bound private Blob bytes",
+      "completedAt": "2026-10-20T09:03:31.101Z",
+      "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "databaseTables": 167,
+      "databaseRows": 793,
+      "ledgerRows": 60,
+      "privateObjects": 17,
+      "privateBytes": 41950560,
+      "productionAccess": 0,
+      "nativeDumpRestore": false,
+      "crossProjectRecoveryClaimed": false,
+      "currentProductionRestoreProof": false
+    }
+  },
+  "access": {
+    "browserControlToolAvailable": false,
+    "regularAdminSessionAvailableToThisTask": false,
+    "environmentWorkspaceReady": false,
+    "envMetadataTruncated": true,
+    "envRowsReturned": 100,
+    "envRowsOmitted": 446,
+    "cronSecretProductionExists": true,
+    "cronSecretType": "sensitive",
+    "secretValuesReadOrOutput": false,
+    "monitoringScopesAndPauseEnvMetadata": "UNKNOWN_FROM_TRUNCATED_METADATA; actual successful delegated execution separately verified"
+  },
+  "runtimeLogBoundary": {
+    "scheduledWindow": "2026-10-31T05:59:00Z/2026-10-31T06:05:00Z",
+    "matchingGroupsReturned": 0,
+    "identityEventWindow": "preceding 24h",
+    "matchingIdentityEventsReturned": 0,
+    "meaning": "No additional provider log attestation; absence of retained matching logs does not negate database/audit proof."
+  },
+  "openProofs": [
+    "Authenticated /api/system/database runtimeProof from actual deployment using a regular authorized CRM session; connector-role access alone is not deployed application credential proof.",
+    "Current private-store metadata and an authenticated file-byte check through existing legitimate application/provider access.",
+    "A fresh complete production database/private-file restore was not part of this read-only reconciliation; historical synthetic restore and current recovery metadata remain separately scoped."
+  ],
+  "actions": [
+    "Preserved existing valid daily schedule and MFA delegation; no duplicate scan or forced next-due modification.",
+    "Created dedicated documentation branch and disabled automatic deployments for that branch only. No production release/configuration/secret changes."
+  ]
+}
