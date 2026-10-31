@@ -66,7 +66,7 @@ Diese Punkte sind technische Zugangs-/Nachweisgrenzen. Sie werden nicht durch ei
 
 Paket 4 wurde am 21.10. über [PR #92](https://github.com/novalure/novalure-crm/pull/92) integriert; die späteren produktiven Studio-Knowledge-Nachweise stehen in [PR #98](https://github.com/novalure/novalure-crm/pull/98). Die früheren Blockertexte bleiben als datierte Historie erhalten und werden durch den aktuellen Hinweis eingeordnet.
 
-Die Prüfungen dieser Ausführung waren lesend. Es gab keine Produktionsmigration, kein Deployment/Promote, keinen zusätzlichen Scan, keine neue Sitzung, keine Konfigurations-/Secretänderung im Betrieb und keinen Restore. Im Repository wurden der eigene Dokumentationsbranch angelegt, dessen automatische Deployments deaktiviert und die unten beschriebene Secret-Scan-Diagnose samt eng begrenzter historischer Funddisposition ergänzt.
+Die Prüfungen dieser Ausführung waren lesend. Es gab keine Produktionsmigration, kein Deployment/Promote, keinen zusätzlichen Scan, keine neue Sitzung, keine Konfigurations-/Secretänderung im Betrieb und keinen Restore. Im Repository wurden der eigene Dokumentationsbranch angelegt, dessen automatische Deployments deaktiviert und die unten beschriebenen CI-Diagnose-/Fundkorrekturen sowie die bereits produktiv enthaltenen Undici-/Zod-Sicherheitskorrekturen ergänzt.
 
 Detaillierte IDs, Zeiten, Berechtigungsgrenzen und Vergleichsergebnisse: [Produktionsbeobachtungen](../qa/knowledge-operational-closure-2026-10-31/production-observations.json).
 
@@ -75,3 +75,11 @@ Detaillierte IDs, Zeiten, Berechtigungsgrenzen und Vergleichsergebnisse: [Produk
 Der erste Full-History-Secret-Scan meldete einen Fund in einem älteren Produktionsbranch-Commit außerhalb dieser Dokumentationsänderung. Eine Diagnoseergänzung gibt bei Fehlern ausschließlich Regel, Datei, Zeilen, Commit und Fingerprint aus; Geheimnis- und Matchwerte werden nicht ausgegeben. Scanner-Version, Binär-Checksum, Redaktion, Full-History-/Tree-Prüfung, Fehlerstatus und Bereinigung bleiben erhalten.
 
 Der Fund wurde unabhängig als öffentlicher Website-Routingbezeichner bestätigt: `publicSiteKey` wird in `data-site-key` eingebettet und wählt lediglich die gespeicherte Integration. Der technische Zugriff verlangt weiterhin ein signiertes JWT und eine separate Runtime-Capability. Ausschließlich der exakte historische Fingerprint wurde in `.gitleaksignore` ergänzt; keine aktuelle Datei oder Scannerregel wurde ausgenommen. [Disposition](../qa/knowledge-operational-closure-2026-10-31/secret-scan-disposition.json).
+
+## Abhängigkeitsaudit des main-Stands
+
+Der reguläre Produktionsaudit des Dokumentationsbranches fand acht Schwachstellen in den geerbten Undici-/Zod-Abhängigkeiten (drei moderat, fünf hoch). Es war kein Netzwerkfehler. Übernommen wurden ausschließlich die vier exakten Paket-/Lockfile-Hunks aus dem bereits geprüften Fix `e8c6673c2cc38960f335121abaac1b12730c5e74`, der nachweislich ein Vorfahr des aktuell produktiven Commits ist.
+
+Undici wird auf 6.29.1 und das aufgelöste Zod auf 4.6.7 gesetzt; der bereits bestehende CLI-Config-Zod-Pfad erhält den gleichlautenden, eng begrenzten Override. Im Lockfile ändern sich zwei Paketknoten, ein verwundbarer verschachtelter Zod-Knoten entfällt; 649 andere Einträge bleiben identisch. Framework und Providerpakete werden nicht aktualisiert. Die Korrektur wurde in den Repository-Stand zurückübernommen; ein neues Produktionsdeployment war dafür nicht erforderlich.
+
+Die eindeutige Anwendung der Quellhunks, JSON-Struktur und Peer-Kompatibilität sind unabhängig geprüft. Installation, Audit und Regression entscheidet die reguläre CI am finalen PR-Head; ihr Ergebnis wird nicht durch den Quellreview ersetzt. [Abhängigkeitsdisposition](../qa/knowledge-operational-closure-2026-10-31/dependency-disposition.json).
