@@ -148,6 +148,9 @@
   },
   "overrides": {
     "dompurify": "3.4.17",
-    "undici": "6.28.1"
+    "undici": "6.29.1",
+    "@vercel/cli-config@0.2.7": {
+      "zod": "4.6.7"
+    }
   }
 }
