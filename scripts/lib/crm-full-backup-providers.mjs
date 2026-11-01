@@ -108,7 +108,10 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       const response = await request(API + path, { method, redirect: 'error', signal: AbortSignal.timeout(20000),
         headers: { authorization: `Bearer ${env.NEON_API_KEY}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) });
-      requireValue(response.ok, 'NEON_REQUEST_FAILED');
+      if (!response.ok) {
+        const status = response.status;
+        throw new CrmBackupError(Number.isInteger(status) && status >= 100 && status <= 599 ? `NEON_HTTP_${status}` : 'NEON_REQUEST_FAILED');
+      }
       return await response.json();
     } catch (error) { throw safeFailure(error); }
   };

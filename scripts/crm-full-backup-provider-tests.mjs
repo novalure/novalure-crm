@@ -102,6 +102,27 @@ test('wrong runtime environment and invalid signed identity block before provide
   assert.equal(bad.blobs.length, 0); assert.equal(bad.calls.length, 0);
 });
 
+test('Neon read failures preserve only a valid numeric HTTP status without inspecting private response data', async () => {
+  for (const [status, expected] of [
+    [401, 'NEON_HTTP_401'], [403, 'NEON_HTTP_403'], [404, 'NEON_HTTP_404'],
+    ['401', 'NEON_REQUEST_FAILED'], [401.5, 'NEON_REQUEST_FAILED'], [undefined, 'NEON_REQUEST_FAILED'],
+    [0, 'NEON_REQUEST_FAILED'], [600, 'NEON_REQUEST_FAILED'],
+  ]) {
+    const f = fixture(); let requests = 0;
+    const ports = await f.make({ fetch: async () => {
+      requests++;
+      return { ok: false, status,
+        get url() { throw new Error('SYNTHETIC private response URL must not be read'); },
+        get headers() { throw new Error('SYNTHETIC private response headers must not be read'); },
+        json: async () => { throw new Error('SYNTHETIC private response body must not be read'); },
+      };
+    } });
+    await assert.rejects(ports.snapshotInfo(config.snapshotId), error => error.code === expected && error.message === expected &&
+      /^[A-Z][A-Z0-9_]+$/u.test(error.code) && !JSON.stringify({ code: error.code, message: error.message }).includes('SYNTHETIC'));
+    assert.equal(requests, 1);
+  }
+});
+
 test('the exact REST restore flag is hardcoded and target/finalizer inputs are rejected', async () => {
   const f = fixture(), ports = await f.make();
   await assert.rejects(ports.restoreSnapshot({ ...restoreArgs, finalize: true }), code('UNSAFE_RESTORE_REQUEST'));
