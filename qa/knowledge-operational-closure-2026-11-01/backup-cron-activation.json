@@ -1,0 +1,110 @@
+{
+  "format": "crm-backup-cron-activation-v1",
+  "status": "CRON_ENABLED_AFTER_VERIFIED_FULL",
+  "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "cron": {
+    "path": "/api/backup",
+    "schedule": "15 3 * * *"
+  },
+  "startedAt": "2026-11-01T18:22:39.748Z",
+  "sourceCrmMutations": 0,
+  "neonCalls": 0,
+  "backupInvocations": 0,
+  "credentialGetters": 0,
+  "credentialValuesRead": 0,
+  "cronSecretRotations": 0,
+  "sourceOrTargetGrantMutations": 0,
+  "firstScheduledRunObserved": false,
+  "retentionMode": "PLAN_ONLY_NO_DELETIONS",
+  "deploymentAttempts": 1,
+  "provenFull": {
+    "deploymentId": "dpl_6gwzyB92ej3QFQgajGpYsbekk1pU",
+    "backupId": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+    "snapshotId": "snap-ancient-hat-al16xd1i",
+    "isolatedBranchId": "br-late-bonus-alphwux4",
+    "manifestSha256": "eec51b47c3a1eedb68263952634f77f97ce087cff4dd52b9203607f3edf3468b",
+    "fileCount": 5,
+    "fileBytes": 44260,
+    "historicalReferenceCount": 2
+  },
+  "proofFiles": {
+    "rootFullSha256": "38f4443aa6ffdbfc1532fc723e6d98d895f79a1a02d2a6863268d2523c050d17",
+    "verifiedIndexSha256": "c0425aa8d31535b6a7ccd2e32f83705fdf8b5605f4bec0ffefa81bd91083d794"
+  },
+  "credentialsBefore": {
+    "CRON_SECRET": {
+      "id": "KnKpRM3Rqv4cDxo1",
+      "key": "CRON_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1793557217769
+    },
+    "NEON_API_KEY": {
+      "id": "AnTnocARcKbbOWW3",
+      "key": "NEON_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1793557188409
+    }
+  },
+  "previousDeploymentId": "dpl_6gwzyB92ej3QFQgajGpYsbekk1pU",
+  "packageDirectory": "/workspace/scratch/crm-backup-cron-activation-20261101t182242787z",
+  "packagedFileSha256": {
+    "package.json": "d42d3dd61e95901447ee9ad0db1b4199b40010704a2f7a2f7634a4984ad21089",
+    "package-lock.json": "fc839ab206603540aa076cd1a4188428560a77d052b0e2d7c5ec81ea04adad3b",
+    "scripts/crm-full-backup.mjs": "1c94553bd83ebcf925f75da67096b976f0e1cb73d35f25810dd4e9d6a280b0c4",
+    "scripts/lib/crm-full-backup.mjs": "71b6fcee5febad9f955b73517aa0cd029330a2652012cdf535504b4b60a92797",
+    "scripts/lib/crm-full-backup-providers.mjs": "f7d4999fa6650157cb032e453a55ca69df5e3f5888399c8872b691443d97515e",
+    "scripts/lib/crm-full-backup-http.mjs": "466795a9d31591eacadf6a65060510beb1ee5236ca9a2be5c24c227c95fbd20b",
+    "scripts/lib/studio-stage3-qa-fingerprint.mjs": "34a5b66feed960aba6b4e558dfd3d95037c0637395667403d07c6867b2e5944b",
+    "scripts/lib/neon-061-compat.mjs": "9a1733751f6ab88947c5c8609d4d9f779f92b10f9971aedcdf5783d672df3dda",
+    "api/backup.mjs": "e20032b6e930b51cb2c8fb6fb7fb29bffefcf0aeedad2b41b806a4ed649954af"
+  },
+  "deployment": {
+    "id": "dpl_D2reD5otiHjAHvFgRqohV4KCPwSy",
+    "url": "knowledge-ops-restore-20261101-ex5m9awac-novalure.vercel.app",
+    "target": "production",
+    "readyState": "READY",
+    "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk"
+  },
+  "cronReadback": {
+    "definitions": [
+      {
+        "path": "/api/backup",
+        "schedule": "15 3 * * *"
+      }
+    ],
+    "disabledAt": null,
+    "observedAt": "2026-11-01T18:22:55.562Z"
+  },
+  "executionFlag": true,
+  "cronSecretPreserved": true,
+  "managementCredentialMetadataPreserved": true,
+  "productionOidcConnectionsPreserved": true,
+  "credentialsAfter": {
+    "CRON_SECRET": {
+      "id": "KnKpRM3Rqv4cDxo1",
+      "key": "CRON_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1793557217769
+    },
+    "NEON_API_KEY": {
+      "id": "AnTnocARcKbbOWW3",
+      "key": "NEON_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1793557188409
+    }
+  },
+  "finishedAt": "2026-11-01T18:22:55.562Z"
+}
