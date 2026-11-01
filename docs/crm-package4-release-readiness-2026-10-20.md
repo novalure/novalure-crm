@@ -1,4 +1,4 @@
-> **Aktueller Betriebsabgleich vom 31.10.2026:** Paket 4 und Migrationen 101–106 sind integriert. Die tägliche produktive Websiteüberwachung ist durch tatsächliche geplante Läufe bestätigt. Der folgende Bericht bleibt der historische Stand vom 20.10.; seine damaligen Merge-/Migrations-/Schedulergrenzen sind nicht pauschal der heutige Status. Aktuelle Ergebnisse und noch offene Artefakt-/Privatstore-/Recovery-Nachweise: [Betriebsabgleich 31.10.2026](knowledge-operational-closure-2026-10-31.md).
+> **Aktueller CRM-Knowledge-Betriebsabgleich vom 01.11.2026:** [Tatsächliche Ergebnisse, Vorfall, isolierter DB-Restore und offene Datei-Recovery](knowledge-operational-closure-2026-11-01.md). Der folgende CRM-Bericht bleibt der historische Stand vom 20.10.; er ist keine Abnahme von Paket 4 der gemeinsamen Lernplattform.
 
 # Evelyn CRM — Paket 4: Gesamtintegration und Releasebereitschaft
 

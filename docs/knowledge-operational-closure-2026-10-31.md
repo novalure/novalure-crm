@@ -1,3 +1,5 @@
+> **Fortschreibung 01.11.2026:** Aktuelle authentifizierte Laufzeit-/Dateinachweise, der Restorevorfall und der anschließend bestandene isolierte Datenbankrestore stehen im [Betriebsabschluss 01.11.2026](knowledge-operational-closure-2026-11-01.md). Dieser Bericht bleibt der datierte Nachweis vom 31.10.
+
 # Knowledge Center Betriebsabschluss vom 31. Oktober 2026
 
 Die tägliche produktive Websiteüberwachung ist bestätigt. Der Betriebsabgleich verbindet den aktuellen CRM-Release mit den installierten Paket-4-Migrationen und den vorhandenen Recovery-Ressourcen. Die tatsächlich konsumierte Datenbank-/Privatstore-Bindung des laufenden Artefakts und ein aktueller vollständiger Produktionsrestore bleiben gesonderte, noch offene Nachweise.
