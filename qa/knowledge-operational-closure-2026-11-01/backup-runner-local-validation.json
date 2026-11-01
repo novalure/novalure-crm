@@ -1,0 +1,32 @@
+{
+  "format": "crm-backup-runner-local-validation-v1",
+  "scope": "Local safety and provider-contract tests only; no actual complete backup execution",
+  "tests": {
+    "command": "npm run test:crm-full-backup",
+    "passed": 36,
+    "failed": 0,
+    "skipped": 0,
+    "remoteProviderCalls": 0
+  },
+  "lint": {
+    "scope": "Five added JavaScript files",
+    "warnings": 0,
+    "status": "PASS"
+  },
+  "cliPlan": {
+    "status": "BLOCKED",
+    "remoteRequests": 0,
+    "missing": [
+      "Project-scoped Neon management credential",
+      "Legitimate backup-project Production OIDC and normal source/target store connections"
+    ]
+  },
+  "pairedScheduledJobDeployed": false,
+  "nativeDailyDatabaseSchedule": "Recorded separately in native-database-backup-schedule.json",
+  "fullDatabaseAndPrivateFileBackupExecuted": false,
+  "productionEndpointId": "ep-wandering-union-alem0781",
+  "productionBranchId": "br-spring-night-alyu48yp",
+  "productionEndpointChangedByRunner": false,
+  "applicationDeploymentChanged": false,
+  "existingWebsiteTeamsCalendarSchedulesChanged": false
+}

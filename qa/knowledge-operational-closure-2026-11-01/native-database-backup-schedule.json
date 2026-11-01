@@ -1,0 +1,30 @@
+{
+  "format": "crm-native-database-backup-schedule-v1",
+  "status": "ACTIVE_DATABASE_ONLY_SCHEDULE_READBACK",
+  "observedAt": "2026-11-01T15:59:27Z",
+  "projectId": "misty-cloud-70835427",
+  "sourceBranchId": "br-spring-night-alyu48yp",
+  "schedule": [
+    {
+      "frequency": "daily",
+      "hour": 3,
+      "retention_seconds": 604800
+    }
+  ],
+  "timezone": "UTC",
+  "currentViennaHour": 4,
+  "retentionDays": 7,
+  "pitrHistorySeconds": 21600,
+  "productionEndpoint": {
+    "id": "ep-wandering-union-alem0781",
+    "branchId": "br-spring-night-alyu48yp",
+    "type": "read_write",
+    "disabled": false,
+    "currentState": "active"
+  },
+  "productionEndpointBindingChanged": false,
+  "privateFileScheduleActive": false,
+  "completeDatabaseAndPrivateFileBackupClaimed": false,
+  "existingWebsiteTeamsCalendarSchedulesChanged": false,
+  "billingPlanChanged": false
+}

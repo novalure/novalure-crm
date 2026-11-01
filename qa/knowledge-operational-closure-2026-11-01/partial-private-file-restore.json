@@ -1,0 +1,68 @@
+{
+  "format": "private-blob-partial-restore-v1",
+  "observedAt": "2026-11-01T15:49:38.985Z",
+  "status": "PARTIAL_2_OF_5",
+  "scopeAssetCount": 5,
+  "scopeBytes": 44260,
+  "restoredAssetCount": 2,
+  "remainingUserFiles": 3,
+  "sourceStoreWrites": 0,
+  "sourceAuthRequests": 0,
+  "sourceBlobReads": 0,
+  "productionDatabaseWrites": 0,
+  "envRunCalls": 0,
+  "secretGetterCalls": 0,
+  "credentialFilesWritten": 0,
+  "targetSdkPutCalls": 1,
+  "targetTokenRequestCount": 1,
+  "userProvidedFileVerified": {
+    "manifestIdentityMatch": true,
+    "privateProviderMatch": true,
+    "mimeMatch": true,
+    "sizeMatch": true,
+    "bytes": 20327,
+    "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0"
+  },
+  "archive": {
+    "newAssetBytes": 20327,
+    "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+    "sizeMatch": true,
+    "shaMatch": true,
+    "fileMode600": true
+  },
+  "targetTokenClaims": {
+    "newProjectMatch": true,
+    "teamMatch": true,
+    "developmentMatch": true,
+    "currentlyValid": true
+  },
+  "existingAssetGuard": {
+    "exhaustiveKeysetOne": true,
+    "sizeMatch": true,
+    "shaMatch": true,
+    "noExistingAssetReput": true
+  },
+  "targetPutCompleted": true,
+  "readback": {
+    "bytes": 20327,
+    "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+    "sizeMatch": true,
+    "shaMatch": true,
+    "exactKeyMatch": true,
+    "privateTargetOriginMatch": true
+  },
+  "targetInventory": {
+    "exhaustive": true,
+    "assetCount": 2,
+    "bytes": 21323,
+    "expectedKeysetMatch": true
+  },
+  "unauthenticatedRead": {
+    "status": 403,
+    "denied": true,
+    "noAuthorizationHeader": true,
+    "noCookies": true
+  },
+  "restoredBytes": 21323,
+  "finishedAt": "2026-11-01T15:49:43.119Z"
+}

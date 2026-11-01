@@ -94,6 +94,9 @@ jobs:
       - name: Security and scope integration tests
         run: npm run test:integration
 
+      - name: Isolated database and private-file backup boundaries
+        run: npm run test:crm-full-backup
+
       - name: Install local QA browser
         run: npx playwright install chromium --with-deps
 
