@@ -1,0 +1,47 @@
+{
+  "format": "crm-backup-preflight-deployment-v1",
+  "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "sourceStoreConnectionsChanged": false,
+  "cronEnabled": false,
+  "fullBackupEnabled": false,
+  "applicationProjectChanged": false,
+  "productionEndpointChanged": false,
+  "newSensitiveSecretCount": 1,
+  "secretPrintedOrPersistedLocally": false,
+  "nodeVersion": "24.x",
+  "existingDeploymentProtectionPreserved": true,
+  "deploymentId": "dpl_FYQUe8K9oFtufsgfRVpRpcNHy522",
+  "deploymentUrl": "knowledge-ops-restore-20261101-e0tl83mpx-novalure.vercel.app",
+  "readyState": "READY",
+  "status": "PRODUCTION_PREFLIGHT_PASS_NEON_KEY_MISSING",
+  "initialDeploymentId": "dpl_HtAiS7R2mNQkauRVVkdprYFREghL",
+  "authenticatedPreflight": {
+    "httpStatus": 200,
+    "mode": "PLAN_ONLY_NO_REMOTE_IO",
+    "status": "BLOCKED",
+    "enabled": false,
+    "missing": [
+      "NEON_API_KEY"
+    ],
+    "code": "BACKUP_PLAN_BLOCKED"
+  },
+  "noCronCredentialRequestRejected": true,
+  "noCronCredentialHttpStatus": 401,
+  "productionOidcProvidedByNativeWorkload": true,
+  "packagedFilesSha256": {
+    "package.json": "528ed1d0e7a38da2c77808dc5920349b52253b1fc5eb22179b97ba39f33af1f9",
+    "package-lock.json": "fc839ab206603540aa076cd1a4188428560a77d052b0e2d7c5ec81ea04adad3b",
+    "api/backup.mjs": "e20032b6e930b51cb2c8fb6fb7fb29bffefcf0aeedad2b41b806a4ed649954af",
+    "scripts/crm-full-backup.mjs": "1c94553bd83ebcf925f75da67096b976f0e1cb73d35f25810dd4e9d6a280b0c4",
+    "scripts/lib/crm-full-backup.mjs": "71b6fcee5febad9f955b73517aa0cd029330a2652012cdf535504b4b60a92797",
+    "scripts/lib/crm-full-backup-providers.mjs": "b319f669d65268efdca84536eef176d197a9528b5105fb8b2a09d74aef6381dc",
+    "scripts/lib/crm-full-backup-http.mjs": "847b3c21b209ffbdf04890e61d498915eafe00d7c1040ed1c47dc9b3547fa53d",
+    "scripts/lib/studio-stage3-qa-fingerprint.mjs": "34a5b66feed960aba6b4e558dfd3d95037c0637395667403d07c6867b2e5944b",
+    "scripts/lib/neon-061-compat.mjs": "9a1733751f6ab88947c5c8609d4d9f779f92b10f9971aedcdf5783d672df3dda",
+    "vercel.json": "8b5e98b02e557cdc6508fda11afbf9fde2f19bd29b29521944adfdc775ac3687"
+  },
+  "sourceStoreRequests": 0,
+  "databaseRequests": 0,
+  "observedAt": "2026-11-01T16:27:57.624Z"
+}

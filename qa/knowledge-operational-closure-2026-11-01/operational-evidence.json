@@ -622,7 +622,7 @@
       "existingWebsiteTeamsCalendarSchedulesChanged": false
     },
     "pairedBackupRunner": {
-      "status": "PREPARED_LOCAL_CODE_NOT_DEPLOYED_OR_ACTIVATED",
+      "status": "PRODUCTION_CALLER_READY_PREFLIGHT_BLOCKED_ONLY_NEON_API_KEY_EXECUTION_DISABLED",
       "documentation": "../../docs/crm-full-backup-runner.md",
       "entrypoint": "scripts/crm-full-backup.mjs",
       "dailyPairedJobDeployed": false,
@@ -630,7 +630,63 @@
       "projectScopedNeonManagementKeyProvisioned": false,
       "backupProjectProductionOidcSourceAndTargetGrantsEstablished": false,
       "developmentTargetAccessIsProductionBackupAccess": false,
-      "actualFullPairedBackupRunCompleted": false
+      "actualFullPairedBackupRunCompleted": false,
+      "callerProductionDeployed": true,
+      "productionOidcProvidedByNativeWorkload": true,
+      "productionOidcForwardedViaSdkContext": true,
+      "externalProductionOidcSecretMissing": false,
+      "missingExternalAccess": [
+        "NEON_API_KEY"
+      ],
+      "pendingOperationalSetup": [
+        "Configure normal backup-project Production OIDC connections to the source and target stores",
+        "Perform and verify the complete paired database/private-file run",
+        "Activate the paired backup cron only after the complete run is verified"
+      ],
+      "operationalStoreGrantsAreOurPendingSetup": true,
+      "deploymentPreflight": {
+        "format": "crm-backup-preflight-deployment-v1",
+        "observedAt": "2026-11-01T16:27:57.624Z",
+        "receipt": "backup-preflight-deployment.json",
+        "receiptSha256": "2971d8c5979444d4b493709b6905ca233b7498cb42757c51315d0425c81c46bd",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "deploymentId": "dpl_FYQUe8K9oFtufsgfRVpRpcNHy522",
+        "deploymentUrl": "knowledge-ops-restore-20261101-e0tl83mpx-novalure.vercel.app",
+        "environment": "production",
+        "readyState": "READY",
+        "nodeVersion": "24.x",
+        "existingDeploymentProtectionPreserved": true,
+        "newSensitiveSecretName": "CRON_SECRET",
+        "newSensitiveSecretCount": 1,
+        "secretScope": "Existing backup project only",
+        "secretPrintedOrPersistedLocally": false,
+        "cronEnabled": false,
+        "crons": [],
+        "fullBackupEnabled": false,
+        "CRM_FULL_BACKUP_ENABLED": false,
+        "authenticatedPreflight": {
+          "httpStatus": 200,
+          "mode": "PLAN_ONLY_NO_REMOTE_IO",
+          "status": "BLOCKED",
+          "enabled": false,
+          "missing": [
+            "NEON_API_KEY"
+          ],
+          "code": "BACKUP_PLAN_BLOCKED"
+        },
+        "unauthorizedCronRequest": {
+          "rejected": true,
+          "httpStatus": 401
+        },
+        "productionOidcProvidedByNativeWorkload": true,
+        "sourceStoreConnectionsChanged": false,
+        "sourceStoreRequests": 0,
+        "databaseRequests": 0,
+        "applicationProjectChanged": false,
+        "productionEndpointChanged": false,
+        "fullOperationalAcceptanceClaimed": false
+      }
     }
   },
   "cliHelperCleanup": {
@@ -701,7 +757,7 @@
     "selfCreatedSuccessStatusUsed": false
   },
   "fullOperationalAcceptance": "BLOCKED_BY_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE",
-  "updatedThrough": "2026-11-01T15:59:27Z",
+  "updatedThrough": "2026-11-01T16:27:57.624Z",
   "knowledgeTxtDocumentDiagnosis": {
     "scope": "One known private Knowledge TXT asset and its historical version references; read-only metadata plus exact production source-code route check.",
     "productionSourceSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",

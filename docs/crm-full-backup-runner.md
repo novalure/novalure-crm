@@ -1,6 +1,6 @@
 # Regelmäßiges Datenbank- und Privatdatei-Backup
 
-Der Node-24-Runner nutzt die bestehende Neon-/Vercel-Blob-Umgebung. Er ist kein Deployment, legt keinen Zeitplan an und verändert die laufende CRM-Anwendung nicht. Ohne einen regulär bereitgestellten projektbezogenen Neon-Managementschlüssel und passende Production-OIDC-Identität bleibt die Ausführung vor dem ersten Remote-Aufruf `BLOCKED`.
+Der Node-24-Runner nutzt die bestehende Neon-/Vercel-Blob-Umgebung und verändert die laufende CRM-Anwendung nicht. Der eigene geschützte HTTP-Aufrufer ist im vorhandenen Backup-Projekt als Production-Prüfbetrieb bereitgestellt; Ausführung und Cron bleiben deaktiviert. Die echte Production-OIDC-Identität kommt aus dem Vercel-Ausführungskontext. Ohne den projektbezogenen Neon-Managementschlüssel bleibt der Gesamtlauf vor dem ersten Remote-Aufruf `BLOCKED`.
 
 ## Abgegrenzter Sicherungsumfang
 
@@ -44,12 +44,26 @@ Ohne `--snapshot` wird der jüngste verfügbare Snapshot des exakt konfigurierte
 ## Erforderliche normale Berechtigungen
 
 - `NEON_API_KEY`: Management-Credential ausschließlich für das benannte Neon-Projekt, regulär vom berechtigten Operator bereitgestellt. Storage-/AI-/Functions-Schlüssel sind kein Ersatz. Verbindungs-URIs werden nur für die neue isolierte Kopie abgerufen und ausschließlich im RAM verwendet.
-- `VERCEL_OIDC_TOKEN`: gültige Production-Identität des exakten Backup-Projekts und Teams. Ein Development-Token oder abgewiesener Development-Zugriff wird nicht umgedeutet oder erneut als Production-Zugriff versucht.
+- Production-OIDC: Der regulär bereitgestellte Aufrufer übernimmt das unveränderte aktuelle Token über `getVercelOidcTokenSync()` aus dem Vercel-Ausführungskontext. Ein Development-Token oder abgewiesener Development-Zugriff wird nicht umgedeutet oder erneut als Production-Zugriff versucht. Für einen anderen legitimen Operator-Aufrufer erwartet die CLI `VERCEL_OIDC_TOKEN` mit exakt diesen Bindungen. Im Prüfmodus erfolgen weder Refresh noch Netzwerkzugriff.
 - Reguläre Production-OIDC-Verbindungen des Backup-Projekts zum Quell- und Zielstore. Der vorhandene CRM-Production-Zugriff und dessen Variablen bleiben unverändert. Unterschiedliche Präfixe, etwa `BACKUP_SOURCE_BLOB` und `BACKUP_TARGET_BLOB`, verhindern eine versehentliche Ersetzung der CRM-Konfiguration. Der SDK-Aufruf verwendet jeweils eine explizite Store-ID.
 
 Der belegte normale Vercel-Vertrag für eine solche zusätzliche Verbindung ist `POST /v1/storage/stores/{storeId}/connections`, Header `x-vercel-use-oidc: 1`, Body `{projectId, envVarEnvironments:["production"], envVarPrefix, skipReadWriteToken:true}`. Er ist ein überprüfbarer Vorschlag und wird von diesem Runner nicht aufgerufen. Das Provider-Grant begrenzt Projekt und Umgebung; eine Einschränkung auf reine Leseaktionen ist in diesem Vertrag nicht belegt. Der Quelladapter stellt deshalb ausschließlich `get/list` bereit, während `put` stets die andere, explizit gebundene Ziel-Store-ID verwendet. Der Runner besitzt keinen Delete-Port.
 
 Es werden keine vorhandenen sensiblen Read-write-Werte ausgelesen, keine privaten Cookies gespeichert und keine neuen Claims erzeugt. Credential-Werte gelangen weder in Ausgaben noch in Dateien oder Manifeste. Die detaillierten Dateilisten verbleiben im privaten Zielstore.
+
+## Geschützter Aufrufer im bestehenden Backup-Projekt
+
+`scripts/prepare-crm-backup-workload.mjs` erzeugt in einem neuen Ordner außerhalb des CRM-Repositories ein eigenes Deploymentpaket. Es kopiert ausschließlich acht benannte Runner-/Bibliotheks- und Paketdateien, erzeugt `/api/backup` und bindet `.vercel/project.json` fest an das Backup-Projekt und Team. CRM-Anwendungsdateien, Git-Historie und lokale `.env`-Dateien werden nicht übernommen. Vorhandene Ausgabeordner werden nicht überschrieben.
+
+```sh
+node scripts/prepare-crm-backup-workload.mjs --output /absolute/new-backup-directory
+```
+
+Das Standardpaket enthält **keinen Cron**. Der bereitgestellte Aufrufer prüft GET, einen neuen projektlokalen `CRON_SECRET` mit mindestens 32 Zeichen, die exakte Workload-Bindung und eine URL ohne Steuerparameter. Standard ist `CRM_FULL_BACKUP_ENABLED=false`: ausschließlich der lokale CLI-Plan, ohne Providerzugriff. Fehler und unbekannte Felder werden vor HTTP-Ausgabe und Logging entfernt. Die Deployment Protection bleibt erhalten; für berechtigte manuelle Prüfungen wird reguläres `vercel curl` verwendet.
+
+Tatsächlich geprüft am 01.11.2026 um 16:27:57 UTC: Production-Deployment `dpl_FYQUe8K9oFtufsgfRVpRpcNHy522` im eigenen Backup-Projekt, Node 24. Autorisierte Planprobe HTTP 200, `BLOCKED`, einzig fehlendes Credential `NEON_API_KEY`; Anfrage ohne Cron-Zugang HTTP 401. Es gab keine Quellstore- oder Datenbankanfrage. Der [Deploymentbeleg](../qa/knowledge-operational-closure-2026-11-01/backup-preflight-deployment.json) enthält die Hashes der tatsächlich gepackten Dateien.
+
+Nach Bereitstellung des fehlenden Neon-Projektschlüssels sind die normalen Production-OIDC-Storeverbindungen zu konfigurieren und zunächst ein tatsächlicher vollständiger Lauf zu prüfen. Erst dann wird der Aufrufer mit `CRM_FULL_BACKUP_ENABLED=true` und dem expliziten Paketflag `--enable-cron` täglich um **03:15 UTC** aktiviert. Die bestehende Development-Verbindung des Zielstores muss bei ihrer Erweiterung erhalten bleiben. Das bestehende native DB-Snapshotfenster um 03:00 UTC und die CRM-Anwendungszeitpläne werden dabei nicht ersetzt. Aktivierung, echter FULL-Lauf und Aufbewahrung sind getrennte Nachweise; ein erfolgreicher Plan ist kein vollständiges Backup.
 
 ## Ablauf und Abschluss
 
@@ -78,7 +92,7 @@ node scripts/crm-full-backup.mjs --retention-index /private/path/verified-backup
 ## Gezielte lokale Prüfungen
 
 ```sh
-node --test scripts/crm-full-backup-tests.mjs scripts/crm-full-backup-provider-tests.mjs
+npm run test:crm-full-backup
 ```
 
 Die Prüfungen verwenden ausschließlich lokale Provider-Ports. Sie belegen die Sicherheitsgrenzen des Runners, keine neue Production-Abnahme, keine neuen Blob-Berechtigungen und keinen tatsächlich durchgeführten Backup-Lauf. Provider-Aktivierung, Zeitplanbelege und eine reale vollständige Ausführung werden separat protokolliert.
