@@ -1,6 +1,6 @@
 {
   "format": "knowledge-ops-operational-evidence-2026-11-01-v1",
-  "scope": "Knowledge Center / novalure/novalure-crm / PR120 and operational follow-up PR122; independent of package4 of the shared learning platform",
+  "scope": "Knowledge Center / novalure/novalure-crm / merged PR120 and PR122 plus open operational follow-up PR123; independent of package4 of the shared learning platform",
   "baselineReuse": {
     "sourceHead": "51af3de033cb8d6fb52ab12c8d44526718c63fb7",
     "qualityRun": "https://github.com/novalure/novalure-crm/actions/runs/41243432576",
@@ -429,11 +429,12 @@
         "changedCategories": []
       }
     },
-    "privateFileBytesRestored": false,
-    "fullDatabaseAndPrivateFilesRecovery": "NOT_PROVEN",
+    "privateFileBytesRestored": true,
+    "fullDatabaseAndPrivateFilesRecovery": "PASS_MANUAL_DATABASE_AND_ALL_REFERENCED_PRIVATE_ORIGINALS_PAIRED",
     "freshAuthenticatedRestoredApplicationAcceptance": false,
     "priorIncident": "Preserved separately; this isolated finalize:false run is not a relabelling of the earlier finalization incident.",
-    "privateFileBytesRestoredScope": "This database-only run restored no physical Blob bytes. Later partial private-file restoration is recorded in privateStoreAuthorization.partialRestore; full recovery remains unproven."
+    "privateFileBytesRestoredScope": "The original database-only run restored no Blob bytes. All five referenced private originals were subsequently restored manually and paired with this same snapshot database using a narrow read-only metadata query; see manualDataRecovery.",
+    "privateFileBytesRestoredDuringDatabaseOnlyPhase": false
   },
   "isolatedRestoreBinding": {
     "sourceBranchId": "br-spring-night-alyu48yp",
@@ -458,8 +459,8 @@
   "privateMediaInventory": {
     "format": "knowledge-ops-isolated-private-media-full-database-inventory-v1",
     "branchId": "br-orange-brook-al5f6n0f",
-    "physicalObjectsRestored": false,
-    "physicalBytesAndSha256Verified": false,
+    "physicalObjectsRestored": true,
+    "physicalBytesAndSha256Verified": true,
     "scope": "ALL_MEDIA_ASSETS_AND_ALL_KNOWLEDGE_VERSIONS_NO_TENANT_FILTER",
     "allMediaCount": 6,
     "allPrivateMediaCount": 5,
@@ -487,8 +488,9 @@
     "knowledgeVersionFileReferenceCount": 2,
     "privateMediaWithoutKnowledgeReference": 4,
     "knowledgeVersionMissingAssetReferences": 0,
-    "observationPhase": "Complete isolated database inventory at the database-only restore; physical-byte flags describe that phase, before the later two-file restoration.",
-    "currentPhysicalRecovery": "See privateStoreAuthorization.partialRestore: two of five private assets restored and verified; three remain."
+    "observationPhase": "Original complete isolated database metadata inventory was captured during the database-only restore. Physical verification flags now include the later five-file manual restoration and 17:16 read-only pairing; the original inventory artifact remains unchanged.",
+    "currentPhysicalRecovery": "PASS: all five referenced private originals, 44260 bytes, restored under their original keys in the separate target store, individually source/target SHA256 verified and anonymously denied; matched to the isolated database and both historical document references.",
+    "physicalObjectsRestoredAtInventoryCapture": false
   },
   "privateStoreAuthorization": {
     "sourceStoreId": "store_vCn7LiyRocYNC8pM",
@@ -512,10 +514,11 @@
       "tokenCurrentlyValid": true,
       "sourceBlobGetRequests": 1,
       "httpStatus": 403,
-      "result": "STOPPED_NO_CLAIM_OR_PERMISSION_CHANGE"
+      "result": "STOPPED_NO_CLAIM_OR_PERMISSION_CHANGE",
+      "observationScope": "Historical initial denied Development request before normal Production connections and the separately authorized temporary operator grant; current post-rollback Development denial is recorded in manualRestore."
     },
-    "physicalArchiveComplete": false,
-    "physicalPrivateStoreRestoreComplete": false,
+    "physicalArchiveComplete": true,
+    "physicalPrivateStoreRestoreComplete": true,
     "targetStoreCreated": true,
     "credentialsPrintedOrPersisted": false,
     "targetStore": {
@@ -583,7 +586,9 @@
       },
       "fullPrivateArchiveOrRestoreClaimed": false,
       "missingImageBytesReconstructed": false,
-      "privateFilenamesOrObjectKeysIncluded": false
+      "privateFilenamesOrObjectKeysIncluded": false,
+      "observationScope": "Historical two-of-five checkpoint at 15:49; all counts and receipts here describe that earlier phase and are superseded for current completeness by manualRestore.",
+      "supersededBy": "manualRestore"
     },
     "credentialValueHandlingScope": "No credential values printed or persisted locally in this evidence; later normal sensitive provisioning in the backup project is recorded separately and is not proof of credential validity.",
     "productionOidcConnections": {
@@ -631,6 +636,157 @@
       "productionEndpointChanged": false,
       "nativeResponseHandling": "Source POST succeeded with an empty response and was not repeated; target PATCH was subsequently applied once; both desired connections confirmed by readback",
       "successfulFullBackupProvenByConnectionsAlone": false
+    },
+    "manualRestore": {
+      "receipt": "manual-private-file-restore.json",
+      "receiptSha256": "bd6b09fc017cde10964751a371a63fcafd870942021b2593813ab228ad4041ce",
+      "format": "private-blob-five-asset-operator-restore-v1",
+      "status": "FINAL_FIVE_ASSET_RESTORE_PASS",
+      "observedAt": "2026-11-01T17:06:44.520Z",
+      "finishedAt": "2026-11-01T17:06:54.738Z",
+      "scopeAssetCount": 5,
+      "scopeBytes": 44260,
+      "restoredAssetCount": 5,
+      "restoredBytes": 44260,
+      "remainingAssetCount": 0,
+      "remainingBytes": 0,
+      "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+      "targetStoreId": "store_Xq45pbZfYunmR6ah",
+      "originalKeysRestored": true,
+      "sourceTargetFiveAssetProof": "PASS",
+      "sourceSdkReadCalls": 5,
+      "targetSdkPutCalls": 3,
+      "existingPdfGuard": {
+        "bothKnownHashesMatch": true,
+        "existingKeysNeverReput": true
+      },
+      "sourceStoreWrites": 0,
+      "sourcePutCalls": 0,
+      "sourceDeleteCalls": 0,
+      "productionDatabaseWrites": 0,
+      "neonCallsDuringFilePhase": 0,
+      "jobRetries": 0,
+      "inventoryAfter": {
+        "exhaustive": true,
+        "totalObjectCount": 5,
+        "originalAssetCount": 5,
+        "originalAssetBytes": 44260,
+        "backupNamespaceObjectCount": 0,
+        "otherObjectCount": 0
+      },
+      "assetChecks": [
+        {
+          "assetId": "36510a74-dc15-4b6a-a5bd-45c44d400aa7",
+          "bytes": 20327,
+          "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+          "bytes": 996,
+          "sha256": "67f9107c8362338fd6630e15c29c55ec840b8236c75ff3ebebc12a3ec9bf74cc",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "c9730956-1590-4b64-87b7-8fc19fedf69f",
+          "bytes": 6868,
+          "sha256": "14677678104dd339b7a0b836f69039d658488264cedfd4d225c498b12e69a2a8",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+          "bytes": 953,
+          "sha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "e8209f86-93a1-4f0e-a455-e2aa65407b6a",
+          "bytes": 15116,
+          "sha256": "da5ab6148bb774f361322658410eda62ba067fafac80ae2c48bb4443b19a22ed",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        }
+      ],
+      "temporarySourceOperatorGrant": {
+        "kind": "temporary_operator_grant",
+        "connectionId": "spc_mFUHkGw3AuUfslt0",
+        "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "tokenEnvironment": "development",
+        "providerReadonlyGrant": false,
+        "requiresRootRollback": false,
+        "rootActivationConfirmed": true,
+        "rollbackPending": false,
+        "rollbackConfirmed": true,
+        "rollbackConfirmedAt": "2026-11-01T17:07:18.836Z"
+      },
+      "operatorGrantRollback": {
+        "confirmed": true,
+        "confirmedAt": "2026-11-01T17:07:18.836Z",
+        "sourceConnectionEnvironments": [
+          "production"
+        ],
+        "originalCrmProductionConnectionPreserved": true,
+        "rootGrantReceiptSha256": "a206ce505344d33b64752cad454a02306f3647dacf8a297a4ad5ac4202df1b1b",
+        "freshDevelopmentAccessDenied": {
+          "format": "temporary-operator-source-development-revocation-check-v1",
+          "checkedAt": "2026-11-01T17:09:50.039Z",
+          "sourceSdkGetCalls": 1,
+          "bodyExported": false,
+          "bodyInterpreted": false,
+          "storeWrites": 0,
+          "credentialFilesWritten": 0,
+          "freshDevelopmentClaimsMatch": true,
+          "httpStatus": 403,
+          "expected403": true,
+          "permissionCode": "HTTP_403",
+          "status": "REVOCATION_DENIAL_PASS",
+          "finishedAt": "2026-11-01T17:09:50.852Z"
+        }
+      },
+      "sourceManifestProvenance": {
+        "snapshotId": "snap-quiet-rice-alihtu8r",
+        "snapshotAt": "2026-11-01T14:01:49Z",
+        "manifestSha256": "ab9fc80e34bc4f3c59441a95d4a47c68407bfb5401998b293afd22c316c3f72c",
+        "assetCount": 5,
+        "totalBytes": 44260,
+        "historicalKnowledgeVersionReferenceCount": 2
+      },
+      "localArchiveVerification": {
+        "fileCount": 5,
+        "totalBytes": 44260,
+        "allFileModes600": true,
+        "directoryMode700": true,
+        "allSourceArchiveHashesMatch": true
+      },
+      "missingImageBytesReconstructed": false,
+      "additionalUserFileZipRequired": false,
+      "normalApplicationTextDownloadHttp200Claimed": false,
+      "scheduledCombinedBackupFullJobProven": false,
+      "secretOrPrivatePathValuesIncluded": false
     }
   },
   "recoveryAssessment": {
@@ -644,7 +800,7 @@
     ],
     "newManualSnapshotIsPeriodicBackupPolicy": false,
     "sixHoursMeaning": "Retained historical recovery lookback; not a measured data-loss RPO. Errors detected after the window require an independently retained usable snapshot.",
-    "businessAdequacy": "Native daily database snapshots at 03:00 UTC with seven-day retention improve recovery coverage beyond the unchanged six-hour PITR history. Schedule activation is proven, not a later scheduled execution. Complete private-file backup/restore, a paired periodic job, end-to-end application/file RTO and an accepted business RPO remain unproven.",
+    "businessAdequacy": "Manual recovery of the verified 14:23:47 UTC snapshot database and all five referenced private original files is proven. Native daily database snapshots at 03:00 UTC with seven-day retention remain active alongside six-hour PITR. The unattended combined job remains INCOMPLETE/paused with cron off pending corrected valid Neon management-key handoff through normal browser authentication. A repeated automatic full-file recovery process, restored whole-application acceptance, end-to-end RTO and accepted business RPO are not proven.",
     "endToEndApplicationAndFilesRtoMeasured": false,
     "retentionOrScheduleOrPlanChanged": true,
     "automaticSnapshotScheduleVerifiedAt": "2026-11-01T15:59:27Z",
@@ -686,9 +842,9 @@
         "VALIDATED_PROJECT_SCOPED_NEON_API_KEY_HANDOFF"
       ],
       "pendingOperationalSetup": [
-        "Complete the corrected normal UI-to-UI management-credential handoff and validate authenticated access to the exact Neon project",
-        "Perform and verify a successful paired database/private-file run and isolated restoration",
-        "Activate the paired backup cron only after the complete run and restore are verified"
+        "Complete our normal browser authentication/profile setup for corrected UI-to-UI management-key handoff and validate access to the exact Neon project",
+        "Complete and verify a successful unattended paired backup cycle; the separate manual snapshot/database/private-original restoration has already passed",
+        "Activate the paired backup cron only after that unattended cycle is verified"
       ],
       "operationalStoreGrantsAreOurPendingSetup": false,
       "deploymentPreflight": {
@@ -745,7 +901,7 @@
         "validManagementAccessProven": false,
         "validKeyCreationOrHandoffClaimed": false,
         "correctedUiToUiHandoffComplete": false,
-        "currentHandoffBoundary": "Normal Vercel browser MFA/profile setup is pending for corrected UI-to-UI handoff; no MFA codes requested in chat.",
+        "currentHandoffBoundary": "Our normal Vercel browser MFA/profile setup remains pending for the corrected UI-to-UI handoff. No authentication codes are included in this evidence.",
         "productionOidcIsMissingExternalSecret": false,
         "storeConnectionGapResolved": true,
         "credentialValuesIncluded": false
@@ -782,7 +938,8 @@
         },
         "targetOriginalAssetsStillVerified": 2,
         "fullBackupSetProven": false,
-        "successfulIsolatedFullRestoreClaimed": false
+        "successfulIsolatedFullRestoreClaimed": false,
+        "observationScope": "Historical failed unattended attempt at 16:44 before the separate successful manual five-file restoration; its two-file checkpoint and empty backup namespace are preserved as observed."
       },
       "currentExecutionState": {
         "fullBackupEnabled": false,
@@ -792,7 +949,9 @@
         "crons": [],
         "diagnosticErrorCodeFixDeployed": true,
         "diagnosticFixDeploymentIdNotRecordedHere": true,
-        "noNewSuccessfulFullAttemptClaimed": true
+        "noNewSuccessfulFullAttemptClaimed": true,
+        "manualDataRecoveryPass": true,
+        "currentManualOriginalFileCount": 5
       }
     }
   },
@@ -863,10 +1022,10 @@
     "productionDeploymentChangedByMerge": false,
     "selfCreatedSuccessStatusUsed": false
   },
-  "fullOperationalAcceptance": "BLOCKED_BY_VALIDATED_NEON_MANAGEMENT_ACCESS_AND_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE",
-  "updatedThrough": "2026-11-01T16:47:40Z",
+  "fullOperationalAcceptance": "MANUAL_DATA_RECOVERY_PASS_UNATTENDED_AUTOMATION_NOT_ACCEPTED",
+  "updatedThrough": "2026-11-01T17:16:48.371910+00:00",
   "knowledgeTxtDocumentDiagnosis": {
-    "scope": "One known private Knowledge TXT asset and its historical version references; read-only metadata plus exact production source-code route check.",
+    "scope": "Historical generic-route diagnosis and exact production code read, supplemented by later direct original-byte restoration and isolated database-reference pairing.",
     "productionSourceSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
     "neonProjectId": "misty-cloud-70835427",
     "branchId": "br-spring-night-alyu48yp",
@@ -898,8 +1057,14 @@
     "normalDurableSessionRequired": true,
     "workspaceMembershipAndMfaChecksPreserved": true,
     "txtDownloadBytesVerified": false,
-    "txtBytesRestored": false,
-    "privateFilenamesOrObjectKeysIncluded": false
+    "txtBytesRestored": true,
+    "privateFilenamesOrObjectKeysIncluded": false,
+    "txtDownloadBytesVerifiedScope": "A successful authenticated normal application document download is not claimed; direct SDK source and target byte verification is separately proven.",
+    "txtSourceBytesReadAndShaVerified": true,
+    "txtTargetBytesReadAndShaVerified": true,
+    "txtContentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+    "bothHistoricalDocumentHashesMatchRestoredOriginal": true,
+    "normalApplicationTextDownloadHttp200Claimed": false
   },
   "followUpNativeChecksAndMerge": {
     "pullRequest": 122,
@@ -927,5 +1092,116 @@
     },
     "nativeCodeChecksAreSuccessfulOperationalBackupProof": false,
     "selfCreatedSuccessStatusUsed": false
-  }
+  },
+  "manualDataRecovery": {
+    "status": "PASS_DATABASE_AND_ALL_REFERENCED_PRIVATE_ORIGINALS_PAIRED",
+    "operationalDataRecovery": "PASS",
+    "scope": "MANUAL_SNAPSHOT_DATABASE_AND_ALL_DATABASE_REFERENCED_PRIVATE_ORIGINAL_FILES",
+    "verifiedAt": "2026-11-01T17:16:48.371910+00:00",
+    "receipt": "database-file-reference-pairing.json",
+    "receiptSha256": "fb1081bfdaf1afbf308b506f0e4becdc2027a590f694cdf8f2521b1cf0b897af",
+    "databaseSnapshotId": "snap-fragrant-breeze-al24d0gr",
+    "databaseSnapshotPoint": "2026-11-01T14:23:47Z",
+    "reusedFullDatabaseComparison": {
+      "tables": 200,
+      "rows": 5092,
+      "catalogCategories": 28,
+      "sequences": 2,
+      "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4",
+      "mediaAssetsTableSha256": "793a854ca9f7cf5152a83b872d3553cdc6cceff39571515112d23c27933f748d",
+      "knowledgeSourceVersionsTableSha256": "1c3206e9e5c617fc703e0bda92c3aaae5dee253b659d9416e8ac0effa7164fb7",
+      "unchangedProofReused": true
+    },
+    "narrowTargetReadIdentity": {
+      "role": "neondb_owner",
+      "branchId": "br-orange-brook-al5f6n0f",
+      "readOnly": true,
+      "projectId": "misty-cloud-70835427",
+      "databaseName": "neondb",
+      "mediaRlsActive": false,
+      "versionRlsActive": false
+    },
+    "targetEndpointId": "ep-raspy-union-al4lz6jx",
+    "narrowTargetAssetRows": 5,
+    "narrowTargetHistoricalReferenceRows": 2,
+    "matchingOriginalAssetCount": 5,
+    "matchingOriginalBytes": 44260,
+    "historicalVersionReferencesWithMatchingOriginalSha256": 2,
+    "references": [
+      {
+        "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+        "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+        "versionId": "258d0747-f470-49a2-b2c5-9c1143ac014c",
+        "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+        "documentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+        "documentSizeBytes": 953
+      },
+      {
+        "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+        "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+        "versionId": "37c77c9a-c8e7-481a-9000-05360398a61a",
+        "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+        "documentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+        "documentSizeBytes": 953
+      }
+    ],
+    "privateManifestOrigin": {
+      "snapshotId": "snap-quiet-rice-alihtu8r",
+      "snapshotAt": "2026-11-01T14:01:49Z",
+      "manifestSha256": "ab9fc80e34bc4f3c59441a95d4a47c68407bfb5401998b293afd22c316c3f72c",
+      "assetCount": 5,
+      "totalBytes": 44260,
+      "historicalKnowledgeVersionReferenceCount": 2
+    },
+    "fileRestoreReceipt": "manual-private-file-restore.json",
+    "fileRestoreReceiptSha256": "bd6b09fc017cde10964751a371a63fcafd870942021b2593813ab228ad4041ce",
+    "allFiveOriginalSourceTargetHashesMatch": true,
+    "allFiveOriginalTargetKeysMatch": true,
+    "allFiveAnonymousRequestsDenied403": true,
+    "fullDatabaseScanRepeated": false,
+    "isolatedComputeCleanup": {
+      "id": "ep-raspy-union-al4lz6jx",
+      "branchId": "br-orange-brook-al5f6n0f",
+      "disabled": true,
+      "currentState": "idle"
+    },
+    "productionEndpoint": {
+      "id": "ep-wandering-union-alem0781",
+      "branchId": "br-spring-night-alyu48yp",
+      "disabled": false,
+      "currentState": "active"
+    },
+    "productionEndpointChanged": false,
+    "laterSnapshotRestoredClaimed": false,
+    "laterSnapshotId": "snap-silent-shape-alvreahy",
+    "scheduledCombinedJobSucceeded": false,
+    "restoredApplicationAcceptanceClaimed": false,
+    "wholeApplicationBackupClaimed": false,
+    "additionalUserFileZipRequired": false,
+    "initialProductionRestoreIncidentRemainsDisclosed": true
+  },
+  "currentCodeFixPullRequest": {
+    "pullRequest": 123,
+    "url": "https://github.com/novalure/novalure-crm/pull/123",
+    "state": "OPEN",
+    "checkedCodeHeadShaPrefix": "cd6015ef",
+    "nativeQuality": {
+      "runId": 41329232214,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41329232214",
+      "conclusion": "SUCCESS"
+    },
+    "nativeSecretScan": {
+      "runId": 41329232375,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41329232375",
+      "conclusion": "SUCCESS"
+    },
+    "nativePreview": {
+      "deploymentId": "dpl_5rHKVuUmThcYkZi8jQCJXJtXHscR",
+      "conclusion": "SUCCESS"
+    },
+    "finalEvidenceCommitPending": true,
+    "checksForLaterEvidenceCommitClaimed": false
+  },
+  "operationalDataRecovery": "PASS",
+  "unattendedAutomationAcceptance": "BLOCKED_OWN_NORMAL_BROWSER_AUTH_AND_VALIDATED_NEON_KEY_HANDOFF"
 }

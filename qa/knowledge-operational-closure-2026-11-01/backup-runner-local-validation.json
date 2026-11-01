@@ -44,5 +44,17 @@
     "validatedCliFailureCodePreserved": true,
     "testScope": "Focused failure-response and redaction checks",
     "nativeFinalChecks": "Required again for the diagnostic change"
+  },
+  "manualRecovery": {
+    "databaseAndAllReferencedPrivateOriginalsPaired": true,
+    "originalAssets": 5,
+    "originalBytes": 44260,
+    "historicalDocumentShaMatches": 2,
+    "existingFullDatabaseProofReused": true,
+    "fullDatabaseScanRepeated": false,
+    "temporarySourceDevelopmentGrantRevoked": true,
+    "freshDevelopmentSourceAccessAfterRevocationHttpStatus": 403,
+    "wholeApplicationAcceptanceClaimed": false,
+    "scheduledCombinedJobSuccessClaimed": false
   }
 }
