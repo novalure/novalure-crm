@@ -71,7 +71,7 @@
       "company_profile_versions_exists": true
     },
     "interpretation": "The runtime proof confirms the actual running artifact and restricted DB connection. The administrative ledger and company profile tables are intentionally inaccessible to this runtime role, so its catalog listing is not a production migration inventory. Both tables exist under the separate owner catalog check.",
-    "incidentLimitation": "The actual endpoint is still on the unintended restored production branch. This is evidence of the current binding, not evidence of completed rollback or isolated recovery."
+    "incidentLimitation": "The production endpoint was moved by the unintended first restore. Its current data and subsequent legitimate writes were retained, and the branch name/default were aligned to that actual production binding. This is not a rollback or an isolated success claim for the first attempt. The later explicit finalize:false isolated database comparison is recorded separately."
   },
   "normalPrivateFileRead": {
     "format": "knowledge-ops-authorized-private-file-read-v1",
@@ -96,7 +96,7 @@
   "previewIsolation": {
     "schemaVersion": 1,
     "purpose": "Prepare a protected build-only Preview with application authentication and database access intentionally unconfigured.",
-    "state": "prepared_not_deployed",
+    "state": "NATIVE_PREVIEW_CHECK_SUCCESS",
     "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
     "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
     "gitBranch": "codex/knowledge-operational-closure-20261031",
@@ -171,13 +171,19 @@
       }
     ],
     "limitations": [
-      "No Preview deployment has been created by this operation.",
-      "Deployment must use the final reviewed commit; this file does not assert a native Vercel check.",
+      "The preparation operation itself created no deployment; the later native Preview deployment and its successful check are recorded separately.",
+      "Native Preview success applies to the final reviewed head only; it is not authenticated acceptance of a restored application and private-file set.",
       "Known QA integrations may inject prefixed QA variables at deployment time; application runtime database fallback variables remain intentionally empty."
     ],
     "automaticDeploymentPolicy": {
       "mainRemainsDisabled": true,
       "ownBranchEnabledAfterIsolationVerified": true
+    },
+    "nativeCheck": {
+      "headSha": "52f009c8b4709fd36647634b6f7ce54444fe3799",
+      "deploymentId": "dpl_AJdxskiWDGx67nPU6G1nHNnSrsHw",
+      "conclusion": "SUCCESS",
+      "productionReleaseChanged": false
     }
   },
   "initialRestoreIncident": {
@@ -426,7 +432,8 @@
     "privateFileBytesRestored": false,
     "fullDatabaseAndPrivateFilesRecovery": "NOT_PROVEN",
     "freshAuthenticatedRestoredApplicationAcceptance": false,
-    "priorIncident": "Preserved separately; this isolated finalize:false run is not a relabelling of the earlier finalization incident."
+    "priorIncident": "Preserved separately; this isolated finalize:false run is not a relabelling of the earlier finalization incident.",
+    "privateFileBytesRestoredScope": "This database-only run restored no physical Blob bytes. Later partial private-file restoration is recorded in privateStoreAuthorization.partialRestore; full recovery remains unproven."
   },
   "isolatedRestoreBinding": {
     "sourceBranchId": "br-spring-night-alyu48yp",
@@ -479,7 +486,9 @@
     "knowledgeFileVersionBindingsSha256": "6467f35dc3073d0ed99bcf64cfb55b9e3fc4087c20d667a937c51f9446e3765f",
     "knowledgeVersionFileReferenceCount": 2,
     "privateMediaWithoutKnowledgeReference": 4,
-    "knowledgeVersionMissingAssetReferences": 0
+    "knowledgeVersionMissingAssetReferences": 0,
+    "observationPhase": "Complete isolated database inventory at the database-only restore; physical-byte flags describe that phase, before the later two-file restoration.",
+    "currentPhysicalRecovery": "See privateStoreAuthorization.partialRestore: two of five private assets restored and verified; three remain."
   },
   "privateStoreAuthorization": {
     "sourceStoreId": "store_vCn7LiyRocYNC8pM",
@@ -507,17 +516,178 @@
     },
     "physicalArchiveComplete": false,
     "physicalPrivateStoreRestoreComplete": false,
-    "targetStoreCreated": false,
-    "credentialsPrintedOrPersisted": false
+    "targetStoreCreated": true,
+    "credentialsPrintedOrPersisted": false,
+    "targetStore": {
+      "id": "store_Xq45pbZfYunmR6ah",
+      "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+      "access": "private",
+      "oidcEnvironments": [
+        "development"
+      ],
+      "productionOidcConnectionEstablished": false
+    },
+    "partialRestore": {
+      "format": "private-blob-partial-restore-v1",
+      "status": "PARTIAL_2_OF_5",
+      "observedAt": "2026-11-01T15:49:38.985Z",
+      "finishedAt": "2026-11-01T15:49:43.119Z",
+      "receiptSource": "scratch/knowledge-ops-blob-phase1-20261101/partial-restore-2-of-5-receipt.json",
+      "receiptSha256": "b04b46dc60e9748b70aca0d9795f45b339c9756df465a8f6fe857153a1f9973c",
+      "method": "User supplied two normally downloaded PDFs; bytes were verified and restored to the separate private target using its legitimate Development OIDC access.",
+      "scopeAssetCount": 5,
+      "scopeBytes": 44260,
+      "restoredAssetCount": 2,
+      "restoredBytes": 21323,
+      "remainingAssetCount": 3,
+      "remainingBytes": 22937,
+      "restoredMimeTypes": [
+        "application/pdf"
+      ],
+      "targetInventory": {
+        "exhaustive": true,
+        "assetCount": 2,
+        "bytes": 21323,
+        "expectedKeysetMatch": true
+      },
+      "secondAssetReadback": {
+        "bytes": 20327,
+        "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+        "sizeMatch": true,
+        "shaMatch": true,
+        "exactKeyMatch": true,
+        "privateTargetOriginMatch": true
+      },
+      "firstAssetReference": "normalPrivateFileRead and the preceding one-file restore receipt; existing exact target object was verified and not put again in the second-file operation.",
+      "existingAssetGuard": {
+        "exhaustiveKeysetOne": true,
+        "sizeMatch": true,
+        "shaMatch": true,
+        "noExistingAssetReput": true
+      },
+      "unauthenticatedTargetRead": {
+        "httpStatus": 403,
+        "denied": true,
+        "noAuthorizationHeader": true,
+        "noCookies": true
+      },
+      "secondFileOperation": {
+        "sourceStoreWrites": 0,
+        "sourceAuthRequests": 0,
+        "sourceBlobReads": 0,
+        "productionDatabaseWrites": 0,
+        "secretGetterCalls": 0,
+        "credentialFilesWritten": 0,
+        "targetSdkPutCalls": 1
+      },
+      "fullPrivateArchiveOrRestoreClaimed": false,
+      "missingImageBytesReconstructed": false,
+      "privateFilenamesOrObjectKeysIncluded": false
+    }
   },
   "recoveryAssessment": {
     "historyRetentionSeconds": 21600,
-    "automaticSnapshotScheduleForActualProduction": [],
+    "automaticSnapshotScheduleForActualProduction": [
+      {
+        "frequency": "daily",
+        "hour": 3,
+        "retention_seconds": 604800
+      }
+    ],
     "newManualSnapshotIsPeriodicBackupPolicy": false,
     "sixHoursMeaning": "Retained historical recovery lookback; not a measured data-loss RPO. Errors detected after the window require an independently retained usable snapshot.",
-    "businessAdequacy": "Not sufficiently established for dependable business recovery: only six hours history, no observed periodic native snapshot schedule, complete private-file backup/restore not proven. An overnight/weekend detection window is not covered by six hours alone.",
+    "businessAdequacy": "Native daily database snapshots at 03:00 UTC with seven-day retention improve recovery coverage beyond the unchanged six-hour PITR history. Schedule activation is proven, not a later scheduled execution. Complete private-file backup/restore, a paired periodic job, end-to-end application/file RTO and an accepted business RPO remain unproven.",
     "endToEndApplicationAndFilesRtoMeasured": false,
-    "retentionOrScheduleOrPlanChanged": false
+    "retentionOrScheduleOrPlanChanged": true,
+    "automaticSnapshotScheduleVerifiedAt": "2026-11-01T15:59:27Z",
+    "automaticSnapshotScheduleTimezone": "UTC",
+    "automaticSnapshotScheduleSourceBranchId": "br-spring-night-alyu48yp",
+    "automaticSnapshotScheduleReceipt": "native-database-backup-schedule.json",
+    "nativeScheduleStatus": "ACTIVE_DATABASE_ONLY_SCHEDULE_READBACK",
+    "nativeScheduleCoverage": "DATABASE_ONLY",
+    "laterScheduledExecutionObserved": false,
+    "productionEndpointReadback": {
+      "id": "ep-wandering-union-alem0781",
+      "branchId": "br-spring-night-alyu48yp",
+      "type": "read_write",
+      "disabled": false,
+      "currentState": "active"
+    },
+    "productionEndpointBindingChanged": false,
+    "changeScope": {
+      "historyRetentionChanged": false,
+      "nativeSnapshotScheduleActivated": true,
+      "nativeSnapshotRetentionSeconds": 604800,
+      "billingPlanChanged": false,
+      "existingWebsiteTeamsCalendarSchedulesChanged": false
+    },
+    "pairedBackupRunner": {
+      "status": "PRODUCTION_CALLER_READY_PREFLIGHT_BLOCKED_ONLY_NEON_API_KEY_EXECUTION_DISABLED",
+      "documentation": "../../docs/crm-full-backup-runner.md",
+      "entrypoint": "scripts/crm-full-backup.mjs",
+      "dailyPairedJobDeployed": false,
+      "dailyPairedJobActive": false,
+      "projectScopedNeonManagementKeyProvisioned": false,
+      "backupProjectProductionOidcSourceAndTargetGrantsEstablished": false,
+      "developmentTargetAccessIsProductionBackupAccess": false,
+      "actualFullPairedBackupRunCompleted": false,
+      "callerProductionDeployed": true,
+      "productionOidcProvidedByNativeWorkload": true,
+      "productionOidcForwardedViaSdkContext": true,
+      "externalProductionOidcSecretMissing": false,
+      "missingExternalAccess": [
+        "NEON_API_KEY"
+      ],
+      "pendingOperationalSetup": [
+        "Configure normal backup-project Production OIDC connections to the source and target stores",
+        "Perform and verify the complete paired database/private-file run",
+        "Activate the paired backup cron only after the complete run is verified"
+      ],
+      "operationalStoreGrantsAreOurPendingSetup": true,
+      "deploymentPreflight": {
+        "format": "crm-backup-preflight-deployment-v1",
+        "observedAt": "2026-11-01T16:27:57.624Z",
+        "receipt": "backup-preflight-deployment.json",
+        "receiptSha256": "2971d8c5979444d4b493709b6905ca233b7498cb42757c51315d0425c81c46bd",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "deploymentId": "dpl_FYQUe8K9oFtufsgfRVpRpcNHy522",
+        "deploymentUrl": "knowledge-ops-restore-20261101-e0tl83mpx-novalure.vercel.app",
+        "environment": "production",
+        "readyState": "READY",
+        "nodeVersion": "24.x",
+        "existingDeploymentProtectionPreserved": true,
+        "newSensitiveSecretName": "CRON_SECRET",
+        "newSensitiveSecretCount": 1,
+        "secretScope": "Existing backup project only",
+        "secretPrintedOrPersistedLocally": false,
+        "cronEnabled": false,
+        "crons": [],
+        "fullBackupEnabled": false,
+        "CRM_FULL_BACKUP_ENABLED": false,
+        "authenticatedPreflight": {
+          "httpStatus": 200,
+          "mode": "PLAN_ONLY_NO_REMOTE_IO",
+          "status": "BLOCKED",
+          "enabled": false,
+          "missing": [
+            "NEON_API_KEY"
+          ],
+          "code": "BACKUP_PLAN_BLOCKED"
+        },
+        "unauthorizedCronRequest": {
+          "rejected": true,
+          "httpStatus": 401
+        },
+        "productionOidcProvidedByNativeWorkload": true,
+        "sourceStoreConnectionsChanged": false,
+        "sourceStoreRequests": 0,
+        "databaseRequests": 0,
+        "applicationProjectChanged": false,
+        "productionEndpointChanged": false,
+        "fullOperationalAcceptanceClaimed": false
+      }
+    }
   },
   "cliHelperCleanup": {
     "format": "knowledge-ops-cli-probe-cleanup-v1",
@@ -541,6 +711,87 @@
     "cleanup": "Paused the exact new helper project, verified its identity and zero env records, then deleted it via native vercel project delete presence --scope novalure --yes. CLI returned Deleted presence.",
     "noCredentialInjectionProofClaimed": true
   },
-  "finalNativeChecksAndMerge": "Final exact-head Vercel/Actions and merge receipts are recorded in PR120 after this evidence commit; no self-created success status is used.",
-  "fullOperationalAcceptance": "BLOCKED_BY_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE"
+  "finalNativeChecksAndMerge": {
+    "finalHeadSha": "52f009c8b4709fd36647634b6f7ce54444fe3799",
+    "nativeQuality": {
+      "runId": 41316658465,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41316658465",
+      "conclusion": "SUCCESS",
+      "attempt": 1,
+      "completedAt": "2026-11-01T14:43:10Z",
+      "fullGateJobId": 124878029666,
+      "fullGateConclusion": "SUCCESS",
+      "auditJobId": 124878029880,
+      "auditConclusion": "SUCCESS",
+      "includes": [
+        "Production build",
+        "Integrated Design C and Knowledge acceptance",
+        "Whitespace check"
+      ]
+    },
+    "nativeSecretScan": {
+      "runId": 41316658454,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41316658454",
+      "conclusion": "SUCCESS",
+      "attempt": 1,
+      "completedAt": "2026-11-01T14:32:10Z"
+    },
+    "nativePreview": {
+      "deploymentId": "dpl_AJdxskiWDGx67nPU6G1nHNnSrsHw",
+      "conclusion": "SUCCESS",
+      "headSha": "52f009c8b4709fd36647634b6f7ce54444fe3799"
+    },
+    "manualTrustedCandidate": {
+      "jobId": 124880764810,
+      "conclusion": "SKIPPED",
+      "countedAsPass": false
+    },
+    "merge": {
+      "pullRequest": 120,
+      "url": "https://github.com/novalure/novalure-crm/pull/120",
+      "state": "MERGED",
+      "mergeCommitShaPrefix": "a45625d",
+      "mergedAt": "2026-11-01T14:44:11Z"
+    },
+    "productionDeploymentChangedByMerge": false,
+    "selfCreatedSuccessStatusUsed": false
+  },
+  "fullOperationalAcceptance": "BLOCKED_BY_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE",
+  "updatedThrough": "2026-11-01T16:27:57.624Z",
+  "knowledgeTxtDocumentDiagnosis": {
+    "scope": "One known private Knowledge TXT asset and its historical version references; read-only metadata plus exact production source-code route check.",
+    "productionSourceSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+    "neonProjectId": "misty-cloud-70835427",
+    "branchId": "br-spring-night-alyu48yp",
+    "endpointId": "ep-wandering-union-alem0781",
+    "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+    "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+    "assetExists": true,
+    "mimeType": "text/plain",
+    "bytes": 953,
+    "storageProvider": "vercel-blob",
+    "storageAccess": "private",
+    "isPublic": false,
+    "folderClass": "knowledge-private-",
+    "relativePathSha256": "50a6ceb9a7846fa6ec277051827f5b85bdfac6a482aab77890d720c0b57d7d74",
+    "urlSha256": "4d2d5f16e5041ca8889b89b31189d4e8e6ecebf32b0a963ca312e2501aad54d0",
+    "manifestMatchesAssetMetadata": true,
+    "publicTokenPresent": false,
+    "shareCount": 0,
+    "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+    "approvedVersionId": "258d0747-f470-49a2-b2c5-9c1143ac014c",
+    "historicalVersionIds": [
+      "37c77c9a-c8e7-481a-9000-05360398a61a",
+      "258d0747-f470-49a2-b2c5-9c1143ac014c"
+    ],
+    "knowledgeVersionReferences": 2,
+    "genericMedia404Meaning": "The ordinary media database lookup intentionally excludes knowledge-private assets before any Blob read; this 404 does not diagnose missing physical bytes.",
+    "normalDocumentUrl": "https://www.novalure-crm.app/api/knowledge-center/sources/6a4b1ef0-9196-4bdc-a965-8c1aa832aac5/document?versionId=258d0747-f470-49a2-b2c5-9c1143ac014c&workspaceId=8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+    "explicitWorkspaceQuerySupported": true,
+    "normalDurableSessionRequired": true,
+    "workspaceMembershipAndMfaChecksPreserved": true,
+    "txtDownloadBytesVerified": false,
+    "txtBytesRestored": false,
+    "privateFilenamesOrObjectKeysIncluded": false
+  }
 }
