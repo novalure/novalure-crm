@@ -1,0 +1,18 @@
+{
+  "format": "crm-backup-failed-run-pause-v1",
+  "observedAt": "2026-11-01T16:56:11.069Z",
+  "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "deploymentId": "dpl_Et7yzfDUHiN6HeHa4Mve2NbX9vLb",
+  "readyState": "READY",
+  "executionFlagConfiguredFalse": true,
+  "cronEnabled": false,
+  "neonCredentialRecordPresent": true,
+  "credentialValidated": false,
+  "credentialAuthReadHttpStatus": 401,
+  "claimNamespaceObjectCount": 0,
+  "restoreBranchCreated": false,
+  "productionEndpointId": "ep-wandering-union-alem0781",
+  "productionBranchId": "br-spring-night-alyu48yp",
+  "productionEndpointLastObservedActive": true,
+  "productionEndpointDisabled": false
+}

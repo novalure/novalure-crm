@@ -1,6 +1,6 @@
 {
   "format": "knowledge-ops-operational-evidence-2026-11-01-v1",
-  "scope": "Knowledge Center / novalure/novalure-crm / PR120 only; independent of package4 of the shared learning platform",
+  "scope": "Knowledge Center / novalure/novalure-crm / PR120 and operational follow-up PR122; independent of package4 of the shared learning platform",
   "baselineReuse": {
     "sourceHead": "51af3de033cb8d6fb52ab12c8d44526718c63fb7",
     "qualityRun": "https://github.com/novalure/novalure-crm/actions/runs/41243432576",
@@ -523,9 +523,10 @@
       "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
       "access": "private",
       "oidcEnvironments": [
-        "development"
+        "development",
+        "production"
       ],
-      "productionOidcConnectionEstablished": false
+      "productionOidcConnectionEstablished": true
     },
     "partialRestore": {
       "format": "private-blob-partial-restore-v1",
@@ -583,6 +584,53 @@
       "fullPrivateArchiveOrRestoreClaimed": false,
       "missingImageBytesReconstructed": false,
       "privateFilenamesOrObjectKeysIncluded": false
+    },
+    "credentialValueHandlingScope": "No credential values printed or persisted locally in this evidence; later normal sensitive provisioning in the backup project is recorded separately and is not proof of credential validity.",
+    "productionOidcConnections": {
+      "format": "crm-backup-production-blob-connections-v1",
+      "status": "NORMAL_OIDC_CONNECTIONS_CONFIGURED",
+      "observedAt": "2026-11-01T16:40:19.787Z",
+      "receipt": "backup-blob-connections.json",
+      "receiptSha256": "cbf8c7ed4b6d9777bf9c6946991e792c0668a488789bbabfcecac308b67ac4b6",
+      "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+      "targetStoreId": "store_Xq45pbZfYunmR6ah",
+      "sourceBackup": {
+        "connectionId": "spc_mFUHkGw3AuUfslt0",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "environments": [
+          "production"
+        ],
+        "envVarPrefix": "BACKUP_SOURCE_BLOB"
+      },
+      "targetBackup": {
+        "connectionId": "spc_rDycowIUHZ7rBFcQ",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "environments": [
+          "development",
+          "production"
+        ],
+        "envVarPrefix": "BLOB"
+      },
+      "existingCrm": {
+        "connectionId": "spc_kYVPVyeV690yocE2",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "environments": [
+          "production"
+        ],
+        "envVarPrefix": "NOVALURE_PRIVATE_BLOB"
+      },
+      "existingCrmConnectionIdentityEnvironmentAndPrefixPreserved": true,
+      "targetDevelopmentConnectionPreserved": true,
+      "skipReadWriteToken": true,
+      "productionCredentialsCopied": false,
+      "sourceGrantProviderReadOnlyClaimed": false,
+      "sourceAdapterOperations": [
+        "get",
+        "list"
+      ],
+      "productionEndpointChanged": false,
+      "nativeResponseHandling": "Source POST succeeded with an empty response and was not repeated; target PATCH was subsequently applied once; both desired connections confirmed by readback",
+      "successfulFullBackupProvenByConnectionsAlone": false
     }
   },
   "recoveryAssessment": {
@@ -622,13 +670,12 @@
       "existingWebsiteTeamsCalendarSchedulesChanged": false
     },
     "pairedBackupRunner": {
-      "status": "PRODUCTION_CALLER_READY_PREFLIGHT_BLOCKED_ONLY_NEON_API_KEY_EXECUTION_DISABLED",
+      "status": "ACTUAL_RUN_INCOMPLETE_MANAGEMENT_ACCESS_UNVERIFIED_EXECUTION_PAUSED_CRON_OFF",
       "documentation": "../../docs/crm-full-backup-runner.md",
       "entrypoint": "scripts/crm-full-backup.mjs",
       "dailyPairedJobDeployed": false,
       "dailyPairedJobActive": false,
-      "projectScopedNeonManagementKeyProvisioned": false,
-      "backupProjectProductionOidcSourceAndTargetGrantsEstablished": false,
+      "backupProjectProductionOidcSourceAndTargetGrantsEstablished": true,
       "developmentTargetAccessIsProductionBackupAccess": false,
       "actualFullPairedBackupRunCompleted": false,
       "callerProductionDeployed": true,
@@ -636,14 +683,14 @@
       "productionOidcForwardedViaSdkContext": true,
       "externalProductionOidcSecretMissing": false,
       "missingExternalAccess": [
-        "NEON_API_KEY"
+        "VALIDATED_PROJECT_SCOPED_NEON_API_KEY_HANDOFF"
       ],
       "pendingOperationalSetup": [
-        "Configure normal backup-project Production OIDC connections to the source and target stores",
-        "Perform and verify the complete paired database/private-file run",
-        "Activate the paired backup cron only after the complete run is verified"
+        "Complete the corrected normal UI-to-UI management-credential handoff and validate authenticated access to the exact Neon project",
+        "Perform and verify a successful paired database/private-file run and isolated restoration",
+        "Activate the paired backup cron only after the complete run and restore are verified"
       ],
-      "operationalStoreGrantsAreOurPendingSetup": true,
+      "operationalStoreGrantsAreOurPendingSetup": false,
       "deploymentPreflight": {
         "format": "crm-backup-preflight-deployment-v1",
         "observedAt": "2026-11-01T16:27:57.624Z",
@@ -685,7 +732,67 @@
         "databaseRequests": 0,
         "applicationProjectChanged": false,
         "productionEndpointChanged": false,
-        "fullOperationalAcceptanceClaimed": false
+        "fullOperationalAcceptanceClaimed": false,
+        "observationScope": "Historical 16:27 preflight of dpl_FYQUe8K9oFtufsgfRVpRpcNHy522 before later normal store-connection setup, sensitive credential handoff and failed actual attempt; original preflight response is preserved."
+      },
+      "projectScopedNeonManagementKeyValidated": false,
+      "managementCredentialHandoff": {
+        "credentialValueStoredAsSensitiveBackupProductionVariable": true,
+        "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "normalExactProjectAuthenticationReadHttpStatus": 401,
+        "validationReadOnly": true,
+        "validationMutations": 0,
+        "validManagementAccessProven": false,
+        "validKeyCreationOrHandoffClaimed": false,
+        "correctedUiToUiHandoffComplete": false,
+        "currentHandoffBoundary": "Normal Vercel browser MFA/profile setup is pending for corrected UI-to-UI handoff; no MFA codes requested in chat.",
+        "productionOidcIsMissingExternalSecret": false,
+        "storeConnectionGapResolved": true,
+        "credentialValuesIncluded": false
+      },
+      "actualRunAttempt": {
+        "attemptedAt": "2026-11-01T16:44:52Z",
+        "deploymentId": "dpl_GXFQ6g8yBAmFX6NDABDYUEcfYEZ6",
+        "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "httpStatus": 503,
+        "status": "INCOMPLETE",
+        "sourceSnapshot": {
+          "id": "snap-silent-shape-alvreahy",
+          "sourceBranchId": "br-spring-night-alyu48yp",
+          "createdAt": "2026-11-01T16:42:48Z",
+          "expiresAtReported": "2026-11-08 16:45 UTC"
+        },
+        "targetNamespaceObservation": {
+          "prefix": "crm-full-backups/",
+          "observedAt": "2026-11-01T16:47:40Z",
+          "exhaustive": true,
+          "objectCount": 0
+        },
+        "branchListObservation": {
+          "branchCount": 16,
+          "matchingCrmBackupBranchesObserved": 0,
+          "interpretation": "No matching crm-backup branch was observed in that list; this is not a claim about every intermediate provider action."
+        },
+        "productionEndpointReadback": {
+          "id": "ep-wandering-union-alem0781",
+          "branchId": "br-spring-night-alyu48yp",
+          "currentState": "active",
+          "disabled": false,
+          "bindingChanged": false
+        },
+        "targetOriginalAssetsStillVerified": 2,
+        "fullBackupSetProven": false,
+        "successfulIsolatedFullRestoreClaimed": false
+      },
+      "currentExecutionState": {
+        "fullBackupEnabled": false,
+        "flag": "CRM_FULL_BACKUP_ENABLED=false",
+        "pausedAfterIncompleteAttempt": true,
+        "cronEnabled": false,
+        "crons": [],
+        "diagnosticErrorCodeFixDeployed": true,
+        "diagnosticFixDeploymentIdNotRecordedHere": true,
+        "noNewSuccessfulFullAttemptClaimed": true
       }
     }
   },
@@ -756,8 +863,8 @@
     "productionDeploymentChangedByMerge": false,
     "selfCreatedSuccessStatusUsed": false
   },
-  "fullOperationalAcceptance": "BLOCKED_BY_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE",
-  "updatedThrough": "2026-11-01T16:27:57.624Z",
+  "fullOperationalAcceptance": "BLOCKED_BY_VALIDATED_NEON_MANAGEMENT_ACCESS_AND_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE",
+  "updatedThrough": "2026-11-01T16:47:40Z",
   "knowledgeTxtDocumentDiagnosis": {
     "scope": "One known private Knowledge TXT asset and its historical version references; read-only metadata plus exact production source-code route check.",
     "productionSourceSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
@@ -793,5 +900,32 @@
     "txtDownloadBytesVerified": false,
     "txtBytesRestored": false,
     "privateFilenamesOrObjectKeysIncluded": false
+  },
+  "followUpNativeChecksAndMerge": {
+    "pullRequest": 122,
+    "url": "https://github.com/novalure/novalure-crm/pull/122",
+    "finalHeadSha": "ad7f64757dcb06c7af0414bc6b251fc0efeb2385",
+    "nativeQuality": {
+      "runId": 41326808191,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41326808191",
+      "conclusion": "SUCCESS",
+      "durationSeconds": 643
+    },
+    "nativeSecretScan": {
+      "runId": 41326808327,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41326808327",
+      "conclusion": "SUCCESS"
+    },
+    "nativePreview": {
+      "deploymentId": "dpl_J78PwN5rssmgNRtVTRPrLTHiCqZ1",
+      "conclusion": "SUCCESS"
+    },
+    "merge": {
+      "state": "MERGED",
+      "mergeCommitSha": "8baace9abaa4bf8dc44d904f541a90ff39c5b9dc",
+      "mergedAt": "2026-11-01T16:44:00Z"
+    },
+    "nativeCodeChecksAreSuccessfulOperationalBackupProof": false,
+    "selfCreatedSuccessStatusUsed": false
   }
 }

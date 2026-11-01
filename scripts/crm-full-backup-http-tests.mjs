@@ -29,7 +29,8 @@ function privateHeaders(response) {
 function safeLogs(logs) {
   for (const payload of logs) {
     assert.equal(payload !== null && typeof payload === 'object' && !Array.isArray(payload), true);
-    assert.equal(Object.keys(payload).every(key => ['status', 'code'].includes(key)), true);
+    assert.equal(Object.keys(payload).every(key => ['status', 'code', 'failureCode'].includes(key)), true);
+    if (payload.failureCode !== undefined) assert.match(payload.failureCode, /^[A-Z][A-Z0-9_]{1,100}$/u);
     assert.equal(JSON.stringify(payload).includes(cronSecret), false);
   }
 }
@@ -284,6 +285,44 @@ test('current execution-context OIDC reaches only a copied runner environment af
       assert.equal(runs, 0);
       assert.equal(process.env.VERCEL_OIDC_TOKEN, processToken);
       await assertRedacted(response, logs);
+    }
+  });
+});
+
+
+test('validated CLI failure codes remain visible without exposing unsafe runner output', async t => {
+  await t.test('a validated incomplete code is returned alongside the fixed HTTP code', async () => {
+    const f = fixture({ env: { ...workload, CRM_FULL_BACKUP_ENABLED: 'true' }, output: { status: 'INCOMPLETE', code: 'NEON_REQUEST_FAILED' }, exitCode: 1 });
+    const response = await f.handler(request());
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.status, 'INCOMPLETE');
+    assert.equal(body.code, 'BACKUP_INCOMPLETE');
+    assert.equal(body.failureCode, 'NEON_REQUEST_FAILED');
+    for (const record of f.logs) if (record.failureCode !== undefined) assert.equal(record.failureCode, 'NEON_REQUEST_FAILED');
+    safeLogs(f.logs);
+    privateHeaders(response);
+  });
+  await t.test('a private URI or unknown secret field yields no exposed failure code', async () => {
+    const secret = 'SYNTHETIC_PRIVATE_VALUE_MUST_NOT_LEAK';
+    const uri = `postgresql://user:${secret}@private.example.invalid/neondb`;
+    for (const output of [
+      { status: 'INCOMPLETE', code: uri },
+      { status: 'INCOMPLETE', code: 'NEON_REQUEST_FAILED', token: secret },
+    ]) {
+      const f = fixture({ env: { ...workload, CRM_FULL_BACKUP_ENABLED: 'true' }, output, exitCode: 1 });
+      const response = await f.handler(request());
+      assert.equal(response.status, 503);
+      const body = await response.json();
+      assert.equal(body.code, 'BACKUP_HTTP_RESULT_INVALID');
+      assert.equal('failureCode' in body, false);
+      assert.equal(JSON.stringify(body).includes(secret), false);
+      assert.equal(JSON.stringify(body).includes(uri), false);
+      assert.equal(JSON.stringify(f.logs).includes(secret), false);
+      assert.equal(JSON.stringify(f.logs).includes(uri), false);
+      for (const record of f.logs) assert.equal(record.failureCode, undefined);
+      safeLogs(f.logs);
+      privateHeaders(response);
     }
   });
 });
