@@ -1,0 +1,122 @@
+{
+  "format": "knowledge-isolated-database-file-reference-pairing-v1",
+  "status": "PASS_DATABASE_AND_ALL_REFERENCED_PRIVATE_ORIGINALS_PAIRED",
+  "databaseSnapshotId": "snap-fragrant-breeze-al24d0gr",
+  "databaseSnapshotPoint": "2026-11-01T14:23:47Z",
+  "reusedFullDatabaseComparison": {
+    "tables": 200,
+    "rows": 5092,
+    "catalogCategories": 28,
+    "sequences": 2,
+    "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4",
+    "mediaAssetsTableSha256": "793a854ca9f7cf5152a83b872d3553cdc6cceff39571515112d23c27933f748d",
+    "knowledgeSourceVersionsTableSha256": "1c3206e9e5c617fc703e0bda92c3aaae5dee253b659d9416e8ac0effa7164fb7",
+    "unchangedProofReused": true
+  },
+  "assets": [
+    {
+      "bytes": 20327,
+      "assetId": "36510a74-dc15-4b6a-a5bd-45c44d400aa7",
+      "isPublic": false,
+      "mimeType": "application/pdf",
+      "pathSha256": "62054fa5e3a09afc6395ab30ce93d4d3e8aa8d970f196731e7f93652dfd3cb89",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "storageAccess": "private",
+      "storageProvider": "vercel-blob",
+      "publicTokenPresent": false
+    },
+    {
+      "bytes": 996,
+      "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+      "isPublic": false,
+      "mimeType": "application/pdf",
+      "pathSha256": "60b2274acf531007905ca47f7b805e7ae651ddcfd879c390597afed98541952f",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "storageAccess": "private",
+      "storageProvider": "vercel-blob",
+      "publicTokenPresent": false
+    },
+    {
+      "bytes": 6868,
+      "assetId": "c9730956-1590-4b64-87b7-8fc19fedf69f",
+      "isPublic": false,
+      "mimeType": "image/webp",
+      "pathSha256": "56e346c274161e3358fe5504ed10697a070f69d736bd4c71af866c83e9f8668b",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "storageAccess": "private",
+      "storageProvider": "vercel-blob",
+      "publicTokenPresent": false
+    },
+    {
+      "bytes": 953,
+      "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+      "isPublic": false,
+      "mimeType": "text/plain",
+      "pathSha256": "50a6ceb9a7846fa6ec277051827f5b85bdfac6a482aab77890d720c0b57d7d74",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "storageAccess": "private",
+      "storageProvider": "vercel-blob",
+      "publicTokenPresent": false
+    },
+    {
+      "bytes": 15116,
+      "assetId": "e8209f86-93a1-4f0e-a455-e2aa65407b6a",
+      "isPublic": false,
+      "mimeType": "image/png",
+      "pathSha256": "1bfb41e0bdd3ae4adb93557ad6b58ceab5deeb35c7f5d5135d06cbf4e18d23f0",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "storageAccess": "private",
+      "storageProvider": "vercel-blob",
+      "publicTokenPresent": false
+    }
+  ],
+  "identity": {
+    "role": "neondb_owner",
+    "branchId": "br-orange-brook-al5f6n0f",
+    "readOnly": true,
+    "projectId": "misty-cloud-70835427",
+    "databaseName": "neondb",
+    "mediaRlsActive": false,
+    "versionRlsActive": false
+  },
+  "references": [
+    {
+      "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+      "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+      "versionId": "258d0747-f470-49a2-b2c5-9c1143ac014c",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "documentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+      "documentSizeBytes": 953
+    },
+    {
+      "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+      "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+      "versionId": "37c77c9a-c8e7-481a-9000-05360398a61a",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "documentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+      "documentSizeBytes": 953
+    }
+  ],
+  "isolatedComputeCleanup": {
+    "id": "ep-raspy-union-al4lz6jx",
+    "branchId": "br-orange-brook-al5f6n0f",
+    "disabled": true,
+    "currentState": "idle"
+  },
+  "productionEndpoint": {
+    "id": "ep-wandering-union-alem0781",
+    "branchId": "br-spring-night-alyu48yp",
+    "disabled": false,
+    "currentState": "active"
+  },
+  "productionEndpointChanged": false,
+  "fullDatabaseScanRepeated": false,
+  "verifiedAt": "2026-11-01T17:16:48.371910+00:00",
+  "fileRestoreReceiptSha256": "bd6b09fc017cde10964751a371a63fcafd870942021b2593813ab228ad4041ce",
+  "matchingOriginalAssetCount": 5,
+  "matchingOriginalBytes": 44260,
+  "historicalVersionReferencesWithMatchingOriginalSha256": 2,
+  "scheduledCombinedJobSucceeded": false,
+  "restoredApplicationAcceptanceClaimed": false,
+  "wholeApplicationBackupClaimed": false
+}

@@ -3,7 +3,7 @@
   "scope": "Local safety and provider-contract tests only; no actual complete backup execution",
   "tests": {
     "command": "npm run test:crm-full-backup",
-    "passed": 54,
+    "passed": 57,
     "failed": 0,
     "skipped": 0,
     "remoteProviderCalls": 0
@@ -35,6 +35,26 @@
     "cronEnabled": false,
     "productionOidcProvided": true,
     "missingExternalCredential": "NEON_API_KEY",
-    "receipt": "backup-preflight-deployment.json"
+    "receipt": "backup-preflight-deployment.json",
+    "credentialRecordNowPresent": true,
+    "credentialValidated": false,
+    "currentBlocker": "Direct UI credential handoff awaits signed-in Vercel browser MFA; native CLI authorization is available"
+  },
+  "diagnosticFix": {
+    "validatedCliFailureCodePreserved": true,
+    "testScope": "Focused failure-response and redaction checks",
+    "nativeFinalChecks": "Required again for the diagnostic change"
+  },
+  "manualRecovery": {
+    "databaseAndAllReferencedPrivateOriginalsPaired": true,
+    "originalAssets": 5,
+    "originalBytes": 44260,
+    "historicalDocumentShaMatches": 2,
+    "existingFullDatabaseProofReused": true,
+    "fullDatabaseScanRepeated": false,
+    "temporarySourceDevelopmentGrantRevoked": true,
+    "freshDevelopmentSourceAccessAfterRevocationHttpStatus": 403,
+    "wholeApplicationAcceptanceClaimed": false,
+    "scheduledCombinedJobSuccessClaimed": false
   }
 }

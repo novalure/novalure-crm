@@ -32,7 +32,7 @@ function workloadMatches(env) {
     env.VERCEL_PROJECT_ID === binding.backupProjectId && teams.length > 0 && teams.every(key => env[key] === binding.teamId);
 }
 /** Validate the CLI envelope and expose only typed summary values. Source/target
- * records, informational strings and arbitrary error codes never enter HTTP/logs. */
+ * records, informational strings and unvalidated error codes never enter HTTP/logs. */
 function publicSummary(value) {
   if (!safeObject(value) || Object.keys(value).some(key => !knownFields.has(key)) || !statuses.has(value.status)) return null;
   if (value.scope !== undefined && value.scope !== BACKUP_SCOPE) return null;
@@ -41,6 +41,7 @@ function publicSummary(value) {
   if (value.wholeApplicationBackup !== undefined && value.wholeApplicationBackup !== false) return null;
   if (value.fullBackupClaimed !== undefined && value.fullBackupClaimed !== false) return null;
   const result = { status: value.status, scope: BACKUP_SCOPE, wholeApplicationBackup: false };
+  if (value.code !== undefined && ['BLOCKED', 'INCOMPLETE'].includes(value.status)) result.failureCode = value.code;
   if (value.missing !== undefined) {
     if (!Array.isArray(value.missing) || !value.missing.every(item => missingNames.has(item))) return null;
     result.missing = [...new Set(value.missing.map(item => missingNames.get(item)))];
@@ -77,8 +78,9 @@ async function currentRuntimeOidcToken() {
 export function createCrmBackupHttpHandler({ env = process.env, run = main, getOidcToken = currentRuntimeOidcToken, log = record => console.info(JSON.stringify(record)) } = {}) {
   return async function handleCrmBackupRequest(request) {
     const respond = (value, status, extraHeaders = {}) => {
-      // Logs contain only this handler's fixed codes and validated statuses.
-      try { log({ status: value.status, code: value.code }); } catch { /* Logging is never an authority or an error-payload sink. */ }
+      // Only fixed HTTP codes, validated statuses and the same validated CLI
+      // failure code are logged. Provider error objects/messages are excluded.
+      try { log({ status: value.status, code: value.code, ...(value.failureCode ? { failureCode: value.failureCode } : {}) }); } catch { /* Logging is never an authority or an error-payload sink. */ }
       return Response.json(value, { status, headers: { ...headers, ...extraHeaders } });
     };
     const failure = (status, code, httpStatus) => respond({ status, code, wholeApplicationBackup: false }, httpStatus);
