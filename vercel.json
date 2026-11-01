@@ -8,7 +8,8 @@
       "codex/knowledge-center-completion-20261019": false,
       "codex/evelyn-crm-design-c-integration": false,
       "codex/knowledge-center-package3-20261019": false,
-      "codex/evelyn-crm-package4-integration": true
+      "codex/evelyn-crm-package4-integration": true,
+      "codex/knowledge-operational-closure-20261031": true
     }
   },
   "crons": [

@@ -1,0 +1,546 @@
+{
+  "format": "knowledge-ops-operational-evidence-2026-11-01-v1",
+  "scope": "Knowledge Center / novalure/novalure-crm / PR120 only; independent of package4 of the shared learning platform",
+  "baselineReuse": {
+    "sourceHead": "51af3de033cb8d6fb52ab12c8d44526718c63fb7",
+    "qualityRun": "https://github.com/novalure/novalure-crm/actions/runs/41243432576",
+    "secretScanRun": "https://github.com/novalure/novalure-crm/actions/runs/41243432595",
+    "unchangedAcceptedEvidence": "Monitoring configuration, completed scheduled runs, six migration source checksums, dependency fix, independent code review; no repeat acceptance suite was manually started."
+  },
+  "applicationBinding": {
+    "format": "knowledge-ops-regular-application-binding-v1",
+    "observedAt": "2026-11-01T14:08:53.584Z",
+    "method": "User opened existing protected diagnostic in an already signed-in CRM browser; the returned correlation ID was independently matched against native production runtime logs.",
+    "deploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+    "gitSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+    "branch": "codex/continuous-operation-20261029-crm",
+    "environment": "production",
+    "correlationId": "975b89af-e93d-4af5-89cb-47c9edaccd4f",
+    "nativeLogRequestId": "5dkft-1793542132810-cb38581615f2",
+    "database": "neondb",
+    "currentUser": "novalure_app",
+    "sessionUser": "novalure_app",
+    "neonProjectId": "misty-cloud-70835427",
+    "neonBranchId": "br-spring-night-alyu48yp",
+    "runtimeProofStatus": "PASS",
+    "leastPrivilege": true,
+    "bindingMatchesExpectedProject": true,
+    "superuser": false,
+    "bypassRls": false,
+    "createDatabase": false,
+    "createRole": false,
+    "replication": false,
+    "sessionSuperuser": false,
+    "sessionBypassRls": false,
+    "sessionCreateDatabase": false,
+    "sessionCreateRole": false,
+    "sessionReplication": false,
+    "databaseOwner": false,
+    "sessionDatabaseOwner": false,
+    "databaseCreate": false,
+    "sessionDatabaseCreate": false,
+    "schemaCreate": false,
+    "sessionSchemaCreate": false,
+    "readAllData": false,
+    "sessionReadAllData": false,
+    "writeAllData": false,
+    "sessionWriteAllData": false,
+    "tenantRuntimeMember": true,
+    "relevantMemberships": [
+      "novalure_app",
+      "novalure_tenant_app"
+    ],
+    "reachableElevatedRoles": 0,
+    "ownedOrInheritedPublicTables": 0,
+    "forbiddenCompanyProfilesSelect": false,
+    "requiredRlsTablesProtected": true,
+    "diagnosticEnvelopeOk": false,
+    "migrationLedgerError": "migration_ledger_unavailable",
+    "migrationStatus": {
+      "checksumRows": 0,
+      "currentVersion": null,
+      "rows": 0
+    },
+    "diagnosticMissingTables": [
+      "company_profile_versions",
+      "company_profiles"
+    ],
+    "independentOwnerCatalogRead": {
+      "role": "neondb_owner",
+      "company_profiles_exists": true,
+      "company_profile_versions_exists": true
+    },
+    "interpretation": "The runtime proof confirms the actual running artifact and restricted DB connection. The administrative ledger and company profile tables are intentionally inaccessible to this runtime role, so its catalog listing is not a production migration inventory. Both tables exist under the separate owner catalog check.",
+    "incidentLimitation": "The actual endpoint is still on the unintended restored production branch. This is evidence of the current binding, not evidence of completed rollback or isolated recovery."
+  },
+  "normalPrivateFileRead": {
+    "format": "knowledge-ops-authorized-private-file-read-v1",
+    "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+    "bytes": 996,
+    "sha256": "67f9107c8362338fd6630e15c29c55ec840b8236c75ff3ebebc12a3ec9bf74cc",
+    "method": "User performed normal signed-in CRM download and supplied the resulting bytes; no cookie or token was supplied. Native request log confirms the same private file route.",
+    "authenticatedRequest": {
+      "timestamp": "2026-11-01T14:12:27.469Z",
+      "requestId": "wpnqb-1793542347469-c0091ece9130",
+      "httpStatus": 200,
+      "deploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+      "environment": "production",
+      "cacheResult": "MISS"
+    },
+    "independentNoCookieControl": {
+      "httpStatus": 401,
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "contentType": "application/json"
+    }
+  },
+  "previewIsolation": {
+    "schemaVersion": 1,
+    "purpose": "Prepare a protected build-only Preview with application authentication and database access intentionally unconfigured.",
+    "state": "prepared_not_deployed",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "gitBranch": "codex/knowledge-operational-closure-20261031",
+    "sourceHeadAtPreparation": "51af3de033cb8d6fb52ab12c8d44526718c63fb7",
+    "target": [
+      "preview"
+    ],
+    "inventoryReadAt": "2026-11-01T14:17:16.743Z",
+    "verifiedAt": "2026-11-01T14:17:42.294Z",
+    "mutation": {
+      "tool": "vercel_create_project_env",
+      "createdCount": 70,
+      "failedCount": 0,
+      "neutralizedInheritedKeys": 65,
+      "minimalGuardFlags": 5,
+      "productionTargetWrites": 0,
+      "existingRecordUpdates": 0,
+      "integrationChanges": 0,
+      "resourceChanges": 0,
+      "databaseChanges": 0,
+      "deploymentsCreated": 0
+    },
+    "verification": {
+      "pass": true,
+      "totalPreviewRecords": 509,
+      "genericCount": 65,
+      "ownCount": 70,
+      "expectedKeysPresent": true,
+      "genericMetadataUnchanged": true,
+      "allOwnValuesMatch": true,
+      "allOwnScopesMatch": true,
+      "allOwnIdsAreCreated": true
+    },
+    "valueHandling": {
+      "apiDecryptionRequested": false,
+      "credentialValuesPrinted": false,
+      "credentialValuesWritten": false,
+      "valueComparison": "In memory only; per-key Boolean matches recorded."
+    },
+    "previewResourceMetadata": [
+      {
+        "storeId": "store_iC0dv0mmYWCDj7ww",
+        "providerProjectId": "super-block-59791927",
+        "prefix": "G27_QA",
+        "environments": [
+          "preview"
+        ],
+        "deploymentAction": {
+          "required": true,
+          "slug": "Neon",
+          "environments": [
+            "preview"
+          ]
+        },
+        "defaultBranchId": "br-dry-thunder-awmimouk",
+        "defaultReadWriteEndpointId": "ep-super-dew-awqyp0tr"
+      },
+      {
+        "storeId": "store_3n3qzgGn0jnR4PSr",
+        "providerProjectId": "weathered-term-98273025",
+        "prefix": "QA_TENANT",
+        "environments": [
+          "preview",
+          "development"
+        ],
+        "deploymentAction": {
+          "required": true,
+          "actions": []
+        },
+        "defaultBranchId": "br-lucky-heart-alrm9dlw",
+        "defaultReadWriteEndpointId": "ep-morning-fog-al1enszq"
+      }
+    ],
+    "limitations": [
+      "No Preview deployment has been created by this operation.",
+      "Deployment must use the final reviewed commit; this file does not assert a native Vercel check.",
+      "Known QA integrations may inject prefixed QA variables at deployment time; application runtime database fallback variables remain intentionally empty."
+    ],
+    "automaticDeploymentPolicy": {
+      "mainRemainsDisabled": true,
+      "ownBranchEnabledAfterIsolationVerified": true
+    }
+  },
+  "initialRestoreIncident": {
+    "format": "knowledge-ops-unexpected-restore-finalization-v1",
+    "status": "INCIDENT_STOPPED_NO_SUCCESS_CLAIM",
+    "snapshotRequest": {
+      "tool": "neon_create_snapshot",
+      "args": {
+        "project_id": "misty-cloud-70835427",
+        "branch_id": "br-snowy-fog-aldx77v8",
+        "name": "knowledge-ops-recovery-20261101-point-1405z"
+      }
+    },
+    "snapshot": {
+      "id": "snap-quiet-rice-alihtu8r",
+      "name": "knowledge-ops-recovery-20261101-point-1405z",
+      "source_branch_id": "br-snowy-fog-aldx77v8",
+      "created_at": "2026-11-01T14:02:10Z",
+      "manual": true
+    },
+    "restoreRequest": {
+      "tool": "neon_restore_snapshot",
+      "args": {
+        "project_id": "misty-cloud-70835427",
+        "snapshot_id": "snap-quiet-rice-alihtu8r",
+        "name": "knowledge-ops-recovery-20261101-restored-1405z"
+      },
+      "target_branch_id_omitted": true,
+      "finalize_omitted": true,
+      "finalize_false_required_but_not_supplied": true
+    },
+    "restoreInitialResponse": {
+      "id": "br-spring-night-alyu48yp",
+      "project_id": "misty-cloud-70835427",
+      "parent_lsn": "0/A098B140",
+      "name": "knowledge-ops-recovery-20261101-restored-1405z",
+      "slug": "br-spring-night-alyu48yp",
+      "current_state": "init",
+      "pending_state": "ready",
+      "state_changed_at": "2026-11-01T14:02:20Z",
+      "creation_source": "console",
+      "primary": false,
+      "default": false,
+      "protected": false,
+      "cpu_used_sec": 0,
+      "compute_time_seconds": 0,
+      "active_time_seconds": 0,
+      "written_data_bytes": 0,
+      "data_transfer_bytes": 0,
+      "created_at": "2026-11-01T14:02:20Z",
+      "updated_at": "2026-11-01T14:02:20Z",
+      "init_source": "parent-data",
+      "restore_status": "restored",
+      "restored_from": "snap-quiet-rice-alihtu8r",
+      "restored_as": "br-snowy-fog-aldx77v8"
+    },
+    "observedBranches": [
+      {
+        "id": "br-snowy-fog-aldx77v8",
+        "name": "knowledge-ops-recovery-20261101-restored-1405z (1)",
+        "default": false,
+        "primary": false,
+        "current_state": "ready",
+        "created_at": "2026-05-12T17:50:28Z",
+        "updated_at": "2026-11-01T14:02:42Z"
+      },
+      {
+        "id": "br-spring-night-alyu48yp",
+        "name": "main",
+        "default": true,
+        "primary": true,
+        "current_state": "ready",
+        "restore_status": "finalized",
+        "restored_from": "snap-quiet-rice-alihtu8r",
+        "restored_as": "br-snowy-fog-aldx77v8",
+        "parent_lsn": "0/A098B140",
+        "parent_timestamp": "2026-11-01T14:01:49Z",
+        "created_at": "2026-11-01T14:02:20Z",
+        "updated_at": "2026-11-01T14:02:41Z"
+      }
+    ],
+    "observedRelevantEndpoints": [
+      {
+        "id": "ep-young-queen-alvm4ypc",
+        "branch_id": "br-snowy-fog-aldx77v8",
+        "type": "read_write",
+        "disabled": false,
+        "current_state": "idle",
+        "last_active": "2000-01-01T00:00:00Z",
+        "created_at": "2026-11-01T14:02:20Z",
+        "updated_at": "2026-11-01T14:02:20Z"
+      },
+      {
+        "id": "ep-wandering-union-alem0781",
+        "branch_id": "br-spring-night-alyu48yp",
+        "type": "read_write",
+        "disabled": false,
+        "current_state": "active",
+        "last_active": "2026-11-01T13:59:50Z",
+        "created_at": "2026-05-12T17:50:28Z",
+        "updated_at": "2026-11-01T14:02:40Z"
+      }
+    ],
+    "actionsAfterDetection": [
+      "Stopped all remote mutations",
+      "Did not disable or delete any endpoint, branch or snapshot",
+      "Read branch and endpoint metadata only",
+      "Immediately notified root coordinator"
+    ],
+    "productionWritesAfterMove": "POSSIBLE_NOT_YET_PROVEN_OR_EXCLUDED",
+    "firstFingerprintAttempt": {
+      "status": "FAIL",
+      "remoteWrites": 0,
+      "error": "NeonDbError: syntax error at or near \"space\"",
+      "cause": "Local query adapter matched relname as prefix of relnamespace; corrected word-boundary replacement before successful baseline.",
+      "preservedSql": "fingerprint-syntax-failure.sql"
+    },
+    "successfulBaselineFile": "source-before.json",
+    "fullRecoveryClaimed": false,
+    "currentDisposition": "Current production data retained and names/default aligned; no second production reset or endpoint move. See productionStabilization."
+  },
+  "productionStabilization": {
+    "format": "knowledge-ops-production-stabilization-v1",
+    "status": "ACTIVE_DATA_PRESERVED_METADATA_ALIGNED",
+    "actualProductionBranchId": "br-spring-night-alyu48yp",
+    "actualProductionBranchName": "main",
+    "defaultBranchMatchesActualProduction": true,
+    "productionEndpointId": "ep-wandering-union-alem0781",
+    "productionEndpointUnchangedSinceIncident": true,
+    "productionEndpointActive": true,
+    "productionEndpointDisabled": false,
+    "decision": "Keep the currently serving consistent restored data and all subsequent legitimate writes. Rebinding the older original branch would now require reconciliation and could discard later changes. Only branch names and the default pointer were aligned; there was no further production reset, endpoint move, SQL reconciliation, schema/grant change or deployment.",
+    "preservedPreincidentBranch": {
+      "id": "br-snowy-fog-aldx77v8",
+      "name": "knowledge-ops-preincident-20261101",
+      "laterWritesIncluded": false,
+      "immediateRollbackCertified": false,
+      "computeId": "ep-young-queen-alvm4ypc",
+      "computeDisabled": true
+    },
+    "integrityBasis": "Original source remained identical across all200tables/5551rows/28catalogcategories/twoSequences at14:04. Restored data differed only in a completed empty reminder admission row, with one provider-created role. Actual signed-in production role and private-file bytes were subsequently verified. Later table changes are recorded separately.",
+    "incidentRemainsDisclosed": true,
+    "initialAttemptClaimedAsIsolatedRestore": false
+  },
+  "subsequentTableDeltas": {
+    "format": "knowledge-ops-safe-current-table-count-deltas-v1",
+    "scope": "Metadata only; not a data-loss diagnosis",
+    "before": "2026-11-01T14:04:19.625232+00:00",
+    "after": "2026-11-01T14:23:33.906881+00:00",
+    "changes": [
+      {
+        "table": "public.auth_audit_events",
+        "beforeRows": 505,
+        "afterRows": 509
+      },
+      {
+        "table": "public.auth_login_challenges",
+        "beforeRows": 86,
+        "afterRows": 88
+      },
+      {
+        "table": "public.auth_rate_limit_buckets",
+        "beforeRows": 1,
+        "afterRows": 0
+      },
+      {
+        "table": "public.auth_sessions",
+        "beforeRows": 301,
+        "afterRows": 302
+      },
+      {
+        "table": "public.csrf_token_consumptions",
+        "beforeRows": 469,
+        "afterRows": 4
+      }
+    ]
+  },
+  "isolatedDatabaseRestore": {
+    "format": "knowledge-ops-isolated-database-recovery-comparison-v1",
+    "status": "PASS_DATABASE_HASH_EQUIVALENCE_ONLY",
+    "scope": "All stored rows across all200 non-system tables in public and neon_auth,28 catalogue/database/ledger categories,2 logical sequence states; no raw row values returned",
+    "summaries": [
+      {
+        "phase": "current-source-before-isolated",
+        "capturedAt": "2026-11-01T14:23:33.906881+00:00",
+        "branchId": "br-spring-night-alyu48yp",
+        "tables": 200,
+        "rows": 5092,
+        "catalogCategories": 28,
+        "sequences": 2,
+        "dataSha256": "f60ef7e6800273ee809ecabbccef1788eefa0176084beccc057534df7c41a28b",
+        "catalogSha256": "9e5e4ddc4ad3eeb99a440ab2c0c66c7684ab635cb5bdf0740aaaeb1a4a0d1d71",
+        "sequenceSha256": "52fca969922f35790469c580530d7067e5d59bec3cfdf54d9ab9819c7f50b8d7",
+        "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4"
+      },
+      {
+        "phase": "isolated-target",
+        "capturedAt": "2026-11-01T14:25:02.788985+00:00",
+        "branchId": "br-orange-brook-al5f6n0f",
+        "tables": 200,
+        "rows": 5092,
+        "catalogCategories": 28,
+        "sequences": 2,
+        "dataSha256": "f60ef7e6800273ee809ecabbccef1788eefa0176084beccc057534df7c41a28b",
+        "catalogSha256": "9e5e4ddc4ad3eeb99a440ab2c0c66c7684ab635cb5bdf0740aaaeb1a4a0d1d71",
+        "sequenceSha256": "52fca969922f35790469c580530d7067e5d59bec3cfdf54d9ab9819c7f50b8d7",
+        "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4"
+      },
+      {
+        "phase": "current-source-after-isolated",
+        "capturedAt": "2026-11-01T14:25:06.586131+00:00",
+        "branchId": "br-spring-night-alyu48yp",
+        "tables": 200,
+        "rows": 5092,
+        "catalogCategories": 28,
+        "sequences": 2,
+        "dataSha256": "f60ef7e6800273ee809ecabbccef1788eefa0176084beccc057534df7c41a28b",
+        "catalogSha256": "9e5e4ddc4ad3eeb99a440ab2c0c66c7684ab635cb5bdf0740aaaeb1a4a0d1d71",
+        "sequenceSha256": "52fca969922f35790469c580530d7067e5d59bec3cfdf54d9ab9819c7f50b8d7",
+        "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4"
+      }
+    ],
+    "comparisons": {
+      "beforeVsTarget": {
+        "dataEqual": true,
+        "catalogEqual": true,
+        "sequenceEqual": true,
+        "changedData": [],
+        "changedCategories": []
+      },
+      "beforeVsAfter": {
+        "dataEqual": true,
+        "catalogEqual": true,
+        "sequenceEqual": true,
+        "changedData": [],
+        "changedCategories": []
+      },
+      "targetVsAfter": {
+        "dataEqual": true,
+        "catalogEqual": true,
+        "sequenceEqual": true,
+        "changedData": [],
+        "changedCategories": []
+      }
+    },
+    "privateFileBytesRestored": false,
+    "fullDatabaseAndPrivateFilesRecovery": "NOT_PROVEN",
+    "freshAuthenticatedRestoredApplicationAcceptance": false,
+    "priorIncident": "Preserved separately; this isolated finalize:false run is not a relabelling of the earlier finalization incident."
+  },
+  "isolatedRestoreBinding": {
+    "sourceBranchId": "br-spring-night-alyu48yp",
+    "sourceEndpointId": "ep-wandering-union-alem0781",
+    "snapshotId": "snap-fragrant-breeze-al24d0gr",
+    "snapshotCreatedAt": "2026-11-01T14:24:08Z",
+    "snapshotPointTimestamp": "2026-11-01T14:23:47Z",
+    "targetBranchId": "br-orange-brook-al5f6n0f",
+    "targetBranchName": "knowledge-ops-isolated-restore-20261101-1424z",
+    "finalizeExplicitlyFalse": true,
+    "targetBranchIdParameterSupplied": false,
+    "targetDefault": false,
+    "targetPrimary": false,
+    "targetRestoreStatus": "restored",
+    "targetEndpointId": "ep-raspy-union-al4lz6jx",
+    "productionEndpointBindingPreservedDuringIsolatedRun": true,
+    "targetComputeMinCu": 0.25,
+    "targetComputeMaxCu": 0.25,
+    "targetComputeDisabledAfterVerification": true,
+    "targetComputeIdleReceipt": "Confirmed by native endpoint readback: ep-raspy-union-al4lz6jx is disabled=true/current_state=idle; production ep-wandering-union-alem0781 remains active/disabled=false on br-spring-night-alyu48yp."
+  },
+  "privateMediaInventory": {
+    "format": "knowledge-ops-isolated-private-media-full-database-inventory-v1",
+    "branchId": "br-orange-brook-al5f6n0f",
+    "physicalObjectsRestored": false,
+    "physicalBytesAndSha256Verified": false,
+    "scope": "ALL_MEDIA_ASSETS_AND_ALL_KNOWLEDGE_VERSIONS_NO_TENANT_FILTER",
+    "allMediaCount": 6,
+    "allPrivateMediaCount": 5,
+    "mediaCountsByBinding": [
+      {
+        "objects": 1,
+        "is_public": false,
+        "recorded_bytes": 362780,
+        "storage_access": "legacy-public",
+        "storage_provider": "vercel-blob"
+      },
+      {
+        "objects": 5,
+        "is_public": false,
+        "recorded_bytes": 44260,
+        "storage_access": "private",
+        "storage_provider": "vercel-blob"
+      }
+    ],
+    "allPrivateRecordedBytes": 44260,
+    "privateMediaMissingObjectKey": 0,
+    "privateMediaGenericPublicExposure": 0,
+    "privateMediaReferencedByKnowledge": 1,
+    "knowledgeFileVersionBindingsSha256": "6467f35dc3073d0ed99bcf64cfb55b9e3fc4087c20d667a937c51f9446e3765f",
+    "knowledgeVersionFileReferenceCount": 2,
+    "privateMediaWithoutKnowledgeReference": 4,
+    "knowledgeVersionMissingAssetReferences": 0
+  },
+  "privateStoreAuthorization": {
+    "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+    "metadataAccess": "private",
+    "providerObjectCount": 6,
+    "providerRecordedBytes": 47047,
+    "databaseReferencedPrivateObjects": 5,
+    "databaseReferencedPrivateBytes": 44260,
+    "metadataDifferenceNotSilentlyIncluded": true,
+    "knownProductionSecretGetter": {
+      "id": "BqSjOf4aUOm0KXCS",
+      "decrypted": false,
+      "valuePresent": false,
+      "result": "WITHHELD_NO_RETRY_OR_BYPASS"
+    },
+    "normalDevelopmentOidcAttempt": {
+      "requests": 1,
+      "teamClaimsMatch": true,
+      "projectClaimsMatch": true,
+      "developmentClaimsMatch": true,
+      "tokenCurrentlyValid": true,
+      "sourceBlobGetRequests": 1,
+      "httpStatus": 403,
+      "result": "STOPPED_NO_CLAIM_OR_PERMISSION_CHANGE"
+    },
+    "physicalArchiveComplete": false,
+    "physicalPrivateStoreRestoreComplete": false,
+    "targetStoreCreated": false,
+    "credentialsPrintedOrPersisted": false
+  },
+  "recoveryAssessment": {
+    "historyRetentionSeconds": 21600,
+    "automaticSnapshotScheduleForActualProduction": [],
+    "newManualSnapshotIsPeriodicBackupPolicy": false,
+    "sixHoursMeaning": "Retained historical recovery lookback; not a measured data-loss RPO. Errors detected after the window require an independently retained usable snapshot.",
+    "businessAdequacy": "Not sufficiently established for dependable business recovery: only six hours history, no observed periodic native snapshot schedule, complete private-file backup/restore not proven. An overnight/weekend detection window is not covered by six hours alone.",
+    "endToEndApplicationAndFilesRtoMeasured": false,
+    "retentionOrScheduleOrPlanChanged": false
+  },
+  "cliHelperCleanup": {
+    "format": "knowledge-ops-cli-probe-cleanup-v1",
+    "status": "UNINTENDED_HELPER_PROJECT_REMOVED",
+    "cause": "CLI65.9 native env run invocation unexpectedly performed deployments of the presence.cjs helper instead of executing the requested child probe. Three calls were made before the dispatch error was recognized. This command path is no longer used.",
+    "projectId": "prj_yq7Ef9QawjBbgVBppkjlPHQ7oqxn",
+    "projectName": "presence",
+    "deploymentIds": [
+      "dpl_5iUPGrdvAMry2K3xhtmxYyEtRr53",
+      "dpl_GwBoZPXkM6deuHLDJM1VzNmVXY4t",
+      "dpl_Dpt7DG3i46soUJKsQHbDbLbe4Nwo"
+    ],
+    "crmProjectModified": false,
+    "crmDeploymentCreated": false,
+    "beforeCleanup": {
+      "paused": true,
+      "gitConnectionPresent": false,
+      "environmentRecordCount": 0,
+      "source": "Helper contains only Boolean checks of two known variable names; no file bytes, credentials or business data."
+    },
+    "cleanup": "Paused the exact new helper project, verified its identity and zero env records, then deleted it via native vercel project delete presence --scope novalure --yes. CLI returned Deleted presence.",
+    "noCredentialInjectionProofClaimed": true
+  },
+  "finalNativeChecksAndMerge": "Final exact-head Vercel/Actions and merge receipts are recorded in PR120 after this evidence commit; no self-created success status is used.",
+  "fullOperationalAcceptance": "BLOCKED_BY_COMPLETE_PRIVATE_FILE_ARCHIVE_AND_RESTORE"
+}
