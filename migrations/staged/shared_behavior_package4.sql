@@ -1,4 +1,4 @@
--- Development only: not selected by the numbered runner. Requires reviewed 115-119.
+-- Explicit manual cutover only, after verified119. Never selected by ordinary up.
 -- No guessed retention period and no new schedule or credential.
 set local lock_timeout='5s';
 set local statement_timeout='2min';

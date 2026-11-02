@@ -66,15 +66,26 @@ Ein anfänglicher Fixturefehler verwendete den nicht erlaubten Status `inactive`
 er wurde auf das reale `suspended` korrigiert. Die frühere fehlgeschlagene Prüfung
 wird nicht als bestanden ausgegeben.
 
-Migration bleibt unter `migrations/staged/shared_behavior_package4.sql` und wird
-nicht vom Produktionsrunner gewählt. Vor Aktivierung fehlen: genaue aktuelle
-Migrationsvorgängerprüfung, reservierte Nummer/Vertrag, überprüfte Migration,
-separater tatsächlich bereitgestellter Publisherzugang und geprüfte Einbindung
-in einen bestehenden berechtigten Scheduler. Der vorhandene CRM-Cron
-`knowledge-monitoring` bedient Websiteüberwachung mit delegierter Tenantidentität;
-er ist kein Publisher und wurde deshalb nicht mit zusätzlichen Rechten versehen.
+Der echte lesende Neon-Katalogabgleich vom 02.11. um 14:18/14:20 UTC bestätigt
+Projekt `misty-cloud-70835427`, aktive Branch `br-spring-night-alyu48yp`, Schema
+bis 119 mit unverändertem SQL-Hash und freie Nummer 120. Nummerierte SQL-Kopie
+`120_shared_behavior_package4.sql` und separater Quellenvertrag sind vorbereitet.
+Der Standardrunner wählt120 niemals automatisch; nur expliziter manueller
+Zielaufruf nach119 ist möglich. Historische115–118-Nachweise bleiben unverändert.
+Der separate Publisher ist NOLOGIN, ohne private Lese- oder Mitgliedschaftsrechte.
+Der einzige gefundene Mitgliedslogin ist der für diese Anwendung unzulässige
+`neondb_owner` mit RLS-Bypass; er wird nicht als Publishercredential verwendet.
+
+Der vorhandene tägliche `knowledge-monitoring`-Aufrufer besitzt nun einen
+standardmäßig deaktivierten, unabhängig authentifizierten Lern-Adapter. Beide
+Wege laufen parallel in getrennten Pools; die Website-Tenantidentität wird
+nicht zum Publisher. Vor Aktivierung fehlen überprüfte Migration, sicher
+bereitgestellter eng begrenzter Publisherlogin, explizite feste Selektion und
+Aktivierungsschalter sowie echte gezielte Lauf-/Browserabnahme. Ohne Schalter
+bleibt der bisherige Cronpfad unverändert. Bei gesetztem Schalter bleiben
+Cron-Secret und Pausenprüfung zwingend; Konfigurations-/Lauffehler melden503.
 Kein neuer Zeitplan wurde angelegt, kein bestehender der 13 geschützten Evelyn-
-Zeitpläne verändert. Die CLI ist der lauffähige Aufrufer, kein behaupteter
+Zeitpläne verändert. CLI und Scheduleradapter sind lauffähiger Code, kein behaupteter
 aktivierter regelmäßiger Produktionsbetrieb. Fehlerzustände sind gespeichert;
 eine tatsächliche externe Alarmzustellung bleibt eigener Betriebsnachweis.
 

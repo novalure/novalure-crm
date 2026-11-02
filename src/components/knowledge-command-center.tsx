@@ -2148,7 +2148,7 @@ function KnowledgeCenterContent({
           )}
         </>
       ) : null}
-      <SharedLearningPanel scopedPath={scopedPath} />
+      <SharedLearningPanel key={snapshot?.workspace.id ?? workspaceId ?? "session"} scopedPath={scopedPath} />
     </section>
   );
 }

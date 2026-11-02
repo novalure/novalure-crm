@@ -11,6 +11,21 @@ import { createBehaviorLifecycle, runScheduledBehaviorLearning } from "../src/li
 import { readPrivateLearningHistory, deleteOwnLearningSignal } from "../src/lib/shared-behavior/management";
 import { recordPrivateLearningSignal } from "../src/lib/shared-behavior/repository";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { dispatchScheduledBehaviorLearning } from "../src/lib/shared-behavior/scheduler";
+
+test("Paket4 existing scheduler requires explicit enablement, host authentication, configuration and pause clearance", async () => {
+  const secret = "synthetic-test-cron-secret-only";
+  const request = new Request("https://example.invalid/api/cron/knowledge-monitoring", { headers: { authorization: `Bearer ${secret}` } });
+  const factory = () => { throw new Error("MUST_NOT_CONNECT"); };
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", CRON_SECRET: secret, NOVALURE_SHARED_LEARNING_ENABLED: "1", NOVALURE_SHARED_LEARNING_SELECTION: JSON.stringify({ ruleIds: ["clarify-goal"], targets: ["ceo"] }) };
+  assert.equal((await dispatchScheduledBehaviorLearning(request, { NODE_ENV: "test" }, factory)).status, "disabled");
+  assert.equal((await dispatchScheduledBehaviorLearning(new Request(request.url), env, factory)).status, "unauthorized");
+  assert.equal((await dispatchScheduledBehaviorLearning(request, { ...env, CRON_SECRET: "" }, factory)).status, "unauthorized");
+  assert.equal((await dispatchScheduledBehaviorLearning(request, { ...env, NOVALURE_WORKERS_PAUSED: "1" }, factory)).status, "paused");
+  assert.equal((await dispatchScheduledBehaviorLearning(request, env, factory)).status, "unconfigured");
+  assert.equal((await dispatchScheduledBehaviorLearning(request, { ...env, NOVALURE_SHARED_LEARNING_SELECTION: '{"transcript":"PRIVATE"}' }, factory)).status, "failed");
+});
+
 
 test("Paket4: private management, explicit deletion and bounded learning on disposable PostgreSQL", { timeout: 240000 }, async t => {
   const db = await startLocalSalesDb();
@@ -60,7 +75,9 @@ test("Paket4: private management, explicit deletion and bounded learning on disp
       assert.deepEqual(await runScheduledBehaviorLearning({ connect: async () => { throw new Error("MUST_NOT_CONNECT"); } }, { ...config, enabled: false }), { status: "disabled" });
     });
     await t.test("concurrent schedule claims yield exactly one bounded publication", async () => {
-      const results = await Promise.all([runScheduledBehaviorLearning(publisher!, config), runScheduledBehaviorLearning(publisher!, config)]);
+      const request = new Request("https://example.invalid/api/cron/knowledge-monitoring", { headers: { authorization: "Bearer synthetic-only" } });
+      const results = await Promise.all([runScheduledBehaviorLearning(publisher!, config), dispatchScheduledBehaviorLearning(request,
+        { NODE_ENV: "test", CRON_SECRET: "synthetic-only", NOVALURE_SHARED_LEARNING_ENABLED: "1", NOVALURE_SHARED_LEARNING_SELECTION: JSON.stringify(config.selection), BEHAVIOR_PUBLISHER_DATABASE_URL: "synthetic-injected-pool" }, () => new pg.Pool({ host: "127.0.0.1", port: db.port, user: role, database: "postgres", max: 2 }))]);
       assert.deepEqual(results.map(r => r.status).sort(), ["already_claimed", "published"]);
       const view = await createBehaviorLifecycle(publisher!).inspect();
       assert.equal(view.runs.length, 1); assert.equal(view.runs[0].status, "published");

@@ -9,6 +9,11 @@ on:
       - src/app/api/knowledge-center/learning/**
       - src/components/shared-learning-panel.tsx
       - scripts/shared-learning-manage.ts
+      - scripts/shared-learning-package4-migration-tests.mjs
+      - scripts/lib/shared-learning-package4-migration.mjs
+      - src/app/api/cron/knowledge-monitoring/route.ts
+      - config/shared-learning-package4-migration.json
+      - migrations/120_shared_behavior_package4.sql
       - scripts/shared-behavior-*.ts
       - scripts/shared-behavior-*.mjs
       - migrations/staged/shared_behavior*.sql
@@ -54,6 +59,8 @@ jobs:
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-lifecycle-tests.ts
       - name: Private history, explicit deletion and bounded daily learning
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-package4-tests.ts
+      - name: Reserved package4 migration and exact119 predecessor
+        run: node --test scripts/shared-learning-package4-migration-tests.mjs
       - name: CEO and department runtime, compartment RLS and scoped transport
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-runtime-tests.ts
       - name: Exact native personal signature, private context and workload revocation

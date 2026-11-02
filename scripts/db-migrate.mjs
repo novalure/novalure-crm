@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
+import { assertPackage4MigrationSources } from "./lib/shared-learning-package4-migration.mjs";
 import { pathToFileURL } from "node:url";
 import {
   assertConnectedDatabaseTarget,
@@ -62,6 +63,7 @@ const manualCutoverVersions = new Set([
   "116_shared_behavior_package2",
   "117_shared_behavior_package3",
   "118_shared_behavior_personal_runtime",
+  "120_shared_behavior_package4",
   "108_universal_booking",
   "109_booking_setup_communications",
   "110_account_ui_language_preference",
@@ -91,6 +93,7 @@ const migrationDependencies = new Map([
   ["116_shared_behavior_package2", "115_shared_behavior_foundation"],
   ["117_shared_behavior_package3", "116_shared_behavior_package2"],
   ["118_shared_behavior_personal_runtime", "117_shared_behavior_package3"],
+  ["120_shared_behavior_package4", "119_shared_behavior_revocable_operation"],
   ["108_knowledge_connected_assistant_quota", "101_knowledge_center"],
   ["108_universal_booking", "106_crm_operational_readers"],
   ["109_booking_setup_communications", "108_universal_booking"],
@@ -459,6 +462,7 @@ export function isManualCutoverVersion(version) { return manualCutoverVersions.h
 
 function readMigrations() {
   const migrationsDir = join(process.cwd(), "migrations");
+  if (readdirSync(migrationsDir).includes("120_shared_behavior_package4.sql")) assertPackage4MigrationSources(process.cwd());
   if (readdirSync(migrationsDir).some(file => /^11[5-8]_shared_behavior_/.test(file)))
     assertSharedBehaviorMigrationSources({ cwd: process.cwd() });
 
