@@ -1,6 +1,7 @@
 {
   "git": {
     "deploymentEnabled": {
+      "codex/shared-learning-package4-20261102": false,
       "codex/continuous-operation-20261029-crm": false,
       "codex/shared-behavior-studio-adapter-20261027": false,
       "codex/shared-behavior-customer-hooks-20261027": false,
