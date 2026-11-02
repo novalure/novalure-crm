@@ -13,3 +13,7 @@ test('Package4 numbered migration matches reserved source contract and actual119
  assert.equal(isManualCutoverVersion(contract.version),true);
  assert.throws(()=>createMigrationPlan({command:'up',only:contract.version,appliedVersions:[]}));
 });
+test('historical generic sales fixture omits120 while dedicated package4 fixture applies it explicitly',()=>{
+ assert.match(readFileSync('scripts/lib/local-sales-db.mjs','utf8'), /name === "120_shared_behavior_package4\.sql"/);
+ assert.match(readFileSync('scripts/shared-behavior-package4-tests.ts','utf8'), /\["foundation", "package2", "package4"\]/);
+});
