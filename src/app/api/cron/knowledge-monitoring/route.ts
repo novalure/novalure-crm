@@ -12,6 +12,9 @@ export async function GET(request: Request) {
   ]);
   if (monitoring.status === 401) return monitoring;
   const failed = ["failed", "unconfigured", "unauthorized"].includes(learning.status);
+  if (failed) console.error(JSON.stringify({ code: "SHARED_LEARNING_TICK_FAILED", status: learning.status }));
   const payload = await monitoring.json();
-  return Response.json({ ...payload, learning }, { status: failed ? 503 : monitoring.status });
+  // Learning has its own categorical log/receipt. Never turn a successful website
+  // monitoring run into an HTTP failure which could retrigger that independent work.
+  return Response.json({ ...payload, learning }, { status: monitoring.status });
 }

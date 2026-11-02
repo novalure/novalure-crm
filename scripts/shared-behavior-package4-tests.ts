@@ -12,6 +12,29 @@ import { readPrivateLearningHistory, deleteOwnLearningSignal } from "../src/lib/
 import { recordPrivateLearningSignal } from "../src/lib/shared-behavior/repository";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 import { dispatchScheduledBehaviorLearning } from "../src/lib/shared-behavior/scheduler";
+import { GET as monitoringCron } from "../src/app/api/cron/knowledge-monitoring/route";
+
+test("Paket4 route preserves successful website-monitoring status when independent learning fails", async t => {
+  const keys = ["CRON_SECRET", "NOVALURE_SHARED_LEARNING_ENABLED", "NOVALURE_SHARED_LEARNING_SELECTION", "NOVALURE_KNOWLEDGE_MONITORING_SCOPES", "NOVALURE_WORKERS_PAUSED"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const logs: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
+  try {
+    process.env.CRON_SECRET = "synthetic-route-secret";
+    process.env.NOVALURE_SHARED_LEARNING_ENABLED = "1";
+    process.env.NOVALURE_SHARED_LEARNING_SELECTION = '{"transcript":"SYNTHETIC_PRIVATE"}';
+    process.env.NOVALURE_KNOWLEDGE_MONITORING_SCOPES = "[]";
+    process.env.NOVALURE_WORKERS_PAUSED = "0";
+    const response = await monitoringCron(new Request("https://example.invalid/api/cron/knowledge-monitoring", { headers: { authorization: "Bearer synthetic-route-secret" } }));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.ok, true); assert.equal(body.configured, 0); assert.equal(body.attempted, 0);
+    assert.deepEqual(body.learning, { status: "failed" });
+    assert.deepEqual(logs, [[JSON.stringify({ code: "SHARED_LEARNING_TICK_FAILED", status: "failed" })]]);
+  } finally {
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
 
 test("Paket4 existing scheduler requires explicit enablement, host authentication, configuration and pause clearance", async () => {
   const secret = "synthetic-test-cron-secret-only";
