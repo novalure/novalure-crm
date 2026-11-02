@@ -3,13 +3,13 @@ import { createCipheriv, createHash, createHmac, randomBytes, randomUUID } from 
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { startDesignCIntegrationDatabase } from "./lib/design-c-integration-fixture.mjs";
-import type { TenantPool, TenantTransaction } from "../src/lib/db/tenant-client";
+import { withTenantTransaction, type TenantPool, type TenantTransaction } from "../src/lib/db/tenant-client";
 import { runWithTenantTransaction } from "../src/lib/db/transaction-context";
 import { CRM_MACHINE_AUDIENCE, CRM_MACHINE_ENVIRONMENT, CRM_MACHINE_ISSUER, CRM_MACHINE_OWNER_ID, CRM_MACHINE_PROJECT_ID,
   CRM_MACHINE_SUBJECT, CRM_MACHINE_WORKSPACE_ID, type CrmMachineAuthOptions } from "../src/lib/crm-machine-auth";
 import { verifyMachineBookingAuthority, readSavedBookingGrant } from "../src/lib/booking/channel-bindings";
 import { assertBookingChannelSummary, handleMachineBookingRequest, preparedTelephonyBookingIntegration } from "../src/lib/booking/channel-http";
-import { verifyStudioChannelSignature } from "../src/lib/booking/studio-channel";
+import { persistStudioCallbackPhone, readStudioCallbackPhone, prepareStudioHoldPayload, validateStudioCallbackPhone, verifyStudioChannelSignature, assertStudioCallbackPhoneMatches } from "../src/lib/booking/studio-channel";
 import { prepareFormBookingFields } from "../src/lib/booking/form-field";
 import { createFormField, type WebsiteForm } from "../src/lib/form-types";
 import { upsertWebsiteForm, getPublicWebsiteForm } from "../src/lib/db/form-repositories";
@@ -50,6 +50,22 @@ test("Studio gateway authentication covers exact bytes, contract and fresh times
   assert.equal(verifyStudioChannelSignature(raw + " ", headers, secret, now), false);
   assert.equal(verifyStudioChannelSignature(raw, headers, secret, now + 301000), false);
   assert.equal(verifyStudioChannelSignature(raw, headers, "", now), false);
+});
+test("Studio callback phone accepts a bounded dialable number", () => {
+  assert.equal(validateStudioCallbackPhone(" +353 (01) 555-0100 "), "+353 (01) 555-0100");
+  assert.equal(validateStudioCallbackPhone("+43 1/234567"), "+43 1/234567");
+  for (const value of [undefined, "", "12345", "+1 23 45", "123456 ext 9", "1".repeat(101), "123456\n789"])
+    assert.throws(() => validateStudioCallbackPhone(value), /BOOKING_CALLBACK_PHONE_REQUIRED/);
+});
+test("only signed Studio phone holds carry a callback outside the generic channel payload", () => {
+  const payload = { token: "a".repeat(43), startsAt: "2030-01-05T10:00:00.000Z", recipientEmail: "synthetic@example.invalid",
+    recipientPhone: " +353 1 555 0100 ", idempotencyKey: randomUUID() };
+  const phone = prepareStudioHoldPayload("phone", payload);
+  assert.equal(phone.callbackPhone, "+353 1 555 0100");
+  assert.equal("recipientPhone" in phone.channelPayload, false);
+  assert.equal(prepareStudioHoldPayload("teams", { token: payload.token }).callbackPhone, undefined);
+  assert.throws(() => prepareStudioHoldPayload("teams", payload), /INVALID_BOOKING_CHANNEL_OPERATION/);
+  assert.throws(() => prepareStudioHoldPayload("phone", { ...payload, contactId: randomUUID() }), /INVALID_BOOKING_CHANNEL_OPERATION/);
 });
 test("form proof is kept in request memory and never enters the persistent raw payload", () => {
   const field = createFormField({ type: "booking", id: "appointment", crmField: "appointment", label: "Appointment", bookingPublicId: publicId, bookingRequired: true });
@@ -157,6 +173,39 @@ test("machine booking authority uses actual PostgreSQL principal, actor and inde
       try { await client.query("begin"); await client.query(await readFile(`migrations/${migration}`, "utf8")); await client.query("commit"); }
       catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
     }
+    await t.test("signed Studio phone updates only the accepted enquiry contact", async () => {
+      const operationId = randomUUID(), leadId = randomUUID(), contactId = randomUUID(), unrelatedId = randomUUID(),
+        submissionId = randomUUID(), reference = "NL-A1B2C3D4";
+      const snapshot = JSON.stringify({ schemaVersion: "studio-enquiry-snapshot-v1", syntheticTest: true });
+      const payloadHash = createHash("sha256").update(snapshot).digest("hex");
+      await db.admin.query("insert into contacts(id,workspace_id,project_id,name,role,email) values($1,$3,'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2','SYNTHETIC callback','Website Sales','callback@example.invalid'),($2,$3,'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2','SYNTHETIC unrelated','Website Sales','unrelated@example.invalid')", [contactId, unrelatedId, websiteSalesWorkspaceId]);
+      await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,type) values($1,$2,'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2',$3,'Website Sales')", [leadId, websiteSalesWorkspaceId, contactId]);
+      await db.admin.query("insert into form_submissions(id,workspace_id,project_id,form_id,contact_id,lead_id) values($1,$2,'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2','0f98b9fd-d300-4a34-a14c-54a1a61b2415',$3,$4)", [submissionId, websiteSalesWorkspaceId, contactId, leadId]);
+      await db.admin.query(`insert into studio_enquiry_transfers(operation_id,workspace_id,revision,payload_hash,snapshot_text,targets,state,reference,lead_id,submission_id,accepted_at)
+        values($1,$2,1,$3,$4,'[]'::jsonb,'accepted',$5,$6,$7,now())`, [operationId, websiteSalesWorkspaceId, payloadHash, snapshot, reference, leadId, submissionId]);
+      const proof = { operationId, revision: 1, payloadHash, crmReference: reference };
+      await assert.rejects(readStudioCallbackPhone(proof, contactId, undefined, options), /BOOKING_CALLBACK_PHONE_REQUIRED/);
+      await assert.rejects(readStudioCallbackPhone(proof, unrelatedId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
+      await assert.rejects(readStudioCallbackPhone({ ...proof, crmReference: "NL-FFFFFFFF" }, contactId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
+      await assert.rejects(readStudioCallbackPhone(proof, undefined, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
+      assert.equal(await readStudioCallbackPhone(proof, contactId, "+353 1 555 0100", options), "+353 1 555 0100");
+      await assert.rejects(persistStudioCallbackPhone(proof, unrelatedId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
+      await assert.rejects(persistStudioCallbackPhone({ ...proof, crmReference: "NL-FFFFFFFF" }, contactId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
+      const organizerId = randomUUID();
+      await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC booking organizer',$3,'agent','team_member','active')",
+        [organizerId, websiteSalesWorkspaceId, `${organizerId}@example.invalid`]);
+      const organizerView = await withTenantTransaction({ workspaceId: websiteSalesWorkspaceId, actorId: organizerId },
+        tx => tx.queryOne<{ count: number }>("select count(*)::int as count from contacts where id=$1::uuid", [contactId]), options);
+      assert.equal(organizerView?.count, 0, "the organizer has no independent CRM contact grant");
+      assert.equal((await db.admin.query("select phone from contacts where id=$1", [contactId])).rows[0].phone, null);
+      await persistStudioCallbackPhone(proof, contactId, "+43 1/234567", options);
+      assertStudioCallbackPhoneMatches(await readStudioCallbackPhone(proof, contactId, undefined, options), "+43 1/234567");
+      assert.throws(() => assertStudioCallbackPhoneMatches("+43 1/234567", "+43 1/000000"), /BOOKING_CALLBACK_PHONE_CHANGED/);
+      assert.equal(await readStudioCallbackPhone(proof, contactId, undefined, options), "+43 1/234567");
+      const rows = (await db.admin.query("select id,phone from contacts where id=any($1::uuid[]) order by id", [[contactId, unrelatedId]])).rows;
+      assert.equal(rows.find(row => row.id === contactId)?.phone, "+43 1/234567");
+      assert.equal(rows.find(row => row.id === unrelatedId)?.phone, null);
+    });
     await t.test("an explicitly published Studio scope keeps both old entry points closed even after disable", async () => {
       const publicationId = randomUUID(), studioPublicId = "synthetic-studio-cutover";
       const config = { publicId: studioPublicId, enabled: true, channels: { chat: true }, assignments: [] };
