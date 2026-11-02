@@ -83,7 +83,11 @@ nicht zum Publisher. Vor Aktivierung fehlen überprüfte Migration, sicher
 bereitgestellter eng begrenzter Publisherlogin, explizite feste Selektion und
 Aktivierungsschalter sowie echte gezielte Lauf-/Browserabnahme. Ohne Schalter
 bleibt der bisherige Cronpfad unverändert. Bei gesetztem Schalter bleiben
-Cron-Secret und Pausenprüfung zwingend; Konfigurations-/Lauffehler melden503.
+Cron-Secret und Pausenprüfung zwingend. Lernfehler erscheinen im eigenen
+kategorischen Monitorprotokoll und Antwortfeld; bereits gestartete Läufe
+behalten zusätzlich ihre dauerhafte Fehlerquittung. Der HTTP-Status der
+unabhängigen Websiteüberwachung bleibt unverändert, damit deren erfolgreiche
+Arbeit nicht als Fehler behandelt oder erneut angestoßen wird.
 Kein neuer Zeitplan wurde angelegt, kein bestehender der 13 geschützten Evelyn-
 Zeitpläne verändert. CLI und Scheduleradapter sind lauffähiger Code, kein behaupteter
 aktivierter regelmäßiger Produktionsbetrieb. Fehlerzustände sind gespeichert;
