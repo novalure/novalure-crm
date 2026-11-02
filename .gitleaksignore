@@ -41,3 +41,7 @@ scripts/studio-enquiry-tests.ts:generic-api-key:178
 d9734433397d9a831ceb735091e5117995fa884c:scripts/booking-channel-adapter-tests.ts:generic-api-key:69
 # Historical public browser integration selector; no private runtime capability.
 485850509fbbeb327d1228761774456c9d049003:src/lib/shared-behavior/studio-auth.ts:generic-api-key:13
+# Public central-identity UUID, freshly verified as the existing selected operator.
+# This UUID is an authorization selector, never a credential; current metadata
+# uses an unambiguous name. Only this historical exact finding is excluded.
+bd8d3920d74798d7458094e6ebfbd6e544306e00:config/operator-recovery-recipient.json:generic-api-key:6
