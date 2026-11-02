@@ -1,0 +1,15 @@
+# Isolated application recovery configuration
+
+The existing database/file backups do not contain the non-readable Vercel Sensitive authentication settings. A new key would make restored TOTP secrets and recovery-code hashes unusable; a newly enrolled synthetic user would not prove their recovery.
+
+The default-off `POST /api/internal/operator-recovery` seals exactly the three authentication settings and private Blob credential to the fixed RSA4096 public recipient in `config/operator-recovery-recipient.json`. It never accepts a recipient, scope, key name or body from a request. The four plaintext values remain in server memory. The response contains only an RSA-OAEP-SHA256/AES-256-GCM envelope, with authenticated metadata.
+
+The existing persisted-cookie, CSRF, active membership and MFA checks remain in force. Both the first session and freshly revalidated membership must match the fixed internal workspace, existing selected organizer `bf34e694-7aba-4359-b027-f43a68255523`, central identity, admin role and Novalure administrator product role. This is not a general tenant-owner export. The organizer is the existing user-selected Novalure Growth binding documented in `docs/booking/production-activation.md`; the identity association was freshly read from the database. The dedicated Evelyn runtime actor is deliberately excluded.
+
+Successful exports append metadata-only audit records and are limited to three per database UTC day under a transaction lock. There are no model calls, sends, schedule changes or key rotations. Enablement requires the specific deployment variable `NOVALURE_OPERATOR_RECOVERY_EXPORT=1`; it is otherwise 404. `/operator-recovery` uses the normal browser CSRF wrapper and displays only the encrypted envelope.
+
+The private recipient is held outside the repository under the current operator's Windows DPAPI protection and private ACL. A synthetic seal/decrypt/tamper-denial exercise passed with that actual key. This host-bound custody does **not** establish offsite recovery after loss of the Windows profile.
+
+The isolated recovery process must consume the envelope in host memory, retain the original authentication keys for MFA/recovery compatibility, and keep the production Blob credential in its transfer parent only. The application worker receives restored private files or an independently isolated store, no provider-control, outbound, learning-publisher or production-storage credentials. Its database identity must match the independent recovery branch and least-privileged runtime, including inherited roles. No production database, domain, alias or existing backup-project cron may be reassigned.
+
+Local verification: four recovery tests, including real PostgreSQL persisted-cookie/CSRF/MFA authorization, metadata-only audit and daily limit; existing affected Knowledge HTTP and authentication/CSRF regression retained. Production deployment and actual recovery timings remain separate operational receipts; this source document does not claim them complete.
