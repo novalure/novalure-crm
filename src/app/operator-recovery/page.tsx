@@ -11,7 +11,7 @@ export default function OperatorRecoveryPage() {
     try {
       const response = await csrfFetch("/api/internal/operator-recovery", { method: "POST", cache: "no-store" });
       const body = await response.json();
-      setResult(response.ok ? JSON.stringify(body) : "Die geschützte Kopie konnte nicht erstellt werden.");
+      setResult(response.ok ? JSON.stringify(body) : JSON.stringify({ httpStatus: response.status, error: body.error ?? "Die geschützte Kopie konnte nicht erstellt werden.", code: body.code ?? null }));
     } catch { setResult("Die geschützte Kopie konnte nicht erstellt werden."); }
     finally { setBusy(false); }
   }

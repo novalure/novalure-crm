@@ -80,12 +80,12 @@ test("real PostgreSQL route authorizes durable operator cookie and CSRF, audits 
       ...(token ? { "x-novalure-csrf-token": createCsrfToken({ method: "POST", pathname, secret: process.env.NOVALURE_SESSION_SECRET!, sessionCookie: cookie })!.token } : {}),
     } });
     assert.equal((await POST(request(false))).status, 403);
-    assert.equal((await POST(new Request(request(), { body: '{"recipient":"attacker-controlled"}' }))).status, 400);
+    assert.equal((await POST(new Request(request(), { body: '{"recipient":"attacker-controlled"}' }))).status, 413);
     await db.admin.query("update auth_sessions set mfa_verified_at=null where id=$1", [sessionId]);
     assert.ok([401, 403].includes((await POST(request())).status));
     await db.admin.query("update auth_sessions set mfa_verified_at=now() where id=$1", [sessionId]);
     for (let i = 0; i < 3; i++) {
-      const response = await POST(request()); assert.equal(response.status, 200, await response.clone().text());
+      const response = await POST(i === 0 ? new Request(request(), { body: "" }) : request()); assert.equal(response.status, 200, await response.clone().text());
       assert.equal(response.headers.get("cache-control"), "private, no-store");
       const encoded = await response.text();
       for (const key of recoverySecretNames) assert.ok(!encoded.includes(process.env[key]!));
