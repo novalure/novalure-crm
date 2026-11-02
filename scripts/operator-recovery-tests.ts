@@ -6,7 +6,7 @@ import type { AppSession } from "../src/lib/auth/session";
 import recipient from "../config/operator-recovery-recipient.json";
 
 const operator = { authenticated: true, source: "cookie", workspaceId: recipient.workspaceId, userId: recipient.operatorUserId,
-  authIdentityId: recipient.operatorAuthIdentityId, authSessionId: "synthetic-durable-session", role: "admin", productRole: "novalureAdmin",
+  authIdentityId: recipient.operatorCentralIdentityId, authSessionId: "synthetic-durable-session", role: "admin", productRole: "novalureAdmin",
   mfaVerifiedAt: "2026-11-02T00:00:00Z" } as AppSession;
 test("only the actual pinned operator, central identity and durable MFA session qualify", () => {
   assert.equal(isPinnedRecoveryOperator(operator), true);
@@ -66,13 +66,13 @@ test("real PostgreSQL route authorizes durable operator cookie and CSRF, audits 
     const email = "synthetic-recovery@example.invalid";
     await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'SYNTHETIC RECOVERY','novalure_internal','novalure_internal') on conflict(id) do nothing", [recipient.workspaceId]);
     await db.admin.query(`insert into auth_identities(id,normalized_email,display_email,credential_state,mfa_enabled_at,mfa_secret_ciphertext)
-      values($1,$2,$2,'active',now(),$3)`, [recipient.operatorAuthIdentityId, email, encryptMfaSecret("JBSWY3DPEHPK3PXP")]);
+      values($1,$2,$2,'active',now(),$3)`, [recipient.operatorCentralIdentityId, email, encryptMfaSecret("JBSWY3DPEHPK3PXP")]);
     await db.admin.query(`insert into workspace_users(id,workspace_id,auth_identity_id,name,email,role,product_role,status)
       values($1,$2,$3,'SYNTHETIC PINNED RECOVERY',$4,'admin','novalureAdmin','active')
-      on conflict(id) do update set auth_identity_id=excluded.auth_identity_id,name=excluded.name,email=excluded.email,role=excluded.role,product_role=excluded.product_role,status=excluded.status`, [recipient.operatorUserId, recipient.workspaceId, recipient.operatorAuthIdentityId, email]);
+      on conflict(id) do update set auth_identity_id=excluded.auth_identity_id,name=excluded.name,email=excluded.email,role=excluded.role,product_role=excluded.product_role,status=excluded.status`, [recipient.operatorUserId, recipient.workspaceId, recipient.operatorCentralIdentityId, email]);
     const cookie = "v2." + randomBytes(32).toString("base64url"), sessionId = randomUUID();
     await db.admin.query(`insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,mfa_verified_at,expires_at)
-      values($1,$2,$3,$4,$5,now(),now()+interval '1 hour')`, [sessionId, createHash("sha256").update(cookie).digest("hex"), recipient.operatorAuthIdentityId, recipient.operatorUserId, recipient.workspaceId]);
+      values($1,$2,$3,$4,$5,now(),now()+interval '1 hour')`, [sessionId, createHash("sha256").update(cookie).digest("hex"), recipient.operatorCentralIdentityId, recipient.operatorUserId, recipient.workspaceId]);
     const { POST } = await import("../src/app/api/internal/operator-recovery/route");
     const pathname = "/api/internal/operator-recovery", origin = process.env.NOVALURE_APP_ORIGIN;
     const request = (token = true) => new Request(origin + pathname, { method: "POST", headers: {

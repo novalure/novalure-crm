@@ -6,7 +6,7 @@ export const recoverySecretNames = ["NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AU
 export function isPinnedRecoveryOperator(session: AppSession) {
   return session.authenticated && session.source === "cookie" && !!session.authSessionId &&
     session.workspaceId === recipient.workspaceId && session.userId === recipient.operatorUserId &&
-    session.authIdentityId === recipient.operatorAuthIdentityId && session.role === "admin" &&
+    session.authIdentityId === recipient.operatorCentralIdentityId && session.role === "admin" &&
     session.productRole === "novalureAdmin" && !!session.mfaVerifiedAt;
 }
 
