@@ -27,8 +27,9 @@ export function SharedLearningPanel({ scopedPath }: { scopedPath: (path: string)
     try {
       const response = await csrfFetch(scopedPath("/api/knowledge-center/learning"), { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventId: selected }) });
       if (!response.ok) throw new Error();
+      const result = await response.json() as { deleted: boolean };
       setSnapshot(current => current ? { ...current, signals: current.signals.filter(signal => signal.eventId !== selected) } : current);
-      setSelected(null); setMessage("Eigenes Lernsignal entfernt.");
+      setSelected(null); setMessage(result.deleted ? "Eigenes Lernsignal entfernt." : "Dieses eigene Lernsignal ist nicht mehr vorhanden.");
     } catch { setMessage("Löschen nicht bestätigt. Bitte den aktuellen Stand laden."); }
     finally { setBusy(false); }
   }

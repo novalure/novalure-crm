@@ -42,7 +42,10 @@ async function main() {
     return await lifecycle.rollback(input.version as number, input.expectedRevision as number);
   } finally { await pool.end(); }
 }
-main().then(result => console.log(JSON.stringify(result))).catch(error => {
+main().then(result => {
+  console.log(JSON.stringify(result));
+  if (result && "status" in result && result.status === "failed") process.exitCode = 1;
+}).catch(error => {
   // SQL, provider messages, configuration contents and URLs must never enter logs.
   console.error(JSON.stringify({ status: "failed", code: error instanceof SharedBehaviorError ? error.code : "LEARNING_MANAGEMENT_FAILED" }));
   process.exitCode = 1;
