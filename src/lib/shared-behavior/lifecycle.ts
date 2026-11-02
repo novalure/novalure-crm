@@ -46,6 +46,34 @@ async function candidate(client: PoolClient, id: string) {
 /** Dedicated, explicitly injected publisher pool; never uses DATABASE_URL or tenant credentials. */
 export function createBehaviorLifecycle(pool: PublisherPool) {
   return {
+    /** Dedicated publisher administration; never expose this pool through a tenant HTTP route. */
+    async inspect() {
+      return transaction(pool, async client => ({
+        head: await head(client),
+        candidates: (await client.query("select id,rule_ids,targets,baseline_revision from behavior_candidates order by id limit 100")).rows,
+        evaluations: (await client.query("select candidate_id,checks,improvements,regressions,passed from behavior_evaluations order by candidate_id limit 100")).rows,
+        history: (await client.query("select revision,action,version,candidate_id from behavior_publication_events order by revision desc limit 100")).rows,
+        runs: (await client.query("select run_id,slot,status,started_at,completed_at from behavior_learning_runs order by slot desc limit 30")).rows,
+      }));
+    },
+    async admitScheduledRun() {
+      return transaction(pool, async client => {
+        // DB clock only. A running or failed claim is retained and never automatically retried.
+        const id = randomUUID();
+        const result = await client.query(`insert into behavior_learning_runs(run_id,slot,status)
+          values($1,date_trunc('day',now() at time zone 'UTC') at time zone 'UTC','running')
+          on conflict(slot) do nothing returning run_id`, [id]);
+        return result.rowCount ? id : null;
+      });
+    },
+    async finishScheduledRun(id: string, status: "published" | "rejected" | "failed") {
+      uuid(id);
+      if (!["published", "rejected", "failed"].includes(status)) throw new SharedBehaviorError("INVALID_RUN_STATUS");
+      return transaction(pool, async client => {
+        const result = await client.query("update behavior_learning_runs set status=$2,completed_at=now() where run_id=$1 and status='running' returning run_id", [id, status]);
+        if (result.rowCount !== 1) throw new SharedBehaviorError("RUN_NOT_ACTIVE");
+      });
+    },
     async propose(value: unknown, expectedRevision: number) {
       const selection = parseBehaviorSelection(value); revision(expectedRevision);
       return transaction(pool, async client => {
@@ -108,4 +136,23 @@ export async function runBehaviorLearningCycle(pool: PublisherPool, selection: u
   if (!evaluation.passed) return { status: "rejected" as const, candidateId: proposal.candidateId, evaluation };
   const publication = await lifecycle.publish(proposal.candidateId, expectedRevision);
   return { status: "published" as const, candidateId: proposal.candidateId, evaluation, ...publication };
+}
+
+/** Caller is an existing authorized scheduler. No cron definitions, private reads, models or retries. */
+export async function runScheduledBehaviorLearning(pool: PublisherPool, input: { enabled: boolean; selection: unknown; expectedRevision: number }) {
+  if (input.enabled !== true) return { status: "disabled" as const };
+  // Validate before admission: malformed input cannot consume a day or introduce free text.
+  const selection = parseBehaviorSelection(input.selection); revision(input.expectedRevision);
+  const lifecycle = createBehaviorLifecycle(pool);
+  const runId = await lifecycle.admitScheduledRun();
+  if (!runId) return { status: "already_claimed" as const };
+  try {
+    const result = await runBehaviorLearningCycle(pool, selection, input.expectedRevision);
+    await lifecycle.finishScheduledRun(runId, result.status);
+    return { runId, ...result };
+  } catch {
+    await lifecycle.finishScheduledRun(runId, "failed");
+    // No raw SQL/provider exception, private evidence or credential in a monitor result.
+    return { runId, status: "failed" as const };
+  }
 }
