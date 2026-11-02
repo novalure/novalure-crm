@@ -143,7 +143,8 @@ export async function applySalesSchema(db, {
       name === "115_shared_behavior_foundation.sql" ||
       name === "116_shared_behavior_package2.sql" ||
       name === "117_shared_behavior_package3.sql" ||
-      name === "118_shared_behavior_personal_runtime.sql"
+      name === "118_shared_behavior_personal_runtime.sql" ||
+      name === "119_shared_behavior_revocable_operation.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;

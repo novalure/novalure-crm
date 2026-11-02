@@ -13,6 +13,7 @@ on:
       - migrations/116_shared_behavior_package2.sql
       - migrations/117_shared_behavior_package3.sql
       - migrations/118_shared_behavior_personal_runtime.sql
+      - migrations/119_shared_behavior_revocable_operation.sql
       - config/shared-behavior-migration-contract.json
       - qa/shared-behavior-package3-personal-2026-10-27/**
       - scripts/lib/shared-behavior-migration-contract.mjs
@@ -54,3 +55,5 @@ jobs:
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-personal-tests.ts
       - name: Exact Studio signature, existing public knowledge and private assistant signals
         run: node --conditions=react-server --import tsx --test scripts/shared-behavior-studio-tests.ts
+      - name: Explicit bounded and revocable operation on the production schema predecessor
+        run: node --conditions=react-server --import tsx --test scripts/shared-behavior-revocable-tests.ts
