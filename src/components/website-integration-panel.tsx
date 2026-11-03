@@ -121,6 +121,7 @@ export function WebsiteIntegrationPanel({ snapshot, language, scopedPath, active
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="max-w-2xl"><h4 id={`${formId}-title`} className="text-lg font-semibold">{text.title}</h4><p className="mt-2 text-sm leading-6 text-stone-600">{text.intro}</p></div>
       <div className="flex flex-wrap gap-2">
+        <a className={buttonClass} href={scopedPath("/webchat")}>{language === "de" ? "Webchat-Kundenbereich" : "Webchat customer portal"}</a>
         <button className={buttonClass} disabled={loading || busy} onClick={() => void refresh()} type="button">{text.refresh}</button>
         {data?.permissions.canManage ? <button className={primaryClass} disabled={busy} onClick={() => openEditor()} type="button">{text.add}</button> : null}
       </div>

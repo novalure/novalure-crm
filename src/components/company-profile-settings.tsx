@@ -397,6 +397,7 @@ function IssueList({
 type CompanyProfileSettingsProps = {
   context: WorkspaceProductContext;
   language: LanguageCode;
+  accessOnly?: boolean;
 };
 
 export function CompanyProfileSettings(props: CompanyProfileSettingsProps) {
@@ -407,6 +408,7 @@ export function CompanyProfileSettings(props: CompanyProfileSettingsProps) {
 function WorkspaceCompanyProfileSettings({
   context,
   language,
+  accessOnly = false,
 }: CompanyProfileSettingsProps) {
   const text = copy[language];
   const accessUrl = `/api/settings/access/users?${new URLSearchParams({ workspaceId: context.workspaceId })}`;
@@ -475,12 +477,13 @@ function WorkspaceCompanyProfileSettings({
   }, [accessUrl]);
 
   useEffect(() => {
+    if (accessOnly) return;
     const timer = window.setTimeout(() => {
       void loadProfile();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [loadProfile]);
+  }, [accessOnly, loadProfile]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -630,7 +633,7 @@ function WorkspaceCompanyProfileSettings({
 
   return (
     <section className="grid min-w-0 gap-4">
-      <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-5">
+      {!accessOnly ? <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{text.title}</p>
@@ -858,7 +861,7 @@ function WorkspaceCompanyProfileSettings({
             ) : null}
           </div>
         ) : null}
-      </article>
+      </article> : null}
 
       <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex flex-col gap-1">

@@ -216,6 +216,7 @@ type KnowledgeCommandCenterProps = {
   language: LanguageCode;
   projectLabel?: string;
   initialProjectId?: string;
+  initialTab?: Tab;
   projects?: Project[];
   workspaceId?: string;
   workspaceName?: string;
@@ -232,6 +233,7 @@ function KnowledgeCenterContent({
   workspaceId,
   workspaceName,
   initialProjectId,
+  initialTab = "sources",
 }: KnowledgeCommandCenterProps) {
   const text = getKnowledgeCenterCopy(language);
   const lifecycleText = getKnowledgeLifecycleCopy(language);
@@ -244,8 +246,8 @@ function KnowledgeCenterContent({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
-  const [tab, setTab] = useState<Tab>("sources");
-  const [websiteTabVisited, setWebsiteTabVisited] = useState(false);
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [websiteTabVisited, setWebsiteTabVisited] = useState(initialTab === "websites");
   const [projectId, setProjectId] = useState(initialProjectId ?? "");
   const [areaFilter, setAreaFilter] = useState("");
   const [search, setSearch] = useState("");
