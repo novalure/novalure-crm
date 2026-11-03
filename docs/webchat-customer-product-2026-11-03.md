@@ -117,6 +117,16 @@ Profilabfrage und keine Einladungs-/Mutationausführung. Beleg
 
 ## Produktionsabschluss – getrennt offen
 
+Technische Fortsetzung vom 3. November: Der erste Pflichtlauf
+`41619364278` scheiterte bei U1-C03, weil
+`NOVALURE_WEBCHAT_PRODUCT_ISOLATED_ENABLED` im Umgebungsverzeichnis noch nicht
+klassifiziert war. Der historische Herkunftsnachweis bestand. Eine tatsächliche
+Produktionsabweichung wurde damit weder gemessen noch behauptet. Die Variable
+ist nun ausdrücklich Test-/Preview-only und in Production verboten; die
+gezielte Manifestprüfung sichert beide Zuordnungen. Kein Laufzeitcode, Ziel,
+Produktionswert oder Schutzmechanismus wurde dafür geändert. Übersprungene
+spätere CI-Schritte gelten erst nach ihrer tatsächlichen Ausführung als geprüft.
+
 1. Preise, Vertrags-/Rechnungsregeln, Abrechnungseinheit, Mengen, Reset und
    Gültigkeit zusätzlicher Einheiten verbindlich konfigurieren. Hier existieren
    keine angenommenen Standardwerte oder Aufbewahrungsfristen.
