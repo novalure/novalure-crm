@@ -115,6 +115,44 @@ test("Studio offers only Teams/phone while signed legacy management and another 
       const available = await dispatchBookingChannelAction(other.token, "availability", { date: startsAt.slice(0, 10) }, request(), otherOptions); assert("slots" in available);
       const cross = await signed("status", { token: other.token, bookingId: held.booking.id }); assert.equal(cross.status, 403);
     });
+    await t.test("fresh signed Studio proof resumes only the same expired session and preserves booking, limits and current authority", async () => {
+      const typeId=full.types.find(x=>x.kind==="teams")!.id;
+      const issued=await (await signed("session",{typeId})).json(),token=issued.token;
+      const key=randomUUID(),at=new Date(Date.parse(startsAt)+12*86400000).toISOString();
+      const held=await signed("hold",{token,startsAt:at,recipientEmail:"synthetic@example.invalid",recipientName:"SYNTHETIC resume",idempotencyKey:key});assert.equal(held.status,200);
+      const booking=(await held.json()).booking as PublicBookingRecord,beforeCreates=creates;
+      const row=()=>db.admin.query("select id,expires_at,request_count,hold_count from booking_channel_sessions where token_hash=encode(sha256($1::bytea),'hex')",[token]).then(r=>r.rows[0]);
+      const expire=()=>db.admin.query("update booking_channel_sessions set expires_at=now()-interval '1 minute' where token_hash=encode(sha256($1::bytea),'hex')",[token]);
+      await expire();assert.equal((await signed("status",{token,bookingId:booking.id})).status,401);
+      const before=await row(),resumed=await Promise.all([signed("resume",{token,typeId}),signed("resume",{token,typeId})]);
+      for(const response of resumed){assert.equal(response.status,200);const result=await response.json();assert.equal(result.token,token);assert(Date.parse(result.expiresAt)>Date.now());assert(Date.parse(result.expiresAt)<=Date.now()+30*60000+1000);}
+      const after=await row();assert.equal(after.id,before.id);assert.equal(after.request_count,before.request_count);assert.equal(after.hold_count,before.hold_count);
+      assert.equal((await db.admin.query("select count(*)::int n from audit_logs where action='booking.channel_session_resumed' and entity_id=$1",[after.id])).rows[0].n,1);
+      const recovered=await signed("status",{token,idempotencyKey:key});assert.equal(recovered.status,200);assert.equal((await recovered.json()).booking.id,booking.id);
+      const summary={startsAt:booking.startsAt,timeZone:booking.timeZone,kind:booking.kind,location:booking.location};
+      assert.equal((await signed("confirm",{token,bookingId:booking.id,consent:false,summary})).status,409);assert.equal(creates,beforeCreates);
+      await expire();
+      assert.equal((await signed("resume",{token,typeId:full.types.find(x=>x.kind==="phone")!.id})).status,401);
+      const foreign=await startBookingChannelSession(request(),{publicId:b.publication.publicId,channel:"link",typeId:b.publication.assignments.find(x=>x.kind==="teams")!.id,language:"en"},options);
+      assert.equal((await signed("resume",{token:foreign.token,typeId})).status,401);
+      await assert.rejects(dispatchTrustedBookingTool(request(),"chat",{publicId:a.publication.publicId,workspaceId:websiteSalesWorkspaceId,bindingId:operationId,typeIds:[typeId],relation},{operation:"resume",token,typeId},options),/INVALID_BOOKING_CHANNEL_OPERATION/);
+      await db.admin.query("update booking_channel_sessions set revoked_at=now() where id=$1",[after.id]);
+      try{assert.equal((await signed("resume",{token,typeId})).status,401);}finally{await db.admin.query("update booking_channel_sessions set revoked_at=null where id=$1",[after.id]);}
+      await db.admin.query("update leads set contact_id=null where id=$1",[leadId]);
+      try{assert.equal((await signed("resume",{token,typeId})).status,401);}finally{await db.admin.query("update leads set contact_id=$2 where id=$1",[leadId,contactId]);}
+      const stored=await lookupBookingPublication(a.publication.publicId,pool);
+      await db.admin.query("update booking_publications set revision=revision+1 where id=$1",[stored.id]);
+      try{assert.equal((await signed("resume",{token,typeId})).status,401);}finally{await db.admin.query("update booking_publications set revision=$2 where id=$1",[stored.id,stored.revision]);}
+      const beforeLimit=await row();await db.admin.query("update booking_channel_sessions set request_count=200 where id=$1",[after.id]);
+      try{assert.equal((await signed("resume",{token,typeId})).status,401);}finally{await db.admin.query("update booking_channel_sessions set request_count=$2 where id=$1",[after.id,beforeLimit.request_count]);}
+      await db.admin.query("update workspace_users set status='suspended' where id=$1",[a.session.userId]);
+      try{assert((await signed("resume",{token,typeId})).status>=400);}finally{await db.admin.query("update workspace_users set status='active' where id=$1",[a.session.userId]);}
+      const expired=await row();assert(new Date(expired.expires_at).getTime()<Date.now());assert.equal(creates,beforeCreates);
+      const rate=(await db.admin.query("select * from booking_channel_rate_buckets where publication_id=$1 and kind='session'",[stored.id])).rows;
+      await db.admin.query("update booking_channel_rate_buckets set attempts=12,window_started_at=now() where publication_id=$1 and kind='session'",[stored.id]);
+      try{assert.equal((await signed("resume",{token,typeId})).status,429);assert.equal(new Date((await row()).expires_at).getTime(),new Date(expired.expires_at).getTime());}
+      finally{for(const bucket of rate)await db.admin.query("update booking_channel_rate_buckets set attempts=$3,window_started_at=$4 where publication_id=$1 and ip_hash=$2 and kind='session'",[stored.id,bucket.ip_hash,bucket.attempts,bucket.window_started_at]);}
+    });
     await t.test("prepared presentation cannot bypass a changed publication, wrong scope, expiry or disabled organizer", async () => {
       const stored = await lookupBookingPublication(a.publication.publicId, pool), prepared = await prepareBookingPublication(stored, "chat", pool, ["teams", "phone"]), typeId = full.types.find(x => x.kind === "teams")!.id;
       const input = { publicId: a.publication.publicId, typeId, channel: "chat" as const, language: "en" as const, workspaceId: websiteSalesWorkspaceId, bindingId: operationId, relation };
