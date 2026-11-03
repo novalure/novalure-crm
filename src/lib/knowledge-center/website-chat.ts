@@ -17,6 +17,8 @@ import { retrieveExternalAssistantKnowledge } from "./external-assistant";
 import { readKnowledgeJson } from "./http";
 import { assistantKnowledgeLimits, type AssistantKnowledgeContext } from "./integrations";
 import { knowledgeId, KnowledgeCenterError, knowledgeText } from "./policy";
+import { CrmCommandError } from "../crm-command";
+import { beginCustomerTurn, completeCustomerTurn, releaseUnstartedCustomerTurn } from "../webchat-product/turns";
 
 export const websiteChatLimits = Object.freeze({ messageCharacters: 2000, answerCharacters: 2400, maxOutputTokens: 900, modelTimeoutMs: 20_000 });
 type Language = "de" | "en" | "es";
@@ -24,7 +26,7 @@ type Citation = { sourceId: string; versionId: string; title: string };
 export const websiteOperationalReasons = Object.freeze(["budget_limit", "access_denied", "provider_rate_limit", "service_unavailable"] as const);
 export type WebsiteOperationalReason = typeof websiteOperationalReasons[number];
 export type WebsiteChatAnswer = { contractVersion: "website-answer-v1"; answerStatus: "grounded" | "insufficient_knowledge" | "temporarily_unavailable"; answer: string; citations: Citation[]; operationalReason?: WebsiteOperationalReason };
-type Input = { origin: string; publicSiteKey: string; sessionId: string; sessionToken: string; message: string };
+type Input = { origin: string; publicSiteKey: string; sessionId: string; sessionToken: string; message: string; requestId?: string };
 export type WebsiteChatOptions = NativeAssistantOptions & { model?: LanguageModel };
 type GeneratedAnswer = { answerable: boolean; answer: string; sourceIndices: number[] };
 const fallbackText = {
@@ -42,6 +44,7 @@ function fallback(language: Language, answerStatus: "insufficient_knowledge" | "
 }
 /** Only SDK/knowledge error types and numeric status codes, never provider bodies or messages. */
 export function websiteOperationalReason(error: unknown): WebsiteOperationalReason {
+  if (error instanceof CrmCommandError) return error.code === "LIMIT_EXCEEDED" ? "budget_limit" : error.status === 403 ? "access_denied" : "service_unavailable";
   if (error instanceof KnowledgeCenterError) return error.code === "LIMIT_EXCEEDED" ? "budget_limit" : error.status === 403 ? "access_denied" : "service_unavailable";
   let current = error;
   for (let depth = 0; depth < 3; depth++) {
@@ -142,14 +145,16 @@ const answerSchema = jsonSchema<GeneratedAnswer>({
   },
 }, { validate: value => validOutput(value) ? { success: true, value } : { success: false, error: new Error("Invalid bounded answer") } });
 
-/** No conversation write, tools, action claims, history replay or browser-selected model. */
-export async function answerWebsiteChat(input: Input, options: WebsiteChatOptions = {}): Promise<WebsiteChatAnswer> {
+/** Existing answer engine; admission and persistence are wrapped below for configured customer accounts. */
+async function generateWebsiteChatAnswer(input: Input, options: WebsiteChatOptions = {}, modelStarted: () => void = () => {},
+  prepared?: { expected: ExternalIntegrationResolution; before: Awaited<ReturnType<typeof validateCurrentAuthority>> },
+  captureContext: (excerpts: AssistantKnowledgeContext["excerpts"]) => void = () => {}): Promise<WebsiteChatAnswer> {
   knowledgeId(input.sessionId, "sessionId");
   input = { ...input, message: knowledgeText(input.message, "message", websiteChatLimits.messageCharacters) };
   if (!/^[A-Za-z0-9_-]{32,128}$/u.test(input.sessionToken)) throw new ExternalIntegrationError("session_denied", 403);
-  const expected = await resolveExternalIntegration({ capability: "chat.context", origin: input.origin, publicSiteKey: input.publicSiteKey });
+  const expected = prepared?.expected ?? await resolveExternalIntegration({ capability: "chat.context", origin: input.origin, publicSiteKey: input.publicSiteKey });
   if (!expected) throw new ExternalIntegrationError("integration_not_found", 404);
-  const before = await validateCurrentAuthority(input, expected, [], options);
+  const before = prepared?.before ?? await validateCurrentAuthority(input, expected, [], options);
   if (!before.valid) return fallback(before.language, before.operationalReason ? "temporarily_unavailable" : "insufficient_knowledge", before.operationalReason);
   const fixedFallback = async (language: Language, status: "insufficient_knowledge" | "temporarily_unavailable", reason?: WebsiteOperationalReason) => {
     const answer = fallback(language, status, reason);
@@ -165,12 +170,14 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
   try { knowledge = await retrieveExternalAssistantKnowledge({ ...input, query: websiteKnowledgeQuery(input.message), maxResults: 5 }, options); }
   catch (error) { return fixedFallback(before.language, "temporarily_unavailable", websiteOperationalReason(error)); }
   if (knowledge.answerStatus !== "grounded" || knowledge.excerpts.length === 0) return fixedFallback(before.language, "insufficient_knowledge");
+  captureContext(knowledge.excerpts);
   let output: GeneratedAnswer;
   let providerFailureReason: WebsiteOperationalReason | undefined;
   try {
     const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_API_KEY;
     if (!options.model && !apiKey && process.env.VERCEL !== "1") throw new Error("Gateway unavailable");
     const model = options.model ?? createGateway({ apiKey })(process.env.NOVALURE_LLM_MODEL || "openai/gpt-5.4");
+    modelStarted();
     const result = await generateText({
       model: observedModel(model, reason => { providerFailureReason = reason; }), output: Output.object({ schema: answerSchema }), maxOutputTokens: websiteChatLimits.maxOutputTokens,
       maxRetries: 0, timeout: websiteChatLimits.modelTimeoutMs, reasoning: "none",
@@ -208,6 +215,47 @@ export async function answerWebsiteChat(input: Input, options: WebsiteChatOption
   return signal.status === "authority_changed" ? fallback(current.language, finalOperationalReason ? "temporarily_unavailable" : "insufficient_knowledge", finalOperationalReason) : answer;
 }
 
+/** Customer admission is atomic across every chatbot in the same account. */
+export async function answerWebsiteChat(input: Input, options: WebsiteChatOptions = {}): Promise<WebsiteChatAnswer> {
+  knowledgeId(input.sessionId, "sessionId");
+  input = { ...input, message: knowledgeText(input.message, "message", websiteChatLimits.messageCharacters) };
+  if (!/^[A-Za-z0-9_-]{32,128}$/u.test(input.sessionToken)) throw new ExternalIntegrationError("session_denied", 403);
+  const expected = await resolveExternalIntegration({ capability: "chat.context", origin: input.origin, publicSiteKey: input.publicSiteKey });
+  if (!expected) throw new ExternalIntegrationError("integration_not_found", 404);
+  const before = await validateCurrentAuthority(input, expected, [], options);
+  if (!before.valid) return fallback(before.language, before.operationalReason ? "temporarily_unavailable" : "insufficient_knowledge", before.operationalReason);
+  let turn: Awaited<ReturnType<typeof beginCustomerTurn>>;
+  try { turn = await beginCustomerTurn(input, expected, options); }
+  catch (error) {
+    if (error instanceof CrmCommandError && error.code === "LIMIT_EXCEEDED") return fallback(before.language, "temporarily_unavailable", "budget_limit");
+    throw error;
+  }
+  if (turn?.replayed && turn.response) {
+    const receipt = JSON.parse(turn.response) as { answer: WebsiteChatAnswer; provenance: AssistantKnowledgeContext["excerpts"]; behavior: typeof before.behavior };
+    const saved = receipt.answer;
+    // Receipt replay must not resurrect a withdrawn source/version or grant.
+    const current = await validateCurrentAuthority(input, expected, receipt.provenance, options);
+    return current.valid && sameNativeBehavior(receipt.behavior, current.behavior) ? saved : fallback(current.language, "temporarily_unavailable", current.operationalReason ?? "access_denied");
+  }
+  let started = false;
+  let exposed: AssistantKnowledgeContext["excerpts"] = [];
+  try {
+    const answer = await generateWebsiteChatAnswer(input, options, () => { started = true; }, { expected, before }, excerpts => { exposed = excerpts; });
+    // Keep every retrieved source/version reference, including uncited context.
+    // Receipt metadata is internal and is never returned by the public handler.
+    const receipt = JSON.stringify({ answer, provenance: exposed.map(item => ({ ...item, text: "" })),
+      behavior: before.behavior ? { version: before.behavior.version, instruction: before.behavior.instruction } : null });
+    if (turn) await completeCustomerTurn(input, expected, turn, receipt, started, options, async () => {
+      const latest = await validateCurrentAuthority(input, expected, exposed, options);
+      if (!latest.valid || !sameNativeBehavior(before.behavior, latest.behavior)) throw new ExternalIntegrationError("answer_authority_changed", 403);
+    });
+    return answer;
+  } catch (error) {
+    if (turn && !started) await releaseUnstartedCustomerTurn(input, expected, turn, options);
+    throw error;
+  }
+}
+
 export function websiteChatSiteKey(request: Request) {
   const params = new URL(request.url).searchParams;
   for (const key of params.keys()) if (key !== "site_key" || params.getAll(key).length !== 1) throw new ExternalIntegrationError("invalid_request", 400);
@@ -224,7 +272,7 @@ export async function handleWebsiteChatRequest(request: Request, options: Websit
     const publicSiteKey = websiteChatSiteKey(request);
     const resolution = await resolveExternalIntegration({ capability: "chat.context", origin, publicSiteKey });
     if (!resolution || resolution.widgetConfiguration.chatEnabled !== true) throw new ExternalIntegrationError("integration_not_found", 404);
-    const body = await readKnowledgeJson(request, ["sessionId", "message"], 8192);
+    const body = await readKnowledgeJson(request, ["sessionId", "message", "requestId"], 8192);
     const sessionId = knowledgeId(body.sessionId, "sessionId"), message = knowledgeText(body.message, "message", websiteChatLimits.messageCharacters);
     const clientIp = requireExternalIntegrationClientIp(request.headers);
     const policies = [["ip", clientIp, 30], ["integration", "all", 200], ["session", sessionId, 20]] as const;
@@ -232,7 +280,7 @@ export async function handleWebsiteChatRequest(request: Request, options: Websit
       keyHash: createPublicSubmissionOpaqueHash({ label: `website-answer-${kind}`, value: `${resolution.integrationId}\n${value}` }), limit: maximum, windowSeconds: 600,
     })) });
     if (!limit.allowed) throw new ExternalIntegrationError("rate_limited", 429);
-    const answer = await answerWebsiteChat({ origin, publicSiteKey, sessionId, message,
+    const answer = await answerWebsiteChat({ origin, publicSiteKey, sessionId, message, requestId: body.requestId === undefined ? undefined : knowledgeId(body.requestId, "requestId"),
       sessionToken: request.headers.get("x-novalure-session-token")?.trim() ?? "" }, options);
     return externalJson(origin, answer, { correlationId: context.correlationId });
   } catch (error) {
