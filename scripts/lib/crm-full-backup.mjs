@@ -7,6 +7,15 @@ import { posix as path } from 'node:path';
 import { canonical, catalogQueries, captureDatabaseMetadata } from './studio-stage3-qa-fingerprint.mjs';
 
 export const BACKUP_SCOPE = 'FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES';
+export const backupProviderStages = Object.freeze(['PRODUCTION_BINDING_READ', 'SNAPSHOT_READ', 'SNAPSHOT_RESTORE',
+  'ISOLATED_RESOURCE_READ', 'ISOLATED_ENDPOINT_CREATE', 'ISOLATED_ENDPOINT_UPDATE', 'ISOLATED_CONNECTION_READ',
+  'OPERATION_READ', 'NEON_REQUEST']);
+/** Fixed operation categories and numeric status only, never path/body/error text. */
+export function backupProviderDiagnostics(error) {
+  if (!backupProviderStages.includes(error?.providerStage)) return {};
+  return { providerStage: error.providerStage, ...(Number.isInteger(error.providerHttpStatus) &&
+    error.providerHttpStatus >= 100 && error.providerHttpStatus <= 599 ? { providerHttpStatus: error.providerHttpStatus } : {}) };
+}
 export const defaultCrmBackupConfig = Object.freeze({
   neonProjectId: 'misty-cloud-70835427', sourceBranchId: 'br-spring-night-alyu48yp',
   productionEndpointId: 'ep-wandering-union-alem0781', databaseName: 'neondb',
@@ -15,7 +24,10 @@ export const defaultCrmBackupConfig = Object.freeze({
   teamSlug: 'novalure', prefix: 'crm-full-backups', retentionDays: 7, maxFileBytes: 20 * 1024 * 1024,
 });
 export class CrmBackupError extends Error {
-  constructor(code) { super(code); this.name = 'CrmBackupError'; this.code = code; }
+  constructor(code, diagnostics = {}) {
+    super(code); this.name = 'CrmBackupError'; this.code = code;
+    Object.assign(this, backupProviderDiagnostics(diagnostics));
+  }
 }
 const requireValue = (condition, code) => { if (!condition) throw new CrmBackupError(code); };
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -307,16 +319,16 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     await checkProduction();
     return full;
   } catch (error) {
-    let cleanupCode = null, productionVerification = { status: 'NOT_YET_CAPTURED' };
+    let cleanupCode = null, cleanupFailure = null, productionVerification = { status: 'NOT_YET_CAPTURED' };
     if (initial) {
       try { await checkProduction(); productionVerification = { status: 'UNCHANGED' }; }
-      catch (failure) { productionVerification = { status: 'UNCONFIRMED_OR_CHANGED', failureCode: errorCode(failure) }; cleanupCode = errorCode(failure); }
+      catch (failure) { productionVerification = { status: 'UNCONFIRMED_OR_CHANGED', failureCode: errorCode(failure), ...backupProviderDiagnostics(failure) }; cleanupCode = errorCode(failure); cleanupFailure = failure; }
     }
     // Unexpected production drift stops further Neon mutations; it must never
     // be 'repaired' by moving an endpoint or touching an unverified branch.
-    if (branch && !cleanup && productionVerification.status === 'UNCHANGED') try { cleanup = await shutDown(); } catch (failure) { cleanupCode = errorCode(failure); }
-    const incomplete = { ...evidence, status: 'INCOMPLETE', failureCode: errorCode(error), completedAt: timestamp(),
-      isolatedBranchId: branch?.id ?? null, productionVerification, cleanup: cleanup ?? { status: 'UNCONFIRMED', failureCode: cleanupCode },
+    if (branch && !cleanup && productionVerification.status === 'UNCHANGED') try { cleanup = await shutDown(); } catch (failure) { cleanupCode = errorCode(failure); cleanupFailure = failure; }
+    const incomplete = { ...evidence, status: 'INCOMPLETE', failureCode: errorCode(error), ...backupProviderDiagnostics(error), completedAt: timestamp(),
+      isolatedBranchId: branch?.id ?? null, productionVerification, cleanup: cleanup ?? { status: 'UNCONFIRMED', failureCode: cleanupCode, ...backupProviderDiagnostics(cleanupFailure) },
       fullMarkerState: fullMarkerAttempted ? 'MAY_EXIST_BUT_SUPPRESSED' : 'NOT_ATTEMPTED' };
     // A duplicate invocation must not attach INCOMPLETE to an earlier valid
     // FULL set. Only the atomic claim owner may append this run's evidence.
@@ -324,7 +336,7 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
       await save(root + '/INCOMPLETE.json', incomplete).catch(() => {});
       await save(`${config.prefix}/index/${backupId}-INCOMPLETE.json`, incomplete).catch(() => {});
     }
-    throw new CrmBackupError(cleanupCode ?? errorCode(error));
+    throw new CrmBackupError(cleanupCode ?? errorCode(error), backupProviderDiagnostics(cleanupFailure ?? error));
   }
 }
 

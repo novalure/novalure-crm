@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "assembledAt": "2026-11-03T10:14:41Z",
+  "scope": "EXISTING_CRM_BACKUP_READ_ONLY_DIAGNOSIS_NO_NEW_BACKUP_OR_RESTORE",
+  "evidenceClass": "REAL_NATIVE_PROVIDER_METADATA_AND_SANITIZED_RUNTIME_RECORD",
+  "currentRun": {
+    "occurredAt": "2026-11-03T03:15:11.232Z",
+    "status": "INCOMPLETE",
+    "code": "BACKUP_INCOMPLETE",
+    "failureCode": "NEON_HTTP_422",
+    "alarmDeliveryProven": false,
+    "providerResponseBodyRetained": false,
+    "exactRequestStage": "UNKNOWN_PRECEDES_CREATION_OF_NEW_BACKUP_BRANCH"
+  },
+  "nativeLogRead": {
+    "source": "VERCEL_GET_RUNTIME_LOGS_EXISTING_EXACT_BACKUP_DEPLOYMENT",
+    "windowStart": "2026-11-03T03:00:00.000Z",
+    "windowEnd": "2026-11-03T04:00:00.000Z",
+    "requestPath": "/api/backup",
+    "groupedLogCount": 1,
+    "safeStatusRecordCount": 1,
+    "priorFullFilteredRead": "NO_MATCH_NOT_PROOF_NO_INVOCATION",
+    "priorBroadHistoricalRead": "TIMED_OUT_NO_RESULTS_NOT_PASS"
+  },
+  "nativeRecoveryMetadataRead": {
+    "snapshotCount": 8,
+    "latestProductionSnapshotCreatedAt": "2026-11-03T03:00:08Z",
+    "latestProductionSnapshotExpiresAt": "2026-11-10T03:00:08Z",
+    "previousProductionSnapshotCreatedAt": "2026-11-02T03:00:09Z",
+    "previousProductionSnapshotExpiresAt": "2026-11-09T03:00:09Z",
+    "snapshotCreatedAtIsNotInferredLogicalDataPoint": true,
+    "branchCount": 18,
+    "lastCombinedBackupBranchCreatedAt": "2026-11-02T03:15:10Z",
+    "newNovember3CombinedBackupBranchPresent": false,
+    "operationRowsRead": 100,
+    "operationRangeOldestAt": "2026-11-01T14:22:46Z",
+    "operationRangeNewestAt": "2026-11-03T03:24:04Z",
+    "failedOperationRows": 0,
+    "newBackupOperationAtScheduledFailureTimeFound": false,
+    "pitrHistorySeconds": 21600,
+    "quotaOrProtectionCauseProven": false
+  },
+  "privateMarkerFollowup": "MATCHING_PRIVATE_INCOMPLETE_AND_TWO_FULL_SETS_FRESHLY_VERIFIED_BY_EXISTING_TARGET_DEVELOPMENT_OIDC_GRANT; NORMALIZED_RECEIPT_SAVED_SEPARATELY_WITHOUT_RECOVERY_PARAMETERS",
+  "remainingDiagnosisPrerequisite": "PROVIDER_REQUEST_AUDIT_TO_DISTINGUISH_PREFLIGHT_GET_FROM_REJECTED_RESTORE_POST; ORIGINAL_MARKER_HAS_NO_REQUEST_STAGE; DO_NOT_REPEAT_UNKNOWN_MUTATION",
+  "retainedAcceptance": {
+    "package3And4": "UNCHANGED_ACCEPTED",
+    "previousAcceptedScheduledFull": "PRESERVED_NO_RETROACTIVE_INVALIDATION",
+    "fullDataAndApplicationRestore": "UNCHANGED_ACCEPTED",
+    "fiveOriginalFilesAndTxt": "UNCHANGED_ACCEPTED",
+    "historicalObservationGaps": "PRESERVED"
+  },
+  "effects": {
+    "newBackupInvocations": 0,
+    "newRestores": 0,
+    "providerMutations": 0,
+    "productionSqlConnections": 0,
+    "credentialValuesPrinted": 0,
+    "bookingChanges": 0,
+    "schedulesChanged": 0,
+    "automaticDeletionEnabled": false
+  }
+}

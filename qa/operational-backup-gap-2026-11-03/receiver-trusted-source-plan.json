@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "status": "EXACT_TRUSTED_SOURCE_ADDITION_PREPARED_NOT_EXECUTED",
+  "observedAt": "2026-11-03T10:50:47.556Z",
+  "method": "PATCH",
+  "path": "/v9/projects/prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "changedField": "trustedSources.projects.prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "addedEntry": {
+    "label": "Existing CRM backup failure warning bridge",
+    "customAllow": [
+      {
+        "from": {
+          "slugs": [
+            "production"
+          ]
+        },
+        "to": {
+          "slugs": [
+            "production"
+          ]
+        }
+      }
+    ]
+  },
+  "requestBodySha256": "c320841c9d70d679e29eae2a521ef4c6e7cd1342c3277984daff21931593c310",
+  "beforeTrustedSourcesSha256": "48eb4f2a028bdd4bb3d7e2a9af6ef2c23e9c46d356a8b5cc94a9970f0d8b2d12",
+  "beforeAllOtherFieldsSha256": "482bc6a2344b4012473d1edabf5250911ce3ab04414c066cf7b4ea3947866918",
+  "alreadyPresent": false,
+  "sourceGatesRequiredBeforeUse": [
+    "EXACT_RECEIVER_REVISION_NATIVE_CI_AND_TRUSTED_APP",
+    "EXACT_SENDER_REVISION_NATIVE_CI_AND_TRUSTED_APP"
+  ],
+  "mutationAndRuntimeLocksRequired": true,
+  "freshBeforeReadAndAllOtherFieldsReadbackRequired": true,
+  "preserveExistingEntriesAndUnknownOptions": true,
+  "wildcardAdded": false,
+  "ssoOrBypassChanged": false,
+  "providerMutations": 0,
+  "credentialsEmitted": 0,
+  "sources": [
+    "https://vercel.com/docs/rest-api/projects/update-an-existing-project",
+    "https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/trusted-sources"
+  ]
+}

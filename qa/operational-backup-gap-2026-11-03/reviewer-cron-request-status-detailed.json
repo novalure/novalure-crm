@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-03T10:59:28.905Z",
+  "source": "EXACT_PROJECT_CDN_REQUEST_METADATA_ONLY",
+  "status": "REQUEST_METADATA_READ_PASS",
+  "exitCode": 0,
+  "requestRecords": [
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:55:06.466Z",
+      "routeClass": "OTHER",
+      "wafActionClass": "deny",
+      "serviceClass": "UNEXPOSED_OR_OTHER",
+      "pathTypeClass": "UNEXPOSED_OR_OTHER",
+      "nativeCronUserAgent": true,
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:50:06.192Z",
+      "routeClass": "OTHER",
+      "wafActionClass": "deny",
+      "serviceClass": "UNEXPOSED_OR_OTHER",
+      "pathTypeClass": "UNEXPOSED_OR_OTHER",
+      "nativeCronUserAgent": true,
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:45:06.077Z",
+      "routeClass": "OTHER",
+      "wafActionClass": "deny",
+      "serviceClass": "UNEXPOSED_OR_OTHER",
+      "pathTypeClass": "UNEXPOSED_OR_OTHER",
+      "nativeCronUserAgent": true,
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 200,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:40:27.695Z",
+      "routeClass": "DEDICATED_REVIEWER",
+      "wafActionClass": "allow",
+      "serviceClass": "UNEXPOSED_OR_OTHER",
+      "pathTypeClass": "streaming_func",
+      "nativeCronUserAgent": true,
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:40:06.080Z",
+      "routeClass": "OTHER",
+      "wafActionClass": "deny",
+      "serviceClass": "UNEXPOSED_OR_OTHER",
+      "pathTypeClass": "UNEXPOSED_OR_OTHER",
+      "nativeCronUserAgent": true,
+      "scoped": false
+    }
+  ],
+  "recordFieldNames": [
+    "timestamp",
+    "projectId",
+    "requestId",
+    "deploymentId",
+    "environment",
+    "requestHostname",
+    "requestPath",
+    "requestMethod",
+    "httpStatus",
+    "route",
+    "pathType",
+    "cacheResult",
+    "edgeNetworkRegion",
+    "service",
+    "clientIpCountry",
+    "clientUserAgent",
+    "wafAction"
+  ],
+  "providerMutations": 0,
+  "reviewTriggers": 0,
+  "modelCallsTriggered": 0,
+  "rawBodyOrTokenOrUrlEmitted": false
+}

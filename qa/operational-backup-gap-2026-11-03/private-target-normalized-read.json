@@ -1,0 +1,56 @@
+{
+  "status": "TARGET_READ_PASS",
+  "credentialsEmitted": 0,
+  "sourceRequests": 0,
+  "writes": 0,
+  "listPages": 1,
+  "targetReads": 11,
+  "incomplete": [
+    {
+      "status": "INCOMPLETE",
+      "failureCode": "NEON_HTTP_422",
+      "createdAt": "2026-11-03T03:15:05.453Z",
+      "completedAt": "2026-11-03T03:15:10.431Z",
+      "snapshotPresent": true,
+      "snapshotCreatedAt": "2026-11-03T03:00:08.000Z",
+      "isolatedBranchPresent": false,
+      "productionVerification": "UNCHANGED",
+      "productionFailureCode": null,
+      "cleanupStatus": "UNCONFIRMED",
+      "cleanupFailureCode": null,
+      "fullMarkerState": "NOT_ATTEMPTED"
+    }
+  ],
+  "verifiedFullCount": 2,
+  "full": [
+    {
+      "status": "FULL",
+      "createdAt": "2026-11-02T03:15:05.416Z",
+      "completedAt": "2026-11-02T03:15:43.644Z",
+      "snapshotCreatedAt": "2026-11-02T03:00:09.000Z",
+      "fileCount": 5,
+      "fileBytes": 44260,
+      "historicalReferenceCount": 2,
+      "fullMarkerVerified": true,
+      "manifestVerified": true,
+      "isolatedCleanup": "OBSERVED_DISABLED_AND_IDLE",
+      "wholeApplicationBackup": false
+    },
+    {
+      "status": "FULL",
+      "createdAt": "2026-11-01T18:20:30.450Z",
+      "completedAt": "2026-11-01T18:21:08.928Z",
+      "snapshotCreatedAt": "2026-11-01T17:59:51.000Z",
+      "fileCount": 5,
+      "fileBytes": 44260,
+      "historicalReferenceCount": 2,
+      "fullMarkerVerified": true,
+      "manifestVerified": true,
+      "isolatedCleanup": "OBSERVED_DISABLED_AND_IDLE",
+      "wholeApplicationBackup": false
+    }
+  ],
+  "observedAt": "2026-11-03T10:19:18.886Z",
+  "source": "EXISTING_BACKUP_TARGET_DEVELOPMENT_GRANT_HOST_MEMORY_ONLY",
+  "providerMutations": 0
+}

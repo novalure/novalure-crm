@@ -2,7 +2,7 @@
 /** Explicit operator entry point; --plan is the default and performs no remote I/O. */
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { BACKUP_SCOPE, CrmBackupError, defaultCrmBackupConfig, validateBackupConfig, runCrmFullBackup, planBackupRetention } from './lib/crm-full-backup.mjs';
+import { BACKUP_SCOPE, CrmBackupError, backupProviderDiagnostics, defaultCrmBackupConfig, validateBackupConfig, runCrmFullBackup, planBackupRetention } from './lib/crm-full-backup.mjs';
 
 function parseArguments(argv) {
   const result = { execute: false };
@@ -69,7 +69,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, outp
       cleanup: result.cleanup.status, completedAt: result.completedAt, wholeApplicationBackup: false });
     return 0;
   } catch (error) {
-    output({ status: 'INCOMPLETE', code: error instanceof CrmBackupError ? error.code : 'BACKUP_CONFIGURATION_OR_IO_FAILED', fullBackupClaimed: false });
+    output({ status: 'INCOMPLETE', code: error instanceof CrmBackupError ? error.code : 'BACKUP_CONFIGURATION_OR_IO_FAILED',
+      ...backupProviderDiagnostics(error), fullBackupClaimed: false });
     return 1;
   }
 }
