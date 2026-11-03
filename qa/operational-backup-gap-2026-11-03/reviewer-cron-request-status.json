@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-03T10:57:34.140Z",
+  "source": "EXACT_PROJECT_CDN_REQUEST_METADATA_ONLY",
+  "status": "REQUEST_METADATA_READ_PASS",
+  "exitCode": 0,
+  "requestRecords": [
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:55:06.466Z",
+      "routeClass": "UNEXPOSED_OR_OTHER",
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:50:06.192Z",
+      "routeClass": "UNEXPOSED_OR_OTHER",
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:45:06.077Z",
+      "routeClass": "UNEXPOSED_OR_OTHER",
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 200,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:40:27.695Z",
+      "routeClass": "DEDICATED_REVIEWER",
+      "scoped": false
+    },
+    {
+      "requestClass": "REVIEWER_SCAN",
+      "httpStatus": 403,
+      "requestMethod": "GET",
+      "occurredAt": "2026-11-03T10:40:06.080Z",
+      "routeClass": "UNEXPOSED_OR_OTHER",
+      "scoped": false
+    }
+  ],
+  "recordFieldNames": [
+    "timestamp",
+    "projectId",
+    "requestId",
+    "deploymentId",
+    "environment",
+    "requestHostname",
+    "requestPath",
+    "requestMethod",
+    "httpStatus",
+    "route",
+    "pathType",
+    "cacheResult",
+    "edgeNetworkRegion",
+    "service",
+    "clientIpCountry",
+    "clientUserAgent",
+    "wafAction"
+  ],
+  "providerMutations": 0,
+  "reviewTriggers": 0,
+  "modelCallsTriggered": 0,
+  "rawBodyOrTokenOrUrlEmitted": false
+}

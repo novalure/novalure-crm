@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-03T11:02:49.060Z",
+  "status": "FINAL_OIDC_SOURCE_FROZEN_NOT_COMMITTED_OR_DEPLOYED",
+  "baseRevision": "1af2f8f9bba9db57c15bfadfee25f6bee5693b9d",
+  "branch": "codex/operational-backup-gaps-20261103",
+  "modified": [
+    "docs/crm-full-backup-runner.md",
+    "package.json",
+    "scripts/crm-full-backup-http-tests.mjs",
+    "scripts/crm-full-backup-provider-tests.mjs",
+    "scripts/crm-full-backup-tests.mjs",
+    "scripts/crm-full-backup.mjs",
+    "scripts/lib/crm-full-backup-http.mjs",
+    "scripts/lib/crm-full-backup-providers.mjs",
+    "scripts/lib/crm-full-backup.mjs",
+    "scripts/prepare-crm-backup-workload.mjs"
+  ],
+  "untracked": [
+    "docs/backup-failure-warning-2026-11-03.md",
+    "qa/operational-backup-gap-2026-11-03/dependency-security-readiness.json",
+    "qa/operational-backup-gap-2026-11-03/native-readonly-observations.json",
+    "qa/operational-backup-gap-2026-11-03/private-target-normalized-read.json",
+    "qa/operational-backup-gap-2026-11-03/receiver-trusted-source-plan.json",
+    "qa/operational-backup-gap-2026-11-03/receiver-trusted-source-read.json",
+    "qa/operational-backup-gap-2026-11-03/reviewer-cron-request-status-detailed.json",
+    "qa/operational-backup-gap-2026-11-03/reviewer-cron-request-status.json",
+    "qa/operational-backup-gap-2026-11-03/source-freeze.json",
+    "scripts/crm-backup-failure-warning-tests.mjs",
+    "scripts/lib/crm-backup-failure-warning.mjs"
+  ],
+  "sourceHashes": [
+    {
+      "path": "docs/backup-failure-warning-2026-11-03.md",
+      "bytes": 12589,
+      "sha256": "f8c4a5f193b4427d8e0408cff3aaefca27a9e2c3e7d807f0decf3bc33eaef81c"
+    },
+    {
+      "path": "docs/crm-full-backup-runner.md",
+      "bytes": 20111,
+      "sha256": "b752df66efc235a9d8bbce1047f6c859d286583bffd7d796c5d753301deec117"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 340537,
+      "sha256": "847322cfb4a41607a705a186e05d9466cbbbd58caadb1138742f3d47b5be62fe"
+    },
+    {
+      "path": "package.json",
+      "bytes": 15309,
+      "sha256": "3ea9494f388aed0e9e01fc2f9dd2dcc0724f4a9638fc23a23261abefd6151fa6"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/dependency-security-readiness.json",
+      "bytes": 8807,
+      "sha256": "dc7784ba5a3289d94e931f4baf73e49b356a97232b06fce9860cc345410416af"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/native-readonly-observations.json",
+      "bytes": 2744,
+      "sha256": "7fb3b3736c56afd1b3a763a92c29c95d9ae36778955bfe01397ff848a387b29c"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/private-target-normalized-read.json",
+      "bytes": 1706,
+      "sha256": "78428c4a1662de0bf26531c02e02a29682b64ed7e0f3163a3deeee0d54d646cd"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/receiver-trusted-source-plan.json",
+      "bytes": 1574,
+      "sha256": "3e777a46076187b0d9f17ce47a7c5b074a8c46f09d157eb962f875d9260a9ef2"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/receiver-trusted-source-read.json",
+      "bytes": 2364,
+      "sha256": "257888c543f3db6e3285f5c65a5e1755c64f7c3626d47890bf4ee649fd61d2ef"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/reviewer-cron-request-status-detailed.json",
+      "bytes": 2495,
+      "sha256": "c9594d1cdabae488a7c542e0b4a034b6caba1ee6cbf040292375d0ad64d4c09e"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/reviewer-cron-request-status.json",
+      "bytes": 1770,
+      "sha256": "514fa61a1edad4803a16acda1a6045b51bc4b086c8d8ec17d0de262dd7c26682"
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/source-freeze.json",
+      "bytes": 6535,
+      "sha256": "0f7b7b7dc2e8323ec28dc3b96fa57aeccb355dbf88bdf613370f2f5bde34ee07"
+    },
+    {
+      "path": "scripts/crm-backup-failure-warning-tests.mjs",
+      "bytes": 15532,
+      "sha256": "b4c4e36078695e809c9b4d3ab7217b9880b8462806733b8c91097958d132719e"
+    },
+    {
+      "path": "scripts/crm-full-backup-http-tests.mjs",
+      "bytes": 17466,
+      "sha256": "995c09fba2bb08ebb9437d3f70a872817fd0b712fa509972e5aded9b40f03ee4"
+    },
+    {
+      "path": "scripts/crm-full-backup-provider-tests.mjs",
+      "bytes": 22346,
+      "sha256": "628467a63eb2fb6aea50e9fb7a59ea402d1353a0806fd378dece8f4b1b4f950f"
+    },
+    {
+      "path": "scripts/crm-full-backup-tests.mjs",
+      "bytes": 26230,
+      "sha256": "d9d011cb0ec4aa8ab83b4e0dc42ba20f013700b5fef89bdfe41c65f7f4794035"
+    },
+    {
+      "path": "scripts/crm-full-backup.mjs",
+      "bytes": 5257,
+      "sha256": "99315117d0dd4f04bdde776c272aede5eb3e47bf0b852ae404545f12bd035dec"
+    },
+    {
+      "path": "scripts/lib/crm-backup-failure-warning.mjs",
+      "bytes": 8323,
+      "sha256": "a8f04b3e6597bb7c81956e8e74b958bd5660db40479a36b0fe5676b9cb5125e8"
+    },
+    {
+      "path": "scripts/lib/crm-full-backup-http.mjs",
+      "bytes": 11169,
+      "sha256": "6d305262b4dee963641395809379d629b3c793d20af2823845cd340cdfa7e72d"
+    },
+    {
+      "path": "scripts/lib/crm-full-backup-providers.mjs",
+      "bytes": 28575,
+      "sha256": "269827ea24e6c1092d093ceb16c2463e64d5fb52154fbe48007f6079654f129f"
+    },
+    {
+      "path": "scripts/lib/crm-full-backup.mjs",
+      "bytes": 35394,
+      "sha256": "2ec03017590434bf2df9f3b960a07b955dbddac87d94fc19f598607201b4804b"
+    },
+    {
+      "path": "scripts/lib/neon-061-compat.mjs",
+      "bytes": 18912,
+      "sha256": "0d9c79a28d032ffaf442c70003109f5ca18ed77299dddd146fc2ebb0a248336a"
+    },
+    {
+      "path": "scripts/lib/studio-stage3-qa-fingerprint.mjs",
+      "bytes": 34482,
+      "sha256": "3865b34018fe8edd26096b31e7fce6f527491f6878faaf4a25dfad36fa212f68"
+    },
+    {
+      "path": "scripts/prepare-crm-backup-workload.mjs",
+      "bytes": 3495,
+      "sha256": "5dc188bc3bfaf688e83235356afbd1d9969b0e28a0ffb52d3ab82f387901225a"
+    }
+  ],
+  "actualApplicableRegression": {
+    "command": "npm run test:crm-full-backup",
+    "tests": 84,
+    "passed": 84,
+    "failed": 0,
+    "skipped": 0,
+    "includes": [
+      "FINAL_HTTP4XX_CLASSIFICATION",
+      "SAFE_PROVIDER_STAGE_DIAGNOSTICS",
+      "CURRENT_NATIVE_OIDC_HANDOFF",
+      "NO_SEPARATE_OLDER_ENV_TOKEN_FALLBACK",
+      "OIDC_SCOPE_AND_EXPIRY_NEGATIVES",
+      "TEN_ACTUAL_ORCHESTRATION_FAILURE_CASES"
+    ],
+    "afterTestsChange": "COMMENT_PRECISION_DOCUMENTATION_AND_NON_SECRET_ENTRYPOINT_DIGEST_LABEL_ONLY_NO_BEHAVIOR_CHANGE",
+    "syntax": "PASS",
+    "diffCheck": "PASS"
+  },
+  "hostPlanner": {
+    "mutationImplementation": false,
+    "actualTests": 5,
+    "passed": 5,
+    "files": [
+      {
+        "path": ".npm-cache/receiver-trusted-source-plan.mjs",
+        "sha256": "e35cfb984fb7418ed9bb47fcffec34a27a6abf4c288a3e82bfae76c859272f80"
+      },
+      {
+        "path": ".npm-cache/receiver-trusted-source-plan.test.mjs",
+        "sha256": "bced1f671867e4c719c7e3b525b733597a5b7c41248b02834e14435e51a4399c"
+      }
+    ],
+    "actualNativePlanExecutedReadOnly": true,
+    "exactSourceEntryNotApplied": true
+  },
+  "generatedWorkload": {
+    "sourceFiles": [
+      {
+        "path": "package.json",
+        "sha256": "3ea9494f388aed0e9e01fc2f9dd2dcc0724f4a9638fc23a23261abefd6151fa6",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "847322cfb4a41607a705a186e05d9466cbbbd58caadb1138742f3d47b5be62fe",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/crm-full-backup.mjs",
+        "sha256": "99315117d0dd4f04bdde776c272aede5eb3e47bf0b852ae404545f12bd035dec",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/lib/crm-full-backup.mjs",
+        "sha256": "2ec03017590434bf2df9f3b960a07b955dbddac87d94fc19f598607201b4804b",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/lib/crm-full-backup-providers.mjs",
+        "sha256": "269827ea24e6c1092d093ceb16c2463e64d5fb52154fbe48007f6079654f129f",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/lib/crm-full-backup-http.mjs",
+        "sha256": "6d305262b4dee963641395809379d629b3c793d20af2823845cd340cdfa7e72d",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/lib/crm-backup-failure-warning.mjs",
+        "sha256": "a8f04b3e6597bb7c81956e8e74b958bd5660db40479a36b0fe5676b9cb5125e8",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/lib/studio-stage3-qa-fingerprint.mjs",
+        "sha256": "3865b34018fe8edd26096b31e7fce6f527491f6878faaf4a25dfad36fa212f68",
+        "matchesCurrentSource": true
+      },
+      {
+        "path": "scripts/lib/neon-061-compat.mjs",
+        "sha256": "0d9c79a28d032ffaf442c70003109f5ca18ed77299dddd146fc2ebb0a248336a",
+        "matchesCurrentSource": true
+      }
+    ],
+    "cronIncluded": false,
+    "credentialsCopied": 0,
+    "providerCalls": 0
+  },
+  "dependencyEvidence": {
+    "source": "dependency-security-readiness.json",
+    "productionAuditFindings": 0,
+    "fullRepositoryAuditExitCode": 1,
+    "inheritedDevelopmentModerate": 16,
+    "high": 0,
+    "critical": 0,
+    "dependenciesAndLockUnchanged": true,
+    "evidenceReusedForUnchangedDependencyBytes": true,
+    "rawReportsKeptLocallyNotCommitted": true
+  },
+  "actualNativeFindings": [
+    "NOVEMBER2_FULL_MARKER_AND_MANIFEST_FRESHLY_VERIFIED",
+    "NOVEMBER3_HTTP422_INCOMPLETE_NO_NEW_RESTORE_BRANCH",
+    "BACKUP_PROJECT_ABSENT_FROM_RECEIVER_TRUSTED_SOURCES",
+    "SCHEDULED_REVIEWER_SCAN_REQUESTS_DENIED_BY_PROVIDER_WAF_HTTP403"
+  ],
+  "pending": [
+    "EXACT_COMMIT_SECRET_SCAN_AND_NATIVE_TRUSTED_APP_CHECK",
+    "SOURCE_GATE_COMPLETION_FOR_BOTH_PROJECTS",
+    "LOCKED_SINGLE_TRUSTED_SOURCE_ENTRY_ADDITION_WITH_FULL_READBACK",
+    "PROTECTED_BRIDGE_CREDENTIAL_HANDOFF_AND_CONTROLLED_DEPLOYMENT",
+    "PROVIDER_AUDIT_FOR_HISTORICAL_BACKUP_HTTP422_CAUSE"
+  ],
+  "effects": {
+    "providerMutations": 0,
+    "deployments": 0,
+    "paidModelCallsTriggered": 0,
+    "newBackupRuns": 0,
+    "newRestoreExercises": 0,
+    "schedulesChanged": 0,
+    "bookingChanges": 0,
+    "automaticDeletionEnabled": false,
+    "originalAcceptancePreserved": true
+  },
+  "metadataScanCorrection": "GENERIC_KEY_SCANNER_FALSE_POSITIVE_PROVEN_SOURCE_DIGEST_LABEL_RENAMED_NO_RULE_EXCEPTION_OR_VALUE_SUPPRESSION"
+}

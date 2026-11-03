@@ -55,7 +55,7 @@ Es werden keine vorhandenen sensiblen Read-write-Werte ausgelesen, keine private
 
 ## Geschützter Aufrufer im bestehenden Backup-Projekt
 
-`scripts/prepare-crm-backup-workload.mjs` erzeugt in einem neuen Ordner außerhalb des CRM-Repositories ein eigenes Deploymentpaket. Es kopiert ausschließlich acht benannte Runner-/Bibliotheks- und Paketdateien, erzeugt `/api/backup` und bindet `.vercel/project.json` fest an das Backup-Projekt und Team. CRM-Anwendungsdateien, Git-Historie und lokale `.env`-Dateien werden nicht übernommen. Vorhandene Ausgabeordner werden nicht überschrieben.
+`scripts/prepare-crm-backup-workload.mjs` erzeugt in einem neuen Ordner außerhalb des CRM-Repositories ein eigenes Deploymentpaket. Es kopiert ausschließlich neun benannte Runner-/Bibliotheks- und Paketdateien einschließlich des vorbereiteten [Backupfehler-Warnadapters](backup-failure-warning-2026-11-03.md), erzeugt `/api/backup` und bindet `.vercel/project.json` fest an das Backup-Projekt und Team. CRM-Anwendungsdateien, Git-Historie und lokale `.env`-Dateien werden nicht übernommen. Vorhandene Ausgabeordner werden nicht überschrieben.
 
 ```sh
 node scripts/prepare-crm-backup-workload.mjs --output /absolute/new-backup-directory

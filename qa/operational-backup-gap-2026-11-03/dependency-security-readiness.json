@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-03T10:41:10.091Z",
+  "scope": "SOURCE_ONLY_BACKUP_FAILURE_BRIDGE_AND_SAFE_DIAGNOSTICS",
+  "baseRevision": "1af2f8f9bba9db57c15bfadfee25f6bee5693b9d",
+  "sourceFreezeSha256": "0f7b7b7dc2e8323ec28dc3b96fa57aeccb355dbf88bdf613370f2f5bde34ee07",
+  "sourceFreezeStillMatches": true,
+  "generatedWorkload": {
+    "status": "PACKAGED_NOT_DEPLOYED",
+    "copiedFiles": [
+      {
+        "path": "package.json",
+        "sha256": "3ea9494f388aed0e9e01fc2f9dd2dcc0724f4a9638fc23a23261abefd6151fa6",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "847322cfb4a41607a705a186e05d9466cbbbd58caadb1138742f3d47b5be62fe",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/crm-full-backup.mjs",
+        "sha256": "99315117d0dd4f04bdde776c272aede5eb3e47bf0b852ae404545f12bd035dec",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/lib/crm-full-backup.mjs",
+        "sha256": "2ec03017590434bf2df9f3b960a07b955dbddac87d94fc19f598607201b4804b",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/lib/crm-full-backup-providers.mjs",
+        "sha256": "269827ea24e6c1092d093ceb16c2463e64d5fb52154fbe48007f6079654f129f",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/lib/crm-full-backup-http.mjs",
+        "sha256": "c1d216e2a090e0ba0169ce7a6bbe9cceba407554d9009de86aa382aae6ef6dd9",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/lib/crm-backup-failure-warning.mjs",
+        "sha256": "a5a018bdc796511a99ae37a7198831236aef0c5f6ee5285bdb1429875e849c7e",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/lib/studio-stage3-qa-fingerprint.mjs",
+        "sha256": "3865b34018fe8edd26096b31e7fce6f527491f6878faaf4a25dfad36fa212f68",
+        "equalsReviewedSource": true
+      },
+      {
+        "path": "scripts/lib/neon-061-compat.mjs",
+        "sha256": "0d9c79a28d032ffaf442c70003109f5ca18ed77299dddd146fc2ebb0a248336a",
+        "equalsReviewedSource": true
+      }
+    ],
+    "sourceCopiesMatch": true,
+    "cronCount": 0,
+    "secretsCopied": 0,
+    "providerCalls": 0,
+    "installCommand": "npm ci --omit=dev --ignore-scripts --no-audit --no-fund",
+    "dependencyFootprint": "EXACT_EXISTING_CRM_PACKAGE_AND_LOCK_WITH_FULL_PRODUCTION_DEPENDENCIES_NOT_A_NEW_MINIMIZED_MANIFEST",
+    "generatedEntrypointSha256": "e20032b6e930b51cb2c8fb6fb7fb29bffefcf0aeedad2b41b806a4ed649954af"
+  },
+  "unchangedDependencies": {
+    "packageLockEqualsBaseBytes": true,
+    "packageLockSha256": "847322cfb4a41607a705a186e05d9466cbbbd58caadb1138742f3d47b5be62fe",
+    "packageDefinitionFieldsEqualBase": {
+      "dependencies": true,
+      "devDependencies": true,
+      "peerDependencies": true,
+      "optionalDependencies": true,
+      "overrides": true,
+      "engines": true,
+      "packageManager": true
+    },
+    "packageLockEqualsGeneratedBytes": true,
+    "installedOrUpgradedPackages": 0,
+    "packageLockBaseComparison": "BASE_BLOB_WITH_REPOSITORY_CHECKOUT_FILTERS",
+    "gitCanonicalBlobEqualsBase": true,
+    "baseGitBlobId": "e37fc58ad60b6463032349f5d0ab8549d9a9bcd4",
+    "checkoutLineEndingNote": "The repository Git blob uses LF and the unchanged Windows checkout uses CRLF; raw unfiltered blob SHA256 is not a working-file mutation test."
+  },
+  "actualResults": [
+    {
+      "mode": "workload-production",
+      "command": "npm audit --omit=dev --audit-level=moderate --json",
+      "exitCode": 0,
+      "status": "AUDIT_PASS",
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "componentCount": null
+    },
+    {
+      "mode": "repository-production",
+      "command": "npm run security:production -- --json",
+      "exitCode": 0,
+      "status": "AUDIT_PASS",
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "componentCount": null
+    },
+    {
+      "mode": "repository-all",
+      "command": "npm audit --audit-level=moderate --json",
+      "exitCode": 1,
+      "status": "AUDIT_FAIL_RETAINED",
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 16,
+        "high": 0,
+        "critical": 0,
+        "total": 16
+      },
+      "componentCount": null
+    },
+    {
+      "mode": "workload-sbom",
+      "command": "npm sbom --package-lock-only --omit=dev --sbom-format=cyclonedx",
+      "exitCode": 0,
+      "status": "SBOM_PASS",
+      "vulnerabilities": null,
+      "componentCount": 200
+    }
+  ],
+  "inheritedDevelopmentFinding": {
+    "fullAuditExitCode": 1,
+    "moderateDependencyNodes": 16,
+    "high": 0,
+    "critical": 0,
+    "rootAdvisory": "GHSA-g3hv-75wg-m249",
+    "affectedPackage": "minimatch",
+    "affectedRange": "<11.0.1",
+    "dependencyPath": "UNCHANGED_ESLINT_NEXT_ESLINT_TYPESCRIPT_ESLINT_DEVELOPMENT_CHAINS",
+    "productionAuditEffect": "OMIT_DEV_AUDITS_ZERO_FINDINGS",
+    "acceptedAsPass": false,
+    "dependencyChangeDecision": "NO_UNRELATED_UPGRADE_OR_SUGGESTED_BREAKING_DOWNGRADE_PERFORMED",
+    "affectedDevelopmentPackages": [
+      "@eslint-community/eslint-utils",
+      "@eslint/config-array",
+      "@eslint/eslintrc",
+      "@next/eslint-plugin-next",
+      "@typescript-eslint/eslint-plugin",
+      "@typescript-eslint/parser",
+      "@typescript-eslint/type-utils",
+      "@typescript-eslint/typescript-estree",
+      "@typescript-eslint/utils",
+      "eslint",
+      "eslint-config-next",
+      "eslint-plugin-import",
+      "eslint-plugin-jsx-a11y",
+      "eslint-plugin-react",
+      "minimatch",
+      "typescript-eslint"
+    ],
+    "advisoryUrl": "https://github.com/advisories/GHSA-g3hv-75wg-m249"
+  },
+  "sbom": {
+    "status": "PASS_LOCK_DERIVED_NOT_INSTALLED_TREE_ATTESTATION",
+    "format": "CycloneDX",
+    "fileSha256": "c6055c4eda945d52e2e29a1304c60ad63796568f67da5e5fa6a4c41fdabbf52e",
+    "componentInventorySha256": "1b15a30e03732346f6aa54462873e38c6f9626c183517eb716d800ea1f190a30",
+    "componentCount": 200
+  },
+  "secretScanner": {
+    "path": "C:/Projects/evelyn/artifacts/tools/gitleaks-8.30.1/bin/gitleaks.exe",
+    "version": "8.30.1",
+    "binarySha256": "17157e2ee8b76fc8b1d8bee607a250e34b8a8023c8bc81822d4b5ee4d78fcb7c",
+    "exactCommitDeltaScanStatus": "PENDING_FINAL_COMMIT_NOT_CLAIMED_PASS"
+  },
+  "noApplicationBuildRestoreBookingOrModelCalls": true,
+  "providerMutations": 0,
+  "remaining": [
+    "EXACT_COMMIT_SECRET_SCAN",
+    "REQUIRED_NATIVE_CI_AND_TRUSTED_APP",
+    "CONTROLLED_BRIDGE_ACTIVATION_AND_REAL_FAILURE_NOTIFICATION_ACCEPTANCE"
+  ],
+  "retainedLocalArtifacts": [
+    {
+      "path": ".npm-cache/security-reports/workload-production-audit.json",
+      "bytes": 366,
+      "sha256": "6a57499024cc766fd3efdc41f9abea23ed403368ebb58a15573b207933841bdc"
+    },
+    {
+      "path": ".npm-cache/security-reports/repository-production-audit.json",
+      "bytes": 366,
+      "sha256": "6a57499024cc766fd3efdc41f9abea23ed403368ebb58a15573b207933841bdc"
+    },
+    {
+      "path": ".npm-cache/security-reports/repository-all-audit.json",
+      "bytes": 9289,
+      "sha256": "f816930e7ad6f5baef3b96542f7a5e226a9fceca39d6b8f13f423530da80921b"
+    },
+    {
+      "path": ".npm-cache/security-reports/workload-production-result.json",
+      "bytes": 640,
+      "sha256": "5febd9bf39ef5c817d930e967a88dc4fc85e0001682993ef679042cde31c9012"
+    },
+    {
+      "path": ".npm-cache/security-reports/repository-production-result.json",
+      "bytes": 629,
+      "sha256": "8b7358abe2d270a637069a1c2c80525c1bebcf628aac81618de6d217ade03373"
+    },
+    {
+      "path": ".npm-cache/security-reports/repository-all-result.json",
+      "bytes": 5112,
+      "sha256": "a0f6569d99b3bf936e304f69dc858aebf2d107b1c5fd812c316f7f71c0d3c91f"
+    },
+    {
+      "path": ".npm-cache/security-reports/workload-sbom-result.json",
+      "bytes": 525,
+      "sha256": "fbf512e6207dd5ecef0cb7eb8a6e44abae33f1cc9659efab93a58bc585f4d6fd"
+    },
+    {
+      "path": ".npm-cache/security-reports/backup-workload-production-sbom.cdx.json",
+      "bytes": 180457,
+      "sha256": "c6055c4eda945d52e2e29a1304c60ad63796568f67da5e5fa6a4c41fdabbf52e"
+    },
+    {
+      "path": ".npm-cache/security-reports/backup-workload-production-sbom.components.txt",
+      "bytes": 13244,
+      "sha256": "1b15a30e03732346f6aa54462873e38c6f9626c183517eb716d800ea1f190a30"
+    }
+  ],
+  "largeRawReportsCommitted": false,
+  "oidcDeltaDependencyEvidenceReuse": "LATER_OIDC_SENDER_DELTA_CHANGES_ONLY_LOCAL_BUILTINS_AND_EXISTING_OIDC_TOKEN_HANDOFF;_PACKAGE_AND_LOCK_DEFINITION_BYTES_UNCHANGED;AUDIT_RESULTS_REUSED_WITHOUT_NEW_WHOLE_SOURCE_PASS_CLAIM"
+}

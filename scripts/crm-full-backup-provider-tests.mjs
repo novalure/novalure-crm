@@ -30,6 +30,12 @@ function fixture(overrides = {}) {
     calls.push({ pathname: u.pathname, search: u.search, method, body, redirect: init.redirect });
     assert.equal(u.origin, 'https://console.neon.tech');
     const root = `/api/v2/projects/${config.neonProjectId}`;
+    if ((overrides.failStage === 'PRODUCTION_BINDING_READ' && u.pathname === root && method === 'GET') ||
+      (overrides.failStage === 'SNAPSHOT_RESTORE' && u.pathname === `${root}/snapshots/${config.snapshotId}/restore` && method === 'POST')) {
+      return { ok: false, status: 422,
+        get headers() { throw new Error('SYNTHETIC private provider headers must not be read'); },
+        json: async () => { throw new Error('SYNTHETIC private provider body must not be read'); } };
+    }
     let value;
     if (u.pathname === root && method === 'GET') value = { project: { id: config.neonProjectId, owner: { subscription_type: 'launch_v3' } } };
     else if (u.pathname === `${root}/branches` && method === 'GET') value = { branches: [source, ...(restored ? [restored] : [])] };
@@ -118,8 +124,22 @@ test('Neon read failures preserve only a valid numeric HTTP status without inspe
       };
     } });
     await assert.rejects(ports.snapshotInfo(config.snapshotId), error => error.code === expected && error.message === expected &&
+      error.providerStage === 'SNAPSHOT_READ' && (Number.isInteger(status) && status >= 100 && status <= 599 ? error.providerHttpStatus === status : error.providerHttpStatus === undefined) &&
       /^[A-Z][A-Z0-9_]+$/u.test(error.code) && !JSON.stringify({ code: error.code, message: error.message }).includes('SYNTHETIC'));
     assert.equal(requests, 1);
+  }
+});
+
+test('safe diagnostics distinguish rejected restore POST from preflight GET without reading error payloads', async () => {
+  for (const failStage of ['PRODUCTION_BINDING_READ', 'SNAPSHOT_RESTORE']) {
+    const actual = fixture({ failStage });
+    const ports = await actual.make();
+    await assert.rejects(ports.restoreSnapshot(restoreArgs), error => error.code === 'NEON_HTTP_422' &&
+      error.providerStage === failStage && error.providerHttpStatus === 422);
+    assert.equal(actual.calls.filter(row => row.method === 'POST' && row.pathname.endsWith('/restore')).length,
+      failStage === 'SNAPSHOT_RESTORE' ? 1 : 0);
+    assert.equal(actual.copied.length, 0);
+    assert.equal(actual.production.branch_id, config.sourceBranchId);
   }
 });
 

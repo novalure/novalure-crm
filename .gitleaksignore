@@ -45,3 +45,8 @@ d9734433397d9a831ceb735091e5117995fa884c:scripts/booking-channel-adapter-tests.t
 # Studio runtime access still requires a signed JWT and separate capability.
 # Keep every rule and both history/tree scans; no current-tree exemption.
 485850509fbbeb327d1228761774456c9d049003:src/lib/shared-behavior/studio-auth.ts:generic-api-key:13
+
+# Reused exact historical public central-identity UUID qualification. Immutable
+# source bytes match the already accepted operator identity selector; this is
+# neither a credential nor a current-tree/pattern exemption. Preserve every rule.
+bd8d3920d74798d7458094e6ebfbd6e544306e00:config/operator-recovery-recipient.json:generic-api-key:6

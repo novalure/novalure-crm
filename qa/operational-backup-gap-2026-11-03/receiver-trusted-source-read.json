@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-03T10:44:04.808Z",
+  "source": "EXACT_RECEIVER_PROJECT_NATIVE_READ_ONLY",
+  "providerMutations": 0,
+  "valuesDecrypted": 0,
+  "protectionBypassValuesReadOrEmitted": false,
+  "status": "TRUSTED_SOURCE_METADATA_READ_PASS",
+  "trustedSourcesPresent": true,
+  "trustedSources": {
+    "enableVercelCiSameRepository": false,
+    "projects": {
+      "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I": {
+        "label": {
+          "stringSha256": "6c015aec57d29846e7f2691f70b012f6692a6df8fbddcbbdaa3bbd1c6568285c"
+        },
+        "customAllow": [
+          {
+            "from": {
+              "slugs": [
+                "preview"
+              ]
+            },
+            "to": {
+              "slugs": [
+                "preview"
+              ]
+            }
+          }
+        ]
+      },
+      "prj_R32Okl6AHijTohvuKmryuTLjWMsk": {
+        "label": {
+          "stringSha256": "14906cb4b37dd7f61f11df69fe9d61d35711af4f1c1361f671e38412ac15dff1"
+        },
+        "customAllow": [
+          {
+            "from": {
+              "slugs": [
+                "preview"
+              ]
+            },
+            "to": {
+              "slugs": [
+                "preview"
+              ]
+            }
+          }
+        ]
+      },
+      "prj_5okehbkYEkLBHaIEzlet1t0FaZj4": {
+        "label": {
+          "stringSha256": "fcff78562d05560d54f94134017d7e9e9dc10a437b6cd594dae8af389f0c026e"
+        },
+        "customAllow": [
+          {
+            "from": {
+              "slugs": [
+                "production"
+              ]
+            },
+            "to": {
+              "slugs": [
+                "production"
+              ]
+            }
+          },
+          {
+            "from": {
+              "slugs": [
+                {
+                  "stringSha256": "c32c66ecdba72f13f7a7dc821909d52cbfd7e63c2bf5dd68425c6edd2e2755e7"
+                }
+              ]
+            },
+            "to": {
+              "slugs": [
+                {
+                  "stringSha256": "c32c66ecdba72f13f7a7dc821909d52cbfd7e63c2bf5dd68425c6edd2e2755e7"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "trustedSourcesSha256": "46684f0299731008b603cb98d1a0124f4e0a4e452dc57dfd4c5c99498f3bb1aa",
+  "containsExactBackupProjectId": false,
+  "ssoProtection": {
+    "deploymentType": "all"
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-03T10:32:09.450Z",
+  "status": "SOURCE_FROZEN_FOR_INDEPENDENT_REVIEW_NOT_COMMITTED_OR_DEPLOYED",
+  "repository": "novalure/novalure-crm",
+  "baseRevision": "1af2f8f9bba9db57c15bfadfee25f6bee5693b9d",
+  "branch": "codex/operational-backup-gaps-20261103",
+  "actualVerification": {
+    "command": "npm run test:crm-full-backup",
+    "tests": 82,
+    "passed": 82,
+    "failed": 0,
+    "skipped": 0,
+    "evidence": "ACTUAL_EXECUTED_FINAL_TOOL_RUN_AFTER_PROVIDER_DIAGNOSTICS_AND_HTTP4XX_CLASSIFICATION_CHANGE",
+    "node": "v24.18.0",
+    "syntax": "PASS",
+    "diffCheck": "PASS",
+    "applicationBuildOrRestoreClaimed": false
+  },
+  "classification": {
+    "NEON_HTTP_401": "CREDENTIALS_UNAVAILABLE",
+    "NEON_HTTP_403": "CREDENTIALS_UNAVAILABLE",
+    "NEON_HTTP_404": "BACKUP_EXECUTION_FAILED",
+    "NEON_HTTP_422": "BACKUP_EXECUTION_FAILED",
+    "NEON_HTTP_429": "PROVIDER_UNAVAILABLE",
+    "NEON_HTTP_503": "PROVIDER_UNAVAILABLE"
+  },
+  "modified": [
+    "docs/crm-full-backup-runner.md",
+    "package.json",
+    "scripts/crm-full-backup-http-tests.mjs",
+    "scripts/crm-full-backup-provider-tests.mjs",
+    "scripts/crm-full-backup-tests.mjs",
+    "scripts/crm-full-backup.mjs",
+    "scripts/lib/crm-full-backup-http.mjs",
+    "scripts/lib/crm-full-backup-providers.mjs",
+    "scripts/lib/crm-full-backup.mjs",
+    "scripts/prepare-crm-backup-workload.mjs"
+  ],
+  "untracked": [
+    "docs/backup-failure-warning-2026-11-03.md",
+    "qa/operational-backup-gap-2026-11-03/native-readonly-observations.json",
+    "qa/operational-backup-gap-2026-11-03/private-target-normalized-read.json",
+    "scripts/crm-backup-failure-warning-tests.mjs",
+    "scripts/lib/crm-backup-failure-warning.mjs"
+  ],
+  "sourceHashes": [
+    {
+      "path": "docs/backup-failure-warning-2026-11-03.md",
+      "bytes": 9740,
+      "sha256": "57c79debdb9e56b7fe2cbf2296b46c7a661f11471f3501ce910a10dc7c68413b",
+      "changed": true
+    },
+    {
+      "path": "docs/crm-full-backup-runner.md",
+      "bytes": 20111,
+      "sha256": "b752df66efc235a9d8bbce1047f6c859d286583bffd7d796c5d753301deec117",
+      "changed": true
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 340537,
+      "sha256": "847322cfb4a41607a705a186e05d9466cbbbd58caadb1138742f3d47b5be62fe",
+      "changed": false
+    },
+    {
+      "path": "package.json",
+      "bytes": 15309,
+      "sha256": "3ea9494f388aed0e9e01fc2f9dd2dcc0724f4a9638fc23a23261abefd6151fa6",
+      "changed": true
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/native-readonly-observations.json",
+      "bytes": 2744,
+      "sha256": "7fb3b3736c56afd1b3a763a92c29c95d9ae36778955bfe01397ff848a387b29c",
+      "changed": true
+    },
+    {
+      "path": "qa/operational-backup-gap-2026-11-03/private-target-normalized-read.json",
+      "bytes": 1706,
+      "sha256": "78428c4a1662de0bf26531c02e02a29682b64ed7e0f3163a3deeee0d54d646cd",
+      "changed": true
+    },
+    {
+      "path": "scripts/crm-backup-failure-warning-tests.mjs",
+      "bytes": 12531,
+      "sha256": "40dc5699a46e4d4e9142652eef5e6dce4b7f435c04e193018c9ff04b81b8c802",
+      "changed": true
+    },
+    {
+      "path": "scripts/crm-full-backup-http-tests.mjs",
+      "bytes": 17466,
+      "sha256": "995c09fba2bb08ebb9437d3f70a872817fd0b712fa509972e5aded9b40f03ee4",
+      "changed": true
+    },
+    {
+      "path": "scripts/crm-full-backup-provider-tests.mjs",
+      "bytes": 22346,
+      "sha256": "628467a63eb2fb6aea50e9fb7a59ea402d1353a0806fd378dece8f4b1b4f950f",
+      "changed": true
+    },
+    {
+      "path": "scripts/crm-full-backup-tests.mjs",
+      "bytes": 25629,
+      "sha256": "93eb36f5ff63d44496461ebdeddcc44806bf948bbe5d74831d71e9f76bc45d41",
+      "changed": true
+    },
+    {
+      "path": "scripts/crm-full-backup.mjs",
+      "bytes": 5257,
+      "sha256": "99315117d0dd4f04bdde776c272aede5eb3e47bf0b852ae404545f12bd035dec",
+      "changed": true
+    },
+    {
+      "path": "scripts/lib/crm-backup-failure-warning.mjs",
+      "bytes": 6872,
+      "sha256": "a5a018bdc796511a99ae37a7198831236aef0c5f6ee5285bdb1429875e849c7e",
+      "changed": true
+    },
+    {
+      "path": "scripts/lib/crm-full-backup-http.mjs",
+      "bytes": 10900,
+      "sha256": "c1d216e2a090e0ba0169ce7a6bbe9cceba407554d9009de86aa382aae6ef6dd9",
+      "changed": true
+    },
+    {
+      "path": "scripts/lib/crm-full-backup-providers.mjs",
+      "bytes": 28575,
+      "sha256": "269827ea24e6c1092d093ceb16c2463e64d5fb52154fbe48007f6079654f129f",
+      "changed": true
+    },
+    {
+      "path": "scripts/lib/crm-full-backup.mjs",
+      "bytes": 35394,
+      "sha256": "2ec03017590434bf2df9f3b960a07b955dbddac87d94fc19f598607201b4804b",
+      "changed": true
+    },
+    {
+      "path": "scripts/lib/neon-061-compat.mjs",
+      "bytes": 18912,
+      "sha256": "0d9c79a28d032ffaf442c70003109f5ca18ed77299dddd146fc2ebb0a248336a",
+      "changed": false
+    },
+    {
+      "path": "scripts/lib/studio-stage3-qa-fingerprint.mjs",
+      "bytes": 34482,
+      "sha256": "3865b34018fe8edd26096b31e7fce6f527491f6878faaf4a25dfad36fa212f68",
+      "changed": false
+    },
+    {
+      "path": "scripts/prepare-crm-backup-workload.mjs",
+      "bytes": 3495,
+      "sha256": "5dc188bc3bfaf688e83235356afbd1d9969b0e28a0ffb52d3ab82f387901225a",
+      "changed": true
+    }
+  ],
+  "callbackTrace": [
+    "prepareCrmBackupWorkload packages nine fixed source/package files and generates api/backup.mjs",
+    "api/backup.mjs GET export calls createCrmBackupHttpHandler()",
+    "authenticated exact enabled workload calls main --execute with host-generated backup UUID",
+    "failed typed summary invokes createCrmBackupFailureEvent then default createCrmBackupFailureNotifier",
+    "one fixed-origin HMAC POST; only matching DELIVERED/native receipt confirms notification",
+    "HTTP503 and original safe backup failure remain unchanged regardless of notification result"
+  ],
+  "productionEffects": {
+    "providerMutations": 0,
+    "deployment": false,
+    "sourceOrTargetDataWrites": 0,
+    "schedulesChanged": 0,
+    "credentialRotations": 0,
+    "newBackupInvocations": 0,
+    "newRestoreExercises": 0,
+    "automaticDeletionEnabled": false
+  },
+  "pending": [
+    "EXACT_IMMUTABLE_INDEPENDENT_REVIEW_AND_REQUIRED_NATIVE_CHECKS",
+    "COHERENT_RECEIVER_AND_SENDER_ACTIVATION_WITH_DEDICATED_PROTECTED_BRIDGE_CREDENTIAL",
+    "PROVIDER_REQUEST_AUDIT_FOR_ORIGINAL_NOVEMBER3_HTTP422_STAGE_AND_CAUSE",
+    "INDEPENDENT_FRESHNESS_MONITOR_DECISION_AND_IMPLEMENTATION_FOR_NO_INVOCATION_CASES"
+  ]
+}
