@@ -1553,13 +1553,26 @@ async function runIntegration() {
       // Fetch its real authenticated snapshot before intercepting: a pending
       // route.fetch must not outlive navigation and try to fulfill a handled route.
       const coreUrl = new URL("/api/crm/core", base).href;
-      const response = await operatorPage.request.get(coreUrl);
-      assert.equal(response.status(), 200);
+      const [response] = await Promise.all([
+        operatorPage.waitForResponse(
+          (response) => response.url() === coreUrl && response.request().method() === "GET",
+        ),
+        operatorPage.evaluate(async (url) => {
+          const response = await fetch(url, { cache: "no-store" });
+          await response.arrayBuffer();
+        }, coreUrl),
+      ]);
+      assert.equal(response.status(), 200, "The real browser-session core snapshot must be authorized");
       const payload = await response.json();
-      assert.equal(payload.source, "database");
-      assert.equal(payload.data.source, "database");
-      assert.equal(payload.activeWorkspaceId, accounts.operator.workspaceId);
-      assert.ok(payload.data.contacts.every(contact => contact.workspaceId === accounts.operator.workspaceId));
+      assert.equal(payload.source, "database", "The real core snapshot must have database provenance");
+      assert.equal(payload.data.source, "database", "The real core data must have database provenance");
+      assert.equal(payload.activeWorkspaceId, accounts.operator.workspaceId, "The real core snapshot must use the operator's own workspace");
+      assert.ok(payload.data.contacts.every(contact => contact.workspaceId === accounts.operator.workspaceId), "The real core contacts must belong to the operator's own workspace");
+      const headers = await response.allHeaders();
+      // The fixture changes the body; retain the response's security/cache
+      // headers while allowing Playwright to encode and size the new JSON.
+      delete headers["content-length"];
+      delete headers["content-encoding"];
       payload.source = "mock";
       payload.data.source = "mock";
       payload.data.moduleSources = Object.fromEntries(
@@ -1571,7 +1584,7 @@ async function runIntegration() {
           name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
         },
       ];
-      const handler = route => route.fulfill({ response, json: payload });
+      const handler = route => route.fulfill({ status: response.status(), headers, json: payload });
       await operatorPage.route(coreUrl, handler);
       try {
         const refresh = operatorPage
