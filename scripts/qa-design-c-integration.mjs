@@ -1549,31 +1549,37 @@ async function runIntegration() {
     "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId, "contacts");
-      const handler = async (route) => {
-        const response = await route.fetch();
-        const payload = await response.json();
-        assert.equal(response.status(), 200);
-        payload.source = "mock";
-        payload.data.source = "mock";
-        payload.data.moduleSources = Object.fromEntries(
-          Object.keys(payload.data.moduleSources).map((key) => [key, "mock"]),
-        );
-        payload.data.contacts = [
-          {
-            ...payload.data.contacts[0],
-            name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
-          },
-        ];
-        await route.fulfill({ response, json: payload });
-      };
-      await operatorPage.route("**/api/crm/core**", handler);
+      // Refresh in the operator's own session uses this exact implicit scope.
+      // Fetch its real authenticated snapshot before intercepting: a pending
+      // route.fetch must not outlive navigation and try to fulfill a handled route.
+      const coreUrl = new URL("/api/crm/core", base).href;
+      const response = await operatorPage.request.get(coreUrl);
+      assert.equal(response.status(), 200);
+      const payload = await response.json();
+      assert.equal(payload.source, "database");
+      assert.equal(payload.data.source, "database");
+      assert.equal(payload.activeWorkspaceId, accounts.operator.workspaceId);
+      assert.ok(payload.data.contacts.every(contact => contact.workspaceId === accounts.operator.workspaceId));
+      payload.source = "mock";
+      payload.data.source = "mock";
+      payload.data.moduleSources = Object.fromEntries(
+        Object.keys(payload.data.moduleSources).map((key) => [key, "mock"]),
+      );
+      payload.data.contacts = [
+        {
+          ...payload.data.contacts[0],
+          name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
+        },
+      ];
+      const handler = route => route.fulfill({ response, json: payload });
+      await operatorPage.route(coreUrl, handler);
       try {
         const refresh = operatorPage
           .locator("[data-crm-header]")
           .getByRole("button", { name: "Aktualisieren", exact: true });
         await Promise.all([
           operatorPage.waitForResponse(
-            (response) => new URL(response.url()).pathname === "/api/crm/core",
+            (response) => response.url() === coreUrl,
           ),
           refresh.click(),
         ]);
@@ -1599,7 +1605,7 @@ async function runIntegration() {
             "Unknown data was presented as a numeric business result",
           );
       } finally {
-        await operatorPage.unroute("**/api/crm/core**", handler);
+        await operatorPage.unroute(coreUrl, handler);
         await open(operatorPage, accounts.operator.workspaceId);
       }
     },
