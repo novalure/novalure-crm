@@ -86,7 +86,14 @@ test("base64url key, lazy session, exact API origin and closure-only credentials
     assert.equal(request.headers["x-novalure-site-key"], key);
     assert.doesNotMatch(request.url, /opaque_session_token/);
   }
-  assert.deepEqual(Object.keys(JSON.parse(state.requests[1].body)).sort(), ["message", "sessionId"]);
+  const answerRequests = state.requests.slice(1).map(request => JSON.parse(request.body));
+  for (const answer of answerRequests) {
+    assert.deepEqual(Object.keys(answer).sort(), ["message", "requestId", "sessionId"]);
+    assert.match(answer.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+    assert.equal(answer.sessionId, started.body.sessionId);
+    assert.equal(answer.message, "What does the website cost?");
+  }
+  assert.notEqual(answerRequests[0].requestId, answerRequests[1].requestId, "separate submitted turns receive distinct request identities");
   assert.equal(state.requests[1].headers["x-novalure-session-token"], started.body.sessionToken);
   assert.ok(state.nodes.every(node => !JSON.stringify(node.attributes).includes(started.body.sessionToken)));
   assert.equal(state.context.session, undefined);
@@ -291,7 +298,9 @@ test("explicit website presentation remains stable after the session without cha
   assert.equal(state.byClass("mode").textContent, "Modo de prueba");
   assert.equal(state.find("a").href, "https://customer.example.invalid/v2/datenschutz/#ki-chat");
   assert.deepEqual(JSON.parse(state.requests[0].body), { language: "en" });
-  assert.deepEqual(JSON.parse(state.requests[1].body), { sessionId: started.body.sessionId, message: "What does the website cost?" });
+  const answerRequest = JSON.parse(state.requests[1].body);
+  assert.match(answerRequest.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+  assert.deepEqual(answerRequest, { sessionId: started.body.sessionId, message: "What does the website cost?", requestId: answerRequest.requestId });
   for (const request of state.requests) {
     assert.ok(request.url.startsWith("https://crm.example.invalid/api/public/integrations/chat/"));
     for (const value of Object.values(embedPresentation)) assert.ok(!request.body.includes(value));
