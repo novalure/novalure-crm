@@ -4,7 +4,8 @@ export type BookingKind = "phone" | "teams" | "meet" | "office" | "onsite";
 export type BookingProviderName = "microsoft" | "google";
 export type BusyInterval = { startsAt: string; endsAt: string; eventId?: string; calendarId?: string; location?: string | null };
 export type ProviderEvent = { eventId: string; etag: string | null; startsAt: string; endsAt: string; onlineMeetingUrl: string | null; videoStatus: "ready" | "pending" | "unavailable" | "none"; cancelled: boolean };
-export type ProviderWrite = { operationId: string; bookingId: string; title: string; startsAt: string; endsAt: string; timeZone: string; kind: BookingKind; location: string };
+export type BookingInvitation = { email: string; name: string };
+export type ProviderWrite = { operationId: string; bookingId: string; title: string; startsAt: string; endsAt: string; timeZone: string; kind: BookingKind; location: string; invitation?: BookingInvitation };
 export interface BookingProvider {
   listBusy(input: { startsAt: string; endsAt: string; excludeEventId?: string; includeLocations?: boolean }): Promise<BusyInterval[]>;
   create(input: ProviderWrite): Promise<ProviderEvent>;

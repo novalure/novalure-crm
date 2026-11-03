@@ -5,7 +5,7 @@ import { withTenantTransaction, type TenantScope, type TenantTransaction, type T
 import { sendTransactionalEmail, type TransactionalEmailResult } from "@/lib/integrations/resend";
 import { readBookingSetup } from "./configuration";
 import { bookingResourceLock, readBooking, withBookingTransaction } from "./repository";
-import { BookingError, type BookingRecord } from "./types";
+import { BookingError, type BookingRecord, type BookingInvitation } from "./types";
 import { createBookingActionLinks } from "./message-actions";
 import { bookingMailBindings, bookingMessageActivation, bookingMessageScopes, isBookingMessageQaRuntime, isBookingMessageRuntime } from "./message-runtime";
 export { bookingMailBindings, bookingMessageActivation, bookingMessageScopes, isBookingMessageQaRuntime, isBookingMessageRuntime, isBookingReminderRuntime } from "./message-runtime";
@@ -22,6 +22,16 @@ export function normalizeBookingRecipient(input: { recipientEmail?: unknown; rec
 }
 function mailAllowed(session: Pick<AppSession, "workspaceId" | "userId">, recipient: string) {
   return bookingMailBindings().some(b => b.workspaceId === session.workspaceId && b.userId === session.userId && b.recipientEmail === recipient);
+}
+/** Same consented, persisted recipient and communication gates as the existing message queue. */
+export async function bookingCalendarInvitation(tx: TenantTransaction, session: AppSession, row: BookingRecord): Promise<BookingInvitation | null> {
+  if (row.provider !== "microsoft" || !row.recipientEmail || !isBookingMessageRuntime() ||
+    !["processing", "uncertain"].includes(row.state) || !["create", "reschedule"].includes(row.operationKind ?? "")) return null;
+  const recipient = normalizeBookingRecipient(row);
+  if (!recipient.recipientEmail || isBookingMessageQaRuntime() && !mailAllowed(session, recipient.recipientEmail) ||
+    !(await readBookingSetup(tx, session, row.kind)).communication.enabled ||
+    !await bookingMessageActivation(tx, session, row)) return null;
+  return { email: recipient.recipientEmail, name: recipient.recipientName };
 }
 async function isOrganizerRecipient(tx: TenantTransaction, session: Pick<AppSession, "workspaceId" | "userId">, recipient: string) {
   const user = await tx.queryOne<{ allowed: boolean }>(`select lower(btrim(email))=$3 as allowed from workspace_users

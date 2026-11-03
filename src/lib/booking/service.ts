@@ -13,7 +13,7 @@ import { bookingAudit, bookingColumns, bookingResourceLock, expireBookingHolds, 
 import { readBookingSetup } from "./configuration";
 import { createGoogleMapsRouter } from "./maps";
 import { createBookingTravelChecker, travelAppointments, TravelCheckError, type DrivingRouter, type TravelProof } from "./travel";
-import { normalizeBookingRecipient, syncBookingMessages } from "./messages";
+import { bookingCalendarInvitation, normalizeBookingRecipient, syncBookingMessages } from "./messages";
 import { resolveBookingPropertyLocation } from "./property-locations";
 export type BookingServiceOptions = TenantTransactionOptions & {
   providerFactory?: BookingProviderFactory; now?:()=>number;
@@ -45,6 +45,16 @@ async function adapter(session:AppSession,provider:BookingProviderName,options:B
   assertRuntime(options);
   if(options.providerFactory)return options.providerFactory(scope(session),provider);
   return createBookingProvider(scope(session),provider,{pool:options.pool,statementTimeoutMs:options.statementTimeoutMs,
+    withInvitationWrite:(effect,write)=>withBookingTransaction(session,async(tx,fresh)=>{
+      await bookingResourceLock(tx,fresh);
+      try {
+        await options.authorize?.(tx,fresh);
+        const row=await readBooking(tx,fresh,effect.bookingId),invitation=await bookingCalendarInvitation(tx,fresh,row);
+        if(row.operationId!==effect.operationId||!invitation||invitation.email!==effect.email||invitation.name!==effect.name)
+          throw new BookingError("BOOKING_INVITATION_CHANGED",409);
+      } catch(error) { throw new BookingProviderError(error instanceof BookingError?error.code:"booking_invitation_unavailable","rejected"); }
+      return write();
+    },options),
     ...(options.authorize?{beforeWrite:()=>withBookingTransaction(session,async(tx,fresh)=>{await bookingResourceLock(tx,fresh);await options.authorize!(tx,fresh);},options)}:{})});
 }
 async function verifyConnection(tx:TenantTransaction,session:AppSession,c:{connectionId:string;calendarId:string;revision:number}) {
@@ -222,7 +232,14 @@ async function providerFailure(session:AppSession,row:BookingRecord,error:unknow
     await bookingAudit(tx,fresh,"booking.provider_rejected",row.id,{operationId:row.operationId,errorCode:error.code});return readBooking(tx,fresh,row.id);
   },options);
 }
-function providerWrite(row:BookingRecord):ProviderWrite { const rules=row.operationTarget?.rules??row.rules;return {operationId:row.operationId!,bookingId:row.id,title:row.title,startsAt:row.operationTarget?.startsAt??row.startsAt,endsAt:row.operationTarget?.endsAt??row.endsAt,timeZone:rules.timeZone,kind:row.kind,location:rules.location}; }
+async function providerWrite(session:AppSession,row:BookingRecord,options:BookingServiceOptions):Promise<ProviderWrite> {
+  const invitation=await withBookingTransaction(session,async(tx,fresh)=>{
+    await bookingResourceLock(tx,fresh);const current=await readBooking(tx,fresh,row.id);
+    if(!sameSnapshot(current,row))throw new BookingProviderError("booking_changed","rejected");
+    return bookingCalendarInvitation(tx,fresh,current);
+  },options);
+  const rules=row.operationTarget?.rules??row.rules;return {operationId:row.operationId!,bookingId:row.id,title:row.title,startsAt:row.operationTarget?.startsAt??row.startsAt,endsAt:row.operationTarget?.endsAt??row.endsAt,timeZone:rules.timeZone,kind:row.kind,location:rules.location,...(invitation?{invitation}:{})};
+}
 export async function confirmBooking(session:AppSession,id:string,options:BookingServiceOptions={}) {
   assertCrmUuid(id);const pre=await withBookingTransaction(session,async(tx,fresh)=>{await expireBookingHolds(tx,fresh,clock(options));return readBooking(tx,fresh,id);},options);
   if(pre.state!=="held")return pre;
@@ -249,7 +266,7 @@ export async function confirmBooking(session:AppSession,id:string,options:Bookin
     const freshTravel=await evaluateTravel(session,claimed.row.kind,claimed.row.startsAt,claimed.row.rules,provider,options,claimed.row,external);
     await withBookingTransaction(session,async(tx,fresh)=>{await bookingResourceLock(tx,fresh);await verifyTravelContext(tx,fresh,claimed.row.rules,freshTravel.digest,id);},options);
   }catch(error){return providerFailure(session,claimed.row,error instanceof BookingError?new BookingProviderError(error.code,"rejected"):error,options);}
-  try{await verifyCurrentBinding(session,claimed.row,options);return await finish(session,claimed.row,await provider.create(providerWrite(claimed.row)),options);}catch(error){return providerFailure(session,claimed.row,error,options);}
+  try{await verifyCurrentBinding(session,claimed.row,options);return await finish(session,claimed.row,await provider.create(await providerWrite(session,claimed.row,options)),options);}catch(error){return providerFailure(session,claimed.row,error,options);}
 }
 export async function getBookingStatus(session:AppSession,id:string,options:BookingServiceOptions={}) {
   assertCrmUuid(id);const row=await withBookingTransaction(session,async(tx,fresh)=>{await expireBookingHolds(tx,fresh,clock(options));return readBooking(tx,fresh,id);},options);
@@ -322,7 +339,7 @@ async function mutate(session:AppSession,id:string,input:{startsAt?:string;idemp
     const freshEvaluation=await evaluateTravel(session,claimed.row.kind,target.startsAt,target.rules,provider,options,claimed.row);
     await withBookingTransaction(session,async(tx,fresh)=>{await bookingResourceLock(tx,fresh);await verifyTravelContext(tx,fresh,target.rules,freshEvaluation.digest,id);},options);
   }catch(error){return providerFailure(session,claimed.row,error instanceof BookingError?new BookingProviderError(error.code,"rejected"):error,options);}
-  try{await verifyCurrentBinding(session,claimed.row,options);if(kind==="cancel"){await provider.delete({bookingId:id,operationId:claimed.row.operationId!,eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag});return finish(session,claimed.row,null,options,true);}return finish(session,claimed.row,await provider.update({...providerWrite(claimed.row),eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag}),options);}catch(error){return providerFailure(session,claimed.row,error,options);}
+  try{await verifyCurrentBinding(session,claimed.row,options);if(kind==="cancel"){await provider.delete({bookingId:id,operationId:claimed.row.operationId!,eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag});return finish(session,claimed.row,null,options,true);}return finish(session,claimed.row,await provider.update({...await providerWrite(session,claimed.row,options),eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag}),options);}catch(error){return providerFailure(session,claimed.row,error,options);}
 }
 export const rescheduleBooking=(session:AppSession,id:string,input:{startsAt:string;idempotencyKey:string;expectedMessageVersion?:number}&BookingLocationInput,options:BookingServiceOptions={})=>mutate(session,id,input,"reschedule",options);
 export const cancelBooking=(session:AppSession,id:string,input:{idempotencyKey:string;expectedMessageVersion?:number},options:BookingServiceOptions={})=>mutate(session,id,input,"cancel",options);

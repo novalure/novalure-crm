@@ -78,6 +78,41 @@ test("Microsoft create carries transaction identity, ownership and UTC times and
   }, microsoft);
 });
 
+test("Microsoft invitation is sent under current server authority and preserves existing attendees", async () => {
+  const microsoft=access("microsoft"), invitation={email:"hello@novalure.eu",name:"Synthetic owner"};
+  const original=process.env.BOOKING_MESSAGES_ENABLED;process.env.BOOKING_MESSAGES_ENABLED="1";
+  let writes=0,authorizations=0;
+  const existing={id:"ms-event","@odata.etag":'W/"v1"',start:{dateTime:write.startsAt},end:{dateTime:write.endsAt},
+    singleValueExtendedProperties:[{id:"String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name NovalureBooking",value:`${scope.workspaceId}:${write.bookingId}`}],
+    attendees:[{emailAddress:{address:"existing@example.invalid",name:"Existing attendee"},type:"optional",status:{response:"accepted"}}]};
+  try{await transport((_url,init)=>{
+    if(init.method==="GET")return response(existing);
+    writes++;assert.equal(authorizations,writes);const body=JSON.parse(String(init.body));
+    assert.equal(body.attendees.at(-1).emailAddress.address,invitation.email);
+    if(init.method==="PATCH"){assert.deepEqual(body.attendees[0],{emailAddress:{address:"existing@example.invalid",name:"Existing attendee"},type:"optional"});assert.equal(new Headers(init.headers).get("If-Match"),'W/"v1"');}
+    return response({...existing,...body,"@odata.etag":'W/"v2"',onlineMeeting:{joinUrl:"https://teams.microsoft.com/l/meetup-join/test"}});
+  },async()=>{
+    const provider=createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async(effect,send)=>{
+      assert.deepEqual(effect,{bookingId:write.bookingId,operationId:write.operationId,...invitation});authorizations++;return send();
+    }});
+    await provider.create({...write,kind:"teams",invitation});await provider.update({...write,kind:"teams",invitation,eventId:"ms-event",etag:'W/"v1"'});
+    assert.equal(writes,2);
+  },microsoft);}finally{if(original===undefined)delete process.env.BOOKING_MESSAGES_ENABLED;else process.env.BOOKING_MESSAGES_ENABLED=original;}
+});
+
+test("invitation denial is definite before a provider mutation and Google receives no attendee", async () => {
+  const microsoft=access("microsoft"), invitation={email:"hello@novalure.eu",name:"Synthetic owner"};
+  const original=process.env.BOOKING_MESSAGES_ENABLED;process.env.BOOKING_MESSAGES_ENABLED="1";let calls=0;
+  try{await transport(()=>{calls++;return response({});},async()=>{
+    await assert.rejects(createBookingProviderWithAccess(scope,microsoft).create({...write,kind:"teams",invitation}),e=>e instanceof BookingProviderError&&e.outcome==="rejected"&&e.code==="booking_invitation_not_authorized");
+    const denied=createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async()=>{throw new BookingProviderError("BOOKING_INVITATION_CHANGED","rejected");}});
+    await assert.rejects(denied.create({...write,kind:"teams",invitation}),e=>e instanceof BookingProviderError&&e.outcome==="rejected");
+    process.env.BOOKING_MESSAGES_ENABLED="0";await assert.rejects(denied.create({...write,kind:"teams",invitation}),/booking_invitation_not_authorized/);assert.equal(calls,0);
+  },microsoft);
+  await transport((_url,init)=>{const body=JSON.parse(String(init.body));assert.equal(body.attendees,undefined);return response(googleEvent());},async()=>{await createBookingProviderWithAccess(scope,access("google")).create({...write,invitation});});
+  }finally{if(original===undefined)delete process.env.BOOKING_MESSAGES_ENABLED;else process.env.BOOKING_MESSAGES_ENABLED=original;}
+});
+
 test("Unsupported Teams/Meet capability and protected calendar fail before transport", async () => {
   let calls = 0;
   const microsoft = access("microsoft"); microsoft.calendar.teamsSupported = false;
