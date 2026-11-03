@@ -49,6 +49,47 @@ export async function issueTrustedBookingChannelSession(request:Request,input:Se
   uuid(input.workspaceId);bounded(input.bindingId,200);
   return issue(request,validateSessionInput({publicId:input.publicId,channel:input.channel,typeId:input.typeId,language:input.language}),options,{workspaceId:input.workspaceId,bindingId:input.bindingId,relation:input.relation});
 }
+/** Reauthorize the same Studio session after fresh signed, accepted-enquiry verification.
+ * Its operation keys, ownership, counters and 30-minute access lifetime are retained.
+ * Expired tokens remain invalid everywhere else; revoked/changed grants are never renewed.
+ */
+export async function resumeTrustedStudioBookingSession(token:string,typeId:string,relation:BookingChannelRelation,stored:StoredBookingPublication,options:BookingChannelOptions){
+  const expected=options.trustedBinding,assignment=stored.config.assignments.find(item=>item.id===typeId);
+  if(typeof token!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(token)||!expected||expected.expectedChannel!=="chat"||
+    expected.expectedWorkspaceId!==stored.workspaceId||expected.expectedPublicId!==stored.config.publicId||
+    expected.expectedBindingId!==relation.sourceId||relation.source!=="studio_handoff"||!expected.expectedTypeIds.includes(typeId)||
+    !assignment||!["teams","phone"].includes(assignment.kind))throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
+  validateRelation(relation);
+  const owner=serverBookingSession(stored.workspaceId,assignment.organizerId),tokenHash=hashOpaqueToken(token);
+  return withBookingTransaction(owner,async(tx,fresh)=>{
+    await tx.query("select pg_advisory_xact_lock_shared(hashtextextended($1,0))",[`booking-workspace:${stored.workspaceId}`]);
+    const current=await tx.queryOne<{publication:StoredBookingPublication|null}>("select booking_publication_lookup($1) as publication",[stored.config.publicId]);
+    if(!current?.publication||current.publication.revision!==stored.revision)throw new BookingError("BOOKING_PUBLICATION_CHANGED",409);
+    const params=[tokenHash,stored.workspaceId,assignment.organizerId,stored.id,typeId,relation.sourceId,stored.revision,JSON.stringify(relation)];
+    const predicate=`token_hash=$1 and workspace_id=$2 and organizer_id=$3 and publication_id=$4 and assignment_id=$5 and binding_id=$6
+      and publication_revision=$7 and relation=$8::jsonb and channel='chat' and origin='trusted:chat' and language='en'
+      and revoked_at is null and request_count<200`;
+    const found=await tx.queryOne<{id:string}>(`select id from booking_channel_sessions where ${predicate}`,params);
+    if(!found)throw new BookingError("BOOKING_SESSION_INVALID",401);
+    await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`booking-channel:${found.id}`]);
+    const row=await tx.queryOne<{id:string;expiresAt:string;active:boolean;ipHash:string}>(`select id,expires_at as "expiresAt",expires_at>now() as active,ip_hash as "ipHash" from booking_channel_sessions where ${predicate} for update`,params);
+    if(!row)throw new BookingError("BOOKING_SESSION_INVALID",401);
+    let expiresAt=row.expiresAt;
+    if(!row.active){
+      const budget=await tx.queryOne<{allowed:boolean}>("select booking_channel_reserve_budget($1,$2,'session') as allowed",[stored.id,row.ipHash]);
+      if(!budget?.allowed)throw new BookingError("BOOKING_SESSION_LIMIT",429);
+      const renewed=await tx.queryOne<{expiresAt:string}>(`update booking_channel_sessions set expires_at=now()+interval '30 minutes' where ${predicate} returning expires_at as "expiresAt"`,params);
+      if(!renewed)throw new BookingError("BOOKING_SESSION_INVALID",401);
+      expiresAt=renewed.expiresAt;
+    }
+    // This also rechecks the current accepted CRM relation and active publisher/assignment.
+    // A failure rolls back a tentative renewal, including its durable rate reservation.
+    const authorized=await tx.queryOne<{allowed:boolean}>("select booking_channel_authorize_session($1) as allowed",[row.id]);
+    if(!authorized?.allowed)throw new BookingError("BOOKING_SESSION_INVALID",401);
+    if(!row.active)await tx.execute("insert into audit_logs(workspace_id,actor_user_id,action,entity_type,entity_id,after) values($1,$2,'booking.channel_session_resumed','booking_channel_session',$3,$4::jsonb)",[fresh.workspaceId,fresh.userId,row.id,JSON.stringify({assignmentId:typeId,previousExpiresAt:row.expiresAt,expiresAt,proof:"fresh_signed_accepted_studio_enquiry"})]);
+    return {token,expiresAt:new Date(expiresAt).toISOString()};
+  },options);
+}
 /** Resolve only a signed Studio session after its current binding and publication are rechecked. */
 export async function trustedStudioBookingKind(token:string,relation:BookingChannelRelation,options:BookingChannelOptions):Promise<BookingKind>{
   const expected=options.trustedBinding;

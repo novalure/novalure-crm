@@ -6,7 +6,7 @@ import { readKnowledgeBytes } from "@/lib/knowledge-center/http";
 import { websiteSalesActorId, websiteSalesWorkspaceId } from "@/lib/website-sales-ingestion";
 import { bookingChannelError, bookingChannelJson, dispatchTrustedBookingTool } from "./channel-http";
 import { lookupBookingPublication, prepareBookingPublication } from "./publication";
-import { trustedStudioBookingKind } from "./channels";
+import { trustedStudioBookingKind, resumeTrustedStudioBookingSession } from "./channels";
 import type { BookingChannelOptions, BookingChannelRelation } from "./channels";
 import type { BookingChannelAuthority } from "./channel-bindings";
 import type { PublicBookingPublication } from "./publication-types";
@@ -150,6 +150,13 @@ export async function handleStudioBookingChannelRequest(request: Request, option
     const binding: BookingChannelOptions = { ...options, trustedBinding: {
       expectedChannel: "chat", expectedWorkspaceId: websiteSalesWorkspaceId, expectedPublicId: publicId,
       expectedBindingId: relation.sourceId, expectedTypeIds: authority.typeIds } };
+    if (body.operation === "resume") {
+      const payload = body.payload as Record<string, unknown>;
+      if (Object.keys(payload).length !== 2 || typeof payload.token !== "string" || typeof payload.typeId !== "string") throw new BookingError("INVALID_BOOKING_REQUEST");
+      const prepared = await prepareBookingPublication(stored, "chat", options, studioKinds);
+      if (!prepared.publication.types.some(type => type.id === payload.typeId)) throw new BookingError("BOOKING_CHANNEL_FORBIDDEN", 403);
+      return bookingChannelJson(await resumeTrustedStudioBookingSession(payload.token, payload.typeId, relation, stored, binding));
+    }
     if (body.operation === "session") {
       const payload = { ...(body.payload as Record<string, unknown>) }, initialDate = payload.initialDate, findNext = payload.findNext;
       if (initialDate !== undefined && (typeof initialDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(initialDate) || !Number.isFinite(Date.parse(`${initialDate}T12:00:00Z`)) || new Date(`${initialDate}T12:00:00Z`).toISOString().slice(0, 10) !== initialDate) || findNext !== undefined && (typeof findNext !== "boolean" || initialDate === undefined)) throw new BookingError("INVALID_DATE");
