@@ -4,6 +4,7 @@ import type { TenantScope, TenantTransactionOptions } from "@/lib/db/tenant-clie
 import { getBookingCalendarAccess, invalidateBookingConnection } from "@/lib/booking/connections";
 import { assertBookingActivation } from "./activation";
 import { bookingRuntimeMode } from "./runtime";
+import { isBookingMessageRuntime } from "./message-runtime";
 import { BookingError, type BookingProvider, type BookingProviderName, type BusyInterval, type ProviderEvent, type ProviderWrite } from "@/lib/booking/types";
 
 const graphRoot = "https://graph.microsoft.com/v1.0";
@@ -13,7 +14,12 @@ const operationProperty = "String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name No
 type JsonObject = Record<string, unknown>;
 type CalendarAccess = Awaited<ReturnType<typeof getBookingCalendarAccess>>;
 /** Only application code constructs these options; public request bodies never supply callbacks. */
-export type BookingProviderOptions = TenantTransactionOptions & { beforeWrite?:()=>Promise<void> };
+export type BookingInvitationEffect = { bookingId: string; operationId: string; email: string; name: string };
+export type BookingProviderOptions = TenantTransactionOptions & {
+  beforeWrite?:()=>Promise<void>;
+  /** Server-only: keep the booking lock and current recipient/message authority through the actual Graph write. */
+  withInvitationWrite?:(effect:BookingInvitationEffect,write:()=>Promise<Response>)=>Promise<Response>;
+};
 
 /** A write may have reached the provider. Call lookup; never repeat a create blindly. */
 export class BookingProviderError extends BookingError {
@@ -74,7 +80,7 @@ function googleTime(value: unknown, calendarTimeZone: string): string {
   throw new BookingProviderError("provider_invalid_time", "rejected");
 }
 
-async function request(scope: TenantScope, access: CalendarAccess, url: URL, method = "GET", body?: unknown, etag?: string | null, options:BookingProviderOptions={}) {
+async function request(scope: TenantScope, access: CalendarAccess, url: URL, method = "GET", body?: unknown, etag?: string | null, options:BookingProviderOptions={}, invitation?:BookingInvitationEffect) {
   const expected = access.provider === "microsoft" ? new URL(graphRoot) : new URL(googleRoot);
   if (url.origin !== expected.origin || !url.pathname.startsWith(`${expected.pathname}/`)) throw new BookingProviderError("provider_invalid_page", "rejected");
   const write = method !== "GET";
@@ -86,14 +92,17 @@ async function request(scope: TenantScope, access: CalendarAccess, url: URL, met
     if(process.env.VERCEL_ENV==="production")await assertProductionPolicy(scope,access,options);
   }
   let response: Response;
+  if (invitation && (access.provider !== "microsoft" || !write || !isBookingMessageRuntime() || !options.withInvitationWrite))
+    throw new BookingProviderError("booking_invitation_not_authorized", "rejected");
   try {
-    response = await fetch(url, { method, headers: {
+    const transmit = () => fetch(url, { method, headers: {
       Authorization: `Bearer ${access.accessToken}`,
       "Content-Type": "application/json",
       ...(access.provider === "microsoft" ? { Prefer: 'outlook.timezone="UTC"' } : {}),
       ...(etag ? { "If-Match": etag } : {}),
     }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(12_000), redirect: "error", cache: "no-store" });
-  } catch { throw new BookingProviderError("provider_transport_unavailable", write ? "unknown" : "rejected"); }
+    response = invitation ? await options.withInvitationWrite!(invitation, transmit) : await transmit();
+  } catch (error) { if (error instanceof BookingProviderError) throw error; throw new BookingProviderError("provider_transport_unavailable", write ? "unknown" : "rejected"); }
   if (response.status === 404 || response.status === 410) return { response, data: null };
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) await invalidateBookingConnection(scope, access.provider, access.revision, access.accessToken).catch(() => undefined);
@@ -184,7 +193,7 @@ async function googleOwnedEvent(access: CalendarAccess, scope: TenantScope, book
   return data;
 }
 
-function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolean) {
+function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolean, existing?: JsonObject) {
   const body: JsonObject = {
     subject: input.title,
     start: { dateTime: instant(input.startsAt).replace(/Z$/, ""), timeZone: "UTC" },
@@ -192,6 +201,21 @@ function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolea
     location: { displayName: input.location },
     singleValueExtendedProperties: [{ id: ownershipProperty, value: marker(scope, input.bookingId) }, { id: operationProperty, value: input.operationId }],
   };
+  if (input.invitation) {
+    const { email, name } = input.invitation;
+    if (typeof email !== "string" || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) ||
+      typeof name !== "string" || name.length > 200 || /[\u0000-\u001f]/.test(name)) throw new BookingProviderError("booking_invitation_invalid", "rejected");
+    const previous = create ? [] : existing?.attendees;
+    if (!Array.isArray(previous) || previous.length >= 500) throw new BookingProviderError("provider_attendees_unverified", "rejected");
+    const attendees = previous.map(entry => {
+      const attendee = object(entry), address = object(attendee.emailAddress);
+      if (!string(address.address) || !["required", "optional", "resource"].includes(String(attendee.type))) throw new BookingProviderError("provider_attendees_unverified", "rejected");
+      return { emailAddress: { address: address.address, ...(typeof address.name === "string" ? { name: address.name } : {}) }, type: attendee.type };
+    });
+    // An owned event can have manually added attendees. Never remove or replace them.
+    if (!attendees.some(a => String(a.emailAddress.address).toLowerCase() === email.toLowerCase()))
+      body.attendees = [...attendees, { emailAddress: { address: email, name }, type: "required" }];
+  }
   if (create) {
     body.transactionId = createHash("sha256").update(`${scope.workspaceId}:${input.operationId}`).digest("hex");
     if (input.kind === "teams") { body.isOnlineMeeting = true; body.onlineMeetingProvider = "teamsForBusiness"; }
@@ -219,7 +243,15 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
   const provider = access.provider;
   const eventUrl = (eventId?: string) => provider === "microsoft" ? graphEventUrl(access, eventId) : googleEventUrl(access, eventId);
   const ownedEvent = (bookingId: string, eventId: string) => provider === "microsoft" ? graphOwnedEvent(access, scope, bookingId, eventId,options) : googleOwnedEvent(access, scope, bookingId, eventId,options);
-  const send=(url:URL,method="GET",body?:unknown,etag?:string|null)=>request(scope,access,url,method,body,etag,options);
+  const send=(url:URL,method="GET",body?:unknown,etag?:string|null,invitation?:BookingInvitationEffect)=>request(scope,access,url,method,body,etag,options,invitation);
+  const invitationEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">)=>provider==="microsoft"&&input.invitation?{bookingId:input.bookingId,operationId:input.operationId,...input.invitation}:undefined;
+  const existingMeetingEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">,existing:JsonObject)=>{
+    if(provider!=="microsoft")return undefined;
+    if(!Array.isArray(existing.attendees))throw new BookingProviderError("provider_attendees_unverified","rejected");
+    if(!existing.attendees.length)return undefined;
+    if(!input.invitation)throw new BookingProviderError("booking_invitation_not_authorized","rejected");
+    return invitationEffect(input);
+  };
   return {
     async listBusy(input) {
       if (process.env.VERCEL_ENV === "production") await assertProductionPolicy(scope,access,options);
@@ -282,7 +314,7 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       await assertTestWritePolicy(scope, access,options); assertWrite(access, input.kind); assertTimes(input);
       const url = eventUrl();
       if (provider === "google") { url.searchParams.set("sendUpdates", "none"); if (input.kind === "meet") url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await send(url, "POST", provider === "microsoft" ? graphWriteBody(scope, input, true) : googleWriteBody(scope, input, true));
+      const { data } = await send(url, "POST", provider === "microsoft" ? graphWriteBody(scope, input, true) : googleWriteBody(scope, input, true), undefined, invitationEffect(input));
       if (!data) throw new BookingProviderError("provider_create_unknown", "unknown");
       return writtenEventResult(provider, data, input);
     },
@@ -318,8 +350,9 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) throw new BookingProviderError("provider_event_missing", "rejected");
       const current = eventResult(provider, existing);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
+      const meetingEffect=existingMeetingEffect(input,existing);
       const url = eventUrl(input.eventId); if (provider === "google") { url.searchParams.set("sendUpdates", "none"); url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false) : googleWriteBody(scope, input, false), current.etag);
+      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false, existing) : googleWriteBody(scope, input, false), current.etag, meetingEffect??invitationEffect(input));
       if (!data) throw new BookingProviderError("provider_update_unknown", "unknown");
       return writtenEventResult(provider, data, input);
     },
@@ -329,8 +362,9 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) return;
       const current = eventResult(provider, existing);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
+      const meetingEffect=existingMeetingEffect(input,existing);
       const url = eventUrl(input.eventId); if (provider === "google") url.searchParams.set("sendUpdates", "none");
-      await send(url, "DELETE", undefined, current.etag);
+      await send(url, "DELETE", undefined, current.etag,meetingEffect);
     },
   };
 }
