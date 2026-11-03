@@ -113,6 +113,25 @@ test("invitation denial is definite before a provider mutation and Google receiv
   }finally{if(original===undefined)delete process.env.BOOKING_MESSAGES_ENABLED;else process.env.BOOKING_MESSAGES_ENABLED=original;}
 });
 
+test("existing Microsoft attendees cannot bypass message authority on reschedule or cancellation", async()=>{
+  const microsoft=access("microsoft"),invitation={email:"hello@novalure.eu",name:"Synthetic owner"};
+  const original=process.env.BOOKING_MESSAGES_ENABLED;process.env.BOOKING_MESSAGES_ENABLED="1";let mutations=0;
+  const existing={id:"ms-event","@odata.etag":'W/"v1"',start:{dateTime:write.startsAt},end:{dateTime:write.endsAt},
+    attendees:[{emailAddress:{address:invitation.email,name:invitation.name},type:"required"}],
+    singleValueExtendedProperties:[{id:"String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name NovalureBooking",value:`${scope.workspaceId}:${write.bookingId}`}]};
+  try{await transport((_url,init)=>{if(init.method==="GET")return response(existing);mutations++;return new Response(null,{status:204});},async()=>{
+    const plain=createBookingProviderWithAccess(scope,microsoft),input={...write,kind:"teams" as const,eventId:"ms-event",etag:'W/"v1"'};
+    for(const action of ["update","delete"] as const)await assert.rejects(plain[action](input),e=>e instanceof BookingProviderError&&e.outcome==="rejected"&&e.code==="booking_invitation_not_authorized");
+    const denied=createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async()=>{throw new BookingProviderError("BOOKING_INVITATION_CHANGED","rejected");}});
+    for(const action of ["update","delete"] as const)await assert.rejects(denied[action]({...input,invitation}),e=>e instanceof BookingProviderError&&e.outcome==="rejected");
+    process.env.BOOKING_MESSAGES_ENABLED="0";
+    for(const action of ["update","delete"] as const)await assert.rejects(denied[action]({...input,invitation}),/booking_invitation_not_authorized/);
+    assert.equal(mutations,0);process.env.BOOKING_MESSAGES_ENABLED="1";
+    let checked=false;await createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async(effect,send)=>{assert.equal(effect.email,invitation.email);checked=true;return send();}}).delete({...input,invitation});
+    assert.equal(checked,true);assert.equal(mutations,1);
+  },microsoft);}finally{if(original===undefined)delete process.env.BOOKING_MESSAGES_ENABLED;else process.env.BOOKING_MESSAGES_ENABLED=original;}
+});
+
 test("Unsupported Teams/Meet capability and protected calendar fail before transport", async () => {
   let calls = 0;
   const microsoft = access("microsoft"); microsoft.calendar.teamsSupported = false;

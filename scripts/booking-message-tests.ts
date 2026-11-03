@@ -146,6 +146,7 @@ test("Auftrag 2 durable versioned messages and reminder race boundaries", { time
       await db.admin.query("update booking_reservations set recipient_email='hello@novalure.eu' where id=$1",[id]);
       process.env.BOOKING_MESSAGES_ENABLED="0";assert.equal(await invited(),null);process.env.BOOKING_MESSAGES_ENABLED="1";
       await db.admin.query("update booking_reservations set operation_kind='cancel' where id=$1",[id]);assert.equal(await invited(),null);
+      assert.deepEqual(await withOwner(async tx=>bookingCalendarInvitation(tx,owner,await readBooking(tx,owner,id),true)),{email:"hello@novalure.eu",name:"Synthetic recipient"});
     });
   }finally{await db.stop();for(const name of envNames){const old=previousEnv[name];if(old===undefined)delete process.env[name];else process.env[name]=old;}}
 });

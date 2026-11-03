@@ -11,7 +11,7 @@ export interface BookingProvider {
   create(input: ProviderWrite): Promise<ProviderEvent>;
   lookup(input: { operationId: string; bookingId: string; eventId?: string }): Promise<ProviderEvent | null>;
   update(input: ProviderWrite & { eventId: string; etag: string | null }): Promise<ProviderEvent>;
-  delete(input: { bookingId: string; operationId: string; eventId: string; etag: string | null }): Promise<void>;
+  delete(input: { bookingId: string; operationId: string; eventId: string; etag: string | null; invitation?: BookingInvitation }): Promise<void>;
 }
 export type BookingProviderFactory = (scope: TenantScope, provider: BookingProviderName) => Promise<BookingProvider>;
 export type BookingRules = {

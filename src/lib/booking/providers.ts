@@ -244,7 +244,14 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
   const eventUrl = (eventId?: string) => provider === "microsoft" ? graphEventUrl(access, eventId) : googleEventUrl(access, eventId);
   const ownedEvent = (bookingId: string, eventId: string) => provider === "microsoft" ? graphOwnedEvent(access, scope, bookingId, eventId,options) : googleOwnedEvent(access, scope, bookingId, eventId,options);
   const send=(url:URL,method="GET",body?:unknown,etag?:string|null,invitation?:BookingInvitationEffect)=>request(scope,access,url,method,body,etag,options,invitation);
-  const invitationEffect=(input:ProviderWrite)=>provider==="microsoft"&&input.invitation?{bookingId:input.bookingId,operationId:input.operationId,...input.invitation}:undefined;
+  const invitationEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">)=>provider==="microsoft"&&input.invitation?{bookingId:input.bookingId,operationId:input.operationId,...input.invitation}:undefined;
+  const existingMeetingEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">,existing:JsonObject)=>{
+    if(provider!=="microsoft")return undefined;
+    if(!Array.isArray(existing.attendees))throw new BookingProviderError("provider_attendees_unverified","rejected");
+    if(!existing.attendees.length)return undefined;
+    if(!input.invitation)throw new BookingProviderError("booking_invitation_not_authorized","rejected");
+    return invitationEffect(input);
+  };
   return {
     async listBusy(input) {
       if (process.env.VERCEL_ENV === "production") await assertProductionPolicy(scope,access,options);
@@ -343,8 +350,9 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) throw new BookingProviderError("provider_event_missing", "rejected");
       const current = eventResult(provider, existing);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
+      const meetingEffect=existingMeetingEffect(input,existing);
       const url = eventUrl(input.eventId); if (provider === "google") { url.searchParams.set("sendUpdates", "none"); url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false, existing) : googleWriteBody(scope, input, false), current.etag, invitationEffect(input));
+      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false, existing) : googleWriteBody(scope, input, false), current.etag, meetingEffect??invitationEffect(input));
       if (!data) throw new BookingProviderError("provider_update_unknown", "unknown");
       return writtenEventResult(provider, data, input);
     },
@@ -354,8 +362,9 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) return;
       const current = eventResult(provider, existing);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
+      const meetingEffect=existingMeetingEffect(input,existing);
       const url = eventUrl(input.eventId); if (provider === "google") url.searchParams.set("sendUpdates", "none");
-      await send(url, "DELETE", undefined, current.etag);
+      await send(url, "DELETE", undefined, current.etag,meetingEffect);
     },
   };
 }

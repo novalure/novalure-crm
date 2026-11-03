@@ -49,7 +49,7 @@ async function adapter(session:AppSession,provider:BookingProviderName,options:B
       await bookingResourceLock(tx,fresh);
       try {
         await options.authorize?.(tx,fresh);
-        const row=await readBooking(tx,fresh,effect.bookingId),invitation=await bookingCalendarInvitation(tx,fresh,row);
+        const row=await readBooking(tx,fresh,effect.bookingId),invitation=await bookingCalendarInvitation(tx,fresh,row,true);
         if(row.operationId!==effect.operationId||!invitation||invitation.email!==effect.email||invitation.name!==effect.name)
           throw new BookingError("BOOKING_INVITATION_CHANGED",409);
       } catch(error) { throw new BookingProviderError(error instanceof BookingError?error.code:"booking_invitation_unavailable","rejected"); }
@@ -232,11 +232,11 @@ async function providerFailure(session:AppSession,row:BookingRecord,error:unknow
     await bookingAudit(tx,fresh,"booking.provider_rejected",row.id,{operationId:row.operationId,errorCode:error.code});return readBooking(tx,fresh,row.id);
   },options);
 }
-async function providerWrite(session:AppSession,row:BookingRecord,options:BookingServiceOptions):Promise<ProviderWrite> {
+async function providerWrite(session:AppSession,row:BookingRecord,options:BookingServiceOptions,allowCancellation=false):Promise<ProviderWrite> {
   const invitation=await withBookingTransaction(session,async(tx,fresh)=>{
     await bookingResourceLock(tx,fresh);const current=await readBooking(tx,fresh,row.id);
     if(!sameSnapshot(current,row))throw new BookingProviderError("booking_changed","rejected");
-    return bookingCalendarInvitation(tx,fresh,current);
+    return bookingCalendarInvitation(tx,fresh,current,allowCancellation);
   },options);
   const rules=row.operationTarget?.rules??row.rules;return {operationId:row.operationId!,bookingId:row.id,title:row.title,startsAt:row.operationTarget?.startsAt??row.startsAt,endsAt:row.operationTarget?.endsAt??row.endsAt,timeZone:rules.timeZone,kind:row.kind,location:rules.location,...(invitation?{invitation}:{})};
 }
@@ -339,7 +339,7 @@ async function mutate(session:AppSession,id:string,input:{startsAt?:string;idemp
     const freshEvaluation=await evaluateTravel(session,claimed.row.kind,target.startsAt,target.rules,provider,options,claimed.row);
     await withBookingTransaction(session,async(tx,fresh)=>{await bookingResourceLock(tx,fresh);await verifyTravelContext(tx,fresh,target.rules,freshEvaluation.digest,id);},options);
   }catch(error){return providerFailure(session,claimed.row,error instanceof BookingError?new BookingProviderError(error.code,"rejected"):error,options);}
-  try{await verifyCurrentBinding(session,claimed.row,options);if(kind==="cancel"){await provider.delete({bookingId:id,operationId:claimed.row.operationId!,eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag});return finish(session,claimed.row,null,options,true);}return finish(session,claimed.row,await provider.update({...await providerWrite(session,claimed.row,options),eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag}),options);}catch(error){return providerFailure(session,claimed.row,error,options);}
+  try{await verifyCurrentBinding(session,claimed.row,options);if(kind==="cancel"){const {invitation}=await providerWrite(session,claimed.row,options,true);await provider.delete({bookingId:id,operationId:claimed.row.operationId!,eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag,...(invitation?{invitation}:{})});return finish(session,claimed.row,null,options,true);}return finish(session,claimed.row,await provider.update({...await providerWrite(session,claimed.row,options),eventId:claimed.row.providerEventId!,etag:claimed.row.providerEtag}),options);}catch(error){return providerFailure(session,claimed.row,error,options);}
 }
 export const rescheduleBooking=(session:AppSession,id:string,input:{startsAt:string;idempotencyKey:string;expectedMessageVersion?:number}&BookingLocationInput,options:BookingServiceOptions={})=>mutate(session,id,input,"reschedule",options);
 export const cancelBooking=(session:AppSession,id:string,input:{idempotencyKey:string;expectedMessageVersion?:number},options:BookingServiceOptions={})=>mutate(session,id,input,"cancel",options);

@@ -24,9 +24,10 @@ function mailAllowed(session: Pick<AppSession, "workspaceId" | "userId">, recipi
   return bookingMailBindings().some(b => b.workspaceId === session.workspaceId && b.userId === session.userId && b.recipientEmail === recipient);
 }
 /** Same consented, persisted recipient and communication gates as the existing message queue. */
-export async function bookingCalendarInvitation(tx: TenantTransaction, session: AppSession, row: BookingRecord): Promise<BookingInvitation | null> {
+export async function bookingCalendarInvitation(tx: TenantTransaction, session: AppSession, row: BookingRecord, allowCancellation = false): Promise<BookingInvitation | null> {
   if (row.provider !== "microsoft" || !row.recipientEmail || !isBookingMessageRuntime() ||
-    !["processing", "uncertain"].includes(row.state) || !["create", "reschedule"].includes(row.operationKind ?? "")) return null;
+    !["processing", "uncertain"].includes(row.state) ||
+    !(allowCancellation ? ["create", "reschedule", "cancel"] : ["create", "reschedule"]).includes(row.operationKind ?? "")) return null;
   const recipient = normalizeBookingRecipient(row);
   if (!recipient.recipientEmail || isBookingMessageQaRuntime() && !mailAllowed(session, recipient.recipientEmail) ||
     !(await readBookingSetup(tx, session, row.kind)).communication.enabled ||
