@@ -64,7 +64,7 @@ export const exposeSourceSql = `jsonb_build_object(
     'developer',coalesce((select pr.developer_organization_id is not null or pr.customer_type='property_developer' or lower(pr.type) like '%bautr%' or w.customer_type='property_developer'
       from workspaces w left join projects pr on pr.id=p.project_id and pr.workspace_id=w.id where w.id=p.workspace_id),false),
     'confirmedCurrentPrice',exists(select 1 from property_units u where u.workspace_id=p.workspace_id and u.project_id=p.project_id and u.id=p.unit_id
-      and u.price_cents=coalesce(p.public_price_cents,case when p.marketing_type='rent' then coalesce(p.rent_price_cents,p.rent_net_cents) else p.target_price_cents end)
+      and u.price_cents=case when p.marketing_type='rent' then p.rent_price_cents else coalesce(p.public_price_cents,p.target_price_cents) end
       and u.metadata->'priceConfirmation'->>'sourceReference' is not null and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text),
     'channelPriceVisibility',p.channel_price_visibility,'rentPriceCents',p.rent_price_cents,'rentNetCents',p.rent_net_cents,
     'monthlyCostsGrossCents',p.monthly_costs_gross_cents,'purchaseAncillaryCostsCents',p.purchase_ancillary_costs_cents,
@@ -73,6 +73,11 @@ export const exposeSourceSql = `jsonb_build_object(
     'availableFrom',p.available_from,'availableFromText',p.available_from_text,
     'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until,
     'countryCode',p.canonical_payload->'geography'->>'countryCode',
+    'geography',case when p.canonical_payload ? 'geography' then jsonb_strip_nulls(jsonb_build_object(
+      'version',p.canonical_payload->'geography'->'version','countryCode',p.canonical_payload->'geography'->'countryCode',
+      'region',p.canonical_payload->'geography'->'region','displayLocale',p.canonical_payload->'geography'->'displayLocale',
+      'contentLanguage',p.canonical_payload->'geography'->'contentLanguage','currency',p.canonical_payload->'geography'->'currency',
+      'bookingTimezone',p.canonical_payload->'geography'->'bookingTimezone','source',p.canonical_payload->'geography'->'source')) else null end,
     'energyCertificate',${publicPropertyEnergySql("p")},'coreNumericState',jsonb_strip_nulls(jsonb_build_object(
       'version',p.canonical_payload->'coreNumericState'->'version',
       'areaSqm',p.canonical_payload->'coreNumericState'->'areaSqm','price',p.canonical_payload->'coreNumericState'->'price',

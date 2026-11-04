@@ -15,7 +15,7 @@ import { formatApprovedPropertyCosts, publicPropertyDetailGroups, publicProperty
 import { propertyDetailNumber } from "@/lib/property-details";
 import { propertyCoreNumberIsKnown, propertyOptionalPriceIsKnown } from "@/lib/property-core-numbers";
 import { publicPropertyEnergyFacts, sanitizePropertyExposeAddress } from "@/lib/property-expose-public-content";
-import { readPropertyGeography } from "@/lib/property-country";
+import { normalizePropertyGeography, readPropertyGeography } from "@/lib/property-country";
 import { webExposePropertyType } from "@/lib/web-expose";
 
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
@@ -102,7 +102,9 @@ export async function getPropertyExposeState(session: AppSession, propertyId: st
 export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: PropertyExposeOptions, images: PropertyExposeImage[]): PropertyExposeDocument {
   const p = snapshot.source.listing;
   const t = (de: string, en: string, es: string) => options.language === "de" ? de : options.language === "es" ? es : en;
-  const locale = publicPropertyLocale(options.language, text(p.countryCode));
+  const geography = p.geography == null ? null : normalizePropertyGeography(p.geography);
+  if (p.geography != null && !geography) throw new PropertyExposeError("EXPOSE_GEOGRAPHY_INVALID", 400, "Saved property geography is invalid.");
+  const locale = geography?.displayLocale ?? publicPropertyLocale(options.language, text(p.countryCode));
   const publicSource = p.publicDetails && typeof p.publicDetails === "object" ? p.publicDetails as Record<string, unknown> : {};
   const details = readPublicPropertyDetails(publicSource);
   const detailGroups = publicPropertyDetailGroups(publicSource, options.language, locale, ["rooms.zimmer", "construction.baujahr"]);
@@ -119,12 +121,14 @@ export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: P
   const rental = p.marketingType === "rent";
   const supportedMarketing = ["sale", "rent", "sale_or_rent"].includes(String(p.marketingType));
   if (!supportedMarketing) throw new PropertyExposeError("EXPOSE_MARKETING_INVALID", 400, "Purchase or rental marketing type must be saved before export.");
-  // Public price is authoritative when set. A valuation/unit sum is NEVER a fallback.
+  // Rental output uses the saved gross rent, as the website projection does.
+  // An asking/public purchase price or private net rent cannot replace it.
   const targetPrice = propertyCoreNumberIsKnown(numericState, "price", p.targetPriceCents) ? p.targetPriceCents : null;
-  const rentalPrice = p.rentPriceCents ?? p.rentNetCents;
-  const selectedPrice = p.publicPriceCents !== null && p.publicPriceCents !== undefined
-    ? propertyOptionalPriceIsKnown(numericState, "publicPrice", p.publicPriceCents) ? p.publicPriceCents : null
-    : rental ? propertyOptionalPriceIsKnown(numericState, "rentPrice", rentalPrice) ? rentalPrice : null : targetPrice;
+  const selectedPrice = rental
+    ? propertyOptionalPriceIsKnown(numericState, "rentPrice", p.rentPriceCents) ? p.rentPriceCents : null
+    : p.publicPriceCents !== null && p.publicPriceCents !== undefined
+      ? propertyOptionalPriceIsKnown(numericState, "publicPrice", p.publicPriceCents) ? p.publicPriceCents : null
+      : targetPrice;
   const priceAmount = money(selectedPrice);
   const notices = [t("Dieses Exposé wurde aus dem gespeicherten Objektstand erstellt. Angaben und Verfügbarkeit bitte vor Weitergabe prüfen.",
     "This brochure was created from the saved property record. Please verify the information and availability before sharing.", "Este dossier se ha creado a partir del inmueble guardado. Compruebe los datos y la disponibilidad antes de compartirlo.")];
@@ -161,7 +165,7 @@ export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: P
     costs.push(...formatApprovedPropertyCosts(snapshot.source.costs, options.language, locale));
   }
   const description = sanitizeAddress(options.description ?? snapshot.source.texts[0]?.content);
-  const country = readPropertyGeography({ countryCode: p.countryCode, region: p.region })?.countryCode;
+  const country = geography?.countryCode ?? readPropertyGeography({ countryCode: p.countryCode, region: p.region })?.countryCode;
   const energy = publicPropertyEnergyFacts(p.energyCertificate, country, options.language, locale, { energyClass: p.energyClass, energyValidUntil: p.energyValidUntil })
     .map(fact => ({ ...fact, value: sanitizeAddress(fact.value) }));
   if (!energy.length) notices.push(t("Energieangaben fehlen im gespeicherten Objektstand.", "Energy information is missing from the saved property.", "Faltan los datos energéticos del inmueble guardado."));
@@ -169,7 +173,7 @@ export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: P
   const contact = options.showContact ? { name: text(p.contactName) || undefined, email: text(p.contactEmail) || text(company?.email) || undefined,
     phone: text(p.contactPhone) || text(company?.phone) || undefined, company: text(company?.name) || undefined } : undefined;
   if (options.showContact && !contact?.email && !contact?.phone) notices.push(t("Ein öffentlicher Ansprechpartner fehlt.", "A public contact is missing.", "Falta un contacto público."));
-  return { template: options.template, language: options.language, title: sanitizeAddress(options.title || p.title).slice(0, 180),
+  return { template: options.template, language: options.language, ...(geography ? { locale: geography.displayLocale } : {}), title: sanitizeAddress(options.title || p.title).slice(0, 180),
     reference: sanitizeAddress(p.objectNumber) || snapshot.propertyId.slice(0, 8), createdAt: iso(),
     address: options.address === "full" ? text(p.address) : options.address === "city" ? [text(p.postalCode), text(p.city) || text(p.region)].filter(Boolean).join(" ") : undefined,
     price: options.showPrice && visibility === "price_on_request" ? t("Preis auf Anfrage", "Price on request", "Precio a consultar") : visibleMoney ? `${rental ? t("Miete", "Rent", "Alquiler") : t("Kaufpreis", "Purchase price", "Precio de compra")}: ${priceAmount}${rental ? t(" / Monat", " / month", " / mes") : ""}` : undefined,

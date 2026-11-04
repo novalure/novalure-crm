@@ -35,14 +35,15 @@ function clean(value: string): string {
 export async function renderPropertyExposePdf(document: PropertyExposeDocument): Promise<Uint8Array> {
   const copy = COPY[document.language];
   const compact = document.template === "compact";
-  if (!copy || !["compact", "full"].includes(document.template) || !clean(document.title) || !Number.isFinite(Date.parse(document.createdAt))) {
+  if (!copy || !["compact", "full"].includes(document.template) || !clean(document.title) || !Number.isFinite(Date.parse(document.createdAt)) ||
+      (document.locale !== undefined && !["de-AT", "de-DE", "es-ES", "en-IE", "de", "en", "es"].includes(document.locale))) {
     throw new PropertyExposePdfError("INVALID_DOCUMENT", "Invalid property brochure document.");
   }
   const [font, semibold] = await Promise.all([
     readFile(path.join(process.cwd(), "src/lib/property-expose-assets/figtree-regular.ttf")),
     readFile(path.join(process.cwd(), "src/lib/property-expose-assets/figtree-semibold.ttf")),
   ]);
-  const locale = document.language === "de" ? "de-AT" : document.language === "es" ? "es-ES" : "en-GB";
+  const locale = document.locale ?? (document.language === "de" ? "de-AT" : document.language === "es" ? "es-ES" : "en-GB");
   const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "Europe/Vienna" }).format(new Date(document.createdAt));
   const pdfPlans: { page: PDFPage; caption: string; width: number; height: number; rotation: number; box: { left: number; bottom: number; right: number; top: number } }[] = [];
   for (const source of document.floorPlanPdfs || []) {
@@ -64,7 +65,7 @@ export async function renderPropertyExposePdf(document: PropertyExposeDocument):
   const pdfBytes = await new Promise<Uint8Array>((resolve, reject) => {
     const pdf = new PDFDocument({
       autoFirstPage: false, bufferPages: true, size: "A4", margins: { top: 0, bottom: 0, left: 0, right: 0 },
-      pdfVersion: "1.7", tagged: true, displayTitle: true, lang: locale,
+      pdfVersion: "1.7", tagged: true, displayTitle: true, lang: document.language,
       info: { Title: clean(document.title), Author: clean(document.contact?.company || "Novalure"), Subject: `${copy.eyebrow} - ${clean(document.reference)}`, Creator: "Novalure CRM", CreationDate: new Date(document.createdAt), ModDate: new Date(document.createdAt) },
     });
     const chunks: Buffer[] = [];
