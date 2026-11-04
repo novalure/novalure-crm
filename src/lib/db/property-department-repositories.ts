@@ -1,5 +1,6 @@
 import { bindPropertyDetails, readPropertyDetails, propertyDetailsLegacyFields, propertyDetailCostBindings, propertyDetailsInput } from "@/lib/property-details";
 import { fullPropertyInputKeys,propertyFullSnapshot,samePropertySnapshot } from "@/lib/property-full-editing";
+import { validatePropertyCreationInput } from "@/lib/property-create-validation";
 import { withCrmRead, CrmCommandError,assertProjectGrant } from "@/lib/crm-command";
 import type { AppSession } from "@/lib/auth/session";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
@@ -156,6 +157,9 @@ async function createSellerListingRecordInTransaction(input: {
     return { persisted: false, reason: "Database persistence is not configured" };
   }
 
+  const creationError = validatePropertyCreationInput(input.property);
+  if (creationError) return { persisted: false, reason: creationError };
+
   try { input={...input,property:{...input.property,...propertyDetailsInput(input.property)}}; }
   catch { return {persisted:false,reason:"Invalid typed property details"}; }
   const fields = asPlainObject(input.property.fieldValues);
@@ -176,13 +180,9 @@ async function createSellerListingRecordInTransaction(input: {
   const federalState = geography.region;
   const region = geography.region;
   const objectType = cleanString(input.property.objectType) || cleanString(fields["classification.objektart"]) || "Wohnung";
-  const areaSqm = toNumber(
-    input.property.areaSqm ??
-      fields["areas.wohnflaeche"] ??
-      fields["areas.nutzflaeche"] ??
-      fields["areas.gesamtflaeche"],
-    0,
-  );
+  const area = resolvePropertyAreaSqm(input.property);
+  if (!area.ok) return { persisted: false, reason: area.reason };
+  const areaSqm = area.value ?? 0;
   const priceCents = toPriceCents(input.property.price ?? fields["costs.kaufpreis"]);
   const projectId = nullableUuid(input.property.projectId);
   const sellerLeadId = nullableUuid(input.property.sellerLeadId);
