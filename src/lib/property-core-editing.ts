@@ -7,7 +7,7 @@ import { propertyPurchaseCostsPayload } from "./property-purchase-costs-draft";
 import { normalizePropertyEnergyCertificate, normalizePropertyGeography, normalizePropertyRegion, readPropertyGeography } from "./property-country";
 import { readPropertyDetails, propertyDetailsInput, propertyDetailsLegacyFields } from "./property-details";
 import { propertyFullSnapshot } from "./property-full-editing";
-import { propertyCoreNumberIsKnown } from "./property-core-numbers";
+import { propertyCoreNumberIsKnown, propertyOptionalPriceIsKnown } from "./property-core-numbers";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const propertyObjectTypes = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"] as const;
@@ -57,11 +57,11 @@ export function createPropertyCoreDraft(listing: SellerListing): PropertyDraft {
     channelPriceVisibility: listing.channelPriceVisibility??{}, contactEmail: listing.contactEmail??"", contactName: listing.contactName??"", contactPhone: listing.contactPhone??"", costItems: [], fieldValues: propertyDetailsLegacyFields(readPropertyDetails(listing)),
     gdprStatus: listing.gdprStatus??"needs_review", internalReference: listing.internalReference??"", marketingType: listing.marketingType || "sale", monthlyCostsGross: listing.monthlyCostsGross==null?"":String(listing.monthlyCostsGross), objectType: listing.objectType,
     objectNumber: listing.objectNumber??"", portalMappingStatus: listing.portalMappingStatus??"needs_review", postalCode: listing.postalCode??"", price: propertyCoreNumberIsKnown(listing.canonicalPayload, "price", listing.targetPrice) ? String(listing.targetPrice) : "", priceVisibility: listing.priceVisibility??"price_on_request",
-    projectId: listing.projectId || "", publicPrice: listing.publicPrice == null ? "" : String(listing.publicPrice),
+    projectId: listing.projectId || "", publicPrice: propertyOptionalPriceIsKnown(listing.canonicalPayload, "publicPrice", parsePropertyEuroCents(listing.publicPrice)) ? String(listing.publicPrice) : "",
     purchaseAncillaryCosts: listing.purchaseAncillaryCosts == null ? "" : String(listing.purchaseAncillaryCosts),
     purchaseAncillaryMode: calculation && geography?.countryCode === "AT" ? "percentage" : "manual",
     purchaseAncillaryRate: calculation ? String(calculation.rateBps / 100) : DEFAULT_PURCHASE_ANCILLARY_RATE,
-    region: listing.region, rentNet: listing.rentNet==null?"":String(listing.rentNet), rentPrice: listing.rentPrice==null?"":String(listing.rentPrice), rooms: listing.rooms == null ? "" : String(listing.rooms),
+    region: listing.region, rentNet: listing.rentNet==null?"":String(listing.rentNet), rentPrice: propertyOptionalPriceIsKnown(listing.canonicalPayload, "rentPrice", parsePropertyEuroCents(listing.rentPrice)) ? String(listing.rentPrice) : "", rooms: listing.rooms == null ? "" : String(listing.rooms),
     subObjectType: listing.subObjectType??"", textBlocks: {}, title: listing.title, usageType: listing.usageType ?? "", yearBuilt: listing.yearBuilt ? String(listing.yearBuilt) : "",
   };
 }

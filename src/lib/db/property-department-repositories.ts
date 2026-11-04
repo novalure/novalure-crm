@@ -184,8 +184,6 @@ async function createSellerListingRecordInTransaction(input: {
   if (!area.ok) return { persisted: false, reason: area.reason };
   const areaSqm = area.value ?? 0;
   const priceCents = toPriceCents(input.property.price ?? fields["costs.kaufpreis"]);
-  const coreNumericState = { version: 1, areaSqm: area.value === null ? "unknown" : "known",
-    price: toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]) === null ? "unknown" : "known" };
   const projectId = nullableUuid(input.property.projectId);
   const sellerLeadId = nullableUuid(input.property.sellerLeadId);
   const unitId = nullableUuid(input.property.unitId);
@@ -215,6 +213,9 @@ async function createSellerListingRecordInTransaction(input: {
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
   const publicPriceCents = toNullablePriceCents(input.property.publicPrice ?? input.property.price ?? fields["costs.kaufpreis"]);
   const rentPriceCents = toNullablePriceCents(input.property.rentPrice ?? fields["costs.mietpreis_brutto"]);
+  const coreNumericState = { version: 1, areaSqm: area.value === null ? "unknown" : "known",
+    price: toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]) === null ? "unknown" : "known",
+    publicPrice: publicPriceCents === null ? "unknown" : "known", rentPrice: rentPriceCents === null ? "unknown" : "known" };
   const rentNetCents = toNullablePriceCents(input.property.rentNet);
   const monthlyCostsGrossCents = toNullablePriceCents(input.property.monthlyCostsGross);
   const purchaseAncillaryCostsCents = toNullablePriceCents(input.property.purchaseAncillaryCosts);
@@ -559,6 +560,8 @@ async function updateSellerListingRecordInTransaction(input: {
     version: 1,
     ...(area.value !== null || completeNumbers && Object.hasOwn(input.property, "areaSqm") ? { areaSqm: area.value === null ? "unknown" : "known" } : {}),
     ...(priceCents !== null || completeNumbers && Object.hasOwn(input.property, "price") ? { price: priceCents === null ? "unknown" : "known" } : {}),
+    ...(toNullablePriceCents(input.property.publicPrice) !== null || completeNumbers && Object.hasOwn(input.property, "publicPrice") ? { publicPrice: toNullablePriceCents(input.property.publicPrice) === null ? "unknown" : "known" } : {}),
+    ...(toNullablePriceCents(input.property.rentPrice) !== null || completeNumbers && Object.hasOwn(input.property, "rentPrice") ? { rentPrice: toNullablePriceCents(input.property.rentPrice) === null ? "unknown" : "known" } : {}),
   };
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
   const row = await queryOne<SellerListingRow>(
@@ -618,9 +621,13 @@ async function updateSellerListingRecordInTransaction(input: {
                 'fieldValues', coalesce(canonical_payload -> 'fieldValues', '{}'::jsonb) || ($49::jsonb -> 'fieldValues')
               ) else '{}'::jsonb end
               || case when $49::jsonb ? 'coreNumericState' then jsonb_build_object('coreNumericState',
-                (case when jsonb_typeof(canonical_payload->'coreNumericState')='object' then canonical_payload->'coreNumericState' else jsonb_build_object('version',1,
+                (jsonb_build_object('version',1,
                   'areaSqm',case when area_sqm>0 then 'known' else 'unknown' end,
-                  'price',case when target_price_cents>0 then 'known' else 'unknown' end) end) || ($49::jsonb->'coreNumericState')) else '{}'::jsonb end
+                  'price',case when target_price_cents>0 then 'known' else 'unknown' end,
+                  'publicPrice',case when public_price_cents>0 then 'known' else 'unknown' end,
+                  'rentPrice',case when rent_price_cents>0 then 'known' else 'unknown' end)
+                  || case when jsonb_typeof(canonical_payload->'coreNumericState')='object' then canonical_payload->'coreNumericState' else '{}'::jsonb end
+                  || ($49::jsonb->'coreNumericState'))) else '{}'::jsonb end
               || case when ${regionInvalidatesInference} then '{"geography":null}'::jsonb
                 when not($49::jsonb ? 'geography') and nullif($12,'') is not null and jsonb_typeof(canonical_payload->'geography')='object'
                 then jsonb_build_object('geography',(canonical_payload->'geography')||jsonb_build_object('region',$12::text)) else '{}'::jsonb end) - 'purchaseAncillaryCalculation')

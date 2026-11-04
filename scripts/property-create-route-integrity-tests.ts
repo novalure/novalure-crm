@@ -8,7 +8,7 @@ import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import { GET, POST } from "../src/app/api/crm/properties/route";
 import { createPropertyGeography } from "../src/lib/property-country";
 import { createPropertyCoreDraft, propertyCoreUpdatePayload } from "../src/lib/property-core-editing";
-import { propertyCoreNumberIsKnown } from "../src/lib/property-core-numbers";
+import { propertyCoreNumberIsKnown, propertyOptionalPriceIsKnown } from "../src/lib/property-core-numbers";
 
 test("property direct creation validates, commits once and rechecks cookie authority", { timeout: 240_000 }, async t => {
   const db = await startLocalSalesDb();
@@ -110,6 +110,40 @@ test("property direct creation validates, commits once and rechecks cookie autho
       assert.equal(reopened.areaSqm, "0"); assert.equal(reopened.price, "0");
       assert.equal(propertyCoreNumberIsKnown(loaded.listing.canonicalPayload, "areaSqm", 0), true);
       assert.equal(propertyCoreNumberIsKnown(loaded.listing.canonicalPayload, "price", 0), true);
+      assert.deepEqual(await counts(), { properties: 1, units: 1, receipts: 1 });
+    });
+    await t.test("unrelated edits preserve legacy unknown public/rent zeros and explicit optional zero survives reload", async () => {
+      const load = async () => {
+        const response = await GET(new Request(origin + path + `&operation=full&propertyId=${createdId}`, { headers: { cookie: "novalure_session=" + cookie } }));
+        assert.equal(response.status, 200, await response.clone().text()); return (await response.json()).data;
+      };
+      await db.admin.query("update seller_listings set public_price_cents=0,rent_price_cents=0,canonical_payload=canonical_payload-'coreNumericState' where id=$1", [createdId]);
+      let loaded = await load(), draft = createPropertyCoreDraft(loaded.listing);
+      assert.equal(draft.publicPrice, ""); assert.equal(draft.rentPrice, "");
+      const partial = await POST(request({ operation: "update_property_core", propertyId: createdId, property: { areaSqm: 21 } }));
+      assert.equal(partial.status, 200, await partial.clone().text());
+      const legacy = (await db.admin.query("select public_price_cents,rent_price_cents,canonical_payload->'coreNumericState' as state from seller_listings where id=$1", [createdId])).rows[0];
+      assert.equal(legacy.public_price_cents, "0"); assert.equal(legacy.rent_price_cents, "0");
+      assert.equal(legacy.state.version, 1); assert.equal(legacy.state.publicPrice, "unknown"); assert.equal(legacy.state.rentPrice, "unknown");
+      loaded = await load(); draft = createPropertyCoreDraft(loaded.listing);
+      assert.equal(draft.publicPrice, ""); assert.equal(draft.rentPrice, "");
+      assert.equal(propertyOptionalPriceIsKnown(loaded.listing.canonicalPayload, "publicPrice", 0), false);
+      assert.equal(propertyOptionalPriceIsKnown(loaded.listing.canonicalPayload, "rentPrice", 0), false);
+      draft.propertyDetails = loaded.details; draft.coreEdit!.expectedFullSnapshot = loaded.snapshot;
+      draft.publicPrice = "0"; draft.rentPrice = "0";
+      const explicit = await POST(request(propertyCoreUpdatePayload(draft, fixture.workspaceId, createdId)));
+      assert.equal(explicit.status, 200, await explicit.clone().text());
+      loaded = await load(); draft = createPropertyCoreDraft(loaded.listing);
+      assert.equal(draft.publicPrice, "0"); assert.equal(draft.rentPrice, "0");
+      assert.equal(propertyOptionalPriceIsKnown(loaded.listing.canonicalPayload, "publicPrice", 0), true);
+      assert.equal(propertyOptionalPriceIsKnown(loaded.listing.canonicalPayload, "rentPrice", 0), true);
+      draft.propertyDetails = loaded.details; draft.coreEdit!.expectedFullSnapshot = loaded.snapshot;
+      draft.publicPrice = ""; draft.rentPrice = "";
+      const clear = await POST(request(propertyCoreUpdatePayload(draft, fixture.workspaceId, createdId)));
+      assert.equal(clear.status, 200, await clear.clone().text());
+      loaded = await load(); draft = createPropertyCoreDraft(loaded.listing);
+      assert.equal(draft.publicPrice, ""); assert.equal(draft.rentPrice, "");
+      assert.deepEqual((await db.admin.query("select public_price_cents,rent_price_cents from seller_listings where id=$1", [createdId])).rows[0], { public_price_cents: null, rent_price_cents: null });
       assert.deepEqual(await counts(), { properties: 1, units: 1, receipts: 1 });
     });
     await t.test("existing cookie and receipt cannot bypass a newly restricted membership/project", async () => {

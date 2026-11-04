@@ -11,7 +11,7 @@ import { getProductRoleCapabilities } from "../src/lib/product-model";
 import { createPropertyGeography } from "../src/lib/property-country";
 import { emptyPropertyCreationDraft, parsePropertyCreationDraft, propertyCreationIssues, propertyCreationPayload, type PropertyCreationDraft } from "../src/lib/property-create-draft";
 import { completePropertyCreationDraft, loadPropertyCreationDrafts, savePropertyCreationDraft } from "../src/lib/db/property-create-draft-repository";
-import { propertyCoreNumberIsKnown } from "../src/lib/property-core-numbers";
+import { propertyCoreNumberIsKnown, propertyOptionalPriceIsKnown } from "../src/lib/property-core-numbers";
 
 test("guided draft shares strict property values while retaining incomplete numbers for correction", () => {
   const draft = emptyPropertyCreationDraft(); assert.equal(draft.geography, null); assert.equal(draft.priceVisibility, "price_on_request");
@@ -72,13 +72,15 @@ test("guided creation stores private resumable drafts and commits the existing p
     await t.test("guided blank and explicit zero create distinct persisted numeric states", async () => {
       for (const supplied of ["", "0"]) {
         const draftId = randomUUID(), value: PropertyCreationDraft = { ...emptyPropertyCreationDraft(projectId), title: `SYNTHETIC ${supplied === "" ? "unknown" : "zero"}`, address: "SYNTHETIC numeric state",
-          geography: createPropertyGeography("AT", "Wien"), region: "Wien", energyCertificate: { version: 1, countryCode: "AT" }, areaSqm: supplied, price: supplied };
+          geography: createPropertyGeography("AT", "Wien"), region: "Wien", energyCertificate: { version: 1, countryCode: "AT" }, areaSqm: supplied, price: supplied, publicPrice: supplied, rentPrice: supplied };
         const saved = await run((tx, fresh) => savePropertyCreationDraft(tx, fresh, { id: draftId, draft: value, step: 3, expectedRevision: 0, requestId: randomUUID() }));
         const result = await completePropertyCreationDraft(session, { id: draftId, expectedRevision: saved.revision }, { idempotencyKey: randomUUID(), correlationId: randomUUID() }, options);
-        const persisted = (await db.admin.query("select area_sqm,target_price_cents,canonical_payload from seller_listings where id=$1", [result.data.id])).rows[0];
+        const persisted = (await db.admin.query("select area_sqm,target_price_cents,public_price_cents,rent_price_cents,canonical_payload from seller_listings where id=$1", [result.data.id])).rows[0];
         assert.equal(Number(persisted.area_sqm), 0); assert.equal(Number(persisted.target_price_cents), 0);
         assert.equal(propertyCoreNumberIsKnown(persisted.canonical_payload, "areaSqm", persisted.area_sqm), supplied === "0");
         assert.equal(propertyCoreNumberIsKnown(persisted.canonical_payload, "price", persisted.target_price_cents), supplied === "0");
+        assert.equal(propertyOptionalPriceIsKnown(persisted.canonical_payload, "publicPrice", persisted.public_price_cents), supplied === "0");
+        assert.equal(propertyOptionalPriceIsKnown(persisted.canonical_payload, "rentPrice", persisted.rent_price_cents), supplied === "0");
         assert.equal(persisted.canonical_payload.propertyDetails.values["areas.wohnfl_che"], supplied === "0" ? 0 : null);
       }
     });
