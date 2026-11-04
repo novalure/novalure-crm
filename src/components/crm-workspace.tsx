@@ -1253,6 +1253,7 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     "buyer-leads": "leadInbox",
     "buyer-profiles": "objectsMandates",
     calendar: "calendar",
+    communication: "communication",
     contacts: "contacts",
     customer: "customerAccess",
     "customer-access": "customerAccess",
@@ -1291,6 +1292,7 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     realestate: "properties",
     objects: "objectsMandates",
     "objects-mandates": "objectsMandates",
+    objectsmandates: "objectsMandates",
     onboarding: "onboarding",
     "managed-service": "managedService",
     managedservice: "managedService",
@@ -2986,9 +2988,13 @@ export function CrmWorkspace({
   const [coreDataStatus, setCoreDataStatus] = useState<"idle" | "loading" | "fresh" | "error">("idle");
   const coreRequestSession = useMemo(() => ({
     userId: sessionUserId,
-    guard: createCrmCoreRequestGuard(activeWorkspace.id),
-  }), [sessionUserId, activeWorkspace.id]);
+    guard: createCrmCoreRequestGuard(sessionWorkspace.id),
+  }), [sessionUserId, sessionWorkspace.id]);
   const coreRequestGuard = coreRequestSession.guard;
+  const coreNavigationRef = useRef({ workspaceId: activeWorkspace.id, projects: liveCoreData.projects });
+  useLayoutEffect(() => {
+    coreNavigationRef.current = { workspaceId: activeWorkspace.id, projects: liveCoreData.projects };
+  }, [activeWorkspace.id, liveCoreData.projects]);
   useLayoutEffect(() => {
     coreRequestGuard.activate();
     return () => coreRequestGuard.dispose();
@@ -3064,11 +3070,13 @@ export function CrmWorkspace({
         throw new Error("CRM data refresh failed");
       }
 
-      const payload = (await response.json()) as { data?: CoreCrmDataResult };
+      const payload = (await response.json()) as { activeWorkspaceId?: string; data?: CoreCrmDataResult };
       if (!coreRequestGuard.isCurrentRefresh(ticket)) return false;
 
-      if (payload.data) {
-        setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
+      if (payload.data && payload.activeWorkspaceId === workspaceId) {
+        const presentation = selectAuthoritativeCrmPresentation(payload.data);
+        coreNavigationRef.current = { workspaceId, projects: presentation.projects };
+        setLiveCoreData(presentation);
         setCoreDataStatus("fresh");
         return true;
       } else {
@@ -3081,16 +3089,18 @@ export function CrmWorkspace({
     }
   }, [activeWorkspace.id, coreRequestGuard, sessionWorkspace.id]);
 
-  const handleWorkspaceSwitch = useCallback(async (workspaceId: string, options: ManagedWorkspaceOption[], projectId?: string | null, replaceHistory = false) => {
+  const handleWorkspaceSwitch = useCallback(async (workspaceId: string, options: ManagedWorkspaceOption[], projectId?: string | null, historyMode: "push" | "replace" | "none" = "push") => {
     const nextWorkspace = options.find((item) => item.id === workspaceId);
     if (!nextWorkspace) {
+      coreRequestGuard.cancelSwitch();
+      setScopeHydrated(true);
       setWorkspaceSwitchState("error");
       return false;
     }
-    if (nextWorkspace.id === activeWorkspace.id) return true;
 
     const ticket = coreRequestGuard.beginSwitch(nextWorkspace.id);
     if (!ticket) return false;
+    workspaceUrlRestoredRef.current = true;
 
     setWorkspaceSwitchState("loading");
     setScopeHydrated(false);
@@ -3102,15 +3112,16 @@ export function CrmWorkspace({
       const response = await fetch(`/api/crm/core${query}`, { cache: "no-store" });
       if (!response.ok) throw new Error("CRM data refresh failed");
 
-      const payload = (await response.json()) as { data?: CoreCrmDataResult };
-      if (!payload.data) throw new Error("CRM data refresh failed");
+      const payload = (await response.json()) as { activeWorkspaceId?: string; data?: CoreCrmDataResult };
+      if (!payload.data || payload.activeWorkspaceId !== nextWorkspace.id) throw new Error("CRM data refresh failed");
+      const presentation = selectAuthoritativeCrmPresentation(payload.data);
 
       const nextScope = projectId !== undefined ? createSelectedCrmScope({
         projectId,
-        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
+        projects: presentation.projects,
         workspaceId: nextWorkspace.id,
       }) : resolveCrmScope({
-        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
+        projects: presentation.projects,
         search: "",
         storage: getBrowserCrmScopeStorage(),
         userId: sessionUserId,
@@ -3118,8 +3129,11 @@ export function CrmWorkspace({
       });
       if (!coreRequestGuard.completeSwitch(ticket)) return false;
 
+      // History can arrive before React paints this accepted response. Resolve
+      // its next intent from the accepted dataset rather than a previous render.
+      coreNavigationRef.current = { workspaceId: nextWorkspace.id, projects: presentation.projects };
       scopeInitializedWorkspaceRef.current = nextWorkspace.id;
-      setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
+      setLiveCoreData(presentation);
       setCrmScope(nextScope);
       setUnitBoardFocusScope(null);
       setPropertyFocusAssetId(undefined);
@@ -3130,21 +3144,32 @@ export function CrmWorkspace({
         operatingModel: nextWorkspace.operatingModel ?? "self_service_customer",
         teamStructure: nextWorkspace.teamStructure ?? "small_team",
       });
-      const nextUrl = serializeCrmScopeUrl(window.location.href, nextScope);
-      if (replaceHistory) window.history.replaceState(null, "", nextUrl);
-      else window.history.pushState(null, "", nextUrl);
+      if (historyMode !== "none") {
+        const nextUrl = serializeCrmScopeUrl(window.location.href, nextScope);
+        if (historyMode === "replace") window.history.replaceState(null, "", nextUrl);
+        else window.history.pushState(null, "", nextUrl);
+      }
       setScopeHydrated(true);
       setCoreDataStatus("fresh");
       setWorkspaceSwitchState("idle");
       return true;
     } catch {
       if (!coreRequestGuard.failSwitch(ticket)) return false;
+      if (historyMode !== "push") {
+        setCrmScope(resolveCrmScope({
+          projects: coreNavigationRef.current.projects,
+          search: window.location.search,
+          storage: getBrowserCrmScopeStorage(),
+          userId: sessionUserId,
+          workspaceId: coreNavigationRef.current.workspaceId,
+        }));
+      }
       setScopeHydrated(true);
       setCoreDataStatus("error");
       setWorkspaceSwitchState("error");
       return false;
     }
-  }, [activeWorkspace.id, coreRequestGuard, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
+  }, [coreRequestGuard, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
 
   useEffect(() => {
     if (!canUseWorkspaceSwitch) return;
@@ -3177,17 +3202,18 @@ export function CrmWorkspace({
           workspaceUrlRestoredRef.current = true;
           const restoreTarget = getCrmWorkspaceRestoreTarget({
             availableWorkspaces: nextWorkspaces,
-            currentWorkspaceId: activeWorkspace.id,
+            currentWorkspaceId: coreNavigationRef.current.workspaceId,
             search: window.location.search,
           });
           if (restoreTarget) {
-            void handleWorkspaceSwitch(restoreTarget.workspaceId, nextWorkspaces, restoreTarget.projectId, true);
+            void handleWorkspaceSwitch(restoreTarget.workspaceId, nextWorkspaces, restoreTarget.projectId, "replace");
             return;
           }
         }
-        const currentWorkspace = nextWorkspaces.find((item) => item.id === activeWorkspace.id);
+        const currentWorkspace = nextWorkspaces.find((item) => item.id === coreNavigationRef.current.workspaceId);
         if (currentWorkspace) {
           setActiveWorkspace((current) => {
+            if (current.id !== currentWorkspace.id) return current;
             const nextWorkspace = { ...current, ...currentWorkspace };
             const currentSetupState = JSON.stringify(current.setupState ?? null);
             const nextSetupState = JSON.stringify(nextWorkspace.setupState ?? null);
@@ -3324,7 +3350,7 @@ export function CrmWorkspace({
       )
     : undefined;
   const projectScopeInvalid =
-    crmScope.status === "invalid" || Boolean(crmScope.projectId && !resolvedActiveProject);
+    crmScope.workspaceId !== activeWorkspace.id || crmScope.status === "invalid" || Boolean(crmScope.projectId && !resolvedActiveProject);
   const activeProject = projectScopeInvalid ? undefined : resolvedActiveProject;
   const activeProjectId = projectScopeInvalid
     ? crmScope.projectId ?? "invalid"
@@ -3425,7 +3451,7 @@ export function CrmWorkspace({
     activePresetProfile.label;
   const isBillingSection = ["billing", "aiBillingAdmin", "aiAssistant"].includes(visibleActiveNavigationEntry.id);
   const unavailableSectionCollections = isBillingSection ? [] : unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
-  const sectionScopeUnavailable = !isBillingSection && visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
+  const sectionScopeUnavailable = (isBillingSection || visibleActiveSection !== "dashboard") && (!scopeHydrated || projectScopeInvalid);
   const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects ? allProjects.length : "—";
   const relatedSectionUnavailable = ["analysis", "dataHygiene"].includes(visibleActiveSection);
   const sessionOnlySectionUnavailable = activeWorkspace.id !== sessionWorkspace.id && ["forms", "customerAccess"].includes(visibleActiveSection);
@@ -3702,23 +3728,38 @@ export function CrmWorkspace({
 
   useEffect(() => {
     const syncScopeFromHistory = () => {
+      // A newer URL also retires a pending switch back to this same workspace
+      // or to an unavailable target. Its late response must not win navigation.
+      coreRequestGuard.cancelSwitch();
+      const current = coreNavigationRef.current;
+      const restoreTarget = canUseWorkspaceSwitch ? getCrmWorkspaceRestoreTarget({
+        availableWorkspaces,
+        currentWorkspaceId: current.workspaceId,
+        search: window.location.search,
+      }) : null;
+      if (restoreTarget) {
+        void handleWorkspaceSwitch(restoreTarget.workspaceId, availableWorkspaces, restoreTarget.projectId, "none");
+        return;
+      }
       const nextScope = resolveCrmScope({
-        projects: allProjects,
+        projects: current.projects,
         search: window.location.search,
         storage: getBrowserCrmScopeStorage(),
         userId: sessionUserId,
-        workspaceId: activeWorkspace.id,
+        workspaceId: current.workspaceId,
       });
 
       setCrmScope(nextScope);
       setScopeHydrated(true);
+      setWorkspaceSwitchState(nextScope.status === "valid" ? "idle" : "error");
+      setCoreDataStatus("idle");
       setUnitBoardFocusScope(null);
       setPropertyFocusAssetId(undefined);
     };
 
     window.addEventListener("popstate", syncScopeFromHistory);
     return () => window.removeEventListener("popstate", syncScopeFromHistory);
-  }, [activeWorkspace.id, allProjects, sessionUserId]);
+  }, [activeWorkspace.id, allProjects, availableWorkspaces, canUseWorkspaceSwitch, coreRequestGuard, handleWorkspaceSwitch, sessionUserId]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -4061,6 +4102,10 @@ export function CrmWorkspace({
   }
 
   function handleProjectScopeChange(projectId: string, scopeProjects = allProjects) {
+    if (!coreRequestGuard.isActiveWorkspace(activeWorkspace.id)) return;
+    coreRequestGuard.cancelSwitch();
+    setWorkspaceSwitchState("idle");
+    setCoreDataStatus("idle");
     const nextScope = createSelectedCrmScope({
       projectId: projectId === "all" ? null : projectId,
       projects: scopeProjects,
@@ -4604,11 +4649,11 @@ export function CrmWorkspace({
               </div>
             ) : null}
 
-            {visibleActiveNavigationEntry.id === "billing" ? (
+            {!sectionScopeUnavailable && visibleActiveNavigationEntry.id === "billing" ? (
               <CrmAiBillingPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
-            ) : visibleActiveNavigationEntry.id === "aiBillingAdmin" ? (
+            ) : !sectionScopeUnavailable && visibleActiveNavigationEntry.id === "aiBillingAdmin" ? (
               <AiBillingAdminPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
-            ) : visibleActiveNavigationEntry.id === "aiAssistant" ? (
+            ) : !sectionScopeUnavailable && visibleActiveNavigationEntry.id === "aiAssistant" ? (
               <CrmAiAssistant key={activeWorkspace.id} workspaceId={activeWorkspace.id} projectId={activeProjectId === "all" ? null : activeProjectId} language={language} />
             ) : unavailableSectionCollections.length || sectionScopeUnavailable || relatedSectionUnavailable || sessionOnlySectionUnavailable ? (
               <section className="dc-card rounded-xl border border-stone-200 bg-white" data-crm-source-unavailable role="status">
