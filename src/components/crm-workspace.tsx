@@ -62,6 +62,7 @@ import { ProjectReportPicker } from "@/components/project-report-picker";
 import { CrmNotifications } from "@/components/crm-notifications";
 import { PropertyCommandCenter } from "@/components/property-command-center";
 import { usePropertyDraftSessionStore } from "@/lib/use-property-draft";
+import { createCrmCoreRequestGuard } from "@/lib/crm-core-request-guard";
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
@@ -2981,6 +2982,15 @@ export function CrmWorkspace({
   const [availableWorkspaces, setAvailableWorkspaces] = useState<ManagedWorkspaceOption[]>([]);
   const [workspaceSwitchState, setWorkspaceSwitchState] = useState<"idle" | "loading" | "error">("idle");
   const [coreDataStatus, setCoreDataStatus] = useState<"idle" | "loading" | "fresh" | "error">("idle");
+  const coreRequestSession = useMemo(() => ({
+    userId: sessionUserId,
+    guard: createCrmCoreRequestGuard(activeWorkspace.id),
+  }), [sessionUserId, activeWorkspace.id]);
+  const coreRequestGuard = coreRequestSession.guard;
+  useEffect(() => {
+    coreRequestGuard.activate();
+    return () => coreRequestGuard.dispose();
+  }, [coreRequestGuard]);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const lastUnitsRefreshKey = useRef("");
   const mobileNavigationRef = useRef<HTMLElement | null>(null);
@@ -3038,6 +3048,8 @@ export function CrmWorkspace({
   const canCreateCustomer = (sessionRole === "owner" || sessionRole === "admin") && canUseWorkspaceSwitch && canCreateProject && hasProductCapability(sessionProductRole, "bots:publish");
 
   const refreshCoreData = useCallback(async (workspaceId = activeWorkspace.id) => {
+    const ticket = coreRequestGuard.beginRefresh(workspaceId);
+    if (!ticket) return false;
     setCoreDataStatus("loading");
 
     try {
@@ -3051,6 +3063,7 @@ export function CrmWorkspace({
       }
 
       const payload = (await response.json()) as { data?: CoreCrmDataResult };
+      if (!coreRequestGuard.isCurrentRefresh(ticket)) return false;
 
       if (payload.data) {
         setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
@@ -3061,10 +3074,10 @@ export function CrmWorkspace({
         return false;
       }
     } catch {
-      setCoreDataStatus("error");
+      if (coreRequestGuard.isCurrentRefresh(ticket)) setCoreDataStatus("error");
       return false;
     }
-  }, [activeWorkspace.id, sessionWorkspace.id]);
+  }, [activeWorkspace.id, coreRequestGuard, sessionWorkspace.id]);
 
   const handleWorkspaceSwitch = useCallback(async (workspaceId: string, options: ManagedWorkspaceOption[], projectId?: string | null, replaceHistory = false) => {
     const nextWorkspace = options.find((item) => item.id === workspaceId);
@@ -3073,6 +3086,9 @@ export function CrmWorkspace({
       return false;
     }
     if (nextWorkspace.id === activeWorkspace.id) return true;
+
+    const ticket = coreRequestGuard.beginSwitch(nextWorkspace.id);
+    if (!ticket) return false;
 
     setWorkspaceSwitchState("loading");
     setScopeHydrated(false);
@@ -3098,6 +3114,7 @@ export function CrmWorkspace({
         userId: sessionUserId,
         workspaceId: nextWorkspace.id,
       });
+      if (!coreRequestGuard.completeSwitch(ticket)) return false;
 
       scopeInitializedWorkspaceRef.current = nextWorkspace.id;
       setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
@@ -3119,12 +3136,13 @@ export function CrmWorkspace({
       setWorkspaceSwitchState("idle");
       return true;
     } catch {
+      if (!coreRequestGuard.failSwitch(ticket)) return false;
       setScopeHydrated(true);
       setCoreDataStatus("error");
       setWorkspaceSwitchState("error");
       return false;
     }
-  }, [activeWorkspace.id, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
+  }, [activeWorkspace.id, coreRequestGuard, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
 
   useEffect(() => {
     if (!canUseWorkspaceSwitch) return;
