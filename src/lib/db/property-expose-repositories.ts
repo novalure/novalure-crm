@@ -68,10 +68,10 @@ export const exposeSourceSql = `jsonb_build_object(
     'availableFrom',p.available_from,'availableFromText',p.available_from_text,
     'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until,
     'countryCode',p.canonical_payload->'geography'->>'countryCode',
-    'energyCertificate',${publicPropertyEnergySql("p")},'coreNumericState',jsonb_build_object(
+    'energyCertificate',${publicPropertyEnergySql("p")},'coreNumericState',jsonb_strip_nulls(jsonb_build_object(
       'version',p.canonical_payload->'coreNumericState'->'version',
       'areaSqm',p.canonical_payload->'coreNumericState'->'areaSqm','price',p.canonical_payload->'coreNumericState'->'price',
-      'publicPrice',p.canonical_payload->'coreNumericState'->'publicPrice','rentPrice',p.canonical_payload->'coreNumericState'->'rentPrice'),
+      'publicPrice',p.canonical_payload->'coreNumericState'->'publicPrice','rentPrice',p.canonical_payload->'coreNumericState'->'rentPrice')),
     'publicDetails',${publicPropertyDetailPayloadSql("p")},
     'linkedUnitDetails',(select ${publicUnitDetailsSql("u")} from property_units u where u.id=p.unit_id and u.workspace_id=p.workspace_id and u.project_id=p.project_id)),
   'media',coalesce((select jsonb_agg(m.item order by m.item->>'id') from (

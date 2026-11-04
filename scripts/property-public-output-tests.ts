@@ -124,6 +124,18 @@ test("public website and both actual PDF paths redact titles, retain country ene
         assert.equal(Boolean(doc.price?.includes("0,00")), state === "known");
       }
     });
+    await t.test("source SQL preserves positive legacy optional prices after unrelated core versioning", async () => {
+      for (const rental of [false, true]) {
+        await db.admin.query("update seller_listings set marketing_type=$2,public_price_cents=$3::bigint,rent_price_cents=$4::bigint,canonical_payload=jsonb_set(canonical_payload,'{coreNumericState}','{\"version\":1,\"price\":\"unknown\",\"areaSqm\":\"known\"}'::jsonb) where id=$1", [fixture.id, rental ? "rent" : "sale", rental ? null : 12345, rental ? 45678 : null]);
+        const source = (await db.admin.query(`select ${exposeSourceSql} as source from seller_listings p where id=$1`, [fixture.id])).rows[0].source;
+        const state = source.listing.coreNumericState;
+        assert.equal(Object.hasOwn(state, "publicPrice"), false); assert.equal(Object.hasOwn(state, "rentPrice"), false);
+        const doc = buildPropertyExposeDocument({ propertyId: fixture.id, workspaceId, projectId, source, registryRaw: null, registry: { schemaVersion: 1, revision: "initial", preferredSource: "generated", activeDocumentId: null, versions: [] }, sourceFingerprint: "synthetic" }, { template: "full", language: "de", address: "hidden", showPrice: true, showContact: false, imageIds: [], floorPlanIds: [] }, []);
+        const actualPdf = await inspect(await renderPropertyExposePdf(doc));
+        assert.ok(actualPdf.text.includes(rental ? "456,78" : "123,45"), "actual generated PDF retains the known positive optional legacy price");
+      }
+      await db.admin.query("update seller_listings set marketing_type='sale',public_price_cents=null,rent_price_cents=null where id=$1", [fixture.id]);
+    });
     fixture.snapshot.units = [{ id: unit, number: "SYNTHETIC A1", area: "75", rooms: "3", price: null, status: "available" }];
     await db.admin.query("insert into property_units(id,workspace_id,project_id,unit_number,area_sqm,price_cents,status,metadata) values($1,$2,$3,'SYNTHETIC A1',75,0,'available',$4)", [unit, workspaceId, projectId, JSON.stringify({ sellerListingId: fixture.id })]);
     await db.admin.query("insert into web_expose_versions(id,workspace_id,property_id,project_id,created_by,language,version,snapshot,source_fingerprint) values($1,$2,$3,$4,$5,'de',1,$6,'synthetic')", [version, workspaceId, fixture.id, projectId, userId, JSON.stringify(fixture.snapshot)]);
