@@ -9,6 +9,9 @@ import { csrfFetch } from "@/lib/security/csrf-client";
 import { usePropertyDraft } from "@/lib/use-property-draft";
 import { PropertyPurchaseCostsInput } from "./property-purchase-costs-input";
 import { DEFAULT_PURCHASE_ANCILLARY_RATE } from "@/lib/property-purchase-costs";
+import { normalizePropertyGeography } from "@/lib/property-country";
+import { PropertyGeographyFields } from "./property-geography-fields";
+import { PropertyEnergyFields } from "./property-energy-fields";
 
 export type PropertyCoreEditorProps = {
   listing: SellerListing;
@@ -24,7 +27,6 @@ export type PropertyCoreEditorProps = {
 const inputClass = "mt-1 min-h-11 min-w-0 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonClass = "min-h-11 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:cursor-not-allowed disabled:opacity-50";
 const coreObjectTypes: readonly string[] = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"];
-const coreRegions: readonly string[] = ["Wien", "Steiermark", "Tirol", "Salzburg", "Oberösterreich", "Niederösterreich", "Kärnten", "Burgenland", "Vorarlberg"];
 
 export function PropertyCoreEditor(props: PropertyCoreEditorProps) {
   if (props.listing.workspaceId !== props.workspaceId || !/^[0-9a-f-]{36}$/i.test(props.listing.id)) {
@@ -64,7 +66,7 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
   useEffect(() => { if (notice?.error) noticeRef.current?.focus(); }, [notice]);
   const disabled = !canEdit || isMutationBusy;
   const objectTypeSupported = coreObjectTypes.includes(draft.objectType);
-  const regionSupported = coreRegions.includes(draft.region);
+  const regionSupported = Boolean(normalizePropertyGeography(draft.geography));
   const hasUnsupportedValue = !objectTypeSupported || !regionSupported;
   const change = (key: keyof PropertyDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
 
@@ -130,8 +132,8 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
       : "Edits this saved property only. Project/unit links and publication status stay unchanged. Inputs remain in memory across section changes, not reload or sign-out. Blank optional numbers retain their existing value."}</p>
     {!canEdit ? <p role="status" className="mt-3 text-sm text-amber-800">{de ? "Für Änderungen fehlen die Immobilien-Schreibrechte." : "Property write permission is required."}</p> : null}
     {hasUnsupportedValue ? <p id={unsupportedValueHelpId} role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{de
-      ? "Der vorhandene Objekttyp oder das Bundesland ist leer oder wird von diesem Editor nicht unterstützt. Der bisherige Wert bleibt unverändert. Wähle zum Speichern ausdrücklich einen unterstützten Wert aus; andernfalls kannst du schließen und den Entwurf behalten."
-      : "The current property type or region is empty or not supported by this editor. The existing value is unchanged. Explicitly choose a supported value to save; otherwise close and keep your draft."}</p> : null}
+      ? "Bitte einen unterstützten Objekttyp und das Objektland festlegen. Ein unbekanntes Land wird nicht aus der Adresse oder der Sprache geraten. Der Entwurf bleibt erhalten."
+      : "Choose a supported property type and the property country. Unknown countries are never inferred from the address or viewer language. Your draft is retained."}</p> : null}
     {notice ? <p ref={noticeRef} tabIndex={-1} aria-atomic="true" role={notice.error ? "alert" : "status"} className={`mt-3 rounded-xl p-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 ${notice.error ? "bg-red-50 text-red-900" : "bg-emerald-50 text-emerald-900"}`}>{notice.text}</p> : null}
     {notice?.conflict ? <button type="button" className={`${buttonClass} mt-3`} disabled={isMutationBusy} onClick={() => void discardAndRefresh()}>{de ? "Entwurf verwerfen und neu laden" : "Discard draft and reload"}</button> : null}
     <form aria-labelledby={headingId} aria-describedby={helpId} onSubmit={(event) => void save(event)} className="mt-4" aria-busy={isMutationBusy}>
@@ -141,14 +143,21 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
         <label className="min-w-0 text-sm font-medium text-slate-700 sm:col-span-2">{de ? "Titel *" : "Title *"}<input className={inputClass} name="title" value={draft.title} onChange={(event) => change("title", event.target.value)} required maxLength={300} /></label>
         <label className="min-w-0 text-sm font-medium text-slate-700">{de ? "Objekttyp" : "Property type"}<select className={inputClass} name="objectType" aria-invalid={!objectTypeSupported || undefined} aria-describedby={!objectTypeSupported ? unsupportedValueHelpId : undefined} value={draft.objectType} onChange={(event) => change("objectType", event.target.value)}>{!objectTypeSupported ? <option disabled value={draft.objectType}>{draft.objectType || (de ? "Nicht angegeben" : "Not provided")} · {de ? "nicht unterstützt – bitte auswählen" : "unsupported – please choose"}</option> : null}{coreObjectTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
         <label className="min-w-0 text-sm font-medium text-slate-700 sm:col-span-2">{de ? "Vollständige Adresse *" : "Full address *"}<input className={inputClass} name="address" value={draft.address} onChange={(event) => change("address", event.target.value)} required maxLength={1000} /></label>
-        <label className="min-w-0 text-sm font-medium text-slate-700">{de ? "Bundesland" : "Region"}<select className={inputClass} name="region" aria-invalid={!regionSupported || undefined} aria-describedby={!regionSupported ? unsupportedValueHelpId : undefined} value={draft.region} onChange={(event) => change("region", event.target.value)}>{!regionSupported ? <option disabled value={draft.region}>{draft.region || (de ? "Nicht angegeben" : "Not provided")} · {de ? "nicht unterstützt – bitte auswählen" : "unsupported – please choose"}</option> : null}{coreRegions.map((value) => <option key={value}>{value}</option>)}</select></label>
         <label className="text-sm font-medium text-slate-700">{de ? "Fläche (m²) *" : "Area (m²) *"}<input className={inputClass} name="areaSqm" type="number" min="0" max={PROPERTY_AREA_MAX_SQM} step="0.01" inputMode="decimal" required value={draft.areaSqm} onChange={(event) => change("areaSqm", event.target.value)} /></label>
         <label className="text-sm font-medium text-slate-700">{de ? "Zimmer (optional)" : "Rooms (optional)"}<input className={inputClass} name="rooms" type="number" min="0" max="999.9" step="0.1" inputMode="decimal" aria-describedby={optionalNumberHelpId} value={draft.rooms} onChange={(event) => change("rooms", event.target.value)} /></label>
         <label className="text-sm font-medium text-slate-700">{de ? "Baujahr (optional)" : "Year built (optional)"}<input className={inputClass} name="yearBuilt" type="number" min="1" max="9999" step="1" inputMode="numeric" aria-describedby={optionalNumberHelpId} value={draft.yearBuilt} onChange={(event) => change("yearBuilt", event.target.value)} /></label>
+        <label className="text-sm font-medium text-slate-700">{de ? "Nutzung für Länderprüfung" : "Use for country review"}<select className={inputClass} name="usageType" value={draft.usageType} onChange={(event) => change("usageType", event.target.value)}><option value="">{de ? "Noch zu prüfen" : "Requires review"}</option><option value="residential">{de ? "Wohngebäude" : "Residential"}</option><option value="commercial">{de ? "Nichtwohngebäude" : "Non-residential"}</option><option value="mixed">{de ? "Gemischte Nutzung" : "Mixed use"}</option><option value="investment">{de ? "Investment · Gebäudenutzung prüfen" : "Investment · review building use"}</option></select></label>
         <label className="text-sm font-medium text-slate-700">{de ? "Angebotspreis (EUR) *" : "Asking price (EUR) *"}<input className={inputClass} name="price" type="number" min="0" step="0.01" inputMode="decimal" required value={draft.price} onChange={(event) => change("price", event.target.value)} /></label>
         <label className="text-sm font-medium text-slate-700">{de ? "Öffentlicher Preis (EUR, optional)" : "Public price (EUR, optional)"}<input className={inputClass} name="publicPrice" type="number" min="0" step="0.01" inputMode="decimal" aria-describedby={optionalNumberHelpId} value={draft.publicPrice} onChange={(event) => change("publicPrice", event.target.value)} /></label>
       </fieldset>
+      <PropertyGeographyFields geography={draft.geography ?? null} region={draft.region} language={language} disabled={disabled}
+        onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,
+          energyCertificate: current.geography?.countryCode !== geography.countryCode ? { version: 1, countryCode: geography.countryCode } : current.energyCertificate,
+          ...(geography.countryCode !== "AT" ? { purchaseAncillaryMode: "manual" as const } : {}) }))} />
+      <PropertyEnergyFields geography={draft.geography ?? null} energy={draft.energyCertificate ?? { version: 1, countryCode: draft.geography?.countryCode }} usageType={draft.usageType} yearBuilt={Number(draft.yearBuilt)} language={language} disabled={disabled}
+        onChange={(energyCertificate) => setDraft((current) => ({ ...current, energyCertificate }))} />
       <PropertyPurchaseCostsInput language={language} price={draft.price} marketingType={draft.marketingType}
+        countryCode={draft.geography?.countryCode ?? ""}
         mode={draft.purchaseAncillaryMode ?? "manual"} rate={draft.purchaseAncillaryRate ?? DEFAULT_PURCHASE_ANCILLARY_RATE}
         manualAmount={draft.purchaseAncillaryCosts} disabled={disabled}
         onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))} />

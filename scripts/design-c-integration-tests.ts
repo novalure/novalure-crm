@@ -4,15 +4,23 @@ import { calendarEvents, contacts, leads, projects, tasks } from "../src/lib/crm
 import { selectAuthoritativeCrmPresentation, unavailableCrmSectionCollections } from "../src/lib/crm-presentation-data";
 import { buildEvelynCommandOverview, type EvelynCommandData } from "../src/lib/evelyn-command-center";
 import type { CoreCrmDataKey, CoreCrmDataResult } from "../src/lib/db/crm-loaders";
-import { getCrmSelfServiceEntries } from "../src/lib/crm-self-service-navigation";
+import { canAccessCrmBilling, getCrmSelfServiceEntries } from "../src/lib/crm-self-service-navigation";
 
 test("customer presets retain read-only Knowledge while management requires existing capabilities", () => {
   const preset = Object.freeze(["properties", "units", "bots", "settings"]);
   const viewer = getCrmSelfServiceEntries(preset, "viewer");
   assert(viewer.includes("knowledge")); assert(viewer.includes("dashboard")); assert(viewer.includes("projects"));
   assert(!viewer.includes("bots")); assert(!viewer.includes("settings"));
+  assert(!viewer.includes("billing"));
+  assert(!getCrmSelfServiceEntries([...preset, "billing"], "viewer").includes("billing"));
+  assert(!getCrmSelfServiceEntries([...preset, "billing"], "external_partner").includes("billing"));
+  assert(!canAccessCrmBilling("viewer")); assert(!canAccessCrmBilling("external_partner"));
+  for (const role of ["customer_owner", "workspace_admin", "team_member", "broker_agent", "developer_sales", "project_sales_member", "assistant_backoffice"] as const) {
+    assert(canAccessCrmBilling(role)); assert(getCrmSelfServiceEntries(preset, role).includes("billing"));
+  }
   const owner = getCrmSelfServiceEntries(preset, "customer_owner");
   assert(owner.includes("bots")); assert(owner.includes("settings"));
+  assert(owner.includes("billing"));
   assert.equal(preset.length, 4);
   assert.equal(new Set(owner).size, owner.length);
 });

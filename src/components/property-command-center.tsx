@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -23,6 +23,7 @@ import {
   buildPropertyAssets,
   buildPropertyDataQualityIssues,
   buildPropertyMatches,
+  createPropertyUnitBoardScope,
   getPropertyDepartmentTabs,
   getPropertyActionStates,
   getPropertyFieldSections,
@@ -49,9 +50,18 @@ import { PropertyCoreEditor } from "@/components/property-core-editor";
 import { PropertyRelationshipEditor } from "@/components/property-relationship-editor";
 import { PropertyMediaGallery } from "@/components/property-media-gallery";
 import { PropertyDocumentReview } from "@/components/property-document-review";
+import { PropertyPortalWorkspace } from "@/components/property-portal-workspace";
+import { WebExposeCommandCenter } from "@/components/web-expose-command-center";
+import { PropertyInquiryList } from "@/components/property-inquiry-list";
+import { PropertyInquiryAssignment } from "@/components/property-inquiry-assignment";
+import { PropertyBookingWorkspace } from "@/components/property-booking-workspace";
+import { GuidedPropertyCreateWorkspace } from "@/components/guided-property-create-workspace";
+import type { PropertyInquiryState } from "@/lib/property-inquiries";
 import { PropertyExposeWorkspace } from "@/components/property-expose-workspace";
 import { createPropertyDraftStore } from "@/lib/property-draft-store";
 import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
+import { createPropertyGeography, type PropertyGeography } from "@/lib/property-country";
+import { PropertyGeographyFields } from "@/components/property-geography-fields";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -64,6 +74,7 @@ type PropertyCommandCenterProps = {
   leads: Lead[];
   initialSelectedAssetId?: string;
   onOpenLeadInbox: () => void;
+  onOpenLead?: (leadId: string) => void;
   onOpenReservations: () => void;
   onOpenUnits: (scope?: PropertyUnitBoardScope) => void;
   onClearPropertyFocus?: () => void;
@@ -84,6 +95,7 @@ type PropertyCommandCenterProps = {
 };
 
 type PropertyDraft = {
+  geography: PropertyGeography;
   address: string;
   areaSqm: string;
   availableFrom: string;
@@ -289,16 +301,7 @@ function listingIdFromAssetId(assetId: string | undefined) {
 }
 
 function createUnitBoardScope(asset: PropertyAssetSummary | undefined): PropertyUnitBoardScope | undefined {
-  if (!asset || (!asset.projectId && asset.unitIds.length === 0)) return undefined;
-
-  const unitKey = asset.unitIds.length ? asset.unitIds.join("|") : asset.projectId ?? asset.id;
-  return {
-    key: `${asset.id}:${unitKey}`,
-    label: asset.title,
-    originAssetId: asset.id,
-    projectId: asset.projectId,
-    unitIds: asset.unitIds.length ? asset.unitIds : undefined,
-  };
+  return createPropertyUnitBoardScope(asset);
 }
 
 export function PropertyCommandCenter({
@@ -312,6 +315,7 @@ export function PropertyCommandCenter({
   language,
   leads,
   onOpenLeadInbox,
+  onOpenLead,
   onOpenReservations,
   onOpenUnits,
   onClearPropertyFocus,
@@ -367,8 +371,10 @@ export function PropertyCommandCenter({
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [editingRelationshipListingId, setEditingRelationshipListingId] = useState<string | null>(null);
   const [workflowDraftStore] = useState(createPropertyDraftStore);
+  const workflowMutationBusy = useSyncExternalStore(workflowDraftStore.subscribe,workflowDraftStore.isMutationBusy,()=>false);
   const workflowCapabilities = usePropertyWorkflowCapabilities(context.workspaceId);
   const [draft, setDraft] = useState<PropertyDraft>(() => ({
+    geography: createPropertyGeography("AT"),
     address: "",
     areaSqm: "",
     availableFrom: "",
@@ -431,6 +437,19 @@ export function PropertyCommandCenter({
   const qualityIssues = buildPropertyDataQualityIssues({ assets, language, leads, reservations });
   const matches = buildPropertyMatches({ assets, buyerSearchProfiles, contacts, language, leads });
   const activeReservations = reservations.filter((reservation) => reservation.status === "hold" || reservation.status === "reserved");
+  const inquiryScopeKey = `${context.workspaceId}:${activeProjectId ?? "all"}`;
+  const [storedInquiryState,setStoredInquiryState] = useState<{key:string;data:PropertyInquiryState|null;error:string}|null>(null);
+  const [inquiryRefresh,setInquiryRefresh] = useState(0);
+  useEffect(()=>{
+    const controller = new AbortController();
+    void fetch(`/api/crm/property-inquiries?workspaceId=${encodeURIComponent(context.workspaceId)}${activeProjectId?`&projectId=${encodeURIComponent(activeProjectId)}`:""}`,{cache:"no-store",signal:controller.signal}).then(async response=>{
+      const result=await response.json() as {data?:PropertyInquiryState;error?:string};if(!response.ok||!result.data)throw new Error(result.error||"Objektanfragen nicht verfügbar");
+      setStoredInquiryState({key:inquiryScopeKey,data:result.data,error:""});
+    }).catch((error:unknown)=>{if(!controller.signal.aborted)setStoredInquiryState({key:inquiryScopeKey,data:null,error:error instanceof Error?error.message:"Objektanfragen nicht verfügbar"});});
+    return()=>controller.abort();
+  },[context.workspaceId,activeProjectId,activeTab,inquiryScopeKey,inquiryRefresh]);
+  const savedInquiries=storedInquiryState?.key===inquiryScopeKey?storedInquiryState.data:null;
+  const inquiryError=storedInquiryState?.key===inquiryScopeKey?storedInquiryState.error:"";
   const routeResults = leads.slice(0, 20).map((lead) => {
     const budget = getBudgetRange(lead);
     return {
@@ -836,7 +855,7 @@ export function PropertyCommandCenter({
                         ) : "-"}
                       </td>
                       <td className="py-3 text-stone-700">
-                        {routeResults.filter((item) => item.route.propertyId === asset.id || item.route.projectId === asset.projectId).length}
+                        {savedInquiries ? savedInquiries.counts.find(item=>item.propertyId===asset.sellerListingId)?.count ?? 0 : "—"}
                       </td>
                     </tr>
                   ))}
@@ -879,7 +898,7 @@ export function PropertyCommandCenter({
                   >
                     {copy.detail.openUnits}
                   </button>
-                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
+                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("documents")} />
                   <button
                     className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
                     disabled={!selectedListing || !workflowCapabilities.canEditProperty}
@@ -917,6 +936,10 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "create" ? (
+        <div className="grid gap-5">
+        {actions.createProperty.enabled ? <GuidedPropertyCreateWorkspace workspaceId={context.workspaceId} projectId={activeProjectId} language={language}
+          onCreated={async listing=>{await refreshPropertyData();onClearPropertyFocus?.();setQuery("");setStatusFilter("all");setSelectedAssetId(`listing:${listing.id}`);setActiveTab("overview");}}/> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{actions.createProperty.reason}</p>}
+        <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">{language==="de"?"Erweiterte Direkterfassung mit allen Feldern":"Advanced direct entry with all fields"}</summary><p className="my-4 text-sm text-stone-600">{language==="de"?"Für fortsetzbare Serverentwürfe den Assistenten oben verwenden. Ungespeicherte Eingaben in dieser Direkterfassung bleiben nur in der aktuellen Ansicht.":"Use the wizard above for resumable server drafts. Unsaved direct-entry values stay only in the current view."}</p>
         <form className="grid gap-5" onSubmit={submitProperty}>
           <div className="sticky top-3 z-20 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -1002,10 +1025,6 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("postalCode", event.target.value)} value={draft.postalCode} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>{copy.form.region}</span>
-                    <input className={propertyInputClass} onChange={(event) => updateDraft("region", event.target.value)} value={draft.region} />
-                  </label>
-                  <label className={propertyFieldClass}>
                     <span>{copy.form.subObjectType}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("subObjectType", event.target.value)} value={draft.subObjectType} />
                   </label>
@@ -1014,6 +1033,8 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("availableFromText", event.target.value)} value={draft.availableFromText} />
                   </label>
                 </div>
+                <PropertyGeographyFields geography={draft.geography} region={draft.region} language={language} disabled={saving}
+                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region }))} />
               </PropertyFormSection>
 
               <PropertyFormSection title={copy.form.areasAvailability}>
@@ -1206,6 +1227,8 @@ export function PropertyCommandCenter({
             </aside>
           </div>
         </form>
+        </details>
+        </div>
       ) : null}
 
       {activeTab === "projectUnits" ? (
@@ -1282,11 +1305,20 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "inquiries" ? (
+        <>
+        <PropertyInquiryList data={savedInquiries} error={inquiryError} propertyId={selectedListingId} language={language} onRefresh={()=>setInquiryRefresh(value=>value+1)} onOpenLead={id=>onOpenLead?onOpenLead(id):onOpenLeadInbox()}/>
+        <PropertyInquiryAssignment language={language} workspaceId={context.workspaceId} activeProjectId={activeProjectId}
+          assets={assets} units={units} canAssign={workflowCapabilities.canAssignInquiry} disabledReason={workflowCapabilities.failed ? (language==="de"?"Berechtigungen konnten nicht geladen werden. Bitte Ansicht neu laden.":"Permissions could not be loaded. Please reload.") : undefined}
+          isMutationBusy={workflowMutationBusy} acquireMutation={workflowDraftStore.acquireMutation} releaseMutation={workflowDraftStore.releaseMutation}
+          onRefresh={refreshPropertyData} suggestions={routeResults.map(({lead,route})=>({leadId:lead.id,label:route.routingReason}))}/>
+        {selectedListing ? <PropertyBookingWorkspace workspaceId={context.workspaceId} propertyId={selectedListing.id}
+          canWrite={workflowCapabilities.canEditProperty} onChanged={refreshPropertyData}/> : null}
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">{copy.subviews.inquiryRouting}</h4>
+            <h4 className="text-lg font-semibold text-slate-950">{language === "de" ? "Zuordnungsvorschläge" : "Suggested associations"}</h4>
             <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenLeadInbox} type="button">{copy.subviews.openLeadCenter}</button>
           </div>
+          <p className="mt-3 text-sm text-stone-600">{language === "de" ? "Kriterienbasierte Vorschläge sind noch keine gespeicherte Objektzuordnung und fließen nicht in die Objektzähler ein." : "Criteria-based suggestions are not saved property associations and are excluded from property counters."}</p>
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-[960px] w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
@@ -1302,7 +1334,7 @@ export function PropertyCommandCenter({
                 {routeResults.map(({ lead, route }) => (
                   <tr className="border-t border-stone-200 align-top" key={lead.id}>
                     <td className="py-3 pr-4">
-                      <p className="font-semibold text-slate-950">{getCrmSystemTextLabel(lead.intent, language)}</p>
+                      <button className="text-left font-semibold text-blue-900 underline decoration-blue-200 underline-offset-4" type="button" onClick={() => onOpenLead ? onOpenLead(lead.id) : onOpenLeadInbox()}>{getCrmSystemTextLabel(lead.intent, language)}</button>
                       <p className="mt-1 text-xs text-stone-500">{contacts.find((contact) => contact.id === lead.contactId)?.name ?? lead.contactId}</p>
                     </td>
                     <td className="py-3 pr-4 text-stone-700">{route.sourceChannel}</td>
@@ -1315,6 +1347,7 @@ export function PropertyCommandCenter({
             </table>
           </div>
         </article>
+        </>
       ) : null}
 
       {activeTab === "channels" ? (
@@ -1356,14 +1389,14 @@ export function PropertyCommandCenter({
               <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.price}: {copy.priceVisibility[selectedAsset.priceVisibility] ?? selectedAsset.priceVisibility}</span>
             </div>
           ) : null}
+          {selectedListing ? <PropertyPortalWorkspace workspaceId={context.workspaceId} propertyId={selectedListing.id} language={language} /> : null}
           {preflight ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Preflight</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{preflight.status}</p>
                 <div className="mt-4 grid gap-2">
-                  <ActionButton action={actions.publishProperty} />
-                  <ActionButton action={actions.exportChannel} />
+                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("documents")} />
                 </div>
               </div>
               <div className="grid gap-2">
@@ -1415,7 +1448,6 @@ export function PropertyCommandCenter({
                   type="file"
                 />
               </label>
-              <ActionButton action={actions.approveDocument} />
             </div>
           </div>
           {notice ? <p aria-atomic="true" className={`mt-3 text-sm font-semibold ${notice.kind === "success" ? "text-emerald-800" : "text-rose-800"}`}
@@ -1430,6 +1462,8 @@ export function PropertyCommandCenter({
                 listing={selectedListing}
                 workspaceId={context.workspaceId}
               />
+              <WebExposeCommandCenter workspaceId={context.workspaceId} propertyId={selectedListing.id} propertyTitle={selectedListing.title} language={language}
+                leads={leads.filter(lead => lead.projectId === selectedListing.projectId).map(lead => ({ id: lead.id, label: contacts.find(contact => contact.id === lead.contactId)?.name || lead.intent || lead.id }))} />
             </div>
           ) : (
             <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">

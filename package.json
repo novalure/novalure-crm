@@ -13,6 +13,7 @@
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
+    "test:livelisted": "node scripts/run-livelisted-checks.mjs",
     "test:ai-billing": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/ai-credit-billing-tests.ts scripts/ai-billing-http-tests.ts scripts/ai-billing-model-tests.ts scripts/ai-billing-admin-http-tests.ts scripts/ai-billing-runtime-acl-tests.ts",
     "test:ai-billing:runtime-acl": "node --conditions=react-server --import tsx --test scripts/ai-billing-runtime-acl-tests.ts",
     "qa:ai-billing-ui": "node scripts/ai-billing-ui-tests.mjs",
@@ -118,11 +119,11 @@
     "@tiptap/starter-kit": "3.31.4",
     "@types/react-grid-layout": "^1.3.6",
     "@vercel/blob": "2.8.0",
-    "@vercel/oidc": "3.8.8",
-    "ai": "^7.0.148",
+    "@vercel/oidc": "4.0.6",
+    "dompurify": "3.4.17",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.4.2",
+    "next": "16.4.5",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.4.299",
     "pdfkit": "0.20.2",
@@ -133,7 +134,8 @@
     "saxes": "6.0.0",
     "server-only": "0.0.1",
     "sharp": "0.35.5",
-    "yauzl": "3.4.0"
+    "yauzl": "3.4.0",
+    "ai": "^7.0.148"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
@@ -145,7 +147,7 @@
     "@types/react-dom": "^19",
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
     "tsx": "4.23.13",
     "typescript": "^5"
@@ -155,6 +157,9 @@
     "undici": "6.29.1",
     "@vercel/cli-config@0.2.7": {
       "zod": "4.6.7"
+    },
+    "@vercel/blob": {
+      "@vercel/oidc": "$@vercel/oidc"
     }
   }
 }

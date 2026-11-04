@@ -8,7 +8,7 @@ import {
 type InventoryMetadata = { idempotencyKey?: string; correlationId?: string; expectedVersion?: unknown; options?: TenantTransactionOptions };
 type RepositoryWriteResult<T> = { data: T; persisted: true; replayed: boolean; auditReference: string; commandId: string };
 type BuildingRow = { id:string; workspaceId:string; projectId:string; name:string; address:string; completionDate:string | Date | null; floors:number | string; version:number | string };
-type UnitRow = { id:string; workspaceId:string; projectId:string; buildingId:string | null; unitNumber:string; floor:number | string; rooms:number | string; areaSqm:number | string; priceCents:number | string; status:PropertyUnit["status"]; buyerContactId:string | null; dealId:string | null; updatedAt:string | Date; version:number | string };
+type UnitRow = { id:string; workspaceId:string; projectId:string; buildingId:string | null; unitNumber:string; floor:number | string; rooms:number | string; areaSqm:number | string; priceCents:number | string; status:PropertyUnit["status"]; buyerContactId:string | null; dealId:string | null; sellerListingId:string | null; updatedAt:string | Date; version:number | string };
 
 function text(value: unknown, label: string, maximum = 200) {
   if (typeof value !== "string" || !value.trim() || value.trim().length > maximum) throw new CrmCommandError("VALIDATION_ERROR", `Invalid ${label}`);
@@ -84,7 +84,7 @@ export async function createPropertyUnitRecord(input: InventoryMetadata & {
     const replay=await ledgerReplay<PropertyUnit & {version:number}>(tx,"unit",ctx.workspaceId,meta.idempotencyKey,digest);
     if(replay) return replay;
     if(buildingId && !await tx.queryOne("select id from property_buildings where workspace_id=$1::uuid and project_id=$2::uuid and id=$3::uuid",[ctx.workspaceId,projectId,buildingId])) throw new CrmCommandError("RELATIONSHIP_INVALID","Building is not in the selected project",400);
-    const columns=`id,workspace_id as "workspaceId",project_id as "projectId",building_id as "buildingId",unit_number as "unitNumber",floor,rooms,area_sqm as "areaSqm",price_cents as "priceCents",status,buyer_contact_id as "buyerContactId",deal_id as "dealId",updated_at as "updatedAt",version`;
+    const columns=`id,workspace_id as "workspaceId",project_id as "projectId",building_id as "buildingId",unit_number as "unitNumber",floor,rooms,area_sqm as "areaSqm",price_cents as "priceCents",status,buyer_contact_id as "buyerContactId",deal_id as "dealId",metadata->>'sellerListingId' as "sellerListingId",updated_at as "updatedAt",version`;
     let row:UnitRow|null;
     if(unitId){
       row=await tx.queryOne<UnitRow>(`update property_units set building_id=$4::uuid,unit_number=$5,floor=$6,rooms=$7,area_sqm=$8,version=version+1,updated_at=now() where workspace_id=$1::uuid and project_id=$2::uuid and id=$3::uuid and version=$9 and status=$10 returning ${columns}`,[ctx.workspaceId,projectId,unitId,buildingId,unitNumber,floor,rooms,areaSqm,expectedVersion,status]);
@@ -93,7 +93,7 @@ export async function createPropertyUnitRecord(input: InventoryMetadata & {
       row=await tx.queryOne<UnitRow>(`insert into property_units(workspace_id,project_id,building_id,unit_number,floor,rooms,area_sqm,price_cents,status,metadata) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,0,$8,$9::jsonb) on conflict(workspace_id,project_id,unit_number) do nothing returning ${columns}`,[ctx.workspaceId,projectId,buildingId,unitNumber,floor,rooms,areaSqm,status,JSON.stringify({source:"unit_board",priceConfirmed:false,updatedByUserId:ctx.actorId})]);
       if(!row) throw new CrmCommandError("UNIT_EXISTS","Unit already exists; use a versioned update",409);
     }
-    const data:PropertyUnit & {version:number}={areaSqm:Number(row.areaSqm),buildingId:row.buildingId??"",buyerContactId:row.buyerContactId??undefined,dealId:row.dealId??undefined,floor:Number(row.floor),id:row.id,priceCents:Number(row.priceCents),projectId:row.projectId,rooms:Number(row.rooms),status:row.status,unitNumber:row.unitNumber,updatedAt:date(row.updatedAt),workspaceId:row.workspaceId,version:Number(row.version)};
+    const data:PropertyUnit & {version:number}={areaSqm:Number(row.areaSqm),buildingId:row.buildingId??"",buyerContactId:row.buyerContactId??undefined,dealId:row.dealId??undefined,floor:Number(row.floor),id:row.id,priceCents:Number(row.priceCents),projectId:row.projectId,rooms:Number(row.rooms),sellerListingId:row.sellerListingId??undefined,status:row.status,unitNumber:row.unitNumber,updatedAt:date(row.updatedAt),workspaceId:row.workspaceId,version:Number(row.version)};
     await ledgerStore(tx,"unit",{workspaceId:ctx.workspaceId,projectId,key:meta.idempotencyKey,digest,id:row.id,data});
     return data;
   },input.options);

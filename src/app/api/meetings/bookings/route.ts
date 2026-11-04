@@ -13,6 +13,9 @@ import {
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
 import { buildPublicMeetingPath } from "@/lib/public-routing";
 import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
+import {getPublicPropertyMeetingPageSettings} from '@/lib/property-booking-repository';
+import {getTrustedAppOrigin} from '@/lib/auth/app-origin';
+import {isWebExposeOriginAllowed} from '@/lib/web-expose-http';
 import {
   bookingSubmissionBodyLimits,
   buildPublicSubmissionScope,
@@ -68,6 +71,7 @@ function resolveMeetingProvider(formData: FormData) {
 const bookingFieldRules = [
   { maxLength: 96, name: "slug" },
   { maxLength: 128, name: "workspace_public_key" },
+  { maxLength: 128, name: "property_context" },
   { maxLength: 8, name: "lang" },
   { maxLength: 32, name: "calendar" },
   { maxLength: 32, name: "meeting" },
@@ -99,6 +103,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if(!isWebExposeOriginAllowed(request,getTrustedAppOrigin()))return NextResponse.json({error:'origin_denied'},{status:403,headers:{'Cache-Control':'private, no-store'}});
   let parsed: Awaited<ReturnType<typeof readBoundedPublicSubmissionFormData>>;
   try {
     parsed = await readBoundedPublicSubmissionFormData(request, bookingSubmissionBodyLimits);
@@ -116,12 +121,13 @@ export async function POST(request: Request) {
   const redirectPath = workspacePublicKey
     ? buildPublicMeetingPath({ slug: slug || "pipeline-audit", workspacePublicKey })
     : `/book/${slug || "pipeline-audit"}`;
-  const redirectUrl = new URL(redirectPath, request.url);
+  const redirectUrl = new URL(redirectPath, getTrustedAppOrigin());
+  const language=getFormValue(formData,'lang');if(['de','en','es'].includes(language))redirectUrl.searchParams.set('lang',language);
 
   const page = workspacePublicKey && slug
-    ? await getPublicMeetingPageSettings({ slug, workspacePublicKey }).catch(() => null)
+    ? await (getFormValue(formData,'property_context')?getPublicPropertyMeetingPageSettings(getFormValue(formData,'property_context')):getPublicMeetingPageSettings({ slug, workspacePublicKey })).catch(() => null)
     : null;
-  if (!page?.id || !page.workspaceId) {
+  if (!page?.id || !page.workspaceId||page.slug!==slug||page.workspacePublicKey!==workspacePublicKey) {
     return bookingFailureResponse({
       redirectUrl,
       reason: "meeting_page_not_found",
@@ -238,6 +244,7 @@ export async function POST(request: Request) {
       source: getFormValue(formData, "utm_source") || "booking_page",
       suppressExternalEffects,
       workspacePublicKey,
+      propertyContext:getFormValue(formData,'property_context')||undefined,
     });
 
     if (!result.persisted) {
@@ -255,6 +262,7 @@ export async function POST(request: Request) {
       : { checked: 0, failed: 0, sent: 0 };
 
     redirectUrl.searchParams.set("submitted", "1");
+    if(result.publicActionToken){redirectUrl.searchParams.set('token',result.publicActionToken);redirectUrl.searchParams.set('property_context',getFormValue(formData,'property_context'));}
     redirectUrl.searchParams.set("booking", result.bookingId || "");
     redirectUrl.searchParams.set("confirmed", result.autoConfirmed ? "1" : "0");
     redirectUrl.searchParams.set("date", getFormValue(formData, "selectedDate"));
@@ -291,7 +299,7 @@ function bookingFailureResponse(input: {
   redirectUrl?: URL;
   requestUrl: string;
 }) {
-  const redirectUrl = input.redirectUrl ?? new URL("/book/pipeline-audit", input.requestUrl);
+  const redirectUrl = input.redirectUrl ?? new URL("/book/pipeline-audit", getTrustedAppOrigin());
   return responseFromSnapshot(createBookingFailureSnapshot(redirectUrl, input.reason));
 }
 

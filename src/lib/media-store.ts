@@ -110,6 +110,8 @@ const allowedExtensionsByMimeType = new Map<string, Set<string>>([
   ["image/jpeg", new Set([".jpg", ".jpeg"])],
   ["image/png", new Set([".png"])],
   ["image/webp", new Set([".webp"])],
+  ["video/mp4", new Set([".mp4"])],
+  ["video/webm", new Set([".webm"])],
 ]);
 const allowedImageMimeTypes = new Set([...allowedExtensionsByMimeType.keys()].filter((value) => value.startsWith("image/")));
 const allowedMediaMimeTypes = new Set(allowedExtensionsByMimeType.keys());
@@ -126,12 +128,15 @@ const libraryPath = path.join(mediaRoot, "library.json");
 // a new version replaces its attachment. Do not infer privacy from source RLS:
 // the source may deliberately be invisible to the current media-library user.
 export const knowledgeMediaFolderPrefix = "knowledge-private-";
+export const leadProofMediaFolderPrefix = "lead-proof-private-";
 const authorizedKnowledgeReads = new WeakSet<MediaAsset>();
 const verifiedKnowledgeUploads = new WeakMap<File, { actorId: string; workspaceId: string; pathname: string }>();
 const knowledgeUploadRollbacks = new WeakMap<MediaAsset, { asset: MediaAsset; actorId: string; transaction: NonNullable<ReturnType<typeof currentTenantTransaction>>["transaction"] }>();
+const leadProofUploadRollbacks = new WeakMap<MediaAsset, { asset: MediaAsset; actorId: string; leadId: string; transaction: NonNullable<ReturnType<typeof currentTenantTransaction>>["transaction"] }>();
+const marketingUploadRollbacks = new WeakMap<MediaAsset, { asset: MediaAsset; actorId: string; propertyId: string; transaction: NonNullable<ReturnType<typeof currentTenantTransaction>>["transaction"] }>();
 const validMediaScopeId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-const isKnowledgePrivateMedia = (asset: Pick<MediaAsset, "folder">) => asset.folder.toLowerCase().startsWith(knowledgeMediaFolderPrefix);
-const ordinaryMediaSql = (alias = "ma") => `left(lower(${alias}.folder), ${knowledgeMediaFolderPrefix.length}) <> '${knowledgeMediaFolderPrefix}'`;
+const isKnowledgePrivateMedia = (asset: Pick<MediaAsset, "folder">) => [knowledgeMediaFolderPrefix, leadProofMediaFolderPrefix].some(prefix => asset.folder.toLowerCase().startsWith(prefix));
+const ordinaryMediaSql = (alias = "ma") => [knowledgeMediaFolderPrefix, leadProofMediaFolderPrefix].map(prefix => `left(lower(${alias}.folder), ${prefix.length}) <> '${prefix}'`).join(" and ");
 
 function mediaAssetSelect(alias = "ma", includeShareStatus = true) {
   return `
@@ -216,8 +221,8 @@ export async function saveWorkspaceFile(input: {
   name?: string;
   workspaceId: string;
 }) {
-  if (input.folder?.trim().toLowerCase().startsWith(knowledgeMediaFolderPrefix)) {
-    throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "Knowledge documents require the Knowledge Center upload.");
+  if (isKnowledgePrivateMedia({ folder: input.folder?.trim() ?? "" })) {
+    throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "Protected documents require their dedicated private upload.");
   }
   return saveMediaFile(input);
 }
@@ -279,8 +284,9 @@ async function saveMediaFile(input: {
   const knowledgeText = knowledgeUpload && Boolean(knowledgeTextExtensions.get(input.file.type.toLowerCase())?.has(path.extname(input.file.name).toLowerCase()));
 
   if (!isAllowedMediaFile(input.file) && !knowledgeText) {
-    throw new MediaStoreError("UNSUPPORTED_FILE_TYPE", "Only images, PDF, DOC and DOCX files are supported.");
+    throw new MediaStoreError("UNSUPPORTED_FILE_TYPE", "Only images, PDF, DOC, DOCX, MP4 and WebM files are supported.");
   }
+  if (knowledgeUpload && input.file.type.toLowerCase().startsWith("video/")) throw new MediaStoreError("UNSUPPORTED_FILE_TYPE", "Knowledge document uploads do not accept video files.");
 
   if (sizeBytes > maxMediaUploadBytes) {
     throw new MediaStoreError("FILE_TOO_LARGE", "Files must be 10 MB or smaller.");
@@ -404,7 +410,7 @@ export async function authorizedKnowledgeMediaAsset(assetId: string, workspaceId
   if (currentTenantTransaction()?.scope.workspaceId !== workspaceId || !hasDatabaseUrl() ||
       !validMediaScopeId(assetId)) return null;
   const row = await queryOne<MediaAssetRow>(`select ${mediaAssetSelect()} from media_assets ma
-    where ma.id=$1 and ma.workspace_id=$2 and not (${ordinaryMediaSql()})
+    where ma.id=$1 and ma.workspace_id=$2 and left(lower(ma.folder),${knowledgeMediaFolderPrefix.length})='${knowledgeMediaFolderPrefix}'
       and ma.storage_access='private' and not ma.is_public and ma.public_token is null
       and not exists(select 1 from media_asset_shares s where s.asset_id=ma.id and s.workspace_id=ma.workspace_id)
     limit 1`, [assetId,workspaceId]);
@@ -412,6 +418,68 @@ export async function authorizedKnowledgeMediaAsset(assetId: string, workspaceId
   const asset = normalizeMediaAsset(row);
   authorizedKnowledgeReads.add(asset);
   return asset;
+}
+
+/** Fixed private storage scope; callers cannot choose a folder or mint a public share. */
+export async function saveLeadProofFile(input: { actorId: string; workspaceId: string; leadId: string; file: File }) {
+  const active = currentTenantTransaction();
+  if (!active || active.scope.actorId !== input.actorId || active.scope.workspaceId !== input.workspaceId || !validMediaScopeId(input.leadId)) throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "An authorized lead proof upload is required.");
+  const allowed = await active.transaction.queryOne<{ allowed: boolean }>(`select crm_lead_qualification_access($1::uuid,l.project_id,l.id,true) as allowed from leads l where l.workspace_id=$1::uuid and l.id=$2::uuid`, [input.workspaceId, input.leadId]);
+  if (!allowed?.allowed) throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "Lead proof upload is not allowed.");
+  if (!["application/pdf", "image/jpeg", "image/png"].includes(input.file.type.toLowerCase()) || input.file.size < 1) throw new MediaStoreError("UNSUPPORTED_FILE_TYPE", "Use a nonempty PDF, JPG or PNG file.");
+  if (input.file.size > 4 * 1024 * 1024) throw new MediaStoreError("FILE_TOO_LARGE", "Private proof uploads must be 4 MB or smaller.");
+  await active.transaction.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`lead-proof-upload:${input.workspaceId}:${input.leadId}`]);
+  const asset = await saveMediaFile({ file: input.file, workspaceId: input.workspaceId, folder: `${leadProofMediaFolderPrefix}${input.leadId}` });
+  leadProofUploadRollbacks.set(asset, { asset: Object.freeze({ ...asset }), actorId: input.actorId, leadId: input.leadId, transaction: active.transaction });
+  return asset;
+}
+export async function authorizedLeadProofMediaAsset(assetId: string, workspaceId: string, leadId: string) {
+  const active = currentTenantTransaction();
+  if (!active || active.scope.workspaceId !== workspaceId || !validMediaScopeId(assetId) || !validMediaScopeId(leadId)) return null;
+  const row = await queryOne<MediaAssetRow>(`select ${mediaAssetSelect()} from media_assets ma where ma.id=$1::uuid and ma.workspace_id=$2 and ma.folder=$3 and ma.storage_access='private' and not ma.is_public and ma.public_token is null and not exists(select 1 from media_asset_shares s where s.asset_id=ma.id and s.workspace_id=ma.workspace_id) and exists(select 1 from lead_qualification_proofs p where p.workspace_id=$2::uuid and p.lead_id=$4::uuid and p.media_asset_id=ma.id and p.status<>'revoked' and p.usable_until>clock_timestamp() and crm_lead_qualification_access(p.workspace_id,p.project_id,p.lead_id,false)) limit 1`, [assetId,workspaceId,`${leadProofMediaFolderPrefix}${leadId}`,leadId]);
+  if (!row) return null;
+  const asset = normalizeMediaAsset(row); authorizedKnowledgeReads.add(asset); return asset;
+}
+/** Only a captured upload can be compensated, after its transaction has settled. */
+export async function discardUncommittedLeadProofFile(asset: MediaAsset) {
+  const upload = leadProofUploadRollbacks.get(asset), active = currentTenantTransaction();
+  if (!upload || !active || active.transaction === upload.transaction || active.scope.actorId !== upload.actorId || active.scope.workspaceId !== upload.asset.workspaceId) return false;
+  await active.transaction.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`lead-proof-upload:${upload.asset.workspaceId}:${upload.leadId}`]);
+  const exists = await active.transaction.queryOne<{ present: boolean }>(`select exists(select 1 from media_assets where id=$1::uuid and workspace_id=$2) as present`, [upload.asset.id,upload.asset.workspaceId]);
+  if (exists?.present !== false) { leadProofUploadRollbacks.delete(asset); return false; }
+  await deleteStoredFile(upload.asset); leadProofUploadRollbacks.delete(asset); return true;
+}
+
+/** Files uploaded from a property editor stay private and remain bound to that property. */
+export async function savePropertyMarketingFile(input: { actorId: string; workspaceId: string; propertyId: string; file: File }) {
+  const active = currentTenantTransaction();
+  if (!active || active.scope.actorId !== input.actorId || active.scope.workspaceId !== input.workspaceId || !validMediaScopeId(input.propertyId)) throw new MediaStoreError("INVALID_STORAGE_REFERENCE", "A scoped property upload is required.");
+  const property = await active.transaction.queryOne(`select id from seller_listings where id=$1::uuid and workspace_id=$2::uuid and crm_project_access(workspace_id,project_id,true)`, [input.propertyId, input.workspaceId]);
+  if (!property) throw new MediaStoreError("INVALID_STORAGE_REFERENCE", "Property upload is not allowed.");
+  if (input.file.size < 1 || input.file.size > 4 * 1024 * 1024) throw new MediaStoreError("FILE_TOO_LARGE", "Direct property uploads must be nonempty and 4 MB or smaller.");
+  await active.transaction.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`property-marketing-upload:${input.workspaceId}:${input.propertyId}`]);
+  const asset = await saveMediaFile({ file: input.file, workspaceId: input.workspaceId, folder: `properties/${input.propertyId}` });
+  marketingUploadRollbacks.set(asset, { asset: Object.freeze({ ...asset }), actorId: input.actorId, propertyId: input.propertyId, transaction: active.transaction });
+  return asset;
+}
+/** A separate, new upload is required for company artwork; existing document IDs cannot be imported. */
+export async function saveCompanyBrandFile(input: { actorId: string; workspaceId: string; file: File }) {
+  const active=currentTenantTransaction();
+  if(!active||active.scope.actorId!==input.actorId||active.scope.workspaceId!==input.workspaceId||!(await active.transaction.queryOne<{allowed:boolean}>('select crm_expose_template_access($1::uuid,true) as allowed',[input.workspaceId]))?.allowed)throw new MediaStoreError('INVALID_STORAGE_REFERENCE','Authorized company artwork upload required.');
+  if(input.file.size<1||input.file.size>4*1024*1024||!['image/png','image/jpeg','image/webp'].includes(input.file.type))throw new MediaStoreError('UNSUPPORTED_FILE_TYPE','Company artwork requires PNG, JPEG or WebP up to 4 MB.');
+  await active.transaction.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`property-marketing-upload:${input.workspaceId}:company-brand-assets`]);
+  const asset=await saveMediaFile({file:input.file,workspaceId:input.workspaceId,folder:'company-brand-assets'});
+  marketingUploadRollbacks.set(asset,{asset:Object.freeze({...asset}),actorId:input.actorId,propertyId:'company-brand-assets',transaction:active.transaction});
+  return asset;
+}
+export async function discardUncommittedCompanyBrandFile(asset:MediaAsset){return discardUncommittedPropertyMarketingFile(asset);}
+export async function discardUncommittedPropertyMarketingFile(asset: MediaAsset) {
+  const upload = marketingUploadRollbacks.get(asset), active = currentTenantTransaction();
+  if (!upload || !active || active.transaction === upload.transaction || active.scope.actorId !== upload.actorId || active.scope.workspaceId !== upload.asset.workspaceId) return false;
+  await active.transaction.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`property-marketing-upload:${upload.asset.workspaceId}:${upload.propertyId}`]);
+  const exists = await active.transaction.queryOne<{ present: boolean }>(`select exists(select 1 from media_assets where id=$1::uuid and workspace_id=$2) as present`, [upload.asset.id, upload.asset.workspaceId]);
+  if (exists?.present !== false) { marketingUploadRollbacks.delete(asset); return false; }
+  await deleteStoredFile(upload.asset); marketingUploadRollbacks.delete(asset); return true;
 }
 
 export async function publishWorkspaceMedia(
@@ -713,7 +781,7 @@ export function serializeMediaAsset(asset: MediaAsset): MediaAssetClient {
   };
 }
 
-export function mediaAssetPath(asset: MediaAsset) {
+export function mediaAssetPath(asset: Pick<MediaAsset, "workspaceId" | "relativePath">) {
   const pathname = storagePathname(asset);
   const resolvedPath = path.resolve(uploadRoot, ...pathname.split("/"));
   const resolvedRoot = `${path.resolve(uploadRoot)}${path.sep}`;

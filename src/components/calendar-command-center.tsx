@@ -312,6 +312,7 @@ type LiveCalendarResponse = {
 };
 
 const statusStyles = {
+  abgesagt: "border-stone-200 bg-stone-50 text-stone-500",
   geplant: "border-blue-200 bg-blue-50 text-blue-900",
   vorbereiten: "border-amber-200 bg-amber-50 text-amber-900",
   bestätigt: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -714,6 +715,7 @@ export function CalendarCommandCenter({
   workspacePublicKey,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
+  const calendarStatusLabels={...text.statusLabels,abgesagt:language==="en"?"Cancelled":"Abgesagt"};
   const isHomeWorkspace = workspaceId === sessionWorkspaceId;
   const connectionReadOnlyMessage = language === "de"
     ? "Kalenderverbindungen sind hier schreibgeschützt. Änderungen sind nur im Anmelde-Workspace möglich."
@@ -1111,19 +1113,19 @@ export function CalendarCommandCenter({
     [contacts, effectiveEvents, leads, projects, sessionUserId, sessionUserName, users],
   );
 
-  const todayEvents = decoratedEvents.filter((item) => isSameDay(item.event.startsAt, today));
+  const todayEvents = decoratedEvents.filter((item) => item.event.status!=="abgesagt"&&isSameDay(item.event.startsAt, today));
   const prepareEvents = decoratedEvents.filter((item) => item.event.status === "vorbereiten");
-  const teamsEvents = decoratedEvents.filter((item) => isOnlineMeeting(item.event));
+  const teamsEvents = decoratedEvents.filter((item) => item.event.status!=="abgesagt"&&isOnlineMeeting(item.event));
   const followUpEvents = decoratedEvents.filter((item) => item.event.status === "nachfassen");
   const filteredEvents = decoratedEvents.filter((item) => {
     const normalizedQuery = searchTerm.trim().toLowerCase();
-    const matchesView =
+    const matchesView = item.event.status!=="abgesagt"&&(
       (activeView === "today" && isSameDay(item.event.startsAt, today)) ||
       (activeView === "upcoming" && new Date(item.event.startsAt).getTime() >= today.getTime()) ||
       (activeView === "prepare" && item.event.status === "vorbereiten") ||
       (activeView === "teams" && isOnlineMeeting(item.event)) ||
       (activeView === "followUp" && item.event.status === "nachfassen") ||
-      activeView === "bookings";
+      activeView === "bookings");
     const searchable = [
       item.event.title,
       item.event.location,
@@ -1142,9 +1144,9 @@ export function CalendarCommandCenter({
     return matchesView && (!normalizedQuery || searchable.includes(normalizedQuery));
   });
   const selectedEvent =
-    decoratedEvents.find((item) => item.event.id === selectedEventId) ??
+    filteredEvents.find((item) => item.event.id === selectedEventId) ??
     filteredEvents[0] ??
-    decoratedEvents[0];
+    decoratedEvents.find(item=>item.event.status!=='abgesagt');
   const selectedTasks = selectedEvent?.event.contactId
     ? tasks.filter(
         (task) => task.contactId === selectedEvent.event.contactId && task.status === "open",
@@ -2574,7 +2576,7 @@ export function CalendarCommandCenter({
                 >
                   {(["geplant", "vorbereiten", "bestätigt", "nachfassen"] as CalendarEvent["status"][]).map((status) => (
                     <option key={status} value={status}>
-                      {text.statusLabels[status]}
+                      {calendarStatusLabels[status]}
                     </option>
                   ))}
                 </select>
@@ -3591,7 +3593,7 @@ export function CalendarCommandCenter({
                             : statusStyles[item.event.status]
                         }`}
                       >
-                        {text.statusLabels[item.event.status]}
+                        {calendarStatusLabels[item.event.status]}
                       </span>
                     </span>
                     <span className="flex flex-wrap gap-2 text-xs">
@@ -3649,7 +3651,7 @@ export function CalendarCommandCenter({
               [text.location, selectedEvent?.event.location],
               [text.calendarLabel, getCalendarProviderLabel(selectedEventProvider, text)],
               [text.meetingLabel, getMeetingStatusLabel(selectedEvent?.event, text)],
-              [text.status, selectedEvent ? text.statusLabels[selectedEvent.event.status] : undefined],
+              [text.status, selectedEvent ? calendarStatusLabels[selectedEvent.event.status] : undefined],
               [text.owner, selectedEvent?.owner?.name],
               [text.contact, selectedEvent?.contact?.name ?? text.noContact],
               [text.leadContext, selectedEvent?.lead?.intent ?? text.noLead],

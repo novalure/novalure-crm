@@ -18,7 +18,7 @@ import {
   getUnitBoardCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import { isUnitInPropertyBoardScope, type PropertyUnitBoardScope, type PropertyUnitObjectScope } from "@/lib/property-department";
 import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
@@ -341,7 +341,7 @@ export function UnitBoard({
 
           return { building, buyer, buyerMatches, deal, project, reservation, unit };
         })
-        .filter(({ unit }) => focusedUnitIds.size === 0 || focusedUnitIds.has(unit.id))
+        .filter(({ unit }) => isUnitInPropertyBoardScope(unit, focusScope, focusedUnitIds))
         .filter(({ unit }) => projectFilter === "all" || unit.projectId === projectFilter)
         .filter(({ unit }) => buildingFilter === "all" || unit.buildingId === buildingFilter)
         .filter(({ unit }) => statusFilter === "all" || unit.status === statusFilter)
@@ -361,6 +361,7 @@ export function UnitBoard({
       contacts,
       deals,
       focusedUnitIds,
+      focusScope,
       leads,
       maxPriceCents,
       minPriceCents,
@@ -744,6 +745,7 @@ export function UnitBoard({
                 <button
                   className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
                   onClick={() => onOpenProperty({
+                    originAssetId: focusScope.originAssetId,
                     projectId: focusScope.projectId,
                     unitId: focusScope.unitIds?.[0],
                   })}

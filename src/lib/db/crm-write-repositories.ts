@@ -28,6 +28,7 @@ import {
 } from "@/lib/contact-access";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { syncBrokerEntityForLead } from "@/lib/db/broker-entity-repositories";
+import { recordSourceAutomationEvent } from "@/lib/automation/source-events";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -1259,10 +1260,13 @@ async function upsertTaskRecordInTransaction(input: {
 
   const existingMetadata = asObject(existing?.metadata);
   const inputMetadata = asObject(input.task.metadata);
+  const actionType = input.task.actionType ?? inputMetadata.actionType ?? existingMetadata.actionType ?? "task";
+  if (!["task", "callback", "follow_up"].includes(String(actionType))) return { persisted: false, reason: "Invalid task actionType" };
   const description = cleanString(input.task.description) || cleanString(inputMetadata.description);
   const taskMetadata = {
     ...existingMetadata,
     ...inputMetadata,
+    actionType,
     ...(description ? { description } : {}),
     updatedFrom: "crm_tasks",
     updatedByUserId: input.session.userId,
@@ -2268,6 +2272,9 @@ async function upsertLeadRecordInTransaction(input: {
 
   if (!idempotentReplay) {
     await syncBrokerEntityForLead({ lead: savedLead, session: input.session });
+    if(leadWasInserted)await recordSourceAutomationEvent(input.session,{projectId:row.projectId,leadId:row.id,eventId:`lead-created:${row.id}`,trigger:"new_lead"});
+    if(existing&&existing.status!==row.status)await recordSourceAutomationEvent(input.session,{projectId:row.projectId,leadId:row.id,eventId:`lead-phase:${row.id}:${savedLead.version}`,trigger:"lead_phase_changed"});
+    if(existing&&manualFirstResponseAt&&manualFirstResponseAt!==toNullableIso(existing.lastContactAt))await recordSourceAutomationEvent(input.session,{projectId:row.projectId,leadId:row.id,eventId:`lead-personal-contact:${row.id}:${manualFirstResponseAt}`,trigger:"personal_contact",occurredAt:manualFirstResponseAt});
   }
 
   return { data: savedLead, persisted: true };
@@ -4087,6 +4094,8 @@ function toTask(row: TaskRow): Task {
   const metadata = asObject(row.metadata);
 
   return {
+    origin: typeof metadata.automationId === "string" ? "automation" : "crm",
+    actionType: metadata.actionType === "callback" || metadata.actionType === "follow_up" ? metadata.actionType : "task",
     version: Number(row.version),
     contactId: row.contactId ?? undefined,
     description: typeof metadata.description === "string" ? metadata.description : undefined,
@@ -4130,7 +4139,7 @@ function normalizeCalendarEventLocation(value: unknown): CalendarEvent["location
 }
 
 function normalizeCalendarEventStatus(value: unknown): CalendarEvent["status"] {
-  if (value === "geplant" || value === "vorbereiten" || value === "bestätigt" || value === "nachfassen") {
+  if (value === "geplant" || value === "vorbereiten" || value === "bestätigt" || value === "nachfassen" || value === "abgesagt") {
     return value;
   }
   return "geplant";

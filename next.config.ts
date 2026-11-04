@@ -69,6 +69,11 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["pg", "pdfkit", "pdf-lib", "pdfjs-dist", "yauzl", "saxes"],
   outputFileTracingIncludes: {
+    "/api/public/exposes/*/pdf": [
+      "./src/lib/property-expose-pdf-worker.cjs",
+      "./src/lib/property-expose-assets/**/*",
+      "./node_modules/pdf-lib/**/*",
+    ],
     "/api/knowledge-center/documents": [
       "./src/lib/knowledge-center/document-extraction-worker.cjs",
       "./node_modules/pdfjs-dist/**/*",
@@ -107,12 +112,52 @@ const nextConfig: NextConfig = {
         source: "/",
       },
       {
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+        source: "/expose/:path*",
+      },
+      {
         headers: [...protectedPageHeaders],
         source: "/login/:path*",
       },
       {
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+        source: "/request/:path*",
+      },
+      {
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+        source: "/api/public/lead-requests/:path*",
+      },
+      {
         headers: [...visualQaContentHeaders],
         source: "/visual-qa/crm/content",
+      },
+      {
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+        source: "/book/:path*",
+      },
+      {
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+        source: "/m/:path*",
       },
     ];
   },

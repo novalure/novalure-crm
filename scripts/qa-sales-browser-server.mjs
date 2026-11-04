@@ -16,6 +16,8 @@ let stopRequested = false;
 let cleanup;
 const serveBuiltApplication = process.argv.includes("--built");
 const designCIntegration = process.argv.includes("--design-c");
+const livelistedIntegration = process.argv.includes("--livelisted");
+const propertyAssignmentRegression = process.argv.includes("--property-assignment-regression");
 
 async function waitForExit(completion, durationMs) {
   let timer;
@@ -79,9 +81,20 @@ try {
     ? await (await import("./lib/design-c-integration-fixture.mjs")).startDesignCIntegrationDatabase({ accountLanguagePreference: true, bookingSetup: true })
     : await startLocalSalesDb();
   checkStop();
-  if (!designCIntegration) await applySalesSchema(db);
+  if (!designCIntegration) await applySalesSchema(db, livelistedIntegration ? { maxMigrationNumber: 106 } : {});
+  if (livelistedIntegration) {
+    const { readFile } = await import("node:fs/promises");
+    await (await import("./lib/marketing-form-fixture.mjs")).applyMarketingFormFixture(db);
+    for (const name of ["096_public_integration_gateway.sql", "146_ai_credit_billing.sql", "152_ai_billing_admin.sql", "153_ai_billing_runtime_acl.sql", "154_automation_graph.sql", "155_web_expose.sql", "156_property_portal_exports.sql", "157_newsletter_workspace.sql", "158_web_expose_retention.sql", "159_lead_qualification.sql", "160_project_sales_report_settings.sql", "161_crm_notification_preferences.sql", "162_lead_customer_requests.sql", "163_web_expose_resources.sql", "164_crm_onboarding_examples.sql", "165_automation_mail.sql", "166_web_expose_live_inventory.sql", "167_crm_partner_cooperation.sql", "168_crm_integrations.sql", "169_property_meeting_context.sql", "170_crm_personal_mailbox.sql", "171_property_inquiry_assignments.sql", "172_property_portal_release_checks.sql", "173_property_creation_drafts.sql", "174_lead_qualification_plan.sql", "175_web_expose_templates.sql", "176_newsletter_schedules.sql", "177_crm_notification_email.sql", "178_personal_mailbox_triage.sql", "179_lead_proof_retention.sql", "180_marketing_data.sql", "181_funnel_live_templates.sql", "182_personal_mailbox_sync.sql", "183_marketing_contact_policy.sql", "184_web_expose_brand_layout.sql"]) await db.admin.query(await readFile(path.join("migrations", name), "utf8"));
+  }
   checkStop();
   const fixture = await seedSalesBrowser(db);
+  const localEncryptionKey = randomBytes(40).toString("hex");
+  if (livelistedIntegration) {
+    Object.assign(fixture, await (await import("./lib/livelisted-browser-fixture.mjs")).seedLivelistedBrowser(db, fixture, localEncryptionKey));
+    Object.assign(fixture, await (await import("./lib/livelisted-browser-mfa-fixture.mjs")).seedSyntheticLivelistedMfa(db, fixture, localEncryptionKey));
+    if (propertyAssignmentRegression) Object.assign(fixture, await (await import("./lib/property-assignment-browser-fixture.mjs")).seedPropertyAssignmentRegression(db, fixture));
+  }
   checkStop();
   const port = await new Promise((resolve, reject) => {
     const listener = net.createServer();
@@ -92,6 +105,8 @@ try {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(path|home|systemroot|windir|temp|tmp|tmpdir|userprofile|localappdata|appdata|programfiles|programfiles\(x86\)|comspec|pathext|number_of_processors|lang|lc_all)$/i.test(key)));
   Object.assign(env, { NODE_ENV: "development", NEXT_TELEMETRY_DISABLED: "1", CRM_LOCAL_TEST_DATABASE: "1", DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/${db.database || "postgres"}`, NOVALURE_APP_ORIGIN: baseUrl, NEXT_PUBLIC_APP_URL: baseUrl });
   for (const name of ["NOVALURE_SESSION_SECRET", "NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AUTH_RATE_LIMIT_SECRET", "OAUTH_STATE_SECRET", "NOVALURE_ABUSE_SECRET"]) env[name] = randomBytes(40).toString("hex");
+  if (livelistedIntegration) env.NOVALURE_AUTH_ENCRYPTION_KEY = localEncryptionKey;
+  if (livelistedIntegration) env.NOVALURE_TRUSTED_CLIENT_IP_HEADER = "x-forwarded-for";
   log = createWriteStream(".npm-cache/qa/sales-browser-server.log");
   // Keep the existing loopback-only development database transport and normal
   // login/MFA policy, while optionally checking optimized assets without HMR.

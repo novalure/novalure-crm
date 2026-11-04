@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { PublicCrmLanding } from "@/components/public-crm-landing";
 import { CrmWorkspace } from "@/components/crm-workspace";
 import { getCrmRequestLanguage } from "@/lib/auth/request-language";
+import { PartnerPortal } from "@/components/partner-portal";
 import { getCoreCrmData } from "@/lib/db/crm-loaders";
 import {
   getCrmLandingPageCopy,
@@ -119,6 +120,7 @@ export default async function Home({ searchParams }: HomeProps) {
     );
   }
 
+  if(session.productRole==="external_partner")return <PartnerPortal workspaceId={session.workspaceId} workspaceName={session.workspaceName} userName={session.name} language={appLanguage}/>;
   const coreData = await getCoreCrmData(session.workspaceId, { session });
 
   return (

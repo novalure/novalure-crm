@@ -5,13 +5,15 @@ import type { Contact, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-type
 import {
   getCrmSourceLabel,
   getCrmSystemTextLabel,
-  getCrmTaskDueLabel,
   getCrmTaskPriorityLabel,
   getCrmTaskStatusLabel,
   getTaskCommandCenterCopy,
   type LanguageCode,
 } from "@/lib/i18n";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
+import { compareTaskDue, defaultTaskDueInput, formatTaskDue, mergeConfirmedTasks, taskDueState, taskLocalDateTimeToInstant } from "@/lib/task-due";
+import { useTaskClock } from "@/lib/use-task-clock";
+import { useCrmTeam } from "@/lib/use-crm-team";
 
 type TaskCommandCenterProps = {
   activeProjectId: string | null;
@@ -25,11 +27,14 @@ type TaskCommandCenterProps = {
   sessionUserName: string;
   tasks: Task[];
   users: WorkspaceUser[];
+  workspaceId?: string;
+  timeZone?: string;
 };
 
 type TaskView = "focus" | "today" | "overdue" | "high" | "unlinked" | "followUp" | "all";
 
 type NewTaskDraft = {
+  actionType: NonNullable<Task["actionType"]>;
   contactId: string;
   description: string;
   due: string;
@@ -71,7 +76,7 @@ function resolveOwnerDisplay(
   const owner = users.find((user) => user.id === ownerUserId);
   if (owner) return owner;
   if (ownerUserId === sessionUserId) {
-    const fallbackUser = users[0];
+    const fallbackUser = users.find(user => user.id === sessionUserId);
     return {
       email: fallbackUser?.email ?? "",
       id: sessionUserId,
@@ -88,80 +93,17 @@ function getTaskWriteErrorMessage(reason: string | undefined, text: TaskCommandC
   return reason ?? text.taskCreateFailed;
 }
 
-function parseTaskDueDate(due: string, now = new Date()) {
-  const normalized = due.trim().toLowerCase();
-  const timeMatch = normalized.match(/(\d{1,2}):(\d{2})/);
-  const hours = timeMatch ? Number(timeMatch[1]) : 23;
-  const minutes = timeMatch ? Number(timeMatch[2]) : 59;
-
-  if (normalized.includes("heute") || normalized.includes("today")) {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
-  }
-
-  if (normalized.includes("morgen") || normalized.includes("tomorrow")) {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hours, minutes, 0, 0);
-  }
-
-  if (normalized.includes("woche") || normalized.includes("week")) {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 0, 0);
-  }
-
-  const parsed = new Date(due);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function getDueRank(due: string) {
-  const parsed = parseTaskDueDate(due);
-  return parsed ? Math.round(parsed.getTime() / 60000) : Number.MAX_SAFE_INTEGER;
-}
-
-function isDueToday(due: string) {
-  const parsed = parseTaskDueDate(due);
-  if (!parsed) return false;
-  const today = new Date();
-
-  return (
-    parsed.getFullYear() === today.getFullYear() &&
-    parsed.getMonth() === today.getMonth() &&
-    parsed.getDate() === today.getDate()
-  );
-}
-
-function isOverdue(due: string) {
-  const parsed = parseTaskDueDate(due);
-  return parsed ? parsed.getTime() < new Date().getTime() : false;
-}
-
-function getPriorityRank(priority: Task["priority"]) {
-  if (priority === "Hoch") {
-    return 0;
-  }
-
-  if (priority === "Mittel") {
-    return 1;
-  }
-
-  return 2;
-}
-
-function toDateTimeLocalInput(date: Date) {
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
 function createDefaultTaskDraft(
   projects: Project[],
   sessionUserId: string,
   activeProjectId: string | null,
+  timeZone = "Europe/Vienna",
 ): NewTaskDraft {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(9, 0, 0, 0);
-
   return {
+    actionType: "task",
     contactId: "",
     description: "",
-    due: toDateTimeLocalInput(tomorrow),
+    due: defaultTaskDueInput(new Date(), timeZone),
     leadId: "",
     ownerUserId: sessionUserId,
     priority: "Normal",
@@ -185,9 +127,11 @@ export function TaskCommandCenter({
   sessionUserName,
   tasks,
   users,
+  workspaceId,
+  timeZone = "Europe/Vienna",
 }: TaskCommandCenterProps) {
   const text = getTaskCommandCenterCopy(language);
-  const selfOwnerName = sessionUserName || users[0]?.name || sessionUserId;
+  const selfOwnerName = sessionUserName || users.find(user => user.id === sessionUserId)?.name || sessionUserId;
   const [activeView, setActiveView] = useState<TaskView>("focus");
   const [searchTerm, setSearchTerm] = useState("");
   const [taskOverlays, setTaskOverlays] = useState<Task[]>([]);
@@ -197,13 +141,22 @@ export function TaskCommandCenter({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [taskSaving, setTaskSaving] = useState(false);
   const [taskDraft, setTaskDraft] = useState<NewTaskDraft>(() =>
-    createDefaultTaskDraft(projects, sessionUserId, activeProjectId),
+    createDefaultTaskDraft(projects, sessionUserId, activeProjectId, timeZone),
   );
   const [notice, setNotice] = useState("");
+  const clock = useTaskClock();
+  const referenceNow = useMemo(() => new Date(clock), [clock]);
+  const scopedWorkspaceId = workspaceId ?? projects[0]?.workspaceId ?? tasks[0]?.workspaceId ?? "";
+  const team = useCrmTeam(scopedWorkspaceId, taskDraft.projectId || activeProjectId);
+  const taskEndpoint = `/api/crm/tasks?workspaceId=${encodeURIComponent(scopedWorkspaceId)}`;
   const effectiveTasks = useMemo(() => {
-    const overlayIds = new Set(taskOverlays.map((task) => task.id));
-    return [...taskOverlays, ...tasks.filter((task) => !overlayIds.has(task.id))];
-  }, [taskOverlays, tasks]);
+    return mergeConfirmedTasks(tasks,taskOverlays).filter(task => task.workspaceId === scopedWorkspaceId && (!activeProjectId || task.projectId === activeProjectId));
+  }, [taskOverlays, tasks, scopedWorkspaceId, activeProjectId]);
+  async function refreshConfirmedTask(taskId: string) {
+    if(!onTasksChanged)return;
+    try{await onTasksChanged();setTaskOverlays(current=>current.filter(task=>task.id!==taskId));}
+    catch{setNotice(language==="de"?"Aufgabe gespeichert. Die Übersicht konnte nicht aktualisiert werden; bitte neu laden.":"Task saved. The list could not be refreshed; please reload.");}
+  }
 
   const decoratedTasks = useMemo(
     () =>
@@ -222,18 +175,15 @@ export function TaskCommandCenter({
           leadIntentLabel: lead ? getCrmSystemTextLabel(lead.intent, language) : undefined,
           project,
           isCompleted,
-          rank:
-            getDueRank(task.due) * 10 +
-            getPriorityRank(task.priority) * 100 +
-            (lead ? Math.max(0, 100 - lead.score) : 30),
+          dueState: taskDueState(task.due, referenceNow, timeZone),
         };
       }),
-    [contacts, effectiveTasks, language, leads, projects],
+    [contacts, effectiveTasks, language, leads, projects, referenceNow, timeZone],
   );
 
   const openTasks = decoratedTasks.filter((item) => !item.isCompleted);
-  const dueTodayTasks = openTasks.filter((item) => isDueToday(item.task.due));
-  const overdueTasks = openTasks.filter((item) => isOverdue(item.task.due));
+  const dueTodayTasks = openTasks.filter((item) => item.dueState.group === "today");
+  const overdueTasks = openTasks.filter((item) => item.dueState.overdue);
   const highPriorityTasks = openTasks.filter((item) => item.task.priority === "Hoch");
   const followUpTasks = openTasks.filter((item) => Boolean(item.lead || item.contact));
   const unlinkedTasks = openTasks.filter((item) => !item.contact || !item.project);
@@ -243,8 +193,8 @@ export function TaskCommandCenter({
       const matchesView =
         activeView === "all" ||
         (activeView === "focus" && !item.isCompleted) ||
-        (activeView === "today" && !item.isCompleted && isDueToday(item.task.due)) ||
-        (activeView === "overdue" && !item.isCompleted && isOverdue(item.task.due)) ||
+        (activeView === "today" && !item.isCompleted && item.dueState.group === "today") ||
+        (activeView === "overdue" && !item.isCompleted && item.dueState.overdue) ||
         (activeView === "high" && !item.isCompleted && item.task.priority === "Hoch") ||
         (activeView === "unlinked" && !item.isCompleted && (!item.contact || !item.project)) ||
         (activeView === "followUp" && Boolean(item.lead || item.contact));
@@ -265,14 +215,14 @@ export function TaskCommandCenter({
 
       return matchesView && (!normalizedQuery || searchable.includes(normalizedQuery));
     })
-    .sort((a, b) => a.rank - b.rank);
+    .sort((a, b) => compareTaskDue(a.task, b.task, referenceNow, timeZone));
   const selectedTask = decoratedTasks.find((item) => item.task.id === selectedTaskId) ??
     filteredTasks[0] ??
     decoratedTasks[0];
   const selectedOwner = resolveOwnerDisplay(selectedTask?.task.ownerUserId, users, sessionUserId, sessionUserName);
   const assignableUsers = useMemo(
-    () => users.filter((user) => isUuid(user.id) && user.id !== sessionUserId),
-    [sessionUserId, users],
+    () => team.users.filter((user) => isUuid(user.id) && user.id !== sessionUserId),
+    [sessionUserId, team.users],
   );
   const draftProjects = activeProjectId
     ? projects.filter((project) => project.id === activeProjectId)
@@ -300,16 +250,26 @@ export function TaskCommandCenter({
       setNotice(language === "de" ? "Projekt ist erforderlich." : "Project is required.");
       return;
     }
+    if (!team.users.some(user => user.id === taskDraft.ownerUserId)) {
+      setNotice(text.ownerInvalid);
+      return;
+    }
+    const dueAt = taskDraft.due ? taskLocalDateTimeToInstant(taskDraft.due, timeZone) : null;
+    if (taskDraft.due && !dueAt) {
+      setNotice(language === "de" ? `Fälligkeit ist in ${timeZone} ungültig. Bitte Datum und Uhrzeit prüfen.` : `The due date is invalid in ${timeZone}. Please check the date and time.`);
+      return;
+    }
 
     setTaskSaving(true);
     setNotice("");
     try {
-      const response = await csrfFetch("/api/crm/tasks", {
+      const response = await csrfFetch(taskEndpoint, {
         body: JSON.stringify({
           task: {
+            actionType: taskDraft.actionType,
             contactId: taskDraft.contactId || undefined,
             description: taskDraft.description.trim() || undefined,
-            due: taskDraft.due ? new Date(taskDraft.due).toISOString() : "",
+            due: dueAt?.toISOString() ?? "",
             leadId: taskDraft.leadId || undefined,
             ownerUserId: taskDraft.ownerUserId || undefined,
             priority: taskDraft.priority,
@@ -329,10 +289,10 @@ export function TaskCommandCenter({
 
       setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
       setSelectedTaskId(payload.task.id);
-      setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
+      setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId, timeZone));
       setIsCreateOpen(false);
       setNotice(text.taskCreated);
-      void onTasksChanged?.();
+      await refreshConfirmedTask(payload.task.id);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : text.taskCreateFailed);
     } finally {
@@ -345,7 +305,7 @@ export function TaskCommandCenter({
     if (!currentTask || savingTaskIds.includes(taskId)) return;
     const nextStatus = currentTask.isCompleted ? "open" : "done";
     setSavingTaskIds((current) => [...current, taskId]);
-    void csrfFetch("/api/crm/tasks", {
+    void csrfFetch(taskEndpoint, {
       body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus }, expectedVersion: currentTask.task.version }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -354,7 +314,7 @@ export function TaskCommandCenter({
         const payload = (await response.json().catch(() => ({}))) as { task?: Task; error?: string };
         if (!response.ok || !payload.task) throw new Error(payload.error || text.taskCreateFailed);
         setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
-        void onTasksChanged?.();
+        await refreshConfirmedTask(payload.task.id);
       })
       .catch((error: unknown) => setNotice(error instanceof Error ? error.message : text.taskCreateFailed))
       .finally(() => setSavingTaskIds((current) => current.filter((id) => id !== taskId)));
@@ -415,7 +375,7 @@ export function TaskCommandCenter({
               { label: text.dueToday, value: dueTodayTasks.length },
               { label: text.overdue, value: overdueTasks.length },
               { label: text.highPriority, value: highPriorityTasks.length },
-              { label: text.completedHere, value: taskOverlays.filter((task) => task.status === "done").length },
+              { label: language === "de" ? "Erledigt" : "Completed", value: effectiveTasks.filter(task => task.status === "done").length },
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 p-3" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>
@@ -429,7 +389,7 @@ export function TaskCommandCenter({
             className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
             onClick={() => {
               if (!isCreateOpen) {
-                setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
+                setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId, timeZone));
               }
               setIsCreateOpen((current) => !current);
             }}
@@ -439,12 +399,17 @@ export function TaskCommandCenter({
           </button>
         </div>
         {isCreateOpen ? (
-          <div className="mt-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <div id="task-create-form" className="mt-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold">{text.createTaskTitle}</h4>
               <p className="mt-1 break-words text-sm text-stone-600">{text.createTaskDescription}</p>
             </div>
             <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{language==="de"?"Art der Aufgabe":"Task type"}
+                <select className="mt-2 min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-900" value={taskDraft.actionType} onChange={event=>updateTaskDraft("actionType",event.target.value)}>
+                  <option value="task">{language==="de"?"Allgemeine Aufgabe":"General task"}</option><option value="callback">{language==="de"?"Rückruf":"Callback"}</option><option value="follow_up">{language==="de"?"Nachfassen":"Follow-up"}</option>
+                </select>
+              </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
                 {text.titleField}
                 <input
@@ -463,6 +428,7 @@ export function TaskCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.due}
+                <span className="ml-1 normal-case tracking-normal">({timeZone})</span>
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateTaskDraft("due", event.target.value)}
@@ -554,13 +520,14 @@ export function TaskCommandCenter({
                   value={taskDraft.ownerUserId}
                 >
                   <option value="">{text.noOwner}</option>
-                  <option value={sessionUserId}>{selfOwnerName}</option>
+                  {team.users.some(user => user.id === sessionUserId) ? <option value={sessionUserId}>{selfOwnerName}</option> : null}
                   {assignableUsers.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.name || user.email}
                     </option>
                   ))}
                 </select>
+                {team.failed ? <button type="button" className="mt-2 block text-xs normal-case tracking-normal underline" onClick={team.retry}>{language === "de" ? "Teamauswahl erneut laden" : "Reload team options"}</button> : null}
               </label>
             </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -568,6 +535,7 @@ export function TaskCommandCenter({
                 className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={
                   taskSaving ||
+                  team.loading || team.failed || !team.users.some(user => user.id === taskDraft.ownerUserId) ||
                   !draftProjects.some((project) => project.id === taskDraft.projectId)
                 }
                 onClick={() => void createTask()}
@@ -578,7 +546,7 @@ export function TaskCommandCenter({
               <button
                 className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
                 onClick={() => {
-                  setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
+                  setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId, timeZone));
                   setIsCreateOpen(false);
                 }}
                 type="button"
@@ -623,6 +591,7 @@ export function TaskCommandCenter({
               </button>
             ))}
           </div>
+          <p className="mt-2 text-xs text-stone-500">{language === "de" ? `Heute zeigt noch nicht überfällige Aufgaben. Überfällig umfasst auch frühere Uhrzeiten von heute. Zeitzone: ${timeZone}.` : `Today shows tasks that are not yet overdue. Overdue includes earlier times today. Timezone: ${timeZone}.`}</p>
 
           <div className="mt-5 grid gap-3">
             {filteredTasks.length > 0 ? (
@@ -672,7 +641,7 @@ export function TaskCommandCenter({
                           isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"
                         }`}
                       >
-                        {getCrmTaskDueLabel(item.task.due, language)}
+                        {formatTaskDue(item.task.due, language, timeZone, referenceNow)}
                       </span>
                       {item.lead ? (
                         <span
@@ -716,9 +685,10 @@ export function TaskCommandCenter({
               [text.linkedContact, selectedTask?.contact?.name ?? text.noContact],
               [text.linkedLead, selectedTask?.leadIntentLabel ?? text.noLead],
               [text.descriptionField, selectedTask?.task.description],
-              [text.source, selectedTask?.contact?.source ? getCrmSourceLabel(selectedTask.contact.source, language) : undefined],
+              [text.source, selectedTask ? selectedTask.task.origin === "automation" ? "Automation" : (language === "de" ? "CRM-Aufgabe" : "CRM task") : undefined],
+              [language === "de" ? "Kontaktquelle" : "Contact source", selectedTask?.contact?.source ? getCrmSourceLabel(selectedTask.contact.source, language) : undefined],
               [text.owner, selectedOwner ? selectedOwner.name || selectedOwner.email : text.noOwner],
-              [text.due, selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : undefined],
+              [text.due, selectedTask?.task.due ? formatTaskDue(selectedTask.task.due, language, timeZone, referenceNow) : undefined],
               [text.priority, selectedTask?.task.priority ? getCrmTaskPriorityLabel(selectedTask.task.priority, language) : undefined],
               [text.status, selectedTask ? getCrmTaskStatusLabel(selectedTask.isCompleted ? "done" : "open", language) : undefined],
             ].map(([label, value]) => (
@@ -733,7 +703,7 @@ export function TaskCommandCenter({
 
           <button
             className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
-            disabled={!selectedTask}
+            disabled={!selectedTask || savingTaskIds.includes(selectedTask.task.id)}
             onClick={() => {
               if (selectedTask) {
                 toggleTask(selectedTask.task.id);
@@ -743,6 +713,13 @@ export function TaskCommandCenter({
           >
             {selectedTask?.isCompleted ? text.reopen : text.markDone}
           </button>
+
+          {selectedTask?.isCompleted ? <button type="button" className="mt-2 min-h-11 w-full rounded-md border border-emerald-300 px-4 py-2.5 text-sm font-semibold text-emerald-800" onClick={() => {
+            const task = selectedTask.task;
+            setTaskDraft({ ...createDefaultTaskDraft(projects, sessionUserId, task.projectId, timeZone), title: `${language === "de" ? "Nachfassen" : "Follow-up"}: ${task.title}`.slice(0, 180), contactId: task.contactId ?? "", leadId: task.leadId ?? "", ownerUserId: task.ownerUserId ?? sessionUserId });
+            setIsCreateOpen(true);
+            requestAnimationFrame(() => document.getElementById("task-create-form")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+          }}>{language === "de" ? "Folgeaufgabe anlegen" : "Create a follow-up task"}</button> : null}
 
           <button
             className="mt-2 w-full rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -765,7 +742,7 @@ export function TaskCommandCenter({
             <p className="text-sm font-semibold">{text.taskReliability}</p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-md bg-white/10 px-2 py-1 font-semibold">
-                {selectedTask && isOverdue(selectedTask.task.due) ? text.overdue : text.due}
+                {selectedTask?.dueState.overdue ? text.overdue : text.due}
               </span>
               <span className="rounded-md bg-white/10 px-2 py-1 font-semibold">
                 {selectedTask?.contact ? text.linkedContact : text.noContact}
@@ -776,12 +753,6 @@ export function TaskCommandCenter({
             </div>
           </div>
 
-          <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950">
-            <p className="text-sm font-semibold">{text.microsoftReady}</p>
-            <p className="mt-2 break-words text-sm text-blue-900">
-              {selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : "-"} · {selectedTask?.project?.name ?? projectLabel}
-            </p>
-          </div>
         </aside>
       </section>
     </section>

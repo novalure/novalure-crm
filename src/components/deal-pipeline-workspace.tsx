@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import { compareTaskDue, formatTaskDue, taskDueState } from "@/lib/task-due";
+import { useTaskClock } from "@/lib/use-task-clock";
+import { useCallback, useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
 import type {
   CalendarEvent,
   Contact,
@@ -30,7 +32,6 @@ import {
   getCrmSourceKey,
   getCrmSourceLabel,
   getCrmSystemTextLabel,
-  getCrmTaskDueLabel,
   getDealPipelineCommandCopy,
   getLocale,
   displayTimeZone,
@@ -59,6 +60,8 @@ type DealPipelineWorkspaceProps = {
   tasks: Task[];
   users: WorkspaceUser[];
   onDealsChanged?: () => Promise<boolean | void> | boolean | void;
+  onOpenLead?: (leadId: string) => void;
+  timeZone?: string;
 };
 
 type DealPatch = Partial<
@@ -158,12 +161,6 @@ const warningStyles: Record<WarningItem["tone"], string> = {
   amber: "border-amber-200 bg-amber-50 text-amber-900",
   red: "border-red-200 bg-red-50 text-red-900",
   slate: "border-slate-200 bg-slate-100 text-slate-800",
-};
-
-const priorityRank: Record<Task["priority"], number> = {
-  Hoch: 0,
-  Mittel: 1,
-  Normal: 2,
 };
 
 const legacyStageMap: Record<string, DealStage> = {
@@ -373,29 +370,6 @@ function getDaysBetween(start: string | undefined, end = NOW) {
   return Math.max(0, Math.round((end.getTime() - startTime) / (24 * 60 * 60 * 1000)));
 }
 
-function isTaskOverdue(task: Task) {
-  const due = task.due.toLowerCase();
-  const timeMatch = due.match(/(\d{1,2}):(\d{2})/);
-
-  if ((due.includes("heute") || due.includes("today")) && timeMatch) {
-    const dueMinutes = Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
-    const nowMinutes = NOW.getHours() * 60 + NOW.getMinutes();
-    return dueMinutes < nowMinutes;
-  }
-
-  const parsed = parseDisplayDate(task.due).getTime();
-  return Number.isFinite(parsed) && parsed < NOW.getTime();
-}
-
-function sortTasksByFocus(a: Task, b: Task) {
-  const overdueDelta = Number(isTaskOverdue(b)) - Number(isTaskOverdue(a));
-  if (overdueDelta !== 0) {
-    return overdueDelta;
-  }
-
-  return priorityRank[a.priority] - priorityRank[b.priority];
-}
-
 function isPeriodMatch(value: string, period: PeriodFilter) {
   if (period === "all") {
     return true;
@@ -434,17 +408,15 @@ function parseDisplayDate(value: string) {
 }
 
 function getLinkedLead(deal: Deal, leads: Lead[], contact?: Contact) {
-  return leads.find((lead) => lead.id === deal.leadId) ?? leads.find((lead) => lead.contactId === contact?.id);
+  const candidates = leads.filter(lead => lead.workspaceId === deal.workspaceId && lead.projectId === deal.projectId);
+  if(deal.leadId)return candidates.find(lead=>lead.id===deal.leadId);
+  const byContact=candidates.filter(lead=>Boolean(contact?.id)&&lead.contactId===contact?.id);
+  return byContact.length===1?byContact[0]:undefined;
 }
-
-function getLinkedTasks(deal: Deal, tasks: Task[], contact?: Contact, lead?: Lead) {
-  return tasks
-    .filter(
-      (task) =>
-        task.status === "open" &&
-        ((contact?.id && task.contactId === contact.id) || (lead?.id && task.leadId === lead.id)),
-    )
-    .sort(sortTasksByFocus);
+function getLinkedTasks(deal: Deal, tasks: Task[], contact: Contact|undefined, lead: Lead|undefined, now: Date, timeZone: string) {
+  return tasks.filter(task=>task.status==="open" && task.workspaceId===deal.workspaceId && task.projectId===deal.projectId &&
+    (Boolean(lead?.id)&&task.leadId===lead?.id || !task.leadId && Boolean(contact?.id)&&task.contactId===contact?.id))
+    .sort((a,b)=>compareTaskDue(a,b,now,timeZone));
 }
 
 function getRelevantEvent(deal: Deal, calendarEvents: CalendarEvent[], contact?: Contact, lead?: Lead) {
@@ -506,6 +478,8 @@ export function DealPipelineWorkspace({
   leads,
   organizations,
   onDealsChanged,
+  onOpenLead,
+  timeZone = "Europe/Vienna",
   pipeline,
   projectPipelinePermissions,
   crmPipelines,
@@ -519,6 +493,8 @@ export function DealPipelineWorkspace({
   users,
   workspaceId,
 }: DealPipelineWorkspaceProps) {
+  const taskClock = useTaskClock();
+  const isTaskOverdue = useCallback((task: Task) => taskDueState(task.due, new Date(taskClock), timeZone).overdue, [taskClock, timeZone]);
   const text = getDealPipelineCommandCopy(language);
   const textValue = (key: string, fallback: string) => {
     const value = (text as Record<string, unknown>)[key];
@@ -655,7 +631,7 @@ export function DealPipelineWorkspace({
             : undefined;
         const project = projects.find((item) => item.id === deal.projectId);
         const owner = deal.ownerUserId ? users.find((item) => item.id === deal.ownerUserId) : undefined;
-        const linkedTasks = getLinkedTasks(deal, tasks, contact, lead);
+        const linkedTasks = getLinkedTasks(deal, tasks, contact, lead, new Date(taskClock), timeZone);
         const nextTask = linkedTasks[0];
         const relevantEvent = getRelevantEvent(deal, calendarEvents, contact, lead);
         const unit = propertyUnits.find(
@@ -733,6 +709,7 @@ export function DealPipelineWorkspace({
       tasks,
       users,
       workingDeals,
+      taskClock, timeZone, isTaskOverdue,
     ],
   );
 
@@ -803,6 +780,7 @@ export function DealPipelineWorkspace({
     });
   }, [
     dealViews,
+    isTaskOverdue,
     language,
     leadTypeFilter,
     onlyOverdue,
@@ -1359,7 +1337,7 @@ export function DealPipelineWorkspace({
             <div className="mt-3 grid gap-2 text-xs">
               <span className="break-words rounded-md bg-blue-50 px-2 py-1.5 font-semibold text-blue-800">
                 {item.nextTask
-                  ? `${item.nextTask.title} · ${getCrmTaskDueLabel(item.nextTask.due, language)}`
+                  ? `${item.nextTask.title} · ${formatTaskDue(item.nextTask.due, language, timeZone, new Date(taskClock))}`
                   : item.deal.nextAction ? getCrmSystemTextLabel(item.deal.nextAction, language) : text.defaultNextAction}
               </span>
               <span className="break-words rounded-md bg-stone-50 px-2 py-1.5 font-semibold text-stone-700">
@@ -1799,6 +1777,7 @@ export function DealPipelineWorkspace({
 
           {selectedDeal ? (
             <>
+              {selectedDeal.leadId && onOpenLead ? <button className="mb-4 min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold" type="button" onClick={() => onOpenLead(selectedDeal.leadId!)}>{language === "de" ? "Gemeinsame Leadakte öffnen" : "Open shared lead details"}</button> : null}
               <OfferWorkflow key={selectedDeal.id} deal={selectedDeal} contact={selectedDealView.contact} leads={leads} workspaceQuery={workspaceQuery} onChanged={onDealsChanged} />
               <div className="mt-4 grid gap-3 text-sm">
                 {[
@@ -1988,7 +1967,7 @@ export function DealPipelineWorkspace({
                       <div className="rounded-md border border-stone-200 p-3 text-sm" key={task.id}>
                         <p className="break-words font-semibold text-slate-950">{task.title}</p>
                         <p className="mt-1 break-words text-xs text-stone-500">
-                          {getCrmTaskDueLabel(task.due, language)} · {task.priority}
+                          {formatTaskDue(task.due, language, timeZone, new Date(taskClock))} · {task.priority}
                         </p>
                       </div>
                     ))

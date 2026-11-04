@@ -8,10 +8,16 @@ export function canAccessCrmBilling(role: ProductRole) {
 }
 
 export function getCrmSelfServiceEntries<T extends string>(entries: readonly T[], role: ProductRole): Array<T | SelfServiceEntry> {
-  if (hasProductCapability(role, "novalure:internal")) return [
-    ...entries, "billing", ...(["platform_admin", "novalureAdmin"].includes(role) ? ["aiBillingAdmin" as const] : []),
-  ];
+  if (hasProductCapability(role, "novalure:internal")) {
+    const internal = new Set<T | SelfServiceEntry>(entries);
+    if (canAccessCrmBilling(role)) internal.add("billing");
+    else internal.delete("billing");
+    if (role === "platform_admin" || role === "novalureAdmin") internal.add("aiBillingAdmin");
+    else internal.delete("aiBillingAdmin");
+    return [...internal];
+  }
   const result = new Set<T | SelfServiceEntry>([...entries, "dashboard", "projects", "knowledge", "billing"]);
+  result.delete("aiBillingAdmin");
   if (!canAccessCrmBilling(role)) result.delete("billing");
   if (hasProductCapability(role, "bots:publish")) result.add("bots");
   else result.delete("bots");

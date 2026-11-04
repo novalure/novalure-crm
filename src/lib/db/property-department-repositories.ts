@@ -14,6 +14,7 @@ import { parsePropertyLinkInput, parsePropertyRelationshipInput } from "@/lib/pr
 import { resolvePropertyAreaSqm } from "@/lib/property-area-input";
 import { isEmptyMoneyInput, parsePropertyEuroCents, parsePropertyIntegerCents } from "@/lib/property-money";
 import { normalizePurchaseAncillaryCalculation } from "@/lib/property-purchase-costs";
+import { austriaPropertyRegions, normalizePropertyEnergyCertificate, normalizePropertyGeography, normalizePropertyRegion, propertyGeographyFromInput, readPropertyGeography } from "@/lib/property-country";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -83,18 +84,6 @@ type SellerListingRow = {
 type IdRow = { id: string };
 type ListingProjectRow = { projectId: string | null };
 type CountRow = { count: number | string };
-
-const allowedRegions = new Set([
-  "Wien",
-  "Steiermark",
-  "Tirol",
-  "Salzburg",
-  "Oberoesterreich",
-  "Niederoesterreich",
-  "Kaernten",
-  "Burgenland",
-  "Vorarlberg",
-]);
 
 const sellerListingReturningSql = `
   id,
@@ -166,14 +155,22 @@ async function createSellerListingRecordInTransaction(input: {
   }
 
   const fields = asPlainObject(input.property.fieldValues);
+  const country = propertyGeographyFromInput(input.property);
+  if (!country.ok) return { persisted: false, reason: country.reason };
+  const geography = country.geography;
+  const hasEnergyCertificate = Object.hasOwn(input.property, "energyCertificate");
+  const energyCertificate = hasEnergyCertificate ? normalizePropertyEnergyCertificate(input.property.energyCertificate) : null;
+  if (hasEnergyCertificate && (!energyCertificate || energyCertificate.countryCode !== geography.countryCode || energyCertificate.sourceDocumentId)) {
+    return { persisted: false, reason: "Invalid property energy certificate; attach source documents after creating the property" };
+  }
   const title = cleanString(input.property.title);
   const city = cleanString(input.property.city) || cleanString(fields["location.ort"]);
   const postalCode = cleanString(input.property.postalCode) || cleanString(fields["location.plz"]);
   const street = cleanString(input.property.street) || cleanString(fields["location.strasse"]);
   const houseNumber = cleanString(fields["location.hausnummer"]);
   const address = cleanString(input.property.address) || [street, houseNumber, postalCode, city].filter(Boolean).join(" ");
-  const federalState = cleanString(input.property.region) || cleanString(fields["location.bundesland"]);
-  const region = normalizeRegion(federalState);
+  const federalState = geography.region;
+  const region = geography.region;
   const objectType = cleanString(input.property.objectType) || cleanString(fields["classification.objektart"]) || "Wohnung";
   const areaSqm = toNumber(
     input.property.areaSqm ??
@@ -219,6 +216,8 @@ async function createSellerListingRecordInTransaction(input: {
   const portalMappingStatus = cleanString(input.property.portalMappingStatus) || "needs_review";
   const canonicalPayload = {
     source: "property_department",
+    geography,
+    ...(energyCertificate ? { energyCertificate } : {}),
     submittedByUserId: input.session.userId,
     base: {
       address,
@@ -486,9 +485,35 @@ async function updateSellerListingRecordInTransaction(input: {
     return { persisted: false, reason: "Invalid property relationship comparison snapshot" };
   }
   const hasAncillaryCalculation = Object.hasOwn(input.property, "purchaseAncillaryCalculation");
+  const hasGeography = Object.hasOwn(input.property, "geography");
+  const geography = hasGeography ? normalizePropertyGeography(input.property.geography) : null;
+  const hasExpectedGeography = Object.hasOwn(input.property, "expectedGeography");
+  const expectedGeography = input.property.expectedGeography === null ? null : normalizePropertyGeography(input.property.expectedGeography);
+  if (hasGeography && (!geography || !hasExpectedGeography || (input.property.expectedGeography !== null && !expectedGeography))) {
+    return { persisted: false, reason: "Invalid property geography or comparison snapshot" };
+  }
+  if (geography && Object.hasOwn(input.property, "region") && normalizePropertyRegion(input.property.region) !== geography.region) return { persisted: false, reason: "Invalid property region: geography and region must agree" };
+  const hasEnergyCertificate = Object.hasOwn(input.property, "energyCertificate");
+  const energyCertificate = hasEnergyCertificate ? normalizePropertyEnergyCertificate(input.property.energyCertificate) : null;
+  const expectedEnergyCertificate = input.property.expectedEnergyCertificate;
+  if (hasEnergyCertificate && (!energyCertificate || !Object.hasOwn(input.property, "expectedEnergyCertificate") ||
+      (expectedEnergyCertificate !== null && (!expectedEnergyCertificate || typeof expectedEnergyCertificate !== "object" || Array.isArray(expectedEnergyCertificate) || JSON.stringify(expectedEnergyCertificate).length > 12000)) ||
+      (geography && energyCertificate.countryCode !== geography.countryCode))) {
+    return { persisted: false, reason: "Invalid property energy certificate or comparison snapshot" };
+  }
+  const hasExpectedUsageType = Object.hasOwn(input.property, "expectedUsageType");
+  if (hasExpectedUsageType && (typeof input.property.expectedUsageType !== "string" || input.property.expectedUsageType.length > 100)) {
+    return { persisted: false, reason: "Invalid property use comparison snapshot" };
+  }
+  if (Object.hasOwn(input.property, "usageType") && !["", "residential", "commercial", "mixed", "investment"].includes(String(input.property.usageType))) {
+    return { persisted: false, reason: "Invalid property use" };
+  }
   const ancillaryCalculation = hasAncillaryCalculation ? normalizePurchaseAncillaryCalculation(input.property.purchaseAncillaryCalculation) : null;
   if (hasAncillaryCalculation && input.property.purchaseAncillaryCalculation !== null && !ancillaryCalculation) {
     return { persisted: false, reason: "Invalid purchase ancillary calculation" };
+  }
+  if (ancillaryCalculation && geography && geography.countryCode !== "AT") {
+    return { persisted: false, reason: "Invalid purchase ancillary jurisdiction for property country" };
   }
   const hasExpectedAncillaryCosts = Object.hasOwn(input.property, "expectedAncillaryCosts");
   const expectedAncillaryCosts = asPlainObject(input.property.expectedAncillaryCosts);
@@ -512,7 +537,12 @@ async function updateSellerListingRecordInTransaction(input: {
   const street = cleanString(input.property.street) || cleanString(fields["location.strasse"]);
   const houseNumber = cleanString(fields["location.hausnummer"]);
   const address = cleanString(input.property.address) || [street, houseNumber, postalCode, city].filter(Boolean).join(" ");
-  const federalState = cleanString(input.property.region) || cleanString(fields["location.bundesland"]);
+  const federalState = normalizePropertyRegion(geography?.region ?? (cleanString(input.property.region) || cleanString(fields["location.bundesland"])));
+  if (federalState.length > 200 || /[\u0000-\u001f<>]/.test(federalState)) return { persisted: false, reason: "Invalid property region" };
+  // Legacy callers may update only the old region field. Keep the current
+  // explicit country's other axes, but invalidate an AT inference whose sole
+  // evidence no longer exists. Never guess a new country from a foreign name.
+  const regionInvalidatesInference = `(not($49::jsonb ? 'geography') and nullif($12,'') is not null and canonical_payload->'geography'->>'source'='legacy_at_region' and $12<>all(array[${austriaPropertyRegions.map((region) => `'${region}'`).join(",")}]))`;
   const areaSqm = area.value;
   const priceCents = toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]);
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
@@ -529,7 +559,7 @@ async function updateSellerListingRecordInTransaction(input: {
         contact_user_id = case when $51::jsonb ? 'contactUserId' then $9::uuid else contact_user_id end,
         title = coalesce(nullif($10, ''), title),
         address = coalesce(nullif($11, ''), address),
-        region = coalesce(nullif($12, ''), region),
+        region = case when $49::jsonb ? 'geography' then $12 else coalesce(nullif($12, ''), region) end,
         object_type = coalesce(nullif($13, ''), object_type),
         area_sqm = coalesce($14::numeric, area_sqm),
         rooms = coalesce($15::numeric, rooms),
@@ -539,7 +569,7 @@ async function updateSellerListingRecordInTransaction(input: {
         expected_gross_yield = coalesce($19::numeric, expected_gross_yield),
         postal_code = coalesce(nullif($20, ''), postal_code),
         city = coalesce(nullif($21, ''), city),
-        federal_state = coalesce(nullif($22, ''), federal_state),
+        federal_state = case when $49::jsonb ? 'geography' then $22 else coalesce(nullif($22, ''), federal_state) end,
         street = coalesce(nullif($23, ''), street),
         object_number = coalesce(nullif($24, ''), object_number),
         internal_reference = coalesce(nullif($25, ''), internal_reference),
@@ -549,7 +579,7 @@ async function updateSellerListingRecordInTransaction(input: {
         contact_phone = coalesce(nullif($29, ''), contact_phone),
         contact_email = coalesce(nullif($30, ''), contact_email),
         marketing_type = coalesce(nullif($31, ''), marketing_type),
-        usage_type = coalesce(nullif($32, ''), usage_type),
+        usage_type = case when $58::boolean then nullif($32, '') else coalesce(nullif($32, ''), usage_type) end,
         sub_object_type = coalesce(nullif($33, ''), sub_object_type),
         sub_object_type_custom = coalesce(nullif($34, ''), sub_object_type_custom),
         available_from = coalesce($35::date, available_from),
@@ -571,7 +601,10 @@ async function updateSellerListingRecordInTransaction(input: {
             ((coalesce(canonical_payload, '{}'::jsonb) || ($49::jsonb - 'fieldValues')
               || case when $49::jsonb ? 'fieldValues' then jsonb_build_object(
                 'fieldValues', coalesce(canonical_payload -> 'fieldValues', '{}'::jsonb) || ($49::jsonb -> 'fieldValues')
-              ) else '{}'::jsonb end) - 'purchaseAncillaryCalculation')
+              ) else '{}'::jsonb end
+              || case when ${regionInvalidatesInference} then '{"geography":null}'::jsonb
+                when not($49::jsonb ? 'geography') and nullif($12,'') is not null and jsonb_typeof(canonical_payload->'geography')='object'
+                then jsonb_build_object('geography',(canonical_payload->'geography')||jsonb_build_object('region',$12::text)) else '{}'::jsonb end) - 'purchaseAncillaryCalculation')
               || case when ancillary_selected.calculation is not null then
                 jsonb_build_object('purchaseAncillaryCalculation', ancillary_selected.calculation)
                 when not ($52::jsonb ? 'calculation') and ancillary_previous.calculation is null
@@ -580,10 +613,14 @@ async function updateSellerListingRecordInTransaction(input: {
                 else '{}'::jsonb end
           from lateral (select ${existingAncillarySql} as calculation) ancillary_previous
           cross join lateral (select case
+            when ${regionInvalidatesInference} then null::jsonb
+            when coalesce($49::jsonb -> 'geography' ->> 'countryCode', canonical_payload -> 'geography' ->> 'countryCode', 'AT') <> 'AT' then null::jsonb
             when coalesce(nullif($31, ''), marketing_type, 'sale') not in ('sale', 'sale_or_rent') then null::jsonb
             when $52::jsonb ? 'calculation' then nullif($52::jsonb -> 'calculation', 'null'::jsonb)
             else ancillary_previous.calculation end as calculation) ancillary_selected
           cross join lateral (select case
+            when (${regionInvalidatesInference} or coalesce($49::jsonb -> 'geography' ->> 'countryCode', canonical_payload -> 'geography' ->> 'countryCode', 'AT') <> 'AT')
+              and ancillary_previous.calculation is not null and $52::jsonb ->> 'amountProvided' <> 'true' then null::bigint
             when coalesce(nullif($31, ''), marketing_type, 'sale') not in ('sale', 'sale_or_rent')
               and (ancillary_previous.calculation is not null or jsonb_typeof($52::jsonb -> 'calculation') = 'object')
               then null::bigint
@@ -596,6 +633,14 @@ async function updateSellerListingRecordInTransaction(input: {
         updated_at = now()
       where id = $1::uuid
         and workspace_id = $2
+        and (not $54::boolean or coalesce(canonical_payload -> 'geography', 'null'::jsonb) = $55::jsonb)
+        and (not $56::boolean or coalesce(canonical_payload -> 'energyCertificate', 'null'::jsonb) = $57::jsonb)
+        and (not $58::boolean or coalesce(usage_type, '') = $59::text)
+        and (not $56::boolean or $49::jsonb -> 'energyCertificate' ->> 'countryCode' = coalesce($49::jsonb -> 'geography' ->> 'countryCode', canonical_payload -> 'geography' ->> 'countryCode'))
+        and (nullif($49::jsonb -> 'energyCertificate' ->> 'sourceDocumentId', '') is null or exists (
+          select 1 from property_documents energy_document where energy_document.id = ($49::jsonb -> 'energyCertificate' ->> 'sourceDocumentId')::uuid
+            and energy_document.workspace_id = $2::uuid and energy_document.property_id = $1::uuid
+        ))
         and ($53::jsonb is null or jsonb_build_object(
           'amountCents', purchase_ancillary_costs_cents, 'calculation', ${existingAncillarySql}
         ) = $53::jsonb)
@@ -720,7 +765,7 @@ async function updateSellerListingRecordInTransaction(input: {
       relationships.values.contactUserId,
       title,
       address,
-      federalState ? normalizeRegion(federalState) : "",
+      federalState ? normalizePropertyRegion(federalState) : "",
       cleanString(input.property.objectType) || cleanString(fields["classification.objektart"]),
       areaSqm,
       optionalNumber(input.property.rooms ?? fields["rooms.zimmer"]),
@@ -759,6 +804,8 @@ async function updateSellerListingRecordInTransaction(input: {
       cleanString(input.property.portalMappingStatus),
       cleanString(input.property.internalNotes) || cleanString(fields["notes.interne_notizen"]),
       JSON.stringify({
+        ...(geography ? { geography } : {}),
+        ...(energyCertificate ? { energyCertificate } : {}),
         ...(Object.hasOwn(input.property, "fieldValues") ? { fieldValues: fields } : {}),
         updatedByUserId: input.session.userId,
         updatedFrom: "property_department",
@@ -767,10 +814,16 @@ async function updateSellerListingRecordInTransaction(input: {
       JSON.stringify({ ...relationships.supplied, ...(hasExpectedRelationships ? { _expectedRelationships: expectedRelationships } : {}) }),
       JSON.stringify(ancillaryInput),
       hasExpectedAncillaryCosts ? JSON.stringify({ amountCents: expectedAncillaryCosts.amountCents, calculation: expectedAncillaryCalculation }) : null,
+      hasGeography,
+      JSON.stringify(expectedGeography),
+      hasEnergyCertificate,
+      JSON.stringify(expectedEnergyCertificate ?? null),
+      hasExpectedUsageType,
+      hasExpectedUsageType ? input.property.expectedUsageType : null,
     ],
   );
 
-  if (!row) return { persisted: false, reason: hasExpectedCore || hasExpectedRelationships || hasExpectedAncillaryCosts
+  if (!row) return { persisted: false, reason: hasExpectedCore || hasExpectedRelationships || hasExpectedAncillaryCosts || hasGeography || hasEnergyCertificate || hasExpectedUsageType
     ? "Conflict: property was changed, moved or is no longer available; reload before editing again"
     : "Property not found or project/unit is outside this workspace, or relationship target is invalid" };
 
@@ -1835,6 +1888,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
 
 function toSellerListing(row: SellerListingRow): SellerListing {
   return {
+    countryCode: readPropertyGeography({ canonicalPayload: row.canonicalPayload, region: row.region })?.countryCode,
     address: row.address,
     areaSqm: Number(row.areaSqm ?? 0),
     canonicalPayload: row.canonicalPayload ?? undefined,
@@ -2029,14 +2083,6 @@ function buildCostsSummary(property: Record<string, unknown>) {
     rentPriceCents: toNullablePriceCents(property.rentPrice),
     source: "property_department",
   };
-}
-
-function normalizeRegion(value: string): SellerListing["region"] {
-  const normalized = value.replace("ö", "oe").replace("Ö", "Oe").replace("ä", "ae").replace("Ä", "Ae");
-  if (allowedRegions.has(normalized)) {
-    return value as SellerListing["region"];
-  }
-  return "Wien";
 }
 
 function nullableUuid(value: unknown) {

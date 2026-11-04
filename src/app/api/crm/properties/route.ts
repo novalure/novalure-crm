@@ -1,4 +1,5 @@
-import { withCrmRead } from "@/lib/crm-command";
+import { CrmCommandError, withCrmRead } from "@/lib/crm-command";
+import { assignPropertyInquiry, canAssignPropertyInquiry, parsePropertyInquiryAssignment, readPropertyInquiryAssignments } from "@/lib/db/property-inquiry-assignment-repository";
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
@@ -106,8 +107,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ workspaceId: auth.session.workspaceId, capabilities: {
       canEditProperty: canWriteProperty(auth.session),
       canReviewDocuments: canReviewPropertyDocuments(auth.session),
-      canAssignInquiry: false,
+      canAssignInquiry: canAssignPropertyInquiry(auth.session),
     } }, { headers: privateHeaders });
+  }
+  if (readOperation === "inquiry_assignments") {
+    const allowed = ["workspaceId", "operation", "projectId"];
+    const projectId = parseProjectId(url.searchParams.get("projectId"));
+    if (!url.searchParams.has("workspaceId") || projectId === undefined || [...url.searchParams.keys()].some(key => !allowed.includes(key)) || allowed.some(key => url.searchParams.getAll(key).length > 1)) return NextResponse.json({ persisted: false, error: "Invalid inquiry assignment scope" }, { status: 400, headers: privateHeaders });
+    try { return NextResponse.json({ persisted: true, data: await readPropertyInquiryAssignments(auth.session, projectId) }, { headers: privateHeaders }); }
+    catch (error) { return NextResponse.json({ persisted: false, error: error instanceof CrmCommandError ? error.message : "Gespeicherte Anfragezuordnungen sind vorübergehend nicht verfügbar." }, { status: error instanceof CrmCommandError ? error.status : 503, headers: privateHeaders }); }
   }
   if (readOperation === "relationship_options") {
     const allowed = ["workspaceId", "operation", "propertyId"];
@@ -177,6 +185,14 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "create_property";
+
+  if (operation === "assign_inquiry") {
+    const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
+    try {
+      const result = await assignPropertyInquiry(session, parsePropertyInquiryAssignment(input), { idempotencyKey: request.headers.get("Idempotency-Key") ?? "", correlationId: request.headers.get("X-Correlation-Id") ?? "" });
+      return NextResponse.json({ ...result, persisted: true }, { headers });
+    } catch (error) { return NextResponse.json({ persisted: false, error: error instanceof CrmCommandError ? error.message : "Die Anfragezuordnung konnte nicht bestätigt werden." }, { status: error instanceof CrmCommandError ? error.status : 503, headers }); }
+  }
 
   if (operation === "review_document") {
     const result = await withCrmRead(session, (_tx, scopedSession) => reviewPropertyDocument({

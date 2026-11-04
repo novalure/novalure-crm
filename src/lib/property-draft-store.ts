@@ -1,5 +1,6 @@
 import type { PropertyPriceVisibility } from "./crm-types";
 import type { JSONContent } from "@tiptap/react";
+import type { PropertyEnergyCertificate, PropertyGeography } from "./property-country";
 
 export type PropertyCostDraft = {
   costKey: string;
@@ -15,7 +16,9 @@ export type PropertyCostDraft = {
 };
 
 export type PropertyDraft = {
-  coreEdit?: { propertyId: string; workspaceId: string; expected: Record<string, unknown>; expectedAncillaryCosts?: Record<string, unknown> };
+  coreEdit?: { propertyId: string; workspaceId: string; expected: Record<string, unknown>; expectedAncillaryCosts?: Record<string, unknown>; expectedGeography?: Record<string, unknown> | null; expectedEnergyCertificate?: Record<string, unknown> | null; expectedUsageType?: string };
+  geography?: PropertyGeography | null;
+  energyCertificate?: PropertyEnergyCertificate;
   address: string;
   areaSqm: string;
   availableFrom: string;
