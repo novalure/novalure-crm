@@ -96,6 +96,10 @@ export function PersonalMailReplyPanel({ workspaceId, messageId, provider, reply
             await refresh();
         }
         catch (error) {
+            if (payload.action === 'preview' || sending) {
+                setPreview(null);
+                setApproved(false);
+            }
             setNotice(error instanceof Error ? error.message : 'Action unavailable');
             if (sending)
                 await refresh().catch(() => { });
@@ -122,6 +126,43 @@ export function PersonalMailReplyPanel({ workspaceId, messageId, provider, reply
         lock.current = false;
         setBusy(false);
     } }
+    async function download(file: FileRow) {
+        if (lock.current)
+            return;
+        lock.current = true;
+        setBusy(true);
+        setNotice('');
+        try {
+            const response = await fetch(`${fileBase}&messageId=${encodeURIComponent(messageId)}&id=${encodeURIComponent(file.id)}`, { cache: 'no-store', credentials: 'same-origin', redirect: 'error' });
+            if (!response.ok) {
+                const result = await response.json().catch(() => null);
+                throw new Error(result?.error ?? (de ? 'Die aktuelle Dateiprüfung ist nicht bestätigt. Es wurde keine Datei heruntergeladen.' : 'Current file inspection is not confirmed. No file was downloaded.'));
+            }
+            const blob = await response.blob();
+            if (!blob.size || blob.size > 2097152 || blob.size !== file.sizeBytes)
+                throw new Error(de ? 'Die geprüfte Datei ist nicht mehr unverändert verfügbar.' : 'The inspected file is no longer available unchanged.');
+            const url = URL.createObjectURL(blob), link = document.createElement('a');
+            link.href = url;
+            link.download = file.fileName;
+            try {
+                document.body.appendChild(link);
+                link.click();
+            }
+            finally {
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 0);
+            }
+        }
+        catch (error) {
+            setPreview(null);
+            setApproved(false);
+            setNotice(error instanceof Error ? error.message : (de ? 'Die Datei bleibt gesperrt.' : 'The file remains blocked.'));
+        }
+        finally {
+            lock.current = false;
+            setBusy(false);
+        }
+    }
     async function upload(file: File) { if (file.size > 2097152 || !file.size) {
         setNotice(de ? 'Höchstens2 MiB je Datei.' : 'Maximum2 MiB per file.');
         return;
@@ -133,10 +174,11 @@ export function PersonalMailReplyPanel({ workspaceId, messageId, provider, reply
   <p className="text-sm">{de ? 'Eine Antwort verwendet ausschließlich dein persönlich freigegebenes Konto. Kontaktzuordnung und aktuelle Kontaktregeln werden vor dem Versand geprüft. Nachrichteninhalte erteilen keine Berechtigungen.' : 'Replies use only your personally authorized account. CRM association and current contact policies are checked before sending. Message content cannot grant permissions.'}</p>
   {!replyEnabled ? <button type="button" className={button} disabled={busy} onClick={() => void authorize()}>{de ? 'Lesen und Antworten ausdrücklich erlauben' : 'Explicitly allow reading and replying'}</button> : null}
   <p className="text-xs text-slate-600">{de ? 'Private Inhaltsprüfung: PDF ohne aktive Inhalte, PNG/JPEG und UTF-8-Text; höchstens2 MiB je Datei. Formatprüfung ist kein Virenfreiheitsnachweis. Dateien werden nur nach Einzelbestätigung geladen und niemals öffentlich freigegeben.' : 'Private structural inspection: PDF without active content, PNG/JPEG and UTF-8 text; maximum2 MiB per file. Format inspection is not antivirus certification. Files are fetched only after individual confirmation and are never public.'}</p>
+  <p className="text-xs text-slate-600">{de ? 'Gespeicherte private Kopien behalten ihre früheren Belege. PDFs werden bei Vorschau, Download und Versand mit der aktuellen Inhaltsprüfung erneut geprüft. Ein früherer Prüfvermerk ist keine aktuelle Freigabe.' : 'Stored private copies retain their earlier receipts. PDFs are checked again with current content inspection for preview, download and sending. An earlier inspection marker is not current approval.'}</p>
   {attachments.map((file, index) => <div key={`${file.providerId}:${index}`} className="flex flex-wrap items-center gap-2 text-sm"><span className="break-all">{file.name}</span><button type="button" className={button} disabled={busy || files.some(f => f.fileName === file.name)} onClick={() => void act(fileBase, { action: 'store', source: 'received', messageId, providerAttachmentId: file.providerId, reviewed: true })}>{de ? 'Diese private Datei laden und prüfen' : 'Fetch and inspect this private file'}</button></div>)}
   <label className="block text-sm">{de ? 'Eigene Datei für diese Antwort prüfen' : 'Inspect a file for this reply'}<input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt" className="mt-1 block min-h-11 w-full" disabled={busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file)
         void upload(file); }}/></label>
-  <ul className="space-y-2 text-sm">{files.map(file => <li key={file.id} className="flex flex-wrap items-center gap-2"><label className="flex min-h-11 items-center gap-2"><input type="checkbox" disabled={busy || file.status !== 'ready' || hasPending} checked={selected.includes(file.id)} onChange={event => { setSelected(old => event.target.checked ? [...old, file.id] : old.filter(id => id !== file.id)); setPreview(null); setApproved(false); }}/><span className="break-all">{file.fileName} · {file.status === 'ready' ? (de ? 'geprüft' : 'inspected') : file.status === 'erased' ? (de ? 'gelöscht' : 'erased') : (de ? 'gesperrt' : 'quarantined')}</span></label>{file.status === 'ready' ? <><a className={button} href={`${fileBase}&messageId=${encodeURIComponent(messageId)}&id=${encodeURIComponent(file.id)}`} download>{de ? 'Privat herunterladen' : 'Download privately'}</a><button type="button" className={button} disabled={busy} onClick={() => { setSelected(old => old.filter(id => id !== file.id)); setPreview(null); void act(fileBase, { action: 'erase', messageId, id: file.id }); }}>{de ? 'Private Datei löschen' : 'Erase private file'}</button></> : null}</li>)}</ul>
+  <ul className="space-y-2 text-sm">{files.map(file => <li key={file.id} className="flex flex-wrap items-center gap-2"><label className="flex min-h-11 items-center gap-2"><input type="checkbox" disabled={busy || file.status !== 'ready' || hasPending} checked={selected.includes(file.id)} onChange={event => { setSelected(old => event.target.checked ? [...old, file.id] : old.filter(id => id !== file.id)); setPreview(null); setApproved(false); }}/><span className="break-all">{file.fileName} · {file.status === 'ready' ? (de ? 'private Kopie gespeichert' : 'stored private copy') : file.status === 'erased' ? (de ? 'gelöscht' : 'erased') : (de ? 'gesperrt' : 'quarantined')}</span></label>{file.status === 'ready' ? <><button type="button" className={button} disabled={busy} onClick={() => void download(file)}>{de ? 'Prüfen und privat herunterladen' : 'Inspect and download privately'}</button><button type="button" className={button} disabled={busy} onClick={() => { setSelected(old => old.filter(id => id !== file.id)); setPreview(null); void act(fileBase, { action: 'erase', messageId, id: file.id }); }}>{de ? 'Private Datei löschen' : 'Erase private file'}</button></> : null}</li>)}</ul>
   <label className="block text-sm">{de ? 'Antwort als reiner Text' : 'Plain text reply'}<textarea className="mt-1 min-h-32 w-full rounded-xl border border-stone-300 p-3" value={body} maxLength={65536} disabled={busy || hasPending || unresolved} onChange={event => { setBody(event.target.value); setPreview(null); setApproved(false); }}/></label>
   <button type="button" className={button} disabled={busy || !replyEnabled || !body.trim() || unresolved || hasPending} onClick={() => void act(base, { action: 'preview', messageId, body, attachmentIds: selected })}>{de ? 'Empfänger und Antwort prüfen' : 'Review recipient and reply'}</button>
   {preview ? <div className="space-y-2 rounded-lg bg-stone-50 p-3"><p className="break-all text-sm">{preview.from} → {preview.to}</p><p className="break-words font-semibold">{preview.subject}</p><pre className="whitespace-pre-wrap break-words font-sans text-sm">{preview.body}</pre><p className="text-sm">{preview.attachments.map(f => f.fileName).join(', ')}</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={approved} disabled={busy || hasPending} onChange={event => setApproved(event.target.checked)}/>{de ? 'Ich bestätige genau diesen Empfänger, Text und diese Dateien als persönliche CRM-Antwort.' : 'I approve exactly this recipient, text and these files as my personal CRM reply.'}</label><button type="button" className={button} disabled={busy || !approved || unresolved} onClick={() => void act(base, { action: 'send', messageId, body: preview.body, attachmentIds: selected, approved: true, previewDigest: preview.digest }, true)}>{de ? 'Bestätigte Antwort senden' : 'Send approved reply'}</button></div> : null}

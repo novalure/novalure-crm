@@ -11,10 +11,11 @@ import { startLocalSalesDb, applySalesSchema } from './lib/local-sales-db.mjs';
 import type { AppSession } from '../src/lib/auth/session';
 import { getRolePermissions } from '../src/lib/auth/permissions';
 import { getProductRoleCapabilities } from '../src/lib/product-model';
-import { crmPayloadDigest, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from '../src/lib/crm-command';
+import { crmPayloadDigest, executeCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from '../src/lib/crm-command';
 import type { TenantPool } from '../src/lib/db/tenant-client';
 import { hasMailboxSendScope, personalReplyMime, personalSha256, parsePersonalReplyInput, mailboxReplyScopes } from '../src/lib/crm-mailbox-reply';
 import { inspectPersonalMailAttachment } from '../src/lib/crm-mailbox-attachment';
+import { encryptSecret } from '../src/lib/integrations/secret-box';
 import { readPersonalMailJson } from '../src/lib/crm-mailbox-request';
 import { mailboxAuthorizationUrl, type MailboxTransport } from '../src/lib/integrations/mailbox-provider';
 import { dispatchPersonalReply } from '../src/lib/integrations/mailbox-reply-provider';
@@ -167,6 +168,76 @@ test('personal replies and attachments use actual two-tenant PostgreSQL auth, so
                 const stored=(await db.admin.query('select provider_id_format,body_text from crm_mailbox_messages where id=$1',[result.data.id])).rows[0];assert.equal(stored.body_text,'Synthetic isolated test body');assert.equal(stored.provider_id_format,provider==='microsoft'?'immutable':'legacy');assert.ok(requests.every(url=>!new URL(url).pathname.endsWith('/messages')));
                 const foreign=await fixture(provider);const previous=requests.length;await assert.rejects(importExactQaMailboxMessage(foreign.session,input,metadata(),{...options,transport,qaHostRegistry:JSON.stringify([hostScope])}),{code:'MAIL_QA_CONNECTION_REQUIRED'});assert.equal(requests.length,previous);mode='late-revoke';await assert.rejects(importExactQaMailboxMessage(f.session,input,meta,{...options,transport,qaHostRegistry:JSON.stringify([hostScope])}),{code:'MAIL_QA_CONNECTION_REQUIRED'});
             }
+        });
+        // Synthetic historical rows/receipts only: passive PDFs, no active action contents.
+        async function legacyPdf(f: Awaited<ReturnType<typeof fixture>>, pages: number) {
+            const doc = await PDFDocument.create();
+            for (let i = 0; i < pages; i++) doc.addPage([100, 100]);
+            const bytes = Buffer.from(await doc.save()), id = randomUUID(), fileName = 'legacy-passive.pdf', sha256 = personalSha256(bytes);
+            const checkCode = 'LOCAL_FORMAT_AND_STRUCTURE_CHECKED_NOT_ANTIVIRUS';
+            const encrypted = encryptSecret(JSON.stringify({ purpose: 'crm-personal-mail-attachment-v1', workspaceId: f.workspaceId, userId: f.userId, messageId: f.messageId, id, data: bytes.toString('base64') }));
+            await f.run(tx => tx.query("insert into crm_mailbox_attachment_files(id,workspace_id,user_id,connection_id,message_id,source_kind,file_name,mime_type,content_sha256,size_bytes,content_encrypted,status,check_code) values($1,$2,$3,$4,$5,'upload',$6,'application/pdf',$7,$8,$9,'ready',$10)", [id, f.workspaceId, f.userId, f.connectionId, f.messageId, fileName, sha256, bytes.length, encrypted, checkCode]));
+            f.input.attachmentIds = [id];
+            return { id, bytes, fileName, mimeType: 'application/pdf', sha256, sizeBytes: bytes.length, checkCode };
+        }
+        async function legacyPreparation(f: Awaited<ReturnType<typeof fixture>>, file: Awaited<ReturnType<typeof legacyPdf>>, previewDigest: string, meta: ReturnType<typeof metadata>) {
+            // Simulate the previous producer's durable prepared receipt, with no send I/O.
+            const payload = { ...f.input, approved: true, previewDigest };
+            const prepared = await executeCrmCommand(f.session, { operation: 'mailbox.reply.prepare', capability: 'workspace:operate', resourceId: f.messageId, payload, ...meta }, async (tx, context) => {
+                await tx.query(`insert into crm_mailbox_send_jobs(id,workspace_id,user_id,connection_id,message_id,project_id,contact_id,lead_id,identity_id,send_consent_id,approval_digest,source_revision,provider,account_label,provider_account_id,recipient_email,subject,body_text,thread_id,source_provider_id,source_internet_id,internet_message_id,attachment_manifest)
+                    select $1::uuid,m.workspace_id,m.user_id,m.connection_id,m.id,$3::uuid,$4::uuid,$5::uuid,$6::uuid,c.send_consent_id,$7,m.revision,c.provider,c.account_label,c.provider_account_id,'lead@example.invalid',m.subject,$8,m.thread_id,m.provider_id,m.internet_message_id,$9,$10::jsonb
+                    from crm_mailbox_messages m join crm_mailbox_connections c on c.id=m.connection_id where m.id=$2::uuid`, [context.commandId, f.messageId, f.projectId, f.contactId, f.leadId, f.identity, previewDigest, f.input.body, '<synthetic-legacy-' + context.commandId + '@example.invalid>', JSON.stringify([{ id: file.id, fileName: file.fileName, mimeType: file.mimeType, sha256: file.sha256, sizeBytes: file.sizeBytes }])]);
+                return { id: context.commandId, status: 'prepared' };
+            }, f.opts);
+            return { prepared, payload };
+        }
+        await t.test('legacy passive PDF is freshly checked for download, preview and old prepared replay without changing its immutable evidence', async () => {
+            const f = await fixture(), file = await legacyPdf(f, 1), meta = metadata();
+            const downloaded = await readPersonalAttachment(f.session, f.messageId, file.id, f.opts);
+            assert.deepEqual(Buffer.from(downloaded.bytes), file.bytes);
+            assert.equal(f.calls.length, 0, 'Private copy download uses no provider');
+            const preview = await previewPersonalReply(f.session, f.input, f.opts);
+            assert.equal(preview.attachments[0].sha256, file.sha256);
+            const { prepared, payload } = await legacyPreparation(f, file, preview.digest, meta);
+            const sent = await dispatchPreparedPersonalReply(f.session, prepared.data.id, f.opts);
+            assert.equal(sent.status, 'accepted');
+            assert.equal(f.posts(), 1);
+            const replay = await sendPersonalReply(f.session, payload, meta, f.opts);
+            assert.equal(replay.replayed, true);
+            assert.equal(replay.data.status, 'accepted');
+            assert.equal(f.posts(), 1, 'Historical receipt replay never sends twice');
+            const state = await personalReplyState(f.session, f.messageId, f.opts);
+            assert.equal(state.files[0].checkCode, file.checkCode);
+            assert.equal(state.files[0].sha256, file.sha256);
+            assert.equal(state.files.length, 1);
+            assert.equal(state.jobs.length, 1);
+            assert.equal(state.jobs[0].attachments[0].sha256, file.sha256);
+            assert.deepEqual(Buffer.from((await readPersonalAttachment(f.session, f.messageId, file.id, f.opts)).bytes), file.bytes);
+        });
+        await t.test('historical ready marker and prepared receipt cannot bypass current passive PDF limits on download, preview, prepare or replay', async () => {
+            const f = await fixture(), file = await legacyPdf(f, 51), previewDigest = 'a'.repeat(64), meta = metadata();
+            await assert.rejects(readPersonalAttachment(f.session, f.messageId, file.id, f.opts), { code: 'MAIL_ATTACHMENT_QUARANTINED' });
+            assert.equal(f.calls.length, 0);
+            await assert.rejects(previewPersonalReply(f.session, f.input, f.opts), { code: 'MAIL_ATTACHMENT_QUARANTINED' });
+            await assert.rejects(sendPersonalReply(f.session, { ...f.input, approved: true, previewDigest }, metadata(), f.opts), { code: 'MAIL_ATTACHMENT_QUARANTINED' });
+            assert.equal((await personalReplyState(f.session, f.messageId, f.opts)).jobs.length, 0, 'Current prepare fails before recording a new job');
+            const { prepared, payload } = await legacyPreparation(f, file, previewDigest, meta);
+            const previous = (await personalReplyState(f.session, f.messageId, f.opts)).jobs[0];
+            await assert.rejects(dispatchPreparedPersonalReply(f.session, prepared.data.id, f.opts), { code: 'MAIL_ATTACHMENT_QUARANTINED' });
+            await assert.rejects(sendPersonalReply(f.session, payload, meta, f.opts), { code: 'MAIL_ATTACHMENT_QUARANTINED' });
+            assert.equal(f.posts(), 0);
+            const state = await personalReplyState(f.session, f.messageId, f.opts);
+            assert.equal(state.jobs.length, 1);
+            assert.equal(state.jobs[0].status, 'prepared', 'Content failure occurs before durable dispatching claim');
+            assert.deepEqual(state.jobs[0].attachments, previous.attachments);
+            assert.equal(state.files[0].status, 'ready', 'Historical storage evidence is preserved rather than relabelled');
+            assert.equal(state.files[0].checkCode, file.checkCode);
+            await cancelPreparedPersonalReply(f.session, prepared.data.id, metadata(), f.opts);
+            const terminal = await sendPersonalReply(f.session, payload, meta, f.opts);
+            assert.equal(terminal.data.status, 'suppressed');
+            assert.equal(f.posts(), 0);
+            await erasePersonalAttachment(f.session, f.messageId, file.id, metadata(), f.opts);
+            assert.equal((await personalReplyState(f.session, f.messageId, f.opts)).files[0].status, 'erased');
         });
         await t.test('Google and Outlook replies bind original thread, send one private attachment and persist accepted-not-delivered receipt', async () => {
             for (const provider of ['google', 'microsoft'] as const) {

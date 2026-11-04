@@ -161,11 +161,38 @@ function decryptedFile(s: AppSession, messageId: string, f: StoredFile): Persona
         throw new CrmCommandError('MAIL_ATTACHMENT_CONTEXT', 'Die private Datei ist nicht mehr unverändert verfügbar.', 409);
     }
 }
-async function files(tx: TenantTransaction, s: AppSession, input: PersonalReplyInput) {
+// A qualification exists only inside one server invocation, never in a stored check_code,
+// client payload or command receipt. Every use still decrypts and verifies current bytes.
+type CurrentPdfChecks = Set<string>;
+async function checkedFile(s: AppSession, messageId: string, file: StoredFile, checked: CurrentPdfChecks) {
+    const attachment = decryptedFile(s, messageId, file);
+    if (file.mimeType.toLowerCase() === 'application/pdf' || /\.pdf$/iu.test(file.fileName)) {
+        const key = crmPayloadDigest({ workspaceId: s.workspaceId, userId: s.userId, messageId, id: file.id, fileName: file.fileName, mimeType: file.mimeType, sha256: attachment.sha256, sizeBytes: attachment.bytes.length });
+        if (!checked.has(key)) {
+            try {
+                const current = await inspectPersonalMailAttachment(attachment);
+                if (current.sha256 !== file.sha256 || current.sizeBytes !== file.sizeBytes || current.fileName !== file.fileName || current.mimeType !== file.mimeType)
+                    throw new CrmCommandError('MAIL_ATTACHMENT_QUARANTINED', 'Die aktuelle Inhaltsprüfung stimmt nicht mit der gespeicherten PDF überein.', 409);
+            }
+            catch (error) {
+                if (error instanceof CrmCommandError && error.code === 'MAIL_ATTACHMENT_QUARANTINED')
+                    throw new CrmCommandError('MAIL_ATTACHMENT_QUARANTINED', 'Die gespeicherte PDF besteht die aktuelle Inhaltsprüfung nicht. Es wurden keine Datei-Bytes freigegeben. Datei entfernen oder eine zulässige Originaldatei neu prüfen.', 409);
+                throw error;
+            }
+            checked.add(key);
+        }
+    }
+    return attachment;
+}
+async function files(tx: TenantTransaction, s: AppSession, input: PersonalReplyInput, checked: CurrentPdfChecks) {
     const rows = await tx.query<StoredFile>(`select ${fileColumns} from crm_mailbox_attachment_files where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid and id=any($4::uuid[]) for share`, [s.workspaceId, s.userId, input.messageId, input.attachmentIds]);
     if (rows.length !== input.attachmentIds.length || rows.some(f => f.status !== 'ready'))
         throw new CrmCommandError('MAIL_ATTACHMENT_UNAVAILABLE', 'Ausgewählte private Dateien fehlen oder sind gesperrt.', 409);
-    return input.attachmentIds.map(id => decryptedFile(s, input.messageId, rows.find(f => f.id === id)!));
+    const all: PersonalReplyAttachment[] = [];
+    // Sequential checks respect the existing two-worker global bound for up to five files.
+    for (const id of input.attachmentIds)
+        all.push(await checkedFile(s, input.messageId, rows.find(f => f.id === id)!, checked));
+    return all;
 }
 const manifest = (all: PersonalReplyAttachment[]) => all.map(f => ({ id: f.id, fileName: f.fileName, mimeType: f.mimeType, sha256: f.sha256, sizeBytes: f.bytes.length }));
 const digest = (b: Binding, original: PersonalReplySource, input: PersonalReplyInput, all: PersonalReplyAttachment[]) => crmPayloadDigest({ version: 1, purpose: 'salesFollowUp', binding: stable(b), source: original, body: input.body, attachments: manifest(all) });
@@ -180,7 +207,7 @@ async function consent(tx: TenantTransaction, s: AppSession, b: Binding) {
 export async function previewPersonalReply(s: AppSession, raw: Record<string, unknown>, options: Options = {}) {
     const input = parsePersonalReplyInput(raw), before = await withCrmRead(s, (tx, fresh) => binding(tx, fresh, input.messageId, true), options), original = await source(before, options.transport);
     return withCrmRead(s, async (tx, fresh) => { const current = await binding(tx, fresh, input.messageId, true); if (crmPayloadDigest(stable(current)) !== crmPayloadDigest(stable(before)))
-        throw new CrmCommandError('MAIL_PREVIEW_STALE', 'Die Quelle wurde inzwischen geändert.', 409); await consent(tx, fresh, current); const all = await files(tx, fresh, input); return { digest: digest(current, original, input, all), from: current.accountLabel, to: current.email, subject: current.subject, body: input.body, attachments: manifest(all), purpose: 'salesFollowUp', deliveryVerified: false }; }, options);
+        throw new CrmCommandError('MAIL_PREVIEW_STALE', 'Die Quelle wurde inzwischen geändert.', 409); await consent(tx, fresh, current); const all = await files(tx, fresh, input, new Set()); return { digest: digest(current, original, input, all), from: current.accountLabel, to: current.email, subject: current.subject, body: input.body, attachments: manifest(all), purpose: 'salesFollowUp', deliveryVerified: false }; }, options);
 }
 function jobDto(job: Job) { return { id: job.id, messageId: job.messageId, status: job.status, acceptedByProvider: job.status === 'accepted', deliveryVerified: false, receipt: job.providerReceipt, errorCode: job.errorCode, updatedAt: job.updatedAt, retryAllowed: false }; }
 async function loadJob(tx: TenantTransaction, s: AppSession, id: string) { personal(s, true); const job = await tx.queryOne<Job>(`select ${jobColumns} from crm_mailbox_send_jobs where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid for update`, [assertCrmUuid(id), s.workspaceId, s.userId]); if (!job)
@@ -196,7 +223,7 @@ export async function sendPersonalReply(s: AppSession, raw: Record<string, unkno
     assertCrmFields(raw, ['messageId', 'body', 'attachmentIds', 'approved', 'previewDigest']);
     if (raw.approved !== true || typeof raw.previewDigest !== 'string' || !/^[a-f0-9]{64}$/u.test(raw.previewDigest))
         throw new CrmCommandError('MAIL_APPROVAL_REQUIRED', 'Die unveränderte Vorschau ausdrücklich bestätigen.', 409);
-    const input = parsePersonalReplyInput({ messageId: raw.messageId, body: raw.body, attachmentIds: raw.attachmentIds }), approved = raw.previewDigest;
+    const input = parsePersonalReplyInput({ messageId: raw.messageId, body: raw.body, attachmentIds: raw.attachmentIds }), approved = raw.previewDigest, checked: CurrentPdfChecks = new Set();
     const prepared = await executeCrmCommand(s, { operation: 'mailbox.reply.prepare', capability: 'workspace:operate', resourceId: input.messageId, payload: { ...input, approved: true, previewDigest: approved }, ...metadata }, async (tx, context) => {
         const b = await binding(tx, context.session, input.messageId, true);
         await tx.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`mailbox-reply:${b.connectionId}:${b.id}`]);
@@ -204,17 +231,20 @@ export async function sendPersonalReply(s: AppSession, raw: Record<string, unkno
         if (pending)
             throw new CrmCommandError('MAIL_REPLY_UNRESOLVED', 'Eine Antwort ist vorbereitet oder ihr Versand ist ungeklärt. Den vorhandenen Beleg prüfen; keinen neuen Versand starten.', 409);
         // The real provider source is obtained after this durable, non-sending preparation.
-        const all = await files(tx, context.session, input);
+        const all = await files(tx, context.session, input, checked);
         await consent(tx, context.session, b);
         const internetId = `<novalure-reply-${context.commandId}@${b.accountLabel.split('@')[1]}>`;
         await tx.execute(`insert into crm_mailbox_send_jobs(id,workspace_id,user_id,connection_id,message_id,project_id,contact_id,lead_id,identity_id,send_consent_id,approval_digest,source_revision,provider,account_label,provider_account_id,recipient_email,subject,body_text,thread_id,source_provider_id,source_internet_id,internet_message_id,attachment_manifest) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7::uuid,$8::uuid,$9::uuid,$10::uuid,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb)`, [context.commandId, s.workspaceId, s.userId, b.connectionId, b.id, b.projectId, b.contactId, b.leadId, s.authIdentityId, b.consentId, approved, b.revision, b.provider, b.accountLabel, b.accountId, b.email, b.subject, input.body, b.threadId, b.providerId, b.internetMessageId, internetId, JSON.stringify(manifest(all))]);
         return { id: context.commandId, status: 'prepared' };
     }, options);
-    const job = await dispatchPreparedPersonalReply(s, prepared.data.id, options);
+    const job = await dispatchPreparedPersonalReplyWithChecks(s, prepared.data.id, options, checked);
     return { data: job, replayed: prepared.replayed, auditReference: prepared.auditReference, commandId: prepared.commandId };
 }
 /** A prepared row proves no provider call has started. Dispatching/unknown can never be replayed. */
 export async function dispatchPreparedPersonalReply(s: AppSession, id: string, options: Options = {}) {
+    return dispatchPreparedPersonalReplyWithChecks(s, id, options, new Set());
+}
+async function dispatchPreparedPersonalReplyWithChecks(s: AppSession, id: string, options: Options, checked: CurrentPdfChecks) {
     const before = await withCrmRead(s, async (tx, fresh) => { const job = await loadJob(tx, fresh, id); if (job.status !== 'prepared')
         return { job, b: null }; const b = await binding(tx, fresh, job.messageId, true); return { job, b }; }, options);
     if (!before.b)
@@ -229,7 +259,7 @@ export async function dispatchPreparedPersonalReply(s: AppSession, id: string, o
         throw error;
     }
     const claimed = await withCrmRead(s, async (tx, fresh) => { const job = await loadJob(tx, fresh, id); if (job.status !== 'prepared')
-        return false; const b = await binding(tx, fresh, job.messageId, true), input = { messageId: job.messageId, body: job.body, attachmentIds: job.manifest.map(f => f.id) }, all = await files(tx, fresh, input); await consent(tx, fresh, b); if (digest(b, original, input, all) !== job.approvalDigest)
+        return false; const b = await binding(tx, fresh, job.messageId, true), input = { messageId: job.messageId, body: job.body, attachmentIds: job.manifest.map(f => f.id) }, all = await files(tx, fresh, input, checked); await consent(tx, fresh, b); if (digest(b, original, input, all) !== job.approvalDigest)
         throw new CrmCommandError('MAIL_PREVIEW_STALE', 'Die bestätigte Vorschau ist veraltet. Kein Versand wurde ausgeführt.', 409); await tx.execute("update crm_mailbox_send_jobs set status='dispatching',updated_at=now() where id=$1::uuid", [id]); return true; }, options);
     if (!claimed)
         return withCrmRead(s, async (tx, fresh) => jobDto(await loadJob(tx, fresh, id)), options);
@@ -238,7 +268,7 @@ export async function dispatchPreparedPersonalReply(s: AppSession, id: string, o
         const job = await loadJob(tx, fresh, id);
         if (job.status !== 'dispatching')
             return jobDto(job);
-        const b = await binding(tx, fresh, job.messageId, true), input = { messageId: job.messageId, body: job.body, attachmentIds: job.manifest.map(f => f.id) }, all = await files(tx, fresh, input);
+        const b = await binding(tx, fresh, job.messageId, true), input = { messageId: job.messageId, body: job.body, attachmentIds: job.manifest.map(f => f.id) }, all = await files(tx, fresh, input, checked);
         await consent(tx, fresh, b);
         if (digest(b, original, input, all) !== job.approvalDigest)
             throw new CrmCommandError('MAIL_PREVIEW_STALE', 'Die Quelle wurde vor Versand geändert. Der Beleg bleibt vorsorglich gesperrt.', 409);
@@ -323,7 +353,7 @@ export async function savePersonalAttachment(s: AppSession, raw: Record<string, 
 }
 export async function readPersonalAttachment(s: AppSession, messageId: string, id: string, options: Options = {}) {
     return withCrmRead(s, async (tx, fresh) => { personal(fresh); await assertPersonalMailboxMessageAccess(tx,fresh,messageId); const file = await tx.queryOne<StoredFile>(`select ${fileColumns} from crm_mailbox_attachment_files where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid and id=$4::uuid and status='ready'`, [fresh.workspaceId, fresh.userId, messageId, assertCrmUuid(id)]); if (!file)
-        throw new CrmCommandError('NOT_FOUND', 'Eigene geprüfte Datei nicht verfügbar.', 404); return decryptedFile(fresh, messageId, file); }, options);
+        throw new CrmCommandError('NOT_FOUND', 'Eigene geprüfte Datei nicht verfügbar.', 404); return checkedFile(fresh, messageId, file, new Set()); }, options);
 }
 export async function erasePersonalAttachment(s: AppSession, messageId: string, id: string, metadata: {
     idempotencyKey: string;
