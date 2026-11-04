@@ -150,10 +150,10 @@ export async function applySalesSchema(db, {
       // dedicated two-tenant acceptance applies the unchanged 121 SQL after
       // the real gateway predecessors; generic sales tests do not imply it.
       name === "121_webchat_customer_product.sql" ||
-      // 188 composes that same omitted Webchat predecessor with released 167.
+      // 191 composes that same omitted Webchat predecessor with released 167.
       // The dedicated compatibility fixture applies both real predecessors;
       // generic sales/workspace fixtures must not claim this isolated upgrade.
-      name === "188_webchat_partner_access_compatibility.sql"
+      name === "191_webchat_partner_access_compatibility.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
@@ -215,6 +215,6 @@ export async function applySalesSchema(db, {
   }
   await db.admin.query(`grant usage on schema public to ${db.role}`);
   await db.admin.query(`grant select on workspaces, workspace_users, project_pipeline_permissions to ${db.role}`);
-  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { migration: "111_booking_public_channels.sql", reason: "Requires the deliberately omitted 096 gateway and 100 Studio predecessors; unchanged SQL is applied by the dedicated booking and production-upgrade fixtures" }, { migration: "121_webchat_customer_product.sql", reason: "Requires omitted public chat predecessors; applied by the dedicated two-customer fixture" }, { migration: "188_webchat_partner_access_compatibility.sql", reason: "Requires both isolated Webchat121 and released partner167; applied by the dedicated compatibility fixture" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
+  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { migration: "111_booking_public_channels.sql", reason: "Requires the deliberately omitted 096 gateway and 100 Studio predecessors; unchanged SQL is applied by the dedicated booking and production-upgrade fixtures" }, { migration: "121_webchat_customer_product.sql", reason: "Requires omitted public chat predecessors; applied by the dedicated two-customer fixture" }, { migration: "191_webchat_partner_access_compatibility.sql", reason: "Requires both isolated Webchat121 and released partner167; applied by the dedicated compatibility fixture" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
   return applied;
 }

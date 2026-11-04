@@ -43,7 +43,7 @@ test('isolated Webchat access and released partner/billing guards compose in bot
     await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");
     for (const name of ['092_crm_production_machine_identity.sql','093_crm_machine_internal_context.sql','094_website_sales_ingestion.sql','095_form_tenant_isolation.sql','096_public_integration_gateway.sql']) await apply(name);
     for (const name of (await readdir('migrations')).filter(name => /^\d+.*\.sql$/u.test(name) && !name.includes('_rollback') && Number(name.slice(0,3))>=101 && Number(name.slice(0,3))<=110).sort()) await apply(name);
-    for (const name of ['114_customer_workspace_provisioning.sql','146_ai_credit_billing.sql','152_ai_billing_admin.sql','153_ai_billing_runtime_acl.sql','167_crm_partner_cooperation.sql']) await apply(name);
+    for (const name of ['114_customer_workspace_provisioning.sql','146_ai_credit_billing.sql','152_ai_billing_admin.sql','153_ai_billing_runtime_acl.sql','167_crm_partner_cooperation.sql','188_crm_ai_assistant.sql']) await apply(name);
     const originalDefaults = await defaults();
     await apply('121_webchat_customer_product.sql');
     await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'SYNTHETIC alpha','self_service_customer','general_company'),($2,'SYNTHETIC beta','self_service_customer','general_company')",[ids.alpha,ids.beta]);
@@ -68,8 +68,8 @@ test('isolated Webchat access and released partner/billing guards compose in bot
       assert.deepEqual(await access(ids.member,ids.alpha,ids.alphaProject),denied);
       assert.deepEqual(await access(ids.partner,ids.alpha,ids.alphaProject),denied);
     });
-    await apply('188_webchat_partner_access_compatibility.sql');
-    await t.test('188 retains both branches and current cross-tenant, membership and account revocation',async()=>{
+    await apply('191_webchat_partner_access_compatibility.sql');
+    await t.test('191 retains both branches and current cross-tenant, membership and account revocation',async()=>{
       assert.deepEqual(await access(ids.member,ids.alpha,ids.alphaProject),allowed);
       assert.deepEqual(await access(ids.partner,ids.alpha,ids.alphaProject),denied);
       assert.deepEqual(await access(ids.betaMember,ids.beta,ids.betaProject),allowed);
