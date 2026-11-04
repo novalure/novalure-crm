@@ -52,8 +52,30 @@ const server = createServer((request, response) => {
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const browser = await chromium.launch({ channel: process.env.CRM_QA_BROWSER_CHANNEL || "chrome", headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+const traceEnabled = process.env.CRM_QA_CORE_REFRESH_TRACE === "1", traces = [];
+let currentStep = "startup";
+const trace = (event, details = {}) => { if (traceEnabled) traces.push({ at: Date.now(), step: currentStep, event, ...details }); };
+if (traceEnabled) {
+  await context.exposeBinding("recordCoreRefreshTrace", (_source, event) => trace("browser", event));
+  await context.addInitScript(() => {
+    const lifetime = crypto.randomUUID();
+    const record = (event, details = {}) => { void window.recordCoreRefreshTrace({ browserEvent: event, lifetime, url: location.href, ...details }); };
+    record("document-start");
+    const originalFetch = window.fetch;
+    window.fetch = function (...args) {
+      const qa = window.__QA_CRM__;
+      record("fetch", { endpoint: String(args[0]), stack: new Error().stack, workspaceId: qa?.activeWorkspace.id, marker: qa?.liveCoreData.projects[0]?.name, status: qa?.coreDataStatus });
+      return originalFetch.apply(this, args);
+    };
+    for (const method of ["pushState", "replaceState"]) {
+      const originalHistory = history[method];
+      history[method] = function (...args) { const result = originalHistory.apply(this, args); record(method, { destination: String(args[2]) }); return result; };
+    }
+  });
+}
 const page = await context.newPage(), errors = [], results = [], coreRequests = [], propertyRequests = [];
-let corePlans = [], propertyGate = null;
+page.setDefaultNavigationTimeout(15000);
+let corePlans = [], propertyGate = null, openSequence = 0;
 page.on("pageerror", error => errors.push(error.message));
 await context.route("**/api/**", async route => {
   const request = route.request(), url = new URL(request.url());
@@ -63,8 +85,9 @@ await context.route("**/api/**", async route => {
     const workspaceId = url.searchParams.get("workspaceId") || workspaceA;
     coreRequests.push(workspaceId);
     const plan = corePlans.shift();
+    trace("core-request", { workspaceId, plan: plan ? { workspaceId: plan.workspaceId, marker: plan.marker, status: plan.status, gated: Boolean(plan.gate) } : null, pageUrl: page.url() });
     if (plan) { assert.equal(workspaceId, plan.workspaceId); if (plan.gate) await plan.gate; if (plan.status) return route.fulfill({ status: plan.status, json: { error: "SYNTHETIC failure" } }); }
-    return route.fulfill({ json: { data: core(workspaceId, plan?.marker || `SYNTHETIC default ${workspaceId}`) } });
+    return route.fulfill({ json: { activeWorkspaceId: workspaceId, data: core(workspaceId, plan?.marker || `SYNTHETIC default ${workspaceId}`) } });
   }
   if (url.pathname === "/api/crm/properties" && request.method() === "POST") {
     propertyRequests.push(request.postDataJSON());
@@ -76,11 +99,16 @@ await context.route("**/api/**", async route => {
 });
 const snapshot = () => page.evaluate(() => ({ workspaceId: window.__QA_CRM__.activeWorkspace.id, marker: window.__QA_CRM__.liveCoreData.projects[0]?.name, status: window.__QA_CRM__.coreDataStatus, switchStatus: window.__QA_CRM__.workspaceSwitchState }));
 async function open() {
+  trace("open-start", { pageUrl: page.url() });
   corePlans = []; coreRequests.length = 0; propertyRequests.length = 0; propertyGate = null;
-  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  // The inline managed-service panel also fetches /api/crm/core. Keep this
+  // parent/property harness in its intended section so that unrelated panel
+  // requests cannot consume a queued parent response. Each case remounts.
+  await page.goto(`http://127.0.0.1:${server.address().port}/?qaCoreCase=${++openSequence}#properties`, { waitUntil: "domcontentloaded", timeout: 15000 });
   await expect.poll(() => page.evaluate(() => Boolean(window.__QA_CRM__))).toBe(true);
   await page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); await window.__QA_CRM__.refreshCoreData(); });
   await expect.poll(async () => (await snapshot()).status).toBe("fresh"); coreRequests.length = 0;
+  if (traceEnabled) trace("open-ready", { state: await snapshot(), pageUrl: page.url() });
 }
 const refresh = () => page.evaluate(() => { window.oldRefreshPromise = window.__QA_CRM__.refreshCoreData(); });
 async function switchTo(workspaceId) {
@@ -88,7 +116,7 @@ async function switchTo(workspaceId) {
   if (result) await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   return result;
 }
-async function step(name, run) { await run(); results.push({ name, status: "PASS" }); console.log("PASS " + name); }
+async function step(name, run) { currentStep = name; trace("step-start", { pageUrl: page.url() }); await run(); results.push({ name, status: "PASS" }); console.log("PASS " + name); if (traceEnabled) trace("step-pass", { state: await snapshot(), pageUrl: page.url() }); }
 function gate() { let release; const promise = new Promise(resolve => { release = resolve; }); return { promise, release }; }
 try {
   await step(baseline ? "immutable baseline reproduces late property A data overwriting active workspace B" : "late confirmed property A save cannot refresh A into the real parent after B is active", async () => {
@@ -162,7 +190,7 @@ try {
   });
   await step("URL restoration uses the guarded workspace switch and preserves explicit All", async () => {
     corePlans = []; coreRequests.length = 0; propertyRequests.length = 0; propertyGate = null;
-    await page.goto(`http://127.0.0.1:${server.address().port}/?workspaceId=${workspaceB}&projectId=all`);
+    await page.goto(`http://127.0.0.1:${server.address().port}/?workspaceId=${workspaceB}&projectId=all&qaCoreCase=${++openSequence}#properties`, { waitUntil: "domcontentloaded", timeout: 15000 });
     await expect.poll(() => page.evaluate(() => window.__QA_CRM__?.activeWorkspace.id)).toBe(workspaceB);
     await expect.poll(async () => (await snapshot()).status).toBe("fresh");
     assert.equal(await page.evaluate(() => window.__QA_CRM__.crmScope.projectId), null);
@@ -179,5 +207,6 @@ try {
 } finally {
   const output = path.resolve(".npm-cache/qa/crm-core-refresh"); await mkdir(output, { recursive: true });
   await writeFile(path.join(output, baseline ? "baseline-results.json" : "results.json"), JSON.stringify({ localOnly: true, actualCrmWorkspace: true, unrelatedChildrenStubbed: true, syntheticHttp: true, databaseIntegration: false, baselineReproduction: baseline, baselineRevision: baseline ? baselineRevision : null, results, browserErrors: errors }, null, 2));
+  if (traceEnabled) await writeFile(path.join(output, "trace.json"), JSON.stringify(traces, null, 2));
   await context.close(); await browser.close(); await new Promise(resolve => server.close(resolve));
 }

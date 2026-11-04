@@ -32,6 +32,10 @@ export function createCrmCoreRequestGuard(initialWorkspaceId: string) {
       pendingSwitch = { id: ++sequence, workspaceId };
       return pendingSwitch;
     },
+    cancelSwitch() {
+      latestRefresh = null;
+      pendingSwitch = null;
+    },
     completeSwitch(ticket: CoreRequestTicket) {
       if (!isCurrentSwitch(ticket)) return false;
       activeWorkspaceId = ticket.workspaceId;
