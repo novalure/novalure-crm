@@ -12,6 +12,7 @@ import { encryptSecret, decryptSecret } from '../integrations/secret-box';
 import { unprotectMailboxToken } from './crm-mailbox-repository';
 import { evaluateOutboundConsent } from './consent-policy';
 import { checkMarketingContactPolicy } from './marketing-contact-policy-repository';
+import {assertPersonalMailboxMessageAccess} from './crm-mailbox-message-access';
 type Options = TenantTransactionOptions & {
     transport?: MailboxTransport;
 };
@@ -100,6 +101,7 @@ async function binding(tx: TenantTransaction, s: AppSession, messageId: string, 
     }>(`select m.id,m.connection_id as "connectionId",m.provider_id as "providerId",m.thread_id as "threadId",m.internet_message_id as "internetMessageId",m.subject,m.from_address as "fromAddress",m.revision,m.content_hash as "contentHash",m.attachments,m.deleted_at as "deletedAt",m.provider_id_format='immutable' as immutable,c.provider,c.account_label as "accountLabel",c.provider_account_id as "accountId",c.granted_scopes as scopes,c.status,c.access_token_encrypted as access,c.expires_at::text as "expiresAt",c.revision as "connectionRevision",c.send_consent_id as "consentId",c.send_consent_identity_id as "consentIdentity" from crm_mailbox_messages m join crm_mailbox_connections c on c.id=m.connection_id and c.workspace_id=m.workspace_id and c.user_id=m.user_id where m.id=$1::uuid and m.workspace_id=$2::uuid and m.user_id=$3::uuid for share of m,c`, [assertCrmUuid(messageId), s.workspaceId, s.userId]);
     if (!row || row.deletedAt || row.status !== 'connected' || !row.accountId || !hasMailboxReadScope(row.provider, row.scopes))
         throw new CrmCommandError('MAIL_SOURCE_UNAVAILABLE', 'Die eigene Originalnachricht und eine verifizierte Postfachverbindung sind erforderlich.', 409);
+    if(!send)await assertPersonalMailboxMessageAccess(tx,s,messageId);
     if (send && (!row.consentId || row.consentIdentity !== s.authIdentityId || !hasMailboxSendScope(row.provider, row.scopes)))
         throw new CrmCommandError('MAIL_SEND_CONSENT_REQUIRED', 'Lesen und Antworten zuerst ausdrücklich für dieses persönliche Konto freigeben.', 409);
     const token = unprotectMailboxToken(s, row.provider, row.access, row.accountLabel);
@@ -184,8 +186,7 @@ function jobDto(job: Job) { return { id: job.id, messageId: job.messageId, statu
 async function loadJob(tx: TenantTransaction, s: AppSession, id: string) { personal(s, true); const job = await tx.queryOne<Job>(`select ${jobColumns} from crm_mailbox_send_jobs where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid for update`, [assertCrmUuid(id), s.workspaceId, s.userId]); if (!job)
     throw new CrmCommandError('NOT_FOUND', 'Eigener Antwortbeleg nicht verfügbar.', 404); await assertProjectGrant(tx, s, job.projectId, true); return job; }
 export async function personalReplyState(s: AppSession, messageId: string, options: Options = {}) {
-    return withCrmRead(s, async (tx, fresh) => { personal(fresh); const own = await tx.queryOne('select id from crm_mailbox_messages where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid and deleted_at is null', [assertCrmUuid(messageId), fresh.workspaceId, fresh.userId]); if (!own)
-        throw new CrmCommandError('NOT_FOUND', 'Eigene Nachricht nicht verfügbar.', 404); const all = await tx.query<StoredFile>(`select ${fileColumns} from crm_mailbox_attachment_files where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid order by created_at limit 50`, [fresh.workspaceId, fresh.userId, messageId]); const jobs = await tx.query<Job>(`select ${jobColumns} from crm_mailbox_send_jobs where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid order by created_at desc limit 20`, [fresh.workspaceId, fresh.userId, messageId]); for (const job of jobs)
+    return withCrmRead(s, async (tx, fresh) => { personal(fresh); await assertPersonalMailboxMessageAccess(tx,fresh,messageId); const all = await tx.query<StoredFile>(`select ${fileColumns} from crm_mailbox_attachment_files where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid order by created_at limit 50`, [fresh.workspaceId, fresh.userId, messageId]); const jobs = await tx.query<Job>(`select ${jobColumns} from crm_mailbox_send_jobs where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid order by created_at desc limit 20`, [fresh.workspaceId, fresh.userId, messageId]); for (const job of jobs)
         await assertProjectGrant(tx, fresh, job.projectId, true); return { files: all.map(f => ({ id: f.id, fileName: f.fileName, mimeType: f.mimeType, sha256: f.sha256, sizeBytes: f.sizeBytes, status: f.status, checkCode: f.checkCode })), jobs: jobs.map(job=>({...jobDto(job),from:job.from,to:job.to,subject:job.subject,body:job.body,createdAt:job.createdAt,attachments:job.manifest})) }; }, options);
 }
 export async function sendPersonalReply(s: AppSession, raw: Record<string, unknown>, metadata: {
@@ -316,8 +317,7 @@ export async function savePersonalAttachment(s: AppSession, raw: Record<string, 
     }, options);
 }
 export async function readPersonalAttachment(s: AppSession, messageId: string, id: string, options: Options = {}) {
-    return withCrmRead(s, async (tx, fresh) => { personal(fresh); const message = await tx.queryOne('select id from crm_mailbox_messages where workspace_id=$1::uuid and user_id=$2::uuid and id=$3::uuid and deleted_at is null', [fresh.workspaceId, fresh.userId, assertCrmUuid(messageId)]); if (!message)
-        throw new CrmCommandError('NOT_FOUND', 'Eigene Nachricht nicht verfügbar.', 404); const file = await tx.queryOne<StoredFile>(`select ${fileColumns} from crm_mailbox_attachment_files where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid and id=$4::uuid and status='ready'`, [fresh.workspaceId, fresh.userId, messageId, assertCrmUuid(id)]); if (!file)
+    return withCrmRead(s, async (tx, fresh) => { personal(fresh); await assertPersonalMailboxMessageAccess(tx,fresh,messageId); const file = await tx.queryOne<StoredFile>(`select ${fileColumns} from crm_mailbox_attachment_files where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid and id=$4::uuid and status='ready'`, [fresh.workspaceId, fresh.userId, messageId, assertCrmUuid(id)]); if (!file)
         throw new CrmCommandError('NOT_FOUND', 'Eigene geprüfte Datei nicht verfügbar.', 404); return decryptedFile(fresh, messageId, file); }, options);
 }
 export async function erasePersonalAttachment(s: AppSession, messageId: string, id: string, metadata: {

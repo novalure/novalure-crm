@@ -1,0 +1,17 @@
+[
+  {
+    "path": "artifacts/personal-mail-acl/before-fix.tap.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "097981f208d92216a42e828c73617b08dc126cd801ac6528085e84bcd17f5abb"
+  },
+  {
+    "path": "artifacts/personal-mail-acl/typecheck.log.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e"
+  },
+  {
+    "path": "artifacts/personal-mail-acl/lint.log.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]
