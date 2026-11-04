@@ -1,0 +1,15 @@
+▶ workspace settings commit with their audit and fail atomically
+  ✔ workspace summaries count active projects in each membership scope (72.1656ms)
+  ✔ scoped admin cookie updates the target workspace and writes the matching RLS audit (27.6545ms)
+  ✔ audit failure rolls back the settings and returns a safe JSON failure (22.7813ms)
+  ✔ current viewer membership cannot change settings through an existing internal cookie (10.4753ms)
+  ✔ project-restricted membership summaries count only readable projects (17.6009ms)
+✔ workspace settings commit with their audit and fail atomically (11351.8262ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12570.6461

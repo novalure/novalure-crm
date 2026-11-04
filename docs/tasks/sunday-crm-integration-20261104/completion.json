@@ -1,0 +1,426 @@
+{
+  "schema": {
+    "isolated121": "Preserved as a synthetic-only product schema, with cumulative external_partner denial added to crm_project_access for a late upgrade.",
+    "historicalOrderProof": "The new local PostgreSQL test replays the exact167 access function to reproduce the lost Webchat branch, then verifies188 restores both constraints.",
+    "genericFixture": "Explicitly omits121 and191 because its public-chat predecessors are deliberately absent; dedicated fixtures apply the real SQL. Initial strict predecessor failure is retained.",
+    "compatibility191": "Composes released167 external-partner denial with isolated Webchat member access; requires both unchanged predecessors and creates no account, grant, price, quota or activation.",
+    "originalMigrationSlot": "First implemented as188 in cd55892; renamed byte-identically to191 by6f8de67 after the current assistant claimed188. Historical188 logs are retained with their actual old scope.",
+    "currentLine": [
+      "121_webchat_customer_product.sql",
+      "146_ai_credit_billing.sql",
+      "152_ai_billing_admin.sql",
+      "153_ai_billing_runtime_acl.sql",
+      "167_crm_partner_cooperation.sql",
+      "185_property_matching_details.sql",
+      "186_property_unit_details.sql",
+      "187_property_fragment_editing.sql",
+      "188_crm_ai_assistant.sql",
+      "191_webchat_partner_access_compatibility.sql"
+    ],
+    "reservedNotUsed": [
+      "189_property_media_project_access.sql",
+      "190_property_unknown_values.sql"
+    ]
+  },
+  "recordedAt": "2026-11-04T20:40:30.086Z",
+  "status": "LOCAL_CURRENT_ASSISTANT_SOURCE_COMPOSED_BUILD_AND_TARGETED_CHECKS_COMPLETE_REQUIRED_GATES_OPEN",
+  "workspace": "C:/Projects/novalure-crm-sunday-integration-20261104",
+  "branch": "codex/sunday-crm-integration-20261104",
+  "base": "fa234f226c41def89f038ee7b1c52e838b90cb4f",
+  "sourceHead": "ce88252342042c59481747f6cabe6b04c51b36a3",
+  "currentProduction": {
+    "initialRootObservedSha": "fa234f226c41def89f038ee7b1c52e838b90cb4f",
+    "initialDeployment": "dpl_8GGZ6dFQDg8vuR3YXnbhsKptSkzi",
+    "note": "The root-provided current assistant source11c4384c is now a regular merge ancestor. This local candidate is not released and must be reconciled against any later target change before release. Active QA slots189/190 are reserved and not incorporated.",
+    "latestRootProvidedSha": "11c4384c0c5a360e448f441c822edc1057d9fe17",
+    "latestProvidedSourceIncluded": true
+  },
+  "integrations": [
+    {
+      "candidate": "CRM128",
+      "head": "f2cda0173d6d255e37679a3e40ce746dc49461db",
+      "localMerge": "b5c9df5",
+      "scope": "Isolated customer portal, shared synthetic quota and confirmed test-payment flow; Production guards preserved."
+    },
+    {
+      "candidate": "CRM131",
+      "head": "99379e446848ae23eb2d4150463047a39f5e3dc6",
+      "localMerge": "c7eafb7",
+      "scope": "Additive signed accepted-enquiry session resumption; PR129 invitation fences preserved."
+    },
+    {
+      "candidate": "CRM130",
+      "head": "d9f6cd43e2a2e3f742cb6aa6a8d523162be12d56",
+      "localCommit": "cd55892",
+      "scope": "Selected exact backup/warning closure only; old workflows, Vercel settings and package lock not imported.",
+      "files": [
+        {
+          "file": "scripts/crm-full-backup.mjs",
+          "sourceBlob": "a7c7ce88e9745aedb45116f863ecb57c905ee83d",
+          "integratedBlob": "a7c7ce88e9745aedb45116f863ecb57c905ee83d"
+        },
+        {
+          "file": "scripts/lib/crm-full-backup.mjs",
+          "sourceBlob": "d5293831bda722d50b8eec33a4baa7c8cff65a70",
+          "integratedBlob": "d5293831bda722d50b8eec33a4baa7c8cff65a70"
+        },
+        {
+          "file": "scripts/lib/crm-full-backup-providers.mjs",
+          "sourceBlob": "d3ef966e682b8928eba8c96f155417dd59785b43",
+          "integratedBlob": "d3ef966e682b8928eba8c96f155417dd59785b43"
+        },
+        {
+          "file": "scripts/lib/crm-full-backup-http.mjs",
+          "sourceBlob": "29017d6c6a7b521883b906a2670e47083ec0b917",
+          "integratedBlob": "29017d6c6a7b521883b906a2670e47083ec0b917"
+        },
+        {
+          "file": "scripts/lib/crm-backup-failure-warning.mjs",
+          "sourceBlob": "d47ea3e9133d57695ef8221b9a24ff1b1dcb6fb5",
+          "integratedBlob": "d47ea3e9133d57695ef8221b9a24ff1b1dcb6fb5"
+        },
+        {
+          "file": "scripts/prepare-crm-backup-workload.mjs",
+          "sourceBlob": "1c3032409fbe946ff344dc9f7fec62e5d79fbeeb",
+          "integratedBlob": "1c3032409fbe946ff344dc9f7fec62e5d79fbeeb"
+        },
+        {
+          "file": "scripts/crm-full-backup-tests.mjs",
+          "sourceBlob": "95f142bd55a8434919f7a0e5cdce3f0d6a21329d",
+          "integratedBlob": "95f142bd55a8434919f7a0e5cdce3f0d6a21329d"
+        },
+        {
+          "file": "scripts/crm-full-backup-provider-tests.mjs",
+          "sourceBlob": "bd02e1d960c6aac19ece13c0e71035e81e461a43",
+          "integratedBlob": "bd02e1d960c6aac19ece13c0e71035e81e461a43"
+        },
+        {
+          "file": "scripts/crm-full-backup-http-tests.mjs",
+          "sourceBlob": "0e09c7e3b0540f852fdb34fd756ab329325e13c8",
+          "integratedBlob": "0e09c7e3b0540f852fdb34fd756ab329325e13c8"
+        },
+        {
+          "file": "scripts/crm-backup-failure-warning-tests.mjs",
+          "sourceBlob": "baaa2eb8699a34b807f15343a328647a669997b4",
+          "integratedBlob": "baaa2eb8699a34b807f15343a328647a669997b4"
+        },
+        {
+          "file": "docs/crm-full-backup-runner.md",
+          "sourceBlob": "4e873e5b437c00371cb7210603645e3231aad38a",
+          "integratedBlob": "4e873e5b437c00371cb7210603645e3231aad38a"
+        },
+        {
+          "file": "docs/backup-failure-warning-2026-11-03.md",
+          "sourceBlob": "b8bbf0e4076e3ddd0945b02a065b7af7e22f096b",
+          "integratedBlob": "b8bbf0e4076e3ddd0945b02a065b7af7e22f096b"
+        }
+      ]
+    },
+    {
+      "candidate": "Workspace atomic settings",
+      "head": "a7be3876453f69e66a3a6ea926e3ce3959883408",
+      "localMerge": "ba5144d"
+    },
+    {
+      "candidate": "Workspace URL restore",
+      "head": "1ed6b08d301cef0cb93e55b2cc3b2d2493ea6809",
+      "localMerge": "0bd5039"
+    },
+    {
+      "candidate": "Current live CRM assistant",
+      "head": "11c4384c0c5a360e448f441c822edc1057d9fe17",
+      "localMerge": "c7c6726469526191eda95d7ff2f1705870ca2c74",
+      "scope": "Current assistant, billing-facing contract, navigation and migration188 preserved; CRM workspace composed with the URL restoration fix."
+    }
+  ],
+  "preservation": {
+    "releaseSourcesUnchanged": [
+      "package-lock.json",
+      "vercel.json",
+      ".github",
+      "src/lib/ai-billing",
+      "migrations/146_ai_credit_billing.sql",
+      "migrations/152_ai_billing_admin.sql",
+      "migrations/153_ai_billing_runtime_acl.sql",
+      "migrations/185_property_matching_details.sql",
+      "migrations/186_property_unit_details.sql",
+      "migrations/187_property_fragment_editing.sql"
+    ],
+    "invitation129Ancestor": "10bbabfbb4c55d4188bf9adab1bd792bf6a28a2e",
+    "newerActiveWorktreesChanged": false,
+    "releasePackageRuntimeDependenciesUnchanged": true,
+    "lockUnchanged": true,
+    "existingFingerprintAndNeonHelpersUnchanged": true,
+    "providerCredentialsCopied": false,
+    "currentAssistantSourcesUnchanged": [
+      "migrations/188_crm_ai_assistant.sql",
+      "src/lib/crm-ai-assistant",
+      "src/components/crm-ai-assistant.tsx",
+      "src/app/api/crm/ai-assistant/route.ts",
+      "src/lib/ai-billing",
+      "src/lib/workspace-navigation.ts",
+      "src/lib/crm-self-service-navigation.ts"
+    ]
+  },
+  "localEnvironment": {
+    "node": "24.18.0",
+    "npmUsed": "11.16.0",
+    "repositoryExpectedNpm": "11.9.0",
+    "install": "npm ci --offline --ignore-scripts --no-audit --no-fund",
+    "installedPackages": 525,
+    "registryRequests": 0,
+    "toolchainCiClaimed": false
+  },
+  "checks": {
+    "backupSynthetic": {
+      "passed": 84,
+      "failed": 0,
+      "skipped": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/backup-local.tap"
+    },
+    "initialProductBooking": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/product-booking-targeted.tap"
+    },
+    "schemaCompatibility": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/schema-compatibility.tap"
+    },
+    "productPartnerWorkspaceFirstFinalAttempt": {
+      "passed": 20,
+      "failed": 1,
+      "exitCode": 1,
+      "reason": "Generic fixture omitted121 but initially attempted188; genuine missing-predecessor guard failed.",
+      "log": "artifacts/sunday-crm-integration-20261104/final-product-workspace-partner.tap"
+    },
+    "correctedWorkspaceOnly": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/workspace-settings-final.tap"
+    },
+    "scope": {
+      "passed": 8,
+      "failed": 1,
+      "exitCode": 1,
+      "reason": "Retained broad source-string assertion matches existing projects[0]?.workspaceId, not an implicit project ID default; assertion was not weakened or relabelled.",
+      "log": "artifacts/sunday-crm-integration-20261104/workspace-scope.tap"
+    },
+    "affectedLint": {
+      "exitCode": 0,
+      "initialFiles": 34,
+      "finalQaAndSchemaDeltaFiles": 6,
+      "fixtureSeparatelyChecked": true
+    },
+    "typecheck": {
+      "initialExitCode": 0,
+      "finalLog": "artifacts/sunday-crm-integration-20261104/final-typecheck.log",
+      "finalResult": "PASS_LOCAL_BEFORE_ASSISTANT_MERGE_AND_CURRENT_ASSISTANT_BUILD_TYPESCRIPT_PASS",
+      "finalExitCode": 0
+    },
+    "nextBuild": {
+      "initialExitCode": 0,
+      "finalExitCode": 0,
+      "command": "node node_modules/next/dist/bin/next build --webpack",
+      "finalLog": "artifacts/sunday-crm-integration-20261104/final-build.log",
+      "credentialsRemoved": true,
+      "telemetryDisabled": true,
+      "scope": "Final application sources plus QA fixes. The subsequent sole helper metadata/test-fixture correction does not change application/runtime or SQL bytes."
+    },
+    "secretScan": {
+      "exitCode": 0,
+      "findings": 0,
+      "sourceHead": "ce88252342042c59481747f6cabe6b04c51b36a3",
+      "range": "fa234f226c41def89f038ee7b1c52e838b90cb4f..ce88252342042c59481747f6cabe6b04c51b36a3",
+      "scope": "Committed source history before this documentation/evidence commit; report assistant-secret-scan.json."
+    },
+    "sourceDiffWhitespace": {
+      "status": "INHERITED_FORMAT_FINDINGS_RETAINED",
+      "ownSourceDeltaClean": true,
+      "note": "Current assistant source contains three inherited blank-EOF observations; original QA before-fix text contains four trailing-whitespace lines. No code/assertion was changed solely to relabel them."
+    },
+    "retainedHistoricalRawLogWhitespace": {
+      "file": "qa/live-workspace-settings-2026-11-04/before-fix-tests.txt",
+      "trailingWhitespaceLines": 4,
+      "originalBytesPreserved": true,
+      "notAProductFailure": true
+    },
+    "fullRegression": "NOT_CLAIMED",
+    "independentExactRevisionReview": "NOT_RUN",
+    "nativeCi": "NOT_RUN",
+    "genuineTrustedApp": "NOT_RUN",
+    "assistantAnd191": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/assistant-191-compatibility.tap",
+      "scope": "Local fake-provider assistant/RLS/replay/late-authority plus actual191 SQL installed after the current188 assistant predecessor."
+    },
+    "assistantCompositionLint": {
+      "exitCode": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/assistant-composition-lint.log"
+    },
+    "assistantBuild": {
+      "exitCode": 0,
+      "log": "artifacts/sunday-crm-integration-20261104/assistant-final-build.log",
+      "staticPages": 188,
+      "typescriptFinished": true,
+      "scope": "Current11c4384c assistant composed with QA fixes and unchanged runtime/source compatibility191; subsequent sole fixture comment clarified actual121 scope."
+    }
+  },
+  "unresolved": [
+    {
+      "kind": "ACTIVE_QA_SUCCESSORS",
+      "status": "OPEN",
+      "action": "Reserved189/190 remain owned by the active QA strand. Integrate their final exact sources when provided, keeping191 free for the composed Webchat/partner guard."
+    },
+    {
+      "kind": "FINANCIAL_ARCHITECTURE",
+      "status": "OPEN",
+      "files": [
+        "src/lib/webchat-product/billing.ts",
+        "src/lib/webchat-product/turns.ts",
+        "src/lib/ai-billing/repository.ts"
+      ],
+      "action": "Keep isolated test quotas/payments separate from released AI credits. Real Website invoice authority and actual commercial pricing/contract/checkout/payment mapping remain explicit work; no second active billing truth or removed Production guard."
+    },
+    {
+      "kind": "SOURCE_PROBE",
+      "status": "OPEN",
+      "file": "scripts/crm-scope-persistence-smoke-tests.mjs",
+      "action": "Resolve the inherited overly broad first-project string probe on its intended scope in a separately justified test correction; original8/9 remains retained."
+    },
+    {
+      "kind": "RELEASE",
+      "status": "OPEN",
+      "action": "Final applicable regression/review, native CI, genuine exact-head App, target/cost/access/recovery/monitoring gates before actual integration or release."
+    },
+    {
+      "kind": "LIVE_BACKUP_RUNTIME",
+      "status": "OPEN",
+      "action": "Retained130 source closure runs under the preserved newer release dependencies. Mock-port84/84 does not requalify a real backup/provider/deployment or its costs."
+    }
+  ],
+  "effects": {
+    "providerCalls": 0,
+    "modelCalls": 0,
+    "reviewerCalls": 0,
+    "push": false,
+    "onlinePr": false,
+    "mainMerge": false,
+    "deployment": false,
+    "productionMigration": false,
+    "realPayments": false,
+    "customerDataChanges": false,
+    "mailings": false,
+    "userChatMessages": false,
+    "temporaryLocalIntegrationCommits": true
+  },
+  "evidence": [
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/affected-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-191-compatibility.tap",
+      "sha256": "b9448f625f1871eff7efcf207c31200986f015da3ae2b350188856892e47b68c",
+      "bytes": 2832
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-composition-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-final-build.log",
+      "sha256": "63b3df678784de4f87e14a15f35805af08689d3b17d1262bb842f7aa37ccc80c",
+      "bytes": 8628
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-secret-scan.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-secret-scan.log",
+      "sha256": "b55f578db5f026d273df33d23869e42afa7f5a02da25f8496e1cab84c657ecfc",
+      "bytes": 186
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/backup-local.tap",
+      "sha256": "b1409b881d8a9244fceb52a2444407cbfadb040c7057bebc29e1e1dd94b7ee8e",
+      "bytes": 7840
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/build.log",
+      "sha256": "05f154817beb1b698b65b3f2706e1c7e10d278031c11c433518c346abf19bb89",
+      "bytes": 8602
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/final-build.log",
+      "sha256": "fe167d3841ae8f3886cc9cb4b970eef341efc747381e84814d7d31f5aa018f62",
+      "bytes": 8603
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/final-delta-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/final-product-workspace-partner.tap",
+      "sha256": "93a1aa1857d9e44d9c45e46237ef67db7224b1807b8db00d3118a9d6e8e7e40d",
+      "bytes": 4473
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/final-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/fixture-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/product-booking-targeted.tap",
+      "sha256": "cde2fdddbe69976678a64da8f2f4d6703f5026ed42346cefee52eb9ea68484cb",
+      "bytes": 2825
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/schema-compatibility.tap",
+      "sha256": "26f8fc172972e8767968bbe11dcc28627b58fa99df58eef5054fa0257288ba97",
+      "bytes": 776
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/secret-scan.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/secret-scan.log",
+      "sha256": "18f5961e73a75cf24c07a2a6f2e1cdc869c80c47042cca1bc460edd1e932c1af",
+      "bytes": 186
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/workspace-scope.tap",
+      "sha256": "c1b4aa7e3c31b7a72d47c6947db5cf026f95de5a9cd82b1870e74f226f9be8b9",
+      "bytes": 12189
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/workspace-settings-final.tap",
+      "sha256": "d1c4a0635062e125da681a59175cac08d04ca2736b73a1631def42b78982b8c2",
+      "bytes": 743
+    }
+  ]
+}
