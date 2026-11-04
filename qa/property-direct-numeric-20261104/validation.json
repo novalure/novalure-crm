@@ -1,0 +1,40 @@
+{
+  "status": "Lokal qualifiziert; reine Hilfsfunktion und Tests. UI-Anbindung folgt separat. Nicht live bestätigt oder veröffentlicht.",
+  "finding": "SRC-09 number-control lexical boundary",
+  "baseCommit": "2a7ac7f2943fad98b8de510cb33914fcb0edf682",
+  "branch": "fix/property-number-boundary-20261104",
+  "validatedAt": "2026-11-04T22:10:55+01:00",
+  "liveCalls": 0,
+  "paidCalls": 0,
+  "productionChanges": false,
+  "sourceEvidence": [
+    "src/components/property-command-center.tsx:1097 native number area input and :1131 number price input keep event.target.value strings; submission at :659/:668 spreads those draft strings.",
+    "src/lib/property-money.ts:13 parsePropertyEuroCents intentionally treats grouped EUR text such as1.000 as1000EUR. The parser is unchanged."
+  ],
+  "localProof": [
+    "Fresh isolated headless Chrome, about:blank DOM only, all network routes blocked, zero context requests observed.",
+    "Native step0.01: raw1.000 remains JSON string1.000, numeric value1, valid. Existing EUR parser yields100000cents; normalized1 yields100cents.",
+    "Native step0.01: raw1.010 remains JSON string1.010, numeric value1.01, valid. Existing EUR parser yields101000cents; normalized1.01 yields101cents.",
+    "Native1.001 has step mismatch and helper rejects EXCESS_PRECISION; native-valid1e3 is explicitly rejected as UNSUPPORTED_EXPONENT.",
+    "Maximum-safe-cent EUR strings retain exact decimal text and parse to the expected safe integer cents without converting EUR to Number."
+  ],
+  "api": "normalizeDirectPropertyNumericDraft<T extends DirectPropertyNumericDraft>(draft:T):T; DirectPropertyNumericDraftError(code,field,scale)",
+  "fields": {
+    "areaSqm": 2,
+    "rooms": 1,
+    "yearBuilt": 0,
+    "moneyScale2": ["price", "publicPrice", "rentPrice", "rentNet", "monthlyCostsGross", "purchaseAncillaryCosts"],
+    "costItemScale2": ["monthlyNet", "monthlyVat", "monthlyGross", "oneTimeNet", "oneTimeVat", "oneTimeGross"]
+  },
+  "checks": [
+    { "command": "node --import tsx --test scripts/property-direct-numeric-tests.ts scripts/property-direct-numeric-browser-tests.ts", "passed": 7, "failed": 0, "skipped": 0 },
+    { "command": "npx tsc --noEmit --pretty false", "exitCode": 0 },
+    { "command": "npx eslint --max-warnings=0 src/lib/property-direct-numeric.ts scripts/property-direct-numeric-tests.ts scripts/property-direct-numeric-browser-tests.ts", "exitCode": 0 },
+    { "command": "git diff --check", "exitCode": 0 }
+  ],
+  "limits": [
+    "No component, generic EUR parser, guided/text cost editor, provider, database or migration changes.",
+    "Native DOM/raw JSON plus actual EUR parser proof is local; end-to-end component wiring/request persistence is a separate coordinated task.",
+    "Blank remains blank; extra typed fields and nested extra references are preserved. Only direct number-control lexical values use this helper."
+  ]
+}
