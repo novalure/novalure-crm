@@ -5,13 +5,14 @@ globalThis.fetch=async()=>{throw new Error('external fetch denied');};
 (async()=>{
  const bytes=Buffer.from(workerData.bytes),type=workerData.mimeType;
  if(type==='application/pdf'){
-  await require('./crm-mailbox-pdf-preflight.cjs').preflightPdf(bytes);
+  const {preflightPdf,assertNoPdfOpenAction}=require('./crm-mailbox-pdf-preflight.cjs');
+  await preflightPdf(bytes);
   const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');
   const task=pdfjs.getDocument({data:new Uint8Array(bytes),isEvalSupported:false,disableFontFace:true,useSystemFonts:false,disableAutoFetch:true,disableStream:true,stopAtErrors:true});
   const pdf=await task.promise;
   try{
    if(pdf.numPages<1||pdf.numPages>50||await pdf.getJSActions()||await pdf.getAttachments())throw new Error('active');
-   const open=await pdf.getOpenAction();if(open?.action)throw new Error('active');
+   assertNoPdfOpenAction(await pdf.getOpenAction());
    for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);if(await page.getJSActions()||(await page.getAnnotations()).length)throw new Error('active');
     page.cleanup();

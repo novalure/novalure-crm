@@ -1,6 +1,33 @@
 /* Bounded PDF stream preflight reused from the existing private knowledge worker. */
 /* eslint-disable @typescript-eslint/no-require-imports -- Isolated CommonJS worker helper. */
 const fail = code => { throw new Error(code); };
+function assertPassivePdfObjects(catalog, objects) {
+  const { PDFRawStream, PDFName, PDFArray, PDFDict } = require("pdf-lib");
+  if(!(catalog instanceof PDFDict))fail('INVALID');
+  if(!Array.isArray(objects)||objects.length>20_000)fail('LIMIT');
+  // Reject active actions even when a renderer ignores an unknown OpenAction.
+  // The original PDF bytes are downloadable, so renderer-only detection is insufficient.
+  const forbidden=new Set(['JS','JavaScript','OpenAction','AA','Launch','EmbeddedFiles','RichMedia','AcroForm','XFA','URI','SubmitForm','ImportData','GoToR','GoToE','Collection']);
+  let visited=0;
+  const inspect=(value,depth=0)=>{
+    if(++visited>100000||depth>30)fail('LIMIT');
+    if(value instanceof PDFName){if(forbidden.has(value.decodeText()))fail('ACTIVE');return;}
+    if(value instanceof PDFRawStream){inspect(value.dict,depth+1);return;}
+    if(value instanceof PDFDict){for(const [key,entry] of value.entries()){if(forbidden.has(key.decodeText()))fail('ACTIVE');inspect(entry,depth+1);}return;}
+    if(value instanceof PDFArray)for(const entry of value.asArray())inspect(entry,depth+1);
+  };
+  // A direct trailer Root is resolved as the catalog but is not an indirect object.
+  // Scan it exactly once; retain the existing indirect-object scan and all limits.
+  if(!objects.some(([,item])=>item===catalog))inspect(catalog);
+  for(const [,item] of objects)inspect(item);
+}
+
+// Renderer summaries are Map/null in the pinned version. Any non-null value is
+// an action/destination or an unsupported representation; neither is passive.
+function assertNoPdfOpenAction(openAction) {
+  if(openAction!==null&&openAction!==undefined)fail('ACTIVE');
+}
+
 async function preflightPdf(bytes) {
   const { PDFDocument, PDFRawStream, PDFName, PDFArray, PDFNumber, PDFDict } = require("pdf-lib");
   const DecodeStream = require("pdf-lib/cjs/core/streams/DecodeStream.js").default;
@@ -21,18 +48,7 @@ async function preflightPdf(bytes) {
   if (doc.isEncrypted || doc.context.trailerInfo.Encrypt) fail("ENCRYPTED");
   const objects = doc.context.enumerateIndirectObjects();
   if (objects.length > 20_000) fail("LIMIT");
-  // Reject active actions even when a renderer ignores an unknown OpenAction.
-  // The original PDF bytes are downloadable, so renderer-only detection is insufficient.
-  const forbidden=new Set(['JS','JavaScript','OpenAction','AA','Launch','EmbeddedFiles','RichMedia','AcroForm','XFA','URI','SubmitForm','ImportData','GoToR','GoToE','Collection']);
-  let visited=0;
-  const inspect=(value,depth=0)=>{
-    if(++visited>100000||depth>30)fail('LIMIT');
-    if(value instanceof PDFName){if(forbidden.has(value.decodeText()))fail('ACTIVE');return;}
-    if(value instanceof PDFRawStream){inspect(value.dict,depth+1);return;}
-    if(value instanceof PDFDict){for(const [key,entry] of value.entries()){if(forbidden.has(key.decodeText()))fail('ACTIVE');inspect(entry,depth+1);}return;}
-    if(value instanceof PDFArray)for(const entry of value.asArray())inspect(entry,depth+1);
-  };
-  for(const [,item] of objects)inspect(item);
+  assertPassivePdfObjects(doc.catalog, objects);
   let decoded = 0;
   const streamLengths = new Map();
   for (const [, item] of objects) {
@@ -87,4 +103,4 @@ async function preflightPdf(bytes) {
   }
 }
 
-module.exports={preflightPdf};
+module.exports={preflightPdf,assertPassivePdfObjects,assertNoPdfOpenAction};
