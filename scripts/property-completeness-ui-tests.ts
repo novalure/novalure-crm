@@ -26,7 +26,7 @@ test("AT DE ES IE show only selected-country fields even when all other countrie
  for(const country of countries){const[id,value]=privateMarkers[country];details.values[id]=value;details.legacy[id]=value;}
  details.values["energy.hwb"]=70;details.values["energy.fgee"]=1.2;details.values["energy.hwb_klasse"]="B";details.values["energy.fgee_klasse"]="A";
  const before=JSON.stringify(details);
- for(const country of [...countries,"DE","ES","IE","AT"]){
+ for(const country of [...countries,"DE","ES","IE","AT"] as const){
   const html=renderToStaticMarkup(createElement(PropertyDetailsEditor,{details,language:"de",countryCode:country,onChange:()=>{}}));
   for(const c of countries)assert.equal(html.includes(privateMarkers[c][1]),c===country,`${country} must show only its own saved cadastre values`);
   assert.match(html,/Schlafzimmer/);assert.match(html,/Fahrstuhl/);
