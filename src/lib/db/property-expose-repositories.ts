@@ -61,6 +61,11 @@ export const exposeSourceSql = `jsonb_build_object(
     'city',p.city,'postalCode',p.postal_code,'region',p.region,'objectType',p.object_type,'areaSqm',p.area_sqm,
     'rooms',p.rooms,'yearBuilt',p.year_built,'objectNumber',p.object_number,'marketingType',p.marketing_type,
     'targetPriceCents',p.target_price_cents,'publicPriceCents',p.public_price_cents,'priceVisibility',p.price_visibility,
+    'developer',coalesce((select pr.developer_organization_id is not null or pr.customer_type='property_developer' or lower(pr.type) like '%bautr%' or w.customer_type='property_developer'
+      from workspaces w left join projects pr on pr.id=p.project_id and pr.workspace_id=w.id where w.id=p.workspace_id),false),
+    'confirmedCurrentPrice',exists(select 1 from property_units u where u.workspace_id=p.workspace_id and u.project_id=p.project_id and u.id=p.unit_id
+      and u.price_cents=coalesce(p.public_price_cents,case when p.marketing_type='rent' then coalesce(p.rent_price_cents,p.rent_net_cents) else p.target_price_cents end)
+      and u.metadata->'priceConfirmation'->>'sourceReference' is not null and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text),
     'channelPriceVisibility',p.channel_price_visibility,'rentPriceCents',p.rent_price_cents,'rentNetCents',p.rent_net_cents,
     'monthlyCostsGrossCents',p.monthly_costs_gross_cents,'purchaseAncillaryCostsCents',p.purchase_ancillary_costs_cents,
     'purchaseAncillaryCalculation',p.canonical_payload->'purchaseAncillaryCalculation',

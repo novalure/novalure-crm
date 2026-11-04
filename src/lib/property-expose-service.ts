@@ -129,6 +129,9 @@ export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: P
   const notices = [t("Dieses Exposé wurde aus dem gespeicherten Objektstand erstellt. Angaben und Verfügbarkeit bitte vor Weitergabe prüfen.",
     "This brochure was created from the saved property record. Please verify the information and availability before sharing.", "Este dossier se ha creado a partir del inmueble guardado. Compruebe los datos y la disponibilidad antes de compartirlo.")];
   if (visibleMoney && priceAmount === null) throw new PropertyExposeError("EXPOSE_PRICE_MISSING", 400, "A valid saved display price is missing. Choose price on request or hide the price explicitly.");
+  if (visibleMoney && parsePropertyIntegerCents(selectedPrice) === 0 && p.developer === true && p.confirmedCurrentPrice !== true) {
+    throw new PropertyExposeError("EXPOSE_PRICE_UNCONFIRMED", 409, "A visible developer zero price requires the matching authorized unit-price confirmation.");
+  }
   const facts = [];
   if (text(p.objectType)) facts.push({ label: t("Objektart", "Property type", "Tipo de inmueble"), value: webExposePropertyType(text(p.objectType), options.language) });
   for (const [value, label, suffix] of [
