@@ -1,5 +1,7 @@
 # CRM Sunday integration — lokaler Sammelkandidat
 
+**Aktueller Nachfolger:** Der kohärente Quellfreeze19af886 enthält nun190, die optionalen Serverpreise und die vollständigen Client-/Parentnachfolger; aktuelle gezielte Kandidatenprüfungen und Build sind bestanden. Siehe [COHERENT-CORRECTIONS-INTEGRATION.md](COHERENT-CORRECTIONS-INTEGRATION.md). Die folgenden SRC05-/Fehlstellen- und Testergebnisse beschreiben die ausdrücklich erhaltenen früheren Quellenstände, keine nachträglich umetikettierten Prüfungen.
+
 **Aktuelle Assistantquelle enthalten; nicht veröffentlicht und kein vollständiger Gate-PASS.**
 
 **SRC05 bleibt wegen eines neuen QA-Peerbefunds offen:** Bei Navigation aus dem Immobilienbereich verliert der Unmount den Pending-Ref. Die folgende QA-Korrektur mit bestehendem RAM-Draftstore sowie Unmount-/Remount-/Late-Response-Fällen ist noch nicht enthalten. Die bisherigen9 Browserfälle bestehen, decken diesen Befund jedoch nicht ab. Dies ist kein Teil des alten8/9-Stringtestfehlers.

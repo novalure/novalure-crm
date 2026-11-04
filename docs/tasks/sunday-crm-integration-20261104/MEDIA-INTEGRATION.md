@@ -1,5 +1,7 @@
 # Gemeinsame private Medien- und Rollenabsicherung
 
+**Aktueller Nachfolger:**190 und die noch fehlenden Writer-/Clientkorrekturen sind nun im Quellfreeze19af886 ergänzt;189/191 bleiben unverändert und ihre Kombination besteht erneut15/15 Fälle. Siehe [COHERENT-CORRECTIONS-INTEGRATION.md](COHERENT-CORRECTIONS-INTEGRATION.md). Die folgenden fehlenden Anschlüsse beschreiben den erhaltenen80de-Stand.
+
 Der unveröffentlichte Sammelstand übernimmt den vollständigen Sicherheitsdonor b0c92c1872ed23875701dcffb0c9d6cfa15799a5 regulär als38c9763. Die drei Anwendungsdateien bleiben bytegleich mit dem Donor.55/55gezielte Medien-, Knowledge- und Exposéfälle sind auf diesem Sammelstand bestanden.
 
 Die zusätzliche kombinierte Fixture wendet die tatsächlichen manuellen092-096- und121-Vorgänger am passenden historischen Punkt an. Defaultausführung des allgemeinen Sales-Helfers bleibt unverändert; die neue Callbackoption wird nur ausdrücklich ausgewählt. Ein künstlicher091-Ledgereintrag oder eine Ersatzfunktion wird nicht angelegt. Es bleibt eine lokale partielle Fixture, keine vollständige Produktionsupgrade-Abnahme.

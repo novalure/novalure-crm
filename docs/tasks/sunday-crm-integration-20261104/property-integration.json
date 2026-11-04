@@ -1,4 +1,9 @@
 {
+  "coherentSuccessor": {
+    "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+    "currentReceipt": "artifacts/sunday-crm-integration-20261104/coherent-final/completion.json",
+    "scopeOfFollowingFields": "HISTORICAL_PROPERTY_SOURCE_5416515_AND_ORIGINAL_SRC05_FINDING_RETAINED"
+  },
   "schemaVersion": 1,
   "recordedAt": "2026-11-04T21:03:13.1937679Z",
   "status": "LOCAL_SOURCE_INTEGRATED_SCOPED_CHECKS_PASS_SRC05_NEW_NAVIGATION_BUG_OPEN",

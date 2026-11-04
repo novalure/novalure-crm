@@ -1,4 +1,9 @@
 {
+  "coherentSuccessor": {
+    "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+    "currentReceipt": "artifacts/sunday-crm-integration-20261104/coherent-final/completion.json",
+    "scopeOfFollowingFields": "HISTORICAL_PREVIOUS_INTEGRATION_EVIDENCE_RETAINED_WITHOUT_RELABELING"
+  },
   "schema": {
     "isolated121": "Preserved as a synthetic-only product schema, with cumulative external_partner denial added to crm_project_access for a late upgrade.",
     "historicalOrderProof": "The new local PostgreSQL test replays the exact167 access function to reproduce the lost Webchat branch, then verifies188 restores both constraints.",

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "type": "EXACT_CONSOLE_OUTPUT_LOSSLESS_TRANSPORT",
+  "encoding": "base64",
+  "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+  "originalPath": "artifacts/sunday-crm-integration-20261104/coherent-final/affected-lint.log",
+  "originalBytes": 20,
+  "originalSha256": "b0debda8718392cd657107659fb5ed5dbe4b44b7a7ce73068a42a75cd0f64656",
+  "dataBase64": "CkxPQ0FMX0NISUxEX0VYSVQ9MAo="
+}

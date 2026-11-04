@@ -1,0 +1,18 @@
+import { spawn } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+const [label, ...args] = process.argv.slice(2);
+if (!/^[a-z0-9-]+$/.test(label ?? '') || !args.length) throw Error('Invalid local check');
+const directory = path.resolve('artifacts/sunday-crm-integration-20261104/coherent-final');
+await mkdir(directory, { recursive: true });
+const log = createWriteStream(path.join(directory, `${label}.log`), { flags: 'wx' });
+const allowed = /^(Path|PATH|SystemRoot|WINDIR|ComSpec|TEMP|TMP|USERPROFILE|LOCALAPPDATA|APPDATA|ProgramFiles|ProgramFiles\(x86\)|ProgramData|HOMEDRIVE|HOMEPATH|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE)$/i;
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.test(key)));
+env.NEXT_TELEMETRY_DISABLED = '1';
+env.CI = '1';
+env.NODE_OPTIONS = `--import=${new URL('./loopback-only.mjs', import.meta.url).href}`;
+const child = spawn(process.execPath, args, { cwd: process.cwd(), env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { log.write(data); process.stdout.write(data); });
+child.on('error', error => { log.end(`LOCAL_SPAWN_FAILED ${error.code}\n`); process.exitCode = 1; });
+child.on('exit', code => { log.end(`\nLOCAL_CHILD_EXIT=${code}\n`); process.exitCode = code ?? 1; });

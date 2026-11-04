@@ -1,5 +1,7 @@
 # Property: koordinierter lokaler Backend-/Clientanschluss
 
+**Historischer Beleg:** Die hier fehlenden Writer-/190-/Lifecycle-/Parentnachfolger sind inzwischen im kohärenten Quellfreeze19af886 enthalten und gezielt auf dem vereinten Kandidaten geprüft. Der aktuelle Umfang und die verbleibenden Livegrenzen stehen in [COHERENT-CORRECTIONS-INTEGRATION.md](COHERENT-CORRECTIONS-INTEGRATION.md). Dieser frühere Beleg samt ursprünglichem SRC05-Befund bleibt seinem damaligen Stand zugeordnet.
+
 Dieser Nachfolger erweitert den unveröffentlichten CRM-Sammelstand `0abea1facc4ff3e6a948f39935a52027340d37ba`. Er ist keine zweite Releasefassung und kein Produktivnachweis.
 
 **Neuer offener Funktionsbefund SRC05:** Der Pending-Ref der Direkterfassung geht derzeit beim Verlassen des Immobilienbereichs und Unmount der Komponente verloren. Ein späterer Remount kann deshalb den ursprünglichen Body und die UUIDs eines unklaren Ergebnisses nicht wiederverwenden. Die QA erstellt einen eigenen Nachfolger über den bestehenden RAM-Draftstore auf CRM-Sitzungsebene; dieser ist hier noch nicht enthalten. Kein Browserstorage und kein automatisches Wiederholen sind autorisiert oder hinzugefügt. Dieser neue Fehler ist unabhängig vom alten8/9-Stringtest und verhindert eine vollständige SRC05-Abnahme.
