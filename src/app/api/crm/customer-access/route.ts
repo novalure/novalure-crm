@@ -10,6 +10,8 @@ import {
 } from "@/lib/db/customer-access-repositories";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { resolveRequestLanguage } from "@/lib/i18n";
+import { crmCommandErrorResponse, crmRequestMetadata } from "@/lib/crm-command";
+import { readCustomerProjectGrantState } from "@/lib/db/customer-project-grant-repository";
 
 async function readJson(request: Request) {
   try {
@@ -37,6 +39,14 @@ export async function GET(request: Request) {
   const auth = await requireProductCapability(request, "customer-access:read");
   if (!auth.ok) return auth.response;
 
+  const params = new URL(request.url).searchParams;
+  if (params.get("operation") === "project_grant_state") {
+    try {
+      const state = await readCustomerProjectGrantState(auth.session, { accessId: params.get("accessId") ?? "", projectId: params.get("targetProjectId") ?? "", userId: params.get("userId") ?? "" });
+      return NextResponse.json({ source:"database",state },{headers:{"cache-control":"private, no-store","vary":"Cookie"}});
+    } catch (error) { return crmCommandErrorResponse(error); }
+  }
+
   const payload = await listCustomerAccessCockpit({
     projectId: getProjectId(request),
     session: auth.session,
@@ -57,22 +67,22 @@ export async function PATCH(request: Request) {
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "access";
   const language = resolveRequestLanguage(request);
+  if (operation === "project_grant") {
+    try {
+      const result = await upsertCustomerProjectGrant({
+        accessId: String(input.accessId ?? ""), accessLevel: input.accessLevel,
+        canEditProject: input.canEditProject, canExportData: input.canExportData,
+        canViewContacts: input.canViewContacts, canViewProject: input.canViewProject,
+        projectId: String(input.projectId ?? ""), projectRole: input.projectRole,
+        session: auth.session, status: input.status, userId: String(input.userId ?? ""),
+        expectedStateDigest: input.expectedStateDigest, ...crmRequestMetadata(request,input),
+      });
+      const payload = await listCustomerAccessCockpit({projectId:getProjectId(request),session:auth.session});
+      return NextResponse.json({data:result.data,mutation:result.mutation,payload,persisted:true},{headers:{"cache-control":"private, no-store","vary":"Cookie"}});
+    } catch (error) { return crmCommandErrorResponse(error); }
+  }
   const result =
-    operation === "project_grant"
-      ? await upsertCustomerProjectGrant({
-          accessId: String(input.accessId ?? ""),
-          accessLevel: input.accessLevel,
-          canEditProject: input.canEditProject,
-          canExportData: input.canExportData,
-          canViewContacts: input.canViewContacts,
-          canViewProject: input.canViewProject,
-          projectId: String(input.projectId ?? ""),
-          projectRole: input.projectRole,
-          session: auth.session,
-          status: input.status,
-          userId: String(input.userId ?? ""),
-        })
-      : operation === "workspace_user"
+    operation === "workspace_user"
         ? await updateWorkspaceUserAccess({
             productRole: input.productRole,
             role: input.role,

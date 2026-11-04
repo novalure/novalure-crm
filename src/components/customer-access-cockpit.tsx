@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CustomerProjectGrantState } from "@/lib/db/customer-project-grant-repository";
 import type { CustomerWorkspaceAccess, Project, WorkspaceRole, WorkspaceUser } from "@/lib/crm-types";
 import type {
   CustomerAccessCockpitPayload,
@@ -226,6 +227,11 @@ function PersistedCustomerAccessCockpit({
   const [inviteNotice, setInviteNotice] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [grantSnapshot,setGrantSnapshot] = useState<{ key:string; payload:CustomerAccessCockpitPayload; state:CustomerProjectGrantState|null }|null>(null);
+  const grantCommand = useRef<{fingerprint:string;idempotencyKey:string;correlationId:string}|null>(null);
+  const grantKey = `${grantDraft.accessId}:${grantDraft.projectId}:${grantDraft.userId}`;
+  const currentGrantSnapshot = grantSnapshot?.key===grantKey && grantSnapshot.payload===payload ? grantSnapshot.state : null;
+  const grantReady = Boolean(currentGrantSnapshot && currentGrantSnapshot.projectionOwnership!=="independent");
 
   const applyPayload = useCallback((nextPayload: CustomerAccessCockpitPayload) => {
     if (!isPersistedCustomerAccessPayload(nextPayload)) {
@@ -284,6 +290,29 @@ function PersistedCustomerAccessCockpit({
     return () => window.clearTimeout(timeout);
   }, [loadCockpit]);
 
+  useEffect(()=>{
+    if(loadState!=="ready" || !grantDraft.accessId || !grantDraft.projectId || !grantDraft.userId)return;
+    const selection={accessId:grantDraft.accessId,projectId:grantDraft.projectId,userId:grantDraft.userId};
+    const key=`${selection.accessId}:${selection.projectId}:${selection.userId}`;
+    let cancelled=false;
+    const controller=new AbortController();
+    const params=new URLSearchParams({operation:"project_grant_state",accessId:selection.accessId,targetProjectId:selection.projectId,userId:selection.userId});
+    void csrfFetch(`/api/crm/customer-access?${params}`,{cache:"no-store",signal:controller.signal}).then(async response=>{
+      if(!response.ok)throw new Error("grant_state_unavailable");
+      const result=await response.json() as {source?:string;state?:CustomerProjectGrantState};
+      const state=result.state;
+      if(result.source!=="database" || !state || state.version!=="customer-project-grant-state-v1" || !/^[a-f0-9]{64}$/.test(state.digest) || state.accessId!==selection.accessId || state.projectId!==selection.projectId || state.userId!==selection.userId)throw new Error("grant_state_unavailable");
+      if(cancelled)return;
+      setGrantSnapshot({key,payload,state});
+      setGrantDraft(current=>`${current.accessId}:${current.projectId}:${current.userId}`!==key?current:{
+        ...getGrantDefaults(payload,activeProjectId),...selection,
+        projectRole:payload.users.find(user=>user.id===selection.userId)?.role??"assistant",
+        ...state.current,
+      });
+    }).catch(()=>{if(!cancelled)setGrantSnapshot({key,payload,state:null});});
+    return()=>{cancelled=true;controller.abort();};
+  },[grantDraft.accessId,grantDraft.projectId,grantDraft.userId,loadState,payload,activeProjectId]);
+
   const metrics = useMemo(() => {
     const activeCustomers = payload.customerAccess.filter((item) => item.status === "active").length;
     const onboarding = payload.customerAccess.filter((item) => item.status === "onboarding").length;
@@ -337,15 +366,24 @@ function PersistedCustomerAccessCockpit({
 
   async function persist(input: Record<string, unknown>) {
     if (loadState !== "ready") return;
+    if(input.operation==="project_grant" && (!grantReady || !currentGrantSnapshot || `${input.accessId}:${input.projectId}:${input.userId}`!==grantKey)){setSaveState("error");return;}
     setSaveState("loading");
 
     const params = new URLSearchParams();
     if (activeProjectId && activeProjectId !== "all") params.set("projectId", activeProjectId);
 
     try {
+      const requestInput=input.operation==="project_grant"?{...input,expectedStateDigest:currentGrantSnapshot!.digest}:input;
+      const requestHeaders:Record<string,string>={"Content-Type":"application/json"};
+      if(input.operation==="project_grant"){
+        const fingerprint=JSON.stringify(Object.fromEntries(Object.entries(requestInput).sort(([a],[b])=>a.localeCompare(b))));
+        if(grantCommand.current?.fingerprint!==fingerprint)grantCommand.current={fingerprint,idempotencyKey:crypto.randomUUID(),correlationId:crypto.randomUUID()};
+        requestHeaders["Idempotency-Key"]=grantCommand.current.idempotencyKey;
+        requestHeaders["X-Correlation-Id"]=grantCommand.current.correlationId;
+      }
       const response = await csrfFetch(`/api/crm/customer-access?${params.toString()}`, {
-        body: JSON.stringify(input),
-        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestInput),
+        headers: requestHeaders,
         method: "PATCH",
       });
       const result = (await response.json()) as {
@@ -716,6 +754,7 @@ function PersistedCustomerAccessCockpit({
         <aside className="grid gap-4">
           <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-950">{copy.grant.title}</h3>
+            {grantSnapshot?.key===grantKey && grantSnapshot.payload===payload && !grantReady?<p className="mt-2 text-sm text-rose-700" role="alert">{copy.notices.saveError}</p>:null}
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1 text-sm font-semibold text-slate-700">
                 {copy.filters.customer}
@@ -758,6 +797,7 @@ function PersistedCustomerAccessCockpit({
                   {copy.filters.projectRole}
                   <select
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                    disabled={!grantReady || saveState==="loading"}
                     onChange={(event) => setGrantDraft((current) => ({ ...current, projectRole: event.target.value as CustomerAccessProjectRole }))}
                     value={grantDraft.projectRole}
                   >
@@ -770,6 +810,7 @@ function PersistedCustomerAccessCockpit({
                   {copy.filters.accessLevel}
                   <select
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                    disabled={!grantReady || saveState==="loading"}
                     onChange={(event) => {
                       const accessLevel = event.target.value as CustomerAccessLevel;
                       setGrantDraft((current) => ({
@@ -799,6 +840,7 @@ function PersistedCustomerAccessCockpit({
                   <label className="flex items-center gap-2" key={key}>
                     <input
                       checked={Boolean(grantDraft[key as keyof GrantDraft])}
+                      disabled={!grantReady || saveState==="loading"}
                       onChange={(event) => setGrantDraft((current) => ({ ...current, [key]: event.target.checked }))}
                       type="checkbox"
                     />
@@ -810,6 +852,7 @@ function PersistedCustomerAccessCockpit({
                 {copy.filters.status}
                 <select
                   className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                  disabled={!grantReady || saveState==="loading"}
                   onChange={(event) => setGrantDraft((current) => ({ ...current, status: event.target.value as CustomerAccessGrantStatus }))}
                   value={grantDraft.status}
                 >
@@ -820,7 +863,7 @@ function PersistedCustomerAccessCockpit({
               </label>
               <button
                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                disabled={saveState === "loading" || !grantDraft.accessId || !grantDraft.projectId || !grantDraft.userId}
+                disabled={saveState === "loading" || !grantReady || !grantDraft.accessId || !grantDraft.projectId || !grantDraft.userId}
                 onClick={() => void persist({ ...grantDraft, operation: "project_grant" })}
                 type="button"
               >
