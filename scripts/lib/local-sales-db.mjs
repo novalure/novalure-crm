@@ -145,7 +145,11 @@ export async function applySalesSchema(db, {
       name === "117_shared_behavior_package3.sql" ||
       name === "118_shared_behavior_personal_runtime.sql" ||
       name === "119_shared_behavior_revocable_operation.sql" ||
-      name === "120_shared_behavior_package4.sql"
+      name === "120_shared_behavior_package4.sql" ||
+      // Customer Webchat requires the omitted 096 public chat tables. Its
+      // dedicated two-tenant acceptance applies the unchanged 121 SQL after
+      // the real gateway predecessors; generic sales tests do not imply it.
+      name === "121_webchat_customer_product.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
