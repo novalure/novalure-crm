@@ -69,6 +69,18 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["pg", "pdfkit", "pdf-lib", "pdfjs-dist", "yauzl", "saxes"],
   outputFileTracingIncludes: {
+    "/api/crm/mailbox/attachments": [
+      "./src/lib/crm-mailbox-attachment-worker.cjs",
+      "./src/lib/crm-mailbox-pdf-preflight.cjs",
+      "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/pdf-lib/**/*",
+      "./node_modules/@pdf-lib/**/*",
+      "./node_modules/sharp/**/*",
+      "./node_modules/@img/**/*",
+      "./node_modules/detect-libc/**/*",
+      "./node_modules/@emnapi/runtime/**/*",
+      "./node_modules/@napi-rs/**/*",
+    ],
     "/api/public/exposes/*/pdf": [
       "./src/lib/property-expose-pdf-worker.cjs",
       "./src/lib/property-expose-assets/**/*",

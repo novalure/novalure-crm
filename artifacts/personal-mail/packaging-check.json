@@ -1,0 +1,26 @@
+{
+  "classification": "STATIC_NEXT_FILE_TRACING_NOT_DEPLOYMENT",
+  "required": [
+    {
+      "path": "src/lib/crm-mailbox-attachment-worker.cjs",
+      "included": true
+    },
+    {
+      "path": "src/lib/crm-mailbox-pdf-preflight.cjs",
+      "included": true
+    },
+    {
+      "path": "node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+      "included": true
+    },
+    {
+      "path": "node_modules/pdf-lib/cjs/index.js",
+      "included": true
+    },
+    {
+      "path": "node_modules/sharp/dist/index.cjs",
+      "included": true
+    }
+  ],
+  "allPresent": true
+}

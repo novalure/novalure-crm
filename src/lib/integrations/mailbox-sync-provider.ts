@@ -35,12 +35,13 @@ export async function fetchMailboxSyncPage(provider: MailboxProvider, token: str
   return { changes, after };
 }
 export async function fetchMailboxInboxId(token: string, transport = defaultTransport) { const folder = await mailboxProviderJson('https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id', { headers: auth(token, true) }, transport, 65536); return mailboxProviderId(folder.id); }
-export async function fetchMailboxMetadata(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string): Promise<MailboxMetadata | null> {
+export async function fetchMailboxMetadata(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string, strictQaHeaders=false): Promise<MailboxMetadata | null> {
   const messageId = encodeURIComponent(mailboxProviderId(id));
   let raw: Record<string, unknown>;
-  try { raw = await mailboxProviderJson(provider === "google" ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&fields=id,threadId,labelIds,internalDate,payload(headers)` : `https://graph.microsoft.com/v1.0/me/messages/${messageId}?$select=${metadataSelect}`, { headers: auth(token, provider === "microsoft") }, transport); }
+  try { raw = await mailboxProviderJson(provider === "google" ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References${strictQaHeaders?'&metadataHeaders=Bcc&metadataHeaders=Reply-To':''}&fields=id,threadId,labelIds,internalDate,payload(headers)` : `https://graph.microsoft.com/v1.0/me/messages/${messageId}?$select=${metadataSelect}${strictQaHeaders?',bccRecipients,replyTo':''}`, { headers: auth(token, provider === "microsoft") }, transport); }
   catch (error) { if (error instanceof MailboxProviderError && error.status === 404) return null; throw error; }
   if (mailboxProviderId(raw.id) !== id) throw new MailboxProviderError("MAIL_MESSAGE_ID_CHANGED");
+  if(strictQaHeaders)assertNoQaBlindOrReplyHeaders(provider,raw);
   const headerRows = rows(provider === "google" ? obj(raw.payload).headers : raw.internetMessageHeaders, 200), header = (name: string) => mailboxText(headerRows.find(row => String(row.name).toLowerCase() === name)?.value, 4000);
   const addresses = (value: string) => value.split(",").slice(0, 50).map(mailboxAddress).filter((v): v is string => Boolean(v));
   const fromAddress = mailboxAddress(provider === "google" ? header("from") : obj(obj(raw.from).emailAddress).address);
@@ -49,13 +50,28 @@ export async function fetchMailboxMetadata(provider: MailboxProvider, token: str
   const timestamp = provider === "google" ? Number(raw.internalDate) : Date.parse(String(raw.receivedDateTime)); if (!Number.isFinite(timestamp)) throw new MailboxProviderError("MAIL_INVALID_DATE");
   return { providerId: mailboxProviderId(raw.id), threadId: typeof (raw.threadId || raw.conversationId) === "string" ? String(raw.threadId || raw.conversationId) : null, internetMessageId: provider === "google" ? header("message-id") || null : mailboxText(raw.internetMessageId, 2000) || null, inReplyTo: header("in-reply-to") || null, references: (header("references").match(/<[^<>\s]+>/g) || []).slice(0, 50), fromAddress, toAddresses, participants: [...new Set([...(fromAddress ? [fromAddress] : []), ...toAddresses, ...cc])].sort(), subject: mailboxText(provider === "google" ? header("subject") : raw.subject, 1000), receivedAt: new Date(timestamp).toISOString(), inInbox: provider === "google" ? Array.isArray(raw.labelIds) && raw.labelIds.includes('INBOX') : Boolean(inboxId && raw.parentFolderId === inboxId) };
 }
-export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport): Promise<MailboxImportedMessage> {
+export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, expectedParticipants?: readonly string[]): Promise<MailboxImportedMessage> {
   const encoded = encodeURIComponent(mailboxProviderId(id)), google = provider === "google";
-  const raw = await mailboxProviderJson(google ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encoded}?format=full` : `https://graph.microsoft.com/v1.0/me/messages/${encoded}?$select=${metadataSelect},body,bodyPreview,hasAttachments`, { headers: { ...auth(token, !google), ...(!google ? { Prefer: 'IdType="ImmutableId", outlook.body-content-type="text"' } : {}) } }, transport);
+  const raw = await mailboxProviderJson(google ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encoded}?format=full` : `https://graph.microsoft.com/v1.0/me/messages/${encoded}?$select=${metadataSelect}${expectedParticipants?',bccRecipients,replyTo':''},body,bodyPreview,hasAttachments`, { headers: { ...auth(token, !google), ...(!google ? { Prefer: 'IdType="ImmutableId", outlook.body-content-type="text"' } : {}) } }, transport);
+  if(expectedParticipants){
+    assertNoQaBlindOrReplyHeaders(provider,raw);
+    const headerRows=google?rows(obj(raw.payload).headers,200):[];
+    const header=(name:string)=>{const found=headerRows.filter(row=>String(row.name).toLowerCase()===name);if(found.length>1)throw new MailboxProviderError('MAIL_QA_PARTICIPANTS_CHANGED');return found.length?String(found[0].value):'';};
+    const split=(value:string)=>value?value.split(',').map(mailboxAddress):[];
+    const addresses=google?[...split(header('from')),...split(header('to')),...split(header('cc'))]:[mailboxAddress(obj(obj(raw.from).emailAddress).address),...rows(raw.toRecipients,50).map(row=>mailboxAddress(obj(row.emailAddress).address)),...rows(raw.ccRecipients,50).map(row=>mailboxAddress(obj(row.emailAddress).address))];
+    if(addresses.some(address=>!address)||JSON.stringify([...new Set(addresses)].sort())!==JSON.stringify([...new Set(expectedParticipants)].sort()))throw new MailboxProviderError('MAIL_QA_PARTICIPANTS_CHANGED');
+  }
   if (google) return parseGoogleMailboxMessage(raw);
   const attachments = raw.hasAttachments === true ? await mailboxProviderJson(`https://graph.microsoft.com/v1.0/me/messages/${encoded}/attachments?$select=id,name,contentType,size,isInline&$top=50`, { headers: auth(token, true) }, transport) : null;
   if (attachments?.["@odata.nextLink"]) throw new MailboxProviderError("MAIL_TOO_MANY_ATTACHMENTS");
   return parseMicrosoftMailboxMessage(raw, attachments ? rows(attachments.value, 50) : []);
+}
+function assertNoQaBlindOrReplyHeaders(provider:MailboxProvider,raw:Record<string,unknown>){
+  if(provider==='google'){
+    const headers=rows(obj(raw.payload).headers,200),blocked=headers.some(h=>['bcc','reply-to'].includes(String(h.name).toLowerCase())&&String(h.value??'').trim());
+    if(blocked)throw new MailboxProviderError('MAIL_QA_UNVERIFIED_HEADER');
+    for(const name of ['from','to','cc','subject','message-id','in-reply-to','references'])if(headers.filter(h=>String(h.name).toLowerCase()===name).length>1)throw new MailboxProviderError('MAIL_QA_UNVERIFIED_HEADER');
+  }else if(rows(raw.bccRecipients,50).length||rows(raw.replyTo,50).length)throw new MailboxProviderError('MAIL_QA_UNVERIFIED_HEADER');
 }
 export async function translateMailboxLegacyIds(token: string, ids: string[], transport = defaultTransport) {
   if (!ids.length || ids.length > 20) throw new MailboxProviderError("MAIL_INVALID_ID_BATCH");
