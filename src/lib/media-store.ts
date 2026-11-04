@@ -187,7 +187,7 @@ export function getMediaUsage(assets: MediaAsset[], workspaceId: string) {
 
 export async function listWorkspaceMedia(workspaceId: string) {
   const assets = await readWorkspaceAssets(workspaceId);
-  const usedBytes = getMediaUsage(assets, workspaceId);
+  const usedBytes = await workspaceMediaUsage(workspaceId);
 
   return {
     assets,
@@ -198,6 +198,15 @@ export async function listWorkspaceMedia(workspaceId: string) {
       usedBytes,
     },
   };
+}
+
+async function workspaceMediaUsage(workspaceId: string) {
+  if (!hasDatabaseUrl()) return getMediaUsage(await readWorkspaceAssets(workspaceId, true), workspaceId);
+  const row = await queryOne<{ usedBytes: number | string | null }>(
+    'select crm_workspace_media_usage($1) as "usedBytes"', [workspaceId],
+  );
+  if (row?.usedBytes == null) throw new MediaStoreError("PROJECT_MEDIA_FORBIDDEN", "Media workspace access denied.");
+  return Number(row.usedBytes);
 }
 
 export async function saveWorkspaceImage(input: {
@@ -305,8 +314,7 @@ async function saveMediaFile(input: {
     throw new MediaStoreError("FILE_CONTENT_MISMATCH", "The file content does not match its declared media type.");
   }
 
-  const existingAssets = await readWorkspaceAssets(input.workspaceId, true);
-  const usedBytes = getMediaUsage(existingAssets, input.workspaceId);
+  const usedBytes = await workspaceMediaUsage(input.workspaceId);
   if (usedBytes + sizeBytes > workspaceImageQuotaBytes) {
     throw new MediaStoreError("WORKSPACE_QUOTA_EXCEEDED", "This account has reached the 1 GB image storage limit.");
   }
@@ -366,29 +374,31 @@ export async function findPublicMediaAsset(publicToken: string) {
   const tokenHash = hashMediaShareToken(token);
 
   if (hasDatabaseUrl()) {
-    const row = await queryOne<MediaAssetRow>(
-      `
-        select ${mediaAssetSelect()}
-        from media_asset_shares mas
-        join media_assets ma
-          on ma.id = mas.asset_id
-         and ma.workspace_id = mas.workspace_id
-        where mas.token_hash = $1
-          and mas.scope = $2
-          and mas.revoked_at is null
-          and mas.expires_at > now()
-          and ma.is_public = true
-          and ${ordinaryMediaSql()}
-        limit 1
-      `,
-      [tokenHash, mediaPublicShareScope],
+    const row = await queryOne<{ asset: MediaAssetRow | null }>(
+      "select crm_public_media_lookup($1) as asset", [tokenHash],
     );
-    return row ? normalizeMediaAsset(row) : null;
+    return row?.asset ? normalizeMediaAsset(row.asset) : null;
   }
 
   const library = await readMediaLibrary();
   const share = library.shares.find((item) => isActiveShare(item) && item.tokenHash === tokenHash && item.scope === mediaPublicShareScope);
   return share ? library.assets.find((asset) => asset.id === share.assetId && asset.workspaceId === share.workspaceId && asset.isPublic && !isKnowledgePrivateMedia(asset)) ?? null : null;
+}
+
+/** Generic media services independently check project scope before exposing
+ * metadata, bytes or publication actions. RLS enforces the same rule for SQL.
+ * Call inside the existing tenant transaction, including before file storage. */
+export async function canAccessWorkspaceMedia(
+  workspaceId: string, folder: string, assetId: string | null, writing = false,
+) {
+  const active = currentTenantTransaction();
+  if (!hasDatabaseUrl()) return !folder.toLowerCase().startsWith("properties/");
+  if (!active || active.scope.workspaceId !== workspaceId) return false;
+  const row = await active.transaction.queryOne<{ allowed: boolean }>(
+    "select crm_property_media_access($1,$2,$3,$4) as allowed",
+    [workspaceId, folder, assetId, writing],
+  );
+  return row?.allowed === true;
 }
 
 export async function findWorkspaceMediaAsset(assetId: string, workspaceId: string) {
@@ -895,6 +905,7 @@ export class MediaStoreError extends Error {
     | "IMAGE_TOO_LARGE"
     | "INVALID_STORAGE_REFERENCE"
     | "KNOWLEDGE_MEDIA_PRIVATE"
+    | "PROJECT_MEDIA_FORBIDDEN"
     | "MEDIA_FILE_DELETE_UNCONFIRMED"
     | "MEDIA_RECORD_DELETE_UNCONFIRMED"
     | "PRIVATE_STORAGE_UNAVAILABLE"

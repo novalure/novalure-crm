@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { applyMediaProjectRuntimeFunctions } from "./lib/media-project-runtime-fixture.mjs";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import { withTenantTransaction, type TenantPool } from "../src/lib/db/tenant-client";
 import { runWithTenantTransaction } from "../src/lib/db/transaction-context";
@@ -73,6 +74,11 @@ before(async () => {
         from crm_studio_media_reference_counts(p_asset) previous $$;
     revoke all on function crm_studio_media_reference_counts(uuid),crm_knowledge_media_reference_counts(uuid) from public;
     grant execute on function crm_studio_media_reference_counts(uuid),crm_knowledge_media_reference_counts(uuid) to novalure_tenant_app;`);
+  // Exercise the actual public capability lookup against this deliberately
+  // minimal historical fixture; full project/RLS migration runs separately.
+  await db.admin.query("create table workspace_users(id uuid,workspace_id uuid,status text,product_role text)");
+  await db.admin.query("insert into workspace_users values($1,$2,'active','customer_owner')", [actorId, workspaceId]);
+  await applyMediaProjectRuntimeFunctions(db);
   for (const key of environmentKeys) if (key !== "NOVALURE_MEDIA_ROOT") delete process.env[key];
   Object.assign(process.env,{CRM_LOCAL_TEST_DATABASE:"1",DATABASE_URL:`postgresql://${db.role}@127.0.0.1:${db.port}/postgres`,NODE_ENV:"test"});
   ordinary = await scoped(() => media.saveWorkspaceFile({workspaceId,file:pdf()}));
@@ -128,6 +134,16 @@ test("a stale public token cannot serve a marked knowledge attachment", async ()
   assert.equal(await scoped(() => media.authorizedKnowledgeMediaAsset(document.id,workspaceId)),null);
   await db.admin.query("delete from media_asset_shares where asset_id=$1",[document.id]);
   await db.admin.query("update media_assets set is_public=false where id=$1",[document.id]);
+});
+
+test("public token lookup preserves case-insensitive Knowledge and Proof folder exclusion", async () => {
+  for (const folder of ["Knowledge-Private-SYNTHETIC", "Lead-Proof-Private-SYNTHETIC"]) {
+    const asset = await scoped(() => media.saveWorkspaceFile({ workspaceId, file: pdf() }));
+    const token = "SYNTHETIC-case-" + asset.id;
+    await db.admin.query("update media_assets set folder=$2,is_public=true where id=$1", [asset.id, folder]);
+    await db.admin.query("insert into media_asset_shares(asset_id,workspace_id,token_hash,scope,expires_at) values($1,$2,$3,$4,now()+interval '1 hour')", [asset.id, workspaceId, hashMediaShareToken(token), mediaPublicShareScope]);
+    assert.equal(await scoped(() => media.findPublicMediaAsset(token)), null);
+  }
 });
 
 test("only the authorized source path obtains an opaque private byte-read capability", async () => {
