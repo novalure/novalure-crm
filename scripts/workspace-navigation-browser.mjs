@@ -70,6 +70,7 @@ async function expandSidebar() {
   const sidebar = page.locator("[data-crm-sidebar]");
   if (await sidebar.getAttribute("data-collapsed") === "true") await sidebar.locator("[data-crm-collapse]").click();
   await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+  await expect.poll(() => sidebar.evaluate(element => Math.round(element.getBoundingClientRect().width))).toBe(240);
 }
 async function assertSidebarFits() {
   const evidence = await page.locator("[data-crm-sidebar]").evaluate(element => {
@@ -110,7 +111,9 @@ try {
     await page.locator("#login-mfa-code").fill(totp(secret));
     await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), page.getByRole("button", { name: /^(Sicher bestätigen|Verify securely)$/ }).click()]);
     await expect(page.locator("[data-crm-sidebar]")).toBeVisible();
-    assert.equal((await page.request.get(base.origin + "/api/crm/core")).status(), 200);
+    await expect(page.locator("[data-crm-profile-select]")).toHaveValue("realEstateBroker");
+    const core = await page.evaluate(async () => { const response = await fetch("/api/crm/core", { credentials: "same-origin" }); const body = await response.json(); return { status: response.status, error: body.error ?? null }; });
+    assert.equal(core.status, 200, JSON.stringify(core));
     const cookie = (await context.cookies()).find(item => item.name === "novalure_session");
     assert.ok(cookie?.httpOnly && cookie.value.startsWith("v2."));
     await expandSidebar();
@@ -180,11 +183,13 @@ try {
     await chooseProfile("realEstateBroker");
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 1280, height: 720 }, { width: 1200, height: 720 }]) {
       await page.setViewportSize(viewport);
+      await page.evaluate(() => window.scrollTo(0, 0));
       await expandSidebar();
       sizes.push({ ...await assertSidebarFits(), collapsed: false });
       await page.screenshot({ path: path.join(output, `desktop-${viewport.width}x${viewport.height}.png`), fullPage: false });
       await page.locator("[data-crm-sidebar] [data-crm-collapse]").click();
       await expect(page.locator("[data-crm-sidebar]")).toHaveAttribute("data-collapsed", "true");
+      await expect.poll(() => page.locator("[data-crm-sidebar]").evaluate(element => Math.round(element.getBoundingClientRect().width))).toBe(80);
       sizes.push({ ...await assertSidebarFits(), collapsed: true });
     }
     return sizes;
@@ -216,6 +221,10 @@ try {
     await page.keyboard.press("Escape");
     await expect(page.locator("[data-crm-mobile-drawer]")).toHaveCount(0);
     await expect(trigger).toBeFocused();
+    const currentGroup = await page.locator('[data-crm-sidebar] [data-crm-nav-group][data-active="true"]').getAttribute("data-crm-nav-group");
+    await trigger.click();
+    await page.locator(`[data-crm-mobile-drawer] [data-crm-nav-group="${currentGroup}"]`).click();
+    await expect(page.locator("[data-crm-mobile-drawer]")).toHaveCount(0);
     for (const group of mobileGroups) {
       await trigger.click();
       await page.locator(`[data-crm-mobile-drawer] [data-crm-nav-group="${group}"]`).click();
