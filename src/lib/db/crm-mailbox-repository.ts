@@ -7,7 +7,9 @@ import { createSignedOAuthState, decryptOAuthStateSecret, encryptOAuthStateSecre
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secret-box";
 import { exchangeMailboxToken, fetchMailboxAccountIdentity, fetchMailboxPage, mailboxAuthorizationUrl, mailboxOAuthConfigured, type MailboxTransport } from "@/lib/integrations/mailbox-provider";
 import { recordSourceAutomationEvent } from "@/lib/automation/source-events";
+import { hasMailboxSendScope } from "@/lib/crm-mailbox-reply";
 const returnTo = "/?mailbox=connected";
+const replyReturnTo = "/?mailbox=connected&capability=reply";
 type Connection = { format?: string; id: string; provider: MailboxProvider; accountLabel: string | null; status: string; scopes: string[]; access: string | null; refresh: string | null; expiresAt: string | null; revision: number; nextCursor: string | null };
 const connectionSelect = `id,provider,account_label as "accountLabel",status,granted_scopes as scopes,access_token_encrypted as access,refresh_token_encrypted as refresh,expires_at::text as "expiresAt",revision,next_cursor as "nextCursor"`;
 function actor(session: AppSession) { if (session.serviceIdentity || session.productRole === "external_partner") throw new CrmCommandError("FORBIDDEN", "Persönliche CRM-Anmeldung für das eigene Postfach erforderlich", 403); }
@@ -19,7 +21,7 @@ export function unprotectMailboxToken(session: AppSession, provider: MailboxProv
 const protect = protectMailboxToken, unprotect = unprotectMailboxToken;
 export async function loadCrmMailbox(tx: TenantTransaction, session: AppSession, messageId: string | null = null, page: { before?: string | null; decisionsBefore?: string | null } = {}) {
   actor(session);
-  const connections = await tx.query(`select id,provider,account_label as "accountLabel",status,granted_scopes as scopes,expires_at as "expiresAt",last_synced_at as "lastSyncedAt",last_error as "lastError",next_cursor is not null as "hasOlder",revision from crm_mailbox_connections where workspace_id=$1::uuid and user_id=$2::uuid order by provider`, [session.workspaceId, session.userId]);
+  const connections = await tx.query(`select id,provider,account_label as "accountLabel",status,granted_scopes as scopes,expires_at as "expiresAt",last_synced_at as "lastSyncedAt",last_error as "lastError",next_cursor is not null as "hasOlder",revision,(to_jsonb(crm_mailbox_connections)->>'send_consent_id' is not null and to_jsonb(crm_mailbox_connections)->>'send_consent_identity_id'=$3) as "replyEnabled" from crm_mailbox_connections where workspace_id=$1::uuid and user_id=$2::uuid order by provider`, [session.workspaceId, session.userId,session.authIdentityId??null]);
   let pageKey: { time:string; id:string } | null = null;
   if(page.before){try{const raw=JSON.parse(Buffer.from(page.before,'base64url').toString('utf8'));assertCrmUuid(raw.id);if(!Number.isFinite(Date.parse(raw.time)))throw new Error();pageKey=raw;}catch{throw new CrmCommandError('INVALID_CURSOR','Postfachseite prüfen');}}
   const messages = await tx.query<{id:string;receivedAt:string;preview:string}>(`select m.id,m.connection_id as "connectionId",m.subject,coalesce(to_jsonb(m)->>'source_status','in_inbox') as "sourceStatus",m.from_label as "fromLabel",m.from_address as "fromAddress",m.received_at as "receivedAt",left(m.body_text,200) as preview,m.body_truncated as "bodyTruncated",jsonb_array_length(m.attachments)::int as "attachmentCount",l.id as "linkId" from crm_mailbox_messages m left join crm_mailbox_links l on l.message_id=m.id and l.workspace_id=m.workspace_id and l.user_id=m.user_id where m.workspace_id=$1::uuid and m.user_id=$2::uuid and m.deleted_at is null and($3::timestamptz is null or(m.received_at,m.id)<($3::timestamptz,$4::uuid)) order by m.received_at desc,m.id desc limit 51`, [session.workspaceId, session.userId,pageKey?.time??null,pageKey?.id??null]);
@@ -30,20 +32,26 @@ export async function loadCrmMailbox(tx: TenantTransaction, session: AppSession,
   const auto = await (await import('./crm-mailbox-sync-repository')).loadMailboxAutoState(tx,session,page.decisionsBefore);
   const privateLinks=auto.ready?await tx.query<{messageId:string;status:string;label:string}>(`select d.message_id as "messageId",d.status,c.name as label from crm_mailbox_private_decisions d join leads l on l.workspace_id=d.workspace_id and l.project_id=d.project_id and l.id=d.lead_id join contacts c on c.workspace_id=l.workspace_id and c.project_id=l.project_id and c.id=l.contact_id where d.workspace_id=$1::uuid and d.user_id=$2::uuid and d.status in('suggested','filed') and d.message_id=any($3::uuid[])`,[session.workspaceId,session.userId,messages.map(row=>row.id)]):[];
   const shown=messages.slice(0,50).map(row=>({...row,privateLead:privateLinks.find(link=>link.messageId===row.id)??null})),last=shown.at(-1),nextPage=messages.length>50&&last?Buffer.from(JSON.stringify({time:last.receivedAt,id:last.id})).toString('base64url'):null;
-  return { connections, messages:shown,nextPage,auto, detail, leads, runs, providers: ["google", "microsoft"].map((provider) => ({ provider, configured: mailboxOAuthConfigured(provider as MailboxProvider) })), canAssign: session.permissions.includes("crm:write"), attachmentsStored: false, sent: false };
+  return { connections:connections.map(c=>({...c,replyEnabled:c.replyEnabled===true&&hasMailboxSendScope(c.provider as MailboxProvider,c.scopes as string[])})), messages:shown,nextPage,auto, detail, leads, runs, providers: ["google", "microsoft"].map((provider) => ({ provider, configured: mailboxOAuthConfigured(provider as MailboxProvider) })), canAssign: session.permissions.includes("crm:write"), attachmentsStored: false, sent: false };
 }
-export async function beginCrmMailboxOAuth(tx: TenantTransaction, session: AppSession, provider: MailboxProvider, requestUrl: string) {
+export async function beginCrmMailboxOAuth(tx: TenantTransaction, session: AppSession, provider: MailboxProvider, requestUrl: string, enableReply = false) {
   actor(session); if (!mailboxOAuthConfigured(provider)) throw new CrmCommandError("MAIL_NOT_CONFIGURED", "Postfach-OAuth ist noch nicht eingerichtet", 409);
-  const signed = createSignedOAuthState({ provider, userId: session.userId, workspaceId: session.workspaceId, returnTo });
+  if (enableReply) {
+    assertCrmUuid(session.authIdentityId, 'authIdentityId'); assertCrmUuid(session.authSessionId, 'authSessionId');
+    if (!session.permissions.includes('crm:write') || !session.productPermissions.includes('workspace:operate')) throw new CrmCommandError('FORBIDDEN', 'Persönliche Schreibberechtigung für Antworten erforderlich.', 403);
+    const schema = await tx.queryOne<{ready:boolean}>("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='crm_mailbox_connections' and column_name='send_consent_id') as ready");
+    if (!schema?.ready) throw new CrmCommandError('MAIL_REPLY_MIGRATION_REQUIRED', 'Die persönliche Antwortfunktion ist noch nicht installiert.', 409);
+  }
+  const signed = createSignedOAuthState({ provider, userId: session.userId, workspaceId: session.workspaceId, returnTo: enableReply ? replyReturnTo : returnTo });
   await tx.query(`delete from crm_mailbox_oauth_states where workspace_id=$1::uuid and user_id=$2::uuid and expires_at<now()-interval '1 day'`, [session.workspaceId, session.userId]);
   await tx.query(`insert into crm_mailbox_oauth_states(state_hash,workspace_id,user_id,provider,nonce_hash,verifier_encrypted,expires_at) values($1,$2::uuid,$3::uuid,$4,$5,$6,to_timestamp($7))`, [hashOAuthState(signed.state), session.workspaceId, session.userId, provider, hashOAuthState(signed.nonce), encryptOAuthStateSecret(signed.codeVerifier), signed.expiresAt]);
-  return { authorizationUrl: mailboxAuthorizationUrl({ provider, requestUrl, state: signed.state, codeChallenge: signed.codeChallenge }) };
+  return { authorizationUrl: mailboxAuthorizationUrl({ provider, requestUrl, state: signed.state, codeChallenge: signed.codeChallenge, enableReply }) };
 }
 export async function consumeCrmMailboxOAuth(tx: TenantTransaction, session: AppSession, provider: MailboxProvider, state: string) {
   actor(session); const parsed = parseSignedOAuthState(state, provider);
-  if (!parsed || parsed.userId !== session.userId || parsed.workspaceId !== session.workspaceId || parsed.returnTo !== returnTo) throw new CrmCommandError("MAIL_OAUTH_STATE", "Postfach-Verbindung erneut starten", 409);
+  if (!parsed || parsed.userId !== session.userId || parsed.workspaceId !== session.workspaceId || ![returnTo, replyReturnTo].includes(parsed.returnTo)) throw new CrmCommandError("MAIL_OAUTH_STATE", "Postfach-Verbindung erneut starten", 409);
   const row = await tx.queryOne<{ verifier: string }>(`update crm_mailbox_oauth_states set consumed_at=now() where state_hash=$1 and nonce_hash=$2 and workspace_id=$3::uuid and user_id=$4::uuid and provider=$5 and consumed_at is null and expires_at>now() returning verifier_encrypted as verifier`, [hashOAuthState(state), hashOAuthState(parsed.nonce), session.workspaceId, session.userId, provider]);
-  if (!row) throw new CrmCommandError("MAIL_OAUTH_STATE", "Postfach-Verbindung abgelaufen oder bereits verwendet", 409); return { codeVerifier: decryptOAuthStateSecret(row.verifier) };
+  if (!row) throw new CrmCommandError("MAIL_OAUTH_STATE", "Postfach-Verbindung abgelaufen oder bereits verwendet", 409); return { codeVerifier: decryptOAuthStateSecret(row.verifier), enableReply: parsed.returnTo === replyReturnTo };
 }
 export async function saveCrmMailboxConnection(tx: TenantTransaction, session: AppSession, provider: MailboxProvider, tokens: { accessToken: string; refreshToken: string | null; scopes: string[]; expiresAt: string }, accountLabel: string) {
   actor(session); if (!hasMailboxReadScope(provider, tokens.scopes)) throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Kalenderrechte reichen nicht aus. Postfach-Lesezugriff ausdrücklich erlauben.", 409);
@@ -53,7 +61,7 @@ export async function saveCrmMailboxConnection(tx: TenantTransaction, session: A
 }
 export async function finishCrmMailboxOAuth(session: AppSession, provider: MailboxProvider, state: string, code: string, requestUrl: string, options?: TenantTransactionOptions, transport?: MailboxTransport) {
   const consumed = await withCrmRead(session, (tx, fresh) => consumeCrmMailboxOAuth(tx, fresh, provider, state), options);
-  const tokens = await exchangeMailboxToken({ provider, code, codeVerifier: consumed.codeVerifier, requestUrl }, transport), identity = await fetchMailboxAccountIdentity(provider, tokens.accessToken, transport);
+  const tokens = await exchangeMailboxToken({ provider, code, codeVerifier: consumed.codeVerifier, requestUrl, enableReply: consumed.enableReply }, transport), identity = await fetchMailboxAccountIdentity(provider, tokens.accessToken, transport);
   return withCrmRead(session, async (tx, fresh) => {
     const schema = await tx.queryOne<{ ready: boolean }>(`select exists(select 1 from information_schema.columns where table_name='crm_mailbox_connections' and column_name='provider_account_id') as ready`);
     if (schema?.ready) {
@@ -61,6 +69,12 @@ export async function finishCrmMailboxOAuth(session: AppSession, provider: Mailb
       if (prior && (prior.accountId && prior.accountId !== identity.accountId || prior.label !== identity.label)) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Das Anbieterkonto oder seine Adresse hat sich geändert. Bestehende Privatkopien werden nicht einem anderen Konto zugewiesen.", 409);
     }
     const saved = await saveCrmMailboxConnection(tx, fresh, provider, tokens, identity.label);
+    const sendSchema = await tx.queryOne<{ready:boolean}>("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='crm_mailbox_connections' and column_name='send_consent_id') as ready");
+    if (consumed.enableReply) {
+      actor(fresh); assertCrmUuid(fresh.authIdentityId, 'authIdentityId'); assertCrmUuid(fresh.authSessionId, 'authSessionId');
+      if (!sendSchema?.ready || !fresh.permissions.includes('crm:write') || !fresh.productPermissions.includes('workspace:operate')) throw new CrmCommandError('MAIL_SEND_CONSENT_REQUIRED', 'Antwortfreigabe benötigt eine aktuelle persönliche Schreibsitzung.', 403);
+    }
+    if (sendSchema?.ready) await tx.query("update crm_mailbox_connections set send_consent_id=$2::uuid,send_consent_identity_id=$3::uuid,send_consented_at=case when $2::uuid is not null then now() end,revision=revision+1 where id=$1::uuid", [saved!.id, consumed.enableReply ? randomUUID() : null, consumed.enableReply ? fresh.authIdentityId : null]);
     if (schema?.ready) { await tx.query(`update crm_mailbox_connections set provider_account_id=$2,revision=revision+1 where id=$1::uuid`, [saved.id,identity.accountId]); await tx.query(`update crm_mailbox_auto_settings set enabled=false,status='disabled',revision=revision+1,updated_at=now() where connection_id=$1::uuid`,[saved.id]); }
     return saved;
   }, options);
@@ -114,13 +128,19 @@ export async function syncCrmMailbox(session: AppSession, input: { connectionId:
     throw new CrmCommandError(code, code.includes("SCOPE") || code.includes("AUTH") ? "Postfach-Lesezugriff erneut persönlich erlauben" : "Postfachabruf nicht bestätigt. Verlauf prüfen und denselben Vorgang erneut versuchen.", /SCOPE|AUTH|TOKEN_CONTEXT|CONNECTION_CHANGED/.test(code) ? 409 : 503);
   }
 }
-async function persistMailboxMessage(tx: TenantTransaction, session: AppSession, connectionId: string, message: MailboxImportedMessage) {
+export async function persistMailboxMessage(tx: TenantTransaction, session: AppSession, connectionId: string, message: MailboxImportedMessage) {
   const saved = await tx.queryOne(`insert into crm_mailbox_messages(workspace_id,user_id,connection_id,provider_id,thread_id,internet_message_id,subject,from_label,from_address,to_addresses,received_at,body_text,body_truncated,attachments,content_hash) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14::jsonb,$15) on conflict(connection_id,provider_id) do nothing returning id`, [session.workspaceId, session.userId, connectionId, message.providerId, message.threadId, message.internetMessageId, message.subject, message.fromLabel, message.fromAddress, JSON.stringify(message.toAddresses), message.receivedAt, message.bodyText, message.bodyTruncated, JSON.stringify(message.attachments), crmPayloadDigest(message)]);
   return saved ? 1 : 0;
 }
 export async function eraseCrmMailboxCopy(tx: TenantTransaction, session: AppSession, id: string) {
   actor(session); assertCrmUuid(id); const row = await tx.queryOne(`update crm_mailbox_messages set subject='',from_label='',from_address=null,to_addresses='[]',thread_id=null,internet_message_id=null,body_text='',attachments='[]',deleted_at=coalesce(deleted_at,now()),revision=revision+1 where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid returning id`, [id, session.workspaceId, session.userId]);
-  if (!row) throw new CrmCommandError("NOT_FOUND", "Eigene importierte Kopie nicht verfügbar", 404); return row;
+  if (!row) throw new CrmCommandError("NOT_FOUND", "Eigene importierte Kopie nicht verfügbar", 404);
+  const files=await tx.queryOne<{ready:boolean}>("select to_regclass('public.crm_mailbox_attachment_files') is not null as ready");
+  if(files?.ready){
+    await tx.execute("update crm_mailbox_attachment_files set status='erased',content_encrypted=null where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid and status='ready'",[session.workspaceId,session.userId,id]);
+    await tx.execute("update crm_mailbox_send_jobs set status='suppressed',error_code='SOURCE_COPY_ERASED',updated_at=now() where workspace_id=$1::uuid and user_id=$2::uuid and message_id=$3::uuid and status='prepared'",[session.workspaceId,session.userId,id]);
+  }
+  return row;
 }
 export async function associateCrmMailboxMessage(session: AppSession, input: Record<string, unknown>, metadata: { idempotencyKey: string; correlationId: string }, options?: TenantTransactionOptions) {
   const messageId = assertCrmUuid(input.messageId), projectId = assertCrmUuid(input.projectId), leadId = assertCrmUuid(input.leadId);

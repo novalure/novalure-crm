@@ -1,0 +1,271 @@
+TAP version 13
+# Subtest: mailbox adapters require real mail scopes and treat content, sender and attachments as untrusted data
+ok 1 - mailbox adapters require real mail scopes and treat content, sender and attachments as untrusted data
+  ---
+  duration_ms: 29.6511
+  type: 'test'
+  ...
+# Subtest: Microsoft readonly adapter pins hosts, requests text bodies and quarantines attachment metadata
+ok 2 - Microsoft readonly adapter pins hosts, requests text bodies and quarantines attachment metadata
+  ---
+  duration_ms: 2.9305
+  type: 'test'
+  ...
+# Subtest: personal mailbox persistence, OAuth, safe import and explicit CRM association run in PostgreSQL
+    # Subtest: OAuth state is purpose/actor-bound and single-use; mailbox tokens are separate and encrypted
+    ok 1 - OAuth state is purpose/actor-bound and single-use; mailbox tokens are separate and encrypted
+      ---
+      duration_ms: 176.1806
+      type: 'test'
+      ...
+    # Subtest: bounded readonly import deduplicates and stores only private inert message data
+    ok 2 - bounded readonly import deduplicates and stores only private inert message data
+      ---
+      duration_ms: 79.635
+      type: 'test'
+      ...
+    # Subtest: manual association is permission-checked; only an explicit documented reply creates the reply event
+    ok 3 - manual association is permission-checked; only an explicit documented reply creates the reply event
+      ---
+      duration_ms: 69.3354
+      type: 'test'
+      ...
+    # Subtest: erased personal copies never silently rehydrate on a later provider import
+    ok 4 - erased personal copies never silently rehydrate on a later provider import
+      ---
+      duration_ms: 31.7717
+      type: 'test'
+      ...
+    # Subtest: local disconnect rejects an already fetched late commit and removes credentials
+    ok 5 - local disconnect rejects an already fetched late commit and removes credentials
+      ---
+      duration_ms: 24.7441
+      type: 'test'
+      ...
+    # Subtest: refresh cannot replace missing mail authorization with calendar permission
+    ok 6 - refresh cannot replace missing mail authorization with calendar permission
+      ---
+      duration_ms: 14.874
+      type: 'test'
+      ...
+    # Subtest: token ciphertext is bound to the personal account and valid refresh keeps verified scopes
+    ok 7 - token ciphertext is bound to the personal account and valid refresh keeps verified scopes
+      ---
+      duration_ms: 33.949
+      type: 'test'
+      ...
+    1..7
+ok 3 - personal mailbox persistence, OAuth, safe import and explicit CRM association run in PostgreSQL
+  ---
+  duration_ms: 6550.7393
+  type: 'test'
+  ...
+# Subtest: incremental provider contracts reject unsafe links, preserve string history and prefer immutable Graph IDs
+ok 4 - incremental provider contracts reject unsafe links, preserve string history and prefer immutable Graph IDs
+  ---
+  duration_ms: 32.1489
+  type: 'test'
+  ...
+# Subtest: private periodic mail synchronization persists continuation, decisions, revocation, tombstones and failure states in PostgreSQL
+    # Subtest: host allowlist is insufficient without owner opt-in; no provider call
+    ok 1 - host allowlist is insufficient without owner opt-in; no provider call
+      ---
+      duration_ms: 9.5751
+      type: 'test'
+      ...
+    # Subtest: bootstrap and >5 arrivals resume durable queues; unknown bodies are never fetched; one malformed message is quarantined
+    ok 2 - bootstrap and >5 arrivals resume durable queues; unknown bodies are never fetched; one malformed message is quarantined
+      ---
+      duration_ms: 235.1172
+      type: 'test'
+      ...
+    # Subtest: configured host resumes the personally delegated connection and cron exposes only compact non-content results
+    ok 3 - configured host resumes the personally delegated connection and cron exposes only compact non-content results
+      ---
+      duration_ms: 26.0851
+      type: 'test'
+      ...
+    # Subtest: private filing creates no team link; a different owner cannot see private messages or review counts
+    ok 4 - private filing creates no team link; a different owner cannot see private messages or review counts
+      ---
+      duration_ms: 27.6003
+      type: 'test'
+      ...
+    # Subtest: local erasure survives a History reset and rebootstrap
+    ok 5 - local erasure survives a History reset and rebootstrap
+      ---
+      duration_ms: 74.2779
+      type: 'test'
+      ...
+    # Subtest: shared lease blocks manual import; policy revocation during provider I/O rejects late checkpoint and content
+    ok 6 - shared lease blocks manual import; policy revocation during provider I/O rejects late checkpoint and content
+      ---
+      duration_ms: 22.5125
+      type: 'test'
+      ...
+    # Subtest: Graph legacy IDs including tombstones migrate before delta, empty pages continue and folder removal preserves local work state
+    ok 7 - Graph legacy IDs including tombstones migrate before delta, empty pages continue and folder removal preserves local work state
+      ---
+      duration_ms: 133.6796
+      type: 'test'
+      ...
+    # Subtest: new thread participants and ambiguous contacts stay in private review without content, and private filing survives updates
+    ok 8 - new thread participants and ambiguous contacts stay in private review without content, and private filing survives updates
+      ---
+      duration_ms: 82.4764
+      type: 'test'
+      ...
+    # Subtest: mailbox pagination reaches older messages beyond fifty with stable same-time ordering
+    ok 9 - mailbox pagination reaches older messages beyond fifty with stable same-time ordering
+      ---
+      duration_ms: 19.3422
+      type: 'test'
+      ...
+    # Subtest: expired access refreshes before provider content and preserves verified read scope
+    ok 10 - expired access refreshes before provider content and preserves verified read scope
+      ---
+      duration_ms: 18.4916
+      type: 'test'
+      ...
+    # Subtest: rate limit backoff is durable and respects Retry-After; revoked identity never calls a provider
+    ok 11 - rate limit backoff is durable and respects Retry-After; revoked identity never calls a provider
+      ---
+      duration_ms: 14.7266
+      type: 'test'
+      ...
+    1..11
+ok 5 - private periodic mail synchronization persists continuation, decisions, revocation, tombstones and failure states in PostgreSQL
+  ---
+  duration_ms: 6217.7059
+  type: 'test'
+  ...
+# Subtest: personal send consent is explicit and MIME is a bounded plain text reply, never raw HTML
+ok 6 - personal send consent is explicit and MIME is a bounded plain text reply, never raw HTML
+  ---
+  duration_ms: 6.0502
+  type: 'test'
+  ...
+# Subtest: actual streamed request limit rejects chunked oversize, invalid UTF8 and arrays
+ok 7 - actual streamed request limit rejects chunked oversize, invalid UTF8 and arrays
+  ---
+  duration_ms: 19.263
+  type: 'test'
+  ...
+# Subtest: private file inspection rejects executable/mismatch/active PDF and normalizes safe image bytes
+ok 8 - private file inspection rejects executable/mismatch/active PDF and normalizes safe image bytes
+  ---
+  duration_ms: 658.6409
+  type: 'test'
+  ...
+# Subtest: provider POST failure is never treated as delivered or automatically retried
+ok 9 - provider POST failure is never treated as delivered or automatically retried
+  ---
+  duration_ms: 2.5442
+  type: 'test'
+  ...
+# Subtest: personal replies and attachments use actual two-tenant PostgreSQL auth, source binding, receipts and restart-safe no-resend
+    # Subtest: known-ID-only QA import checks test marker and participant metadata before content for both providers; business mail is never fetched
+    ok 1 - known-ID-only QA import checks test marker and participant metadata before content for both providers; business mail is never fetched
+      ---
+      duration_ms: 475.761
+      type: 'test'
+      ...
+    # Subtest: Google and Outlook replies bind original thread, send one private attachment and persist accepted-not-delivered receipt
+    ok 2 - Google and Outlook replies bind original thread, send one private attachment and persist accepted-not-delivered receipt
+      ---
+      duration_ms: 186.8133
+      type: 'test'
+      ...
+    # Subtest: received file is personally fetched, checked, downloaded privately, erased permanently and never adopted across tenants
+    ok 3 - received file is personally fetched, checked, downloaded privately, erased permanently and never adopted across tenants
+      ---
+      duration_ms: 59.5047
+      type: 'test'
+      ...
+    # Subtest: quarantined executable bytes never persist, download or enter a preview
+    ok 4 - quarantined executable bytes never persist, download or enter a preview
+      ---
+      duration_ms: 34.3185
+      type: 'test'
+      ...
+    # Subtest: old read-only grant and missing identity/session cannot obtain send authority from the message
+    ok 5 - old read-only grant and missing identity/session cannot obtain send authority from the message
+      ---
+      duration_ms: 22.9811
+      type: 'test'
+      ...
+    # Subtest: explicit OAuth reply consent is identity bound; subsequent read-only OAuth removes it
+    ok 6 - explicit OAuth reply consent is identity bound; subsequent read-only OAuth removes it
+      ---
+      duration_ms: 49.8245
+      type: 'test'
+      ...
+    # Subtest: foreign tenant and different user in same tenant cannot preview or attach to another private message
+    ok 7 - foreign tenant and different user in same tenant cannot preview or attach to another private message
+      ---
+      duration_ms: 54.2386
+      type: 'test'
+      ...
+    # Subtest: unknown/unassociated source, changed provider identity and changed recipient are denied without POST
+    ok 8 - unknown/unassociated source, changed provider identity and changed recipient are denied without POST
+      ---
+      duration_ms: 67.4654
+      type: 'test'
+      ...
+    # Subtest: revoked project grant, current role, session, contact consent and recipient change deny send after preview
+    ok 9 - revoked project grant, current role, session, contact consent and recipient change deny send after preview
+      ---
+      duration_ms: 161.8034
+      type: 'test'
+      ...
+    # Subtest: attachment erasure and stale preview digest block dispatch; prepared receipt is cancellable without resetting unknown
+    ok 10 - attachment erasure and stale preview digest block dispatch; prepared receipt is cancellable without resetting unknown
+      ---
+      duration_ms: 59.5181
+      type: 'test'
+      ...
+    # Subtest: erasing an approved attachment blocks dispatch and preserves its immutable metadata
+    ok 11 - erasing an approved attachment blocks dispatch and preserves its immutable metadata
+      ---
+      duration_ms: 43.6791
+      type: 'test'
+      ...
+    # Subtest: lost provider acknowledgement is terminal across request replay, fresh service instance and a new idempotency key
+    ok 12 - lost provider acknowledgement is terminal across request replay, fresh service instance and a new idempotency key
+      ---
+      duration_ms: 689.3616
+      type: 'test'
+      ...
+    # Subtest: lost database acknowledgement after provider call leaves durable dispatching and cannot resend
+    ok 13 - lost database acknowledgement after provider call leaves durable dispatching and cannot resend
+      ---
+      duration_ms: 64.72
+      type: 'test'
+      ...
+    # Subtest: concurrent same-command calls produce one dispatch and changed payload conflicts
+    ok 14 - concurrent same-command calls produce one dispatch and changed payload conflicts
+      ---
+      duration_ms: 71.84
+      type: 'test'
+      ...
+    # Subtest: private-copy erasure also erases cached bytes and prevents rehydration; immutable command audit survives
+    ok 15 - private-copy erasure also erases cached bytes and prevents rehydration; immutable command audit survives
+      ---
+      duration_ms: 45.2729
+      type: 'test'
+      ...
+    1..15
+ok 10 - personal replies and attachments use actual two-tenant PostgreSQL auth, source binding, receipts and restart-safe no-resend
+  ---
+  duration_ms: 6589.771
+  type: 'test'
+  ...
+1..10
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 22778.1174

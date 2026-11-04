@@ -1,6 +1,7 @@
 import "server-only";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { hasMailboxReadScope, mailboxAddress, mailboxCursor, mailboxProviderId, mailboxRequestedScopes, mailboxText, type MailboxAttachment, type MailboxImportedMessage, type MailboxProvider } from "@/lib/crm-mailbox";
+import { hasMailboxSendScope, mailboxReplyScopes } from "@/lib/crm-mailbox-reply";
 export type MailboxTransport = (url: string, init: RequestInit) => Promise<Response>;
 export class MailboxProviderError extends Error { constructor(public readonly code: string, public readonly status?: number, public readonly retryAfterSeconds?: number) { super(code); } }
 const defaultTransport: MailboxTransport = (url, init) => fetch(url, init);
@@ -71,20 +72,23 @@ function tenant() { const value = process.env.MICROSOFT_TENANT_ID?.trim() || "co
 export function mailboxOAuthConfigured(provider: MailboxProvider) { return Boolean(Buffer.byteLength(process.env.OAUTH_STATE_SECRET || "", "utf8") >= 32 && process.env.OAUTH_TOKEN_ENCRYPTION_KEY && (provider === "google" ? process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET : process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET)); }
 export function mailboxOrigin(requestUrl: string) { if (!["http:", "https:"].includes(new URL(requestUrl).protocol)) throw new MailboxProviderError("MAIL_OAUTH_ORIGIN"); const url = new URL(getTrustedAppOrigin()); if (url.username || url.password || (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) throw new MailboxProviderError("MAIL_OAUTH_ORIGIN"); return url.origin; }
 export function mailboxRedirect(provider: MailboxProvider, requestUrl: string) { return `${mailboxOrigin(requestUrl)}/api/crm/mailbox/oauth/${provider}/callback`; }
-export function mailboxAuthorizationUrl(input: { provider: MailboxProvider; requestUrl: string; state: string; codeChallenge: string }) {
+export function mailboxAuthorizationUrl(input: { provider: MailboxProvider; requestUrl: string; state: string; codeChallenge: string; enableReply?: boolean }) {
   if (!mailboxOAuthConfigured(input.provider)) throw new MailboxProviderError("MAIL_OAUTH_NOT_CONFIGURED");
   const url = new URL(input.provider === "google" ? "https://accounts.google.com/o/oauth2/v2/auth" : `https://login.microsoftonline.com/${tenant()}/oauth2/v2.0/authorize`);
-  url.searchParams.set("client_id", (input.provider === "google" ? process.env.GOOGLE_CLIENT_ID : process.env.MICROSOFT_CLIENT_ID)!.trim()); url.searchParams.set("redirect_uri", mailboxRedirect(input.provider, input.requestUrl)); url.searchParams.set("response_type", "code"); url.searchParams.set("scope", mailboxRequestedScopes[input.provider].join(" ")); url.searchParams.set("state", input.state); url.searchParams.set("code_challenge", input.codeChallenge); url.searchParams.set("code_challenge_method", "S256");
+  const scopes: string[] = [...mailboxRequestedScopes[input.provider]];
+  if (input.enableReply === true) scopes.push(mailboxReplyScopes[input.provider]);
+  url.searchParams.set("client_id", (input.provider === "google" ? process.env.GOOGLE_CLIENT_ID : process.env.MICROSOFT_CLIENT_ID)!.trim()); url.searchParams.set("redirect_uri", mailboxRedirect(input.provider, input.requestUrl)); url.searchParams.set("response_type", "code"); url.searchParams.set("scope", scopes.join(" ")); url.searchParams.set("state", input.state); url.searchParams.set("code_challenge", input.codeChallenge); url.searchParams.set("code_challenge_method", "S256");
   if (input.provider === "google") { url.searchParams.set("access_type", "offline"); url.searchParams.set("prompt", "consent"); } else url.searchParams.set("response_mode", "query"); return url.toString();
 }
-export async function exchangeMailboxToken(input: { provider: MailboxProvider; code?: string; codeVerifier?: string; requestUrl?: string; refreshToken?: string; priorScopes?: string[] }, transport: MailboxTransport = defaultTransport) {
+export async function exchangeMailboxToken(input: { provider: MailboxProvider; code?: string; codeVerifier?: string; requestUrl?: string; refreshToken?: string; priorScopes?: string[]; enableReply?: boolean }, transport: MailboxTransport = defaultTransport) {
   const provider = input.provider, body = new URLSearchParams({ client_id: (provider === "google" ? process.env.GOOGLE_CLIENT_ID : process.env.MICROSOFT_CLIENT_ID)?.trim() || "", client_secret: (provider === "google" ? process.env.GOOGLE_CLIENT_SECRET : process.env.MICROSOFT_CLIENT_SECRET)?.trim() || "", grant_type: input.refreshToken ? "refresh_token" : "authorization_code" });
   if (!body.get("client_id") || !body.get("client_secret")) throw new MailboxProviderError("MAIL_OAUTH_NOT_CONFIGURED");
   if (input.refreshToken) body.set("refresh_token", input.refreshToken); else { if (!input.code || !input.codeVerifier || !input.requestUrl) throw new MailboxProviderError("MAIL_OAUTH_STATE"); body.set("code", input.code); body.set("code_verifier", input.codeVerifier); body.set("redirect_uri", mailboxRedirect(provider, input.requestUrl)); }
-  if (provider === "microsoft") body.set("scope", mailboxRequestedScopes.microsoft.join(" "));
+  if (provider === "microsoft") body.set("scope", [...mailboxRequestedScopes.microsoft, ...((input.enableReply === true || input.refreshToken && hasMailboxSendScope(provider, input.priorScopes ?? [])) ? [mailboxReplyScopes.microsoft] : [])].join(" "));
   const result = await json(provider === "google" ? "https://oauth2.googleapis.com/token" : `https://login.microsoftonline.com/${tenant()}/oauth2/v2.0/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, transport, 65536);
   const scopes = typeof result.scope === "string" ? result.scope.split(/\s+/).filter(Boolean) : input.refreshToken ? input.priorScopes ?? [] : [];
   if (!hasMailboxReadScope(provider, scopes) || typeof result.access_token !== "string" || !result.access_token || !Number.isSafeInteger(result.expires_in) || Number(result.expires_in) < 30 || Number(result.expires_in) > 86400 || result.token_type && String(result.token_type).toLowerCase() !== "bearer") throw new MailboxProviderError("MAIL_SCOPE_REQUIRED");
+  if (input.enableReply === true && !hasMailboxSendScope(provider, scopes)) throw new MailboxProviderError("MAIL_SEND_CONSENT_REQUIRED");
   return { accessToken: result.access_token, refreshToken: typeof result.refresh_token === "string" ? result.refresh_token : input.refreshToken ?? null, scopes, expiresAt: new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() };
 }
 export async function fetchMailboxAccountLabel(provider: MailboxProvider, token: string, transport: MailboxTransport = defaultTransport) {
