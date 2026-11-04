@@ -1,11 +1,18 @@
 import { hasProductCapability, type ProductRole } from "@/lib/product-model";
 
 /** Presets organize work; they must not hide the existing customer self-service. */
-type SelfServiceEntry = "dashboard" | "projects" | "knowledge" | "bots" | "settings";
+type SelfServiceEntry = "dashboard" | "projects" | "knowledge" | "bots" | "settings" | "billing" | "aiBillingAdmin";
+
+export function canAccessCrmBilling(role: ProductRole) {
+  return role !== "viewer" && role !== "external_partner";
+}
 
 export function getCrmSelfServiceEntries<T extends string>(entries: readonly T[], role: ProductRole): Array<T | SelfServiceEntry> {
-  if (hasProductCapability(role, "novalure:internal")) return [...entries];
-  const result = new Set<T | SelfServiceEntry>([...entries, "dashboard", "projects", "knowledge"]);
+  if (hasProductCapability(role, "novalure:internal")) return [
+    ...entries, "billing", ...(["platform_admin", "novalureAdmin"].includes(role) ? ["aiBillingAdmin" as const] : []),
+  ];
+  const result = new Set<T | SelfServiceEntry>([...entries, "dashboard", "projects", "knowledge", "billing"]);
+  if (!canAccessCrmBilling(role)) result.delete("billing");
   if (hasProductCapability(role, "bots:publish")) result.add("bots");
   else result.delete("bots");
   if (hasProductCapability(role, "settings:manage")) result.add("settings");

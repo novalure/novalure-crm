@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
 import { Notice as CommandNotice } from "../../design-c/components/ui";
-import { getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
+import { canAccessCrmBilling, getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
+import { CrmAiBillingPanel, getAiBillingNavigationLabel } from "@/components/crm-ai-billing-panel";
+import { AiBillingAdminPanel } from "@/components/ai-billing-admin-panel";
 import { CrmCommandSearch } from "@/components/crm-command-search";
 import { LanguagePreferenceSelect, type LanguagePreferenceSaveState } from "@/components/language-preference-select";
 import { EvelynCommandCenter, type EvelynCommandSection } from "@/components/evelyn-command-center";
@@ -198,6 +200,8 @@ type NavigationPresetId =
   | "novalureAdmin";
 
 type NavigationEntryId =
+  | "billing"
+  | "aiBillingAdmin"
   | "analysis"
   | "analytics"
   | "appointments"
@@ -686,6 +690,8 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   sellerLeads: { id: "sellerLeads", leadTypes: ["Verkäufer"], section: "leadInbox" },
   serviceCockpit: { id: "serviceCockpit", section: "customerSuccess" },
   settings: { id: "settings", section: "settings" },
+  billing: { id: "billing", section: "settings" },
+  aiBillingAdmin: { id: "aiBillingAdmin", section: "settings" },
   slaCockpit: { id: "slaCockpit", section: "leadInbox" },
   systemReleases: { id: "systemReleases", section: "settings" },
   studioWebsiteEnquiries: { id: "studioWebsiteEnquiries", section: "leadInbox" },
@@ -1172,6 +1178,8 @@ function readStoredPresetId(
 }
 
 const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
+  billing: "billing",
+  aiBillingAdmin: "ai-billing-admin",
   auditLog: "audit-log",
   buyerLeads: "buyer-leads",
   buyerProfiles: "buyer-profiles",
@@ -1199,6 +1207,8 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
 
   const hash = window.location.hash.replace("#", "").toLowerCase();
   const sections: Record<string, DashboardSection> = {
+    billing: "settings",
+    "ai-billing-admin": "settings",
     analysis: "analysis",
     analyse: "analysis",
     "analyse-bot": "analysis",
@@ -3382,10 +3392,14 @@ export function CrmWorkspace({
   const sidebarToggleLabel = sidebarCollapsed
     ? copy.shell.expandNavigation
     : copy.shell.collapseNavigation;
-  const navigationLabels: Record<string, string> = isStudioNavigation
-    ? { ...copy.navigation, ...studioCopy.navigation }
-    : copy.navigation;
+  const navigationLabels: Record<string, string> = {
+    ...copy.navigation, ...(isStudioNavigation ? studioCopy.navigation : {}),
+    billing: getAiBillingNavigationLabel(language),
+    aiBillingAdmin: language === "de" ? "KI-Buchungsanfragen" : "AI booking requests",
+  };
   const enabledNavigationEntryIds = getCrmSelfServiceEntries(normalizedActivePreset.navigationEntries, sessionProductRole).filter((entryId) => {
+    if (entryId === "billing") return canAccessCrmBilling(activeWorkspace.productRole ?? workspaceContext.productRole);
+    if (entryId === "aiBillingAdmin") return ["platform_admin", "novalureAdmin"].includes(activeWorkspace.productRole ?? workspaceContext.productRole) && workspaceContext.operatingModel === "novalure_internal";
     if (isStudioNavigation) {
       // This entry is a setup plan; it loads no knowledge or bot data.
       if (entryId === "studioKnowledgeAi") return true;
@@ -3438,8 +3452,9 @@ export function CrmWorkspace({
     navigationLabels[visibleActiveNavigationEntry.id] ??
     navigationLabels[visibleActiveNavigationEntry.section] ??
     activePresetProfile.label;
-  const unavailableSectionCollections = unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
-  const sectionScopeUnavailable = visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
+  const isBillingSection = visibleActiveNavigationEntry.id === "billing" || visibleActiveNavigationEntry.id === "aiBillingAdmin";
+  const unavailableSectionCollections = isBillingSection ? [] : unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
+  const sectionScopeUnavailable = !isBillingSection && visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
   const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects ? allProjects.length : "—";
   const relatedSectionUnavailable = ["analysis", "dataHygiene", "communication", "sequences"].includes(visibleActiveSection);
   const sessionOnlySectionUnavailable = activeWorkspace.id !== sessionWorkspace.id && ["forms", "customerAccess"].includes(visibleActiveSection);
@@ -4945,7 +4960,11 @@ export function CrmWorkspace({
               />
             ) : null}
 
+            {visibleActiveNavigationEntry.id === "billing" ? <CrmAiBillingPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} /> : null}
+            {visibleActiveNavigationEntry.id === "aiBillingAdmin" ? <AiBillingAdminPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} /> : null}
             {visibleActiveSection === "settings" &&
+            visibleActiveNavigationEntry.id !== "billing" &&
+            visibleActiveNavigationEntry.id !== "aiBillingAdmin" &&
             visibleActiveNavigationEntry.id !== "systemReleases" &&
             visibleActiveNavigationEntry.id !== "governanceCompliance" ? (
               <>
