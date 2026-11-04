@@ -28,7 +28,7 @@ const baseline = process.env.CRM_QA_CORE_REFRESH_BASELINE === "1";
 const baselineRevision = "933a54660fa0be1368bd8b32dc077451cdb63bd6";
 const original = (baseline ? execFileSync("git", ["show", `${baselineRevision}:src/components/crm-workspace.tsx`], { encoding: "utf8" }) : await readFile(sourcePath, "utf8")).replace(/\r\n/g, "\n");
 const names = new Map([...original.matchAll(/import\s*\{([^{}]+)\}\s*from\s*["'](@\/components\/[^"']+)["']/g)].map(match => [match[2], match[1].split(",").map(item => item.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]).filter(Boolean)]));
-const observer = `window.__QA_CRM__={refreshCoreData,handleWorkspaceSwitch,handleSectionChange,activeWorkspace,liveCoreData,coreDataStatus,workspaceSwitchState,propertyDraftStore${baseline ? "" : ",coreRequestGuard"}};
+const observer = `window.__QA_CRM__={refreshCoreData,handleWorkspaceSwitch,handleSectionChange,activeWorkspace,liveCoreData,coreDataStatus,workspaceSwitchState,propertyDraftStore,crmScope${baseline ? "" : ",coreRequestGuard"}};
 qaUseLayoutEffect(()=>{if(window.priorGuardTicket)window.priorGuardCurrentAtLayout=window.priorGuardTicket.guard.isCurrentRefresh(window.priorGuardTicket.ticket)},[sessionUserId]);`;
 const needle = '  return (\n    <main className="crm-app';
 assert.equal(original.includes(needle), true);
@@ -159,6 +159,20 @@ try {
       window.setCrmUser("SYNTHETIC-user-b");
     }, workspaceA);
     await expect.poll(() => page.evaluate(() => window.priorGuardCurrentAtLayout)).toBe(false);
+  });
+  await step("URL restoration uses the guarded workspace switch and preserves explicit All", async () => {
+    corePlans = []; coreRequests.length = 0; propertyRequests.length = 0; propertyGate = null;
+    await page.goto(`http://127.0.0.1:${server.address().port}/?workspaceId=${workspaceB}&projectId=all`);
+    await expect.poll(() => page.evaluate(() => window.__QA_CRM__?.activeWorkspace.id)).toBe(workspaceB);
+    await expect.poll(async () => (await snapshot()).status).toBe("fresh");
+    assert.equal(await page.evaluate(() => window.__QA_CRM__.crmScope.projectId), null);
+    assert.equal(await page.evaluate(() => window.__QA_CRM__.crmScope.status), "valid");
+    const restored = new URL(page.url());
+    assert.equal(restored.searchParams.get("workspaceId"), workspaceB);
+    assert.equal(restored.searchParams.get("projectId"), "all");
+    assert.equal(await page.evaluate(() => window.__QA_CRM__.liveCoreData.projects[0]?.workspaceId), workspaceB);
+    assert.ok(coreRequests.includes(workspaceB));
+    assert.equal(propertyRequests.length, 0);
   });
   }
   assert.deepEqual(errors, []);
