@@ -29,7 +29,7 @@ const groupEntries: Record<WorkspaceNavigationGroupId, readonly string[]> = {
   tasks: ["tasks", "followUpQueue"],
   calendar: ["calendar", "appointments", "consultations"],
   marketing: ["marketing", "funnels", "forms", "newsletter", "sequences"],
-  knowledge: ["knowledge", "studioKnowledgeAi", "bots", "analysis", "botGovernance"],
+  knowledge: ["aiAssistant", "knowledge", "studioKnowledgeAi", "bots", "analysis", "botGovernance"],
   management: [
     "settings", "billing", "aiBillingAdmin", "customerAccess", "customerWorkspaces",
     "customerReport", "customerSuccess", "customerSwitch", "managedService", "onboarding",

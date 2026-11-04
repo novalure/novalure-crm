@@ -8,6 +8,8 @@
     "npm": ">=11 <12"
   },
   "scripts": {
+    "test:crm-assistant": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-ai-assistant-tests.ts scripts/crm-ai-assistant-guard-tests.ts",
+    "qa:crm-assistant": "node scripts/crm-ai-assistant-ui-tests.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

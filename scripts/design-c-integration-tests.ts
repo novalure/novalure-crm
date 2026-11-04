@@ -12,11 +12,14 @@ test("customer presets retain read-only Knowledge while management requires exis
   assert(viewer.includes("knowledge")); assert(viewer.includes("dashboard")); assert(viewer.includes("projects"));
   assert(!viewer.includes("bots")); assert(!viewer.includes("settings"));
   assert(!viewer.includes("billing"));
+  assert(!viewer.includes("aiAssistant"));
+  assert(!getCrmSelfServiceEntries(preset, "external_partner").includes("aiAssistant"));
   assert(!getCrmSelfServiceEntries([...preset, "billing"], "viewer").includes("billing"));
   assert(!getCrmSelfServiceEntries([...preset, "billing"], "external_partner").includes("billing"));
   assert(!canAccessCrmBilling("viewer")); assert(!canAccessCrmBilling("external_partner"));
   for (const role of ["customer_owner", "workspace_admin", "team_member", "broker_agent", "developer_sales", "project_sales_member", "assistant_backoffice"] as const) {
     assert(canAccessCrmBilling(role)); assert(getCrmSelfServiceEntries(preset, role).includes("billing"));
+    assert(getCrmSelfServiceEntries(preset, role).includes("aiAssistant"));
   }
   const owner = getCrmSelfServiceEntries(preset, "customer_owner");
   assert(owner.includes("bots")); assert(owner.includes("settings"));
@@ -25,9 +28,11 @@ test("customer presets retain read-only Knowledge while management requires exis
   assert.equal(new Set(owner).size, owner.length);
 });
 
-test("internal department presets keep their existing navigation contract", () => {
+test("internal department presets retain their departments alongside AI and billing access", () => {
   const entries = ["workspaces", "auditLog"];
-  assert.deepEqual(getCrmSelfServiceEntries(entries, "novalureAdmin"), entries);
+  const available = getCrmSelfServiceEntries(entries, "novalureAdmin");
+  assert.deepEqual(available.filter(entry => entries.includes(entry)), entries);
+  assert(available.includes("aiAssistant")); assert(available.includes("billing")); assert(available.includes("aiBillingAdmin"));
 });
 
 function core(): CoreCrmDataResult {

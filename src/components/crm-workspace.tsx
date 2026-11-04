@@ -25,6 +25,7 @@ import { CalendarCommandCenter } from "@/components/calendar-command-center";
 import { CompanyProfileSettings } from "@/components/company-profile-settings";
 import { CrmAiBillingPanel, getAiBillingNavigationLabel } from "@/components/crm-ai-billing-panel";
 import { AiBillingAdminPanel } from "@/components/ai-billing-admin-panel";
+import { CrmAiAssistant } from "@/components/crm-ai-assistant";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
 import { isVisibleBusinessRecord, selectVisibleBusinessRecords } from "@/components/crm-business-visibility";
 import { ContactCommandCenter } from "@/components/contact-command-center";
@@ -214,6 +215,7 @@ type NavigationPresetId =
 type NavigationEntryId =
   | "billing"
   | "aiBillingAdmin"
+  | "aiAssistant"
   | "analysis"
   | "marketing"
   | "analytics"
@@ -674,6 +676,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   analytics: { id: "analytics", section: "analytics" },
   billing: { id: "billing", section: "settings" },
   aiBillingAdmin: { id: "aiBillingAdmin", section: "settings" },
+  aiAssistant: { id: "aiAssistant", section: "bots" },
   appointments: { id: "appointments", section: "calendar" },
   approvals: { id: "approvals", section: "managedService" },
   auditLog: { id: "auditLog", section: "managedService" },
@@ -1208,6 +1211,7 @@ const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
   auditLog: "audit-log",
   billing: "billing",
   aiBillingAdmin: "ai-billing-admin",
+  aiAssistant: "ai-assistant",
   buyerLeads: "buyer-leads",
   buyerProfiles: "buyer-profiles",
   dailyQueue: "daily-queue",
@@ -1236,6 +1240,7 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
   const sections: Record<string, DashboardSection> = {
     billing: "settings",
     "ai-billing-admin": "settings",
+    "ai-assistant": "bots",
     analysis: "analysis",
     analyse: "analysis",
     "analyse-bot": "analysis",
@@ -3315,6 +3320,7 @@ export function CrmWorkspace({
     ...(isStudioNavigation ? studioCopy.navigation : {}),
     billing: getAiBillingNavigationLabel(language),
     aiBillingAdmin: language === "de" ? "KI-Buchungsanfragen" : "AI booking requests",
+    aiAssistant: language === "de" ? "KI-Assistent" : "AI assistant",
   };
   const marketingNavigationEntries: NavigationEntryId[] = marketingNavigation?.workspaceId === activeWorkspace.id &&
     marketingNavigation.entryId === activeNavigationEntryId && normalizedActivePreset.navigationEntries.includes("marketing")
@@ -3382,7 +3388,7 @@ export function CrmWorkspace({
     navigationLabels[visibleActiveNavigationEntry.id] ??
     navigationLabels[visibleActiveNavigationEntry.section] ??
     activePresetProfile.label;
-  const isBillingSection = visibleActiveNavigationEntry.id === "billing" || visibleActiveNavigationEntry.id === "aiBillingAdmin";
+  const isBillingSection = ["billing", "aiBillingAdmin", "aiAssistant"].includes(visibleActiveNavigationEntry.id);
   const unavailableSectionCollections = isBillingSection ? [] : unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
   const sectionScopeUnavailable = !isBillingSection && visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
   const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects ? allProjects.length : "—";
@@ -4389,6 +4395,7 @@ export function CrmWorkspace({
                     else handleSectionChange("properties");
                   }} />
                 <CrmCommandSearch key={`${activeWorkspace.id}-${activeProjectId}`} language={language} entries={focusedNavigationItems.map(item => ({ id: item.id, label: item.label, section: item.section }))} contacts={visibleContacts} leads={visibleLeads} projects={allProjects.filter(project => isProjectInActiveScope(project.id))} onNavigate={entry => handleNavigationChange(entry as NavigationEntryId)} />
+                {enabledNavigationEntryIds.includes("aiAssistant") ? <button type="button" className="min-h-11 rounded-md bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800" onClick={() => handleNavigationChange("aiAssistant")}>{navigationLabels.aiAssistant}</button> : null}
                 <span data-crm-current-user>{sessionUserName}<small>{sessionProductRole}</small></span>
                 <LanguagePreferenceSelect language={language} preference={languagePreference} saveState={languageSaveState} onChange={preference => void handleLanguageChange(preference)} />
                 <WorkspaceOnboardingTour
@@ -4566,6 +4573,8 @@ export function CrmWorkspace({
               <CrmAiBillingPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
             ) : visibleActiveNavigationEntry.id === "aiBillingAdmin" ? (
               <AiBillingAdminPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
+            ) : visibleActiveNavigationEntry.id === "aiAssistant" ? (
+              <CrmAiAssistant key={activeWorkspace.id} workspaceId={activeWorkspace.id} projectId={activeProjectId === "all" ? null : activeProjectId} language={language} />
             ) : unavailableSectionCollections.length || sectionScopeUnavailable || relatedSectionUnavailable || sessionOnlySectionUnavailable ? (
               <section className="dc-card rounded-xl border border-stone-200 bg-white" data-crm-source-unavailable role="status">
                 <h2>{language === "de" ? "Daten für diesen Bereich nicht verfügbar" : "Data for this section is unavailable"}</h2>
