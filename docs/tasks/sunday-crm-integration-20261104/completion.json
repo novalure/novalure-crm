@@ -31,9 +31,10 @@
   "currentProduction": {
     "initialRootObservedSha": "fa234f226c41def89f038ee7b1c52e838b90cb4f",
     "initialDeployment": "dpl_8GGZ6dFQDg8vuR3YXnbhsKptSkzi",
-    "note": "The root-provided current assistant source11c4384c is now a regular merge ancestor. This local candidate is not released and must be reconciled against any later target change before release. Active QA slots189/190 are reserved and not incorporated.",
-    "latestRootProvidedSha": "11c4384c0c5a360e448f441c822edc1057d9fe17",
-    "latestProvidedSourceIncluded": true
+    "note": "The root-provided latest public assistant sourcebb8 is a regular merge ancestor. This local candidate remains unpublished; reconcile any later source/schema change before release. QA migrations189/190 remain reserved and absent.",
+    "latestRootProvidedSha": "bb8bbaa916e5194ae7bdd7e6535f93283906a75c",
+    "latestProvidedSourceIncluded": true,
+    "latestRootProvidedDeployment": "dpl_FWru64SJYvcZJU5otFsmTEJEuWu6"
   },
   "integrations": [
     {
@@ -422,5 +423,18 @@
       "sha256": "d1c4a0635062e125da681a59175cac08d04ca2736b73a1631def42b78982b8c2",
       "bytes": 743
     }
-  ]
+  ],
+  "propertySuccessor": {
+    "sourceHead": "5416515a38cb30bc5f8e3389de5cb124fe0e470e",
+    "receipt": "docs/tasks/sunday-crm-integration-20261104/property-integration.json",
+    "backendTests": "32_OF32_PASS_ON_INTEGRATED_SOURCE",
+    "browserCases": "FINAL9_OF9_PASS_SYNTHETIC_HTTP_ON_EXACT_FINAL_SOURCE",
+    "buildAndTypecheck": "FULL_NEXT_BUILD44B_PASS_FINAL_NARROW_UI_BROWSER_BUNDLE_AND_TYPECHECK_PASS_NO_NEW_FULL_BUILD_CLAIM",
+    "migration189And190": "NOT_INCORPORATED",
+    "completeGatePass": false,
+    "published": false,
+    "assistantSuccessor": "LATEST_PUBLIC_BB8_INCLUDED_AND25_OF25_TARGETED_PASS",
+    "src05": "OPEN_NEW_PENDING_REF_LOSS_ON_COMPONENT_UNMOUNT_AWAIT_QA_SESSION_RAM_STORE_SUCCESSOR",
+    "final9CoverSrc05NavigationLoss": false
+  }
 }

@@ -2,6 +2,10 @@
 
 **Aktuelle Assistantquelle enthalten; nicht veröffentlicht und kein vollständiger Gate-PASS.**
 
+**SRC05 bleibt wegen eines neuen QA-Peerbefunds offen:** Bei Navigation aus dem Immobilienbereich verliert der Unmount den Pending-Ref. Die folgende QA-Korrektur mit bestehendem RAM-Draftstore sowie Unmount-/Remount-/Late-Response-Fällen ist noch nicht enthalten. Die bisherigen9 Browserfälle bestehen, decken diesen Befund jedoch nicht ab. Dies ist kein Teil des alten8/9-Stringtestfehlers.
+
+**Neuer lokaler Property-/Assistantnachfolger:** Backendserie bis `8d94b6b2` zuerst, danach Direkterfassung `6b9b38c5`; zusätzlich neue öffentliche Assistantquelle `bb8bbaa9` regulär integriert und gezielter UI-Nachfolger `2a7ac7f2` ohne doppelte Helferkopie übernommen. Quellenabschluss `5416515a38cb30bc5f8e3389de5cb124fe0e470e`. Die tatsächlichen32/8-Property- und25-Assistantfälle sowie vollständigen Builds behalten ihre exakten Prüfstände; die letzte UI-Fortsetzung hat einen eigenen engen Nachweis. Einzelheiten und offene189/190-/Releaseanschlüsse stehen in [PROPERTY-INTEGRATION.md](PROPERTY-INTEGRATION.md), maschinenlesbare Belege in [property-integration.json](property-integration.json). Die nachfolgenden historischen Ergebnisse bleiben ihrem damaligen Stand zugeordnet.
+
 Arbeitskopie `C:/Projects/novalure-crm-sunday-integration-20261104`, Branch `codex/sunday-crm-integration-20261104`. Ursprüngliche Basis: exakt `fa234f226c41def89f038ee7b1c52e838b90cb4f`. Die inzwischen von Root übergebene führende Assistantrevision `11c4384c0c5a360e448f441c822edc1057d9fe17` ist jetzt regulärer Mergevorfahr. Quellenabschluss vor dieser Dokumentation: `ce88252342042c59481747f6cabe6b04c51b36a3`. Eine neuere Production wird nicht auf den ursprünglichen fa234-Stand zurückgesetzt.
 
 ## Zusammenführung und Migrationslinie
