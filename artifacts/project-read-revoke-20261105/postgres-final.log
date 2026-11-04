@@ -1,0 +1,22 @@
+▶ project grants: actual tenant runtime, cumulative project gate, CAS and atomic receipts
+  ✔ grant then revoke removes CanRead and protected direct access from the same old session (273.5013ms)
+  ✔ stale editor cannot overwrite a newer grant and same-key committed replay is historical (79.9332ms)
+  ✔ malformed statuses and permission booleans cannot turn into an active default grant (19.9813ms)
+  ✔ two actual concurrent writers with the same before-image commit exactly once (158.4532ms)
+  ✔ an independently administered grant cannot slip into the missing-row window (223.6514ms)
+  ✔ another active business grant is preserved as a separate read authority (233.7888ms)
+  ✔ foreign tenant and unrelated membership/customer/workspace rights stay unchanged (167.1437ms)
+  ✔ an independent manual projection cannot be adopted or overwritten by a valid digest (30.5122ms)
+  ✔ current stored caller rights and revoked sessions defeat stale admin claims (24.7554ms)
+  ✔ legacy merged provenance is not silently treated as an exclusively owned read grant (24.2214ms)
+  ✔ audit failure rolls back both business grant and pipeline, with no receipt (42.2483ms)
+  ✔ a current workspace-manager authority is never revoked by changing its project grant (55.42ms)
+✔ project grants: actual tenant runtime, cumulative project gate, CAS and atomic receipts (12100.5506ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13304.8036
