@@ -5,8 +5,10 @@ import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 import { seedSalesBrowser } from "./lib/sales-browser-fixture.mjs";
 import { createCsrfToken } from "../src/lib/security/csrf-core";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
-import { POST } from "../src/app/api/crm/properties/route";
+import { GET, POST } from "../src/app/api/crm/properties/route";
 import { createPropertyGeography } from "../src/lib/property-country";
+import { createPropertyCoreDraft, propertyCoreUpdatePayload } from "../src/lib/property-core-editing";
+import { propertyCoreNumberIsKnown } from "../src/lib/property-core-numbers";
 
 test("property direct creation validates, commits once and rechecks cookie authority", { timeout: 240_000 }, async t => {
   const db = await startLocalSalesDb();
@@ -33,11 +35,13 @@ test("property direct creation validates, commits once and rechecks cookie autho
     await t.test("unsigned requests and missing one-use CSRF cannot create records", async () => {
       assert.equal((await POST(request(base, randomUUID(), randomUUID(), false, false))).status, 401);
       assert.equal((await POST(request(base, randomUUID(), randomUUID(), false))).status, 403);
+      const missing = request(base); missing.headers.delete("Idempotency-Key");
+      assert.equal((await POST(missing)).status, 400);
       assert.deepEqual(await counts(), { properties: 0, units: 0, receipts: 0 });
     });
     await t.test("server rejects malformed supplied numbers, classifications, dates and links", async () => {
       for (const patch of [{ areaSqm: -1 }, { areaSqm: "12abc" }, { areaSqm: 1.234 }, { price: "broken" }, { price: -1 }, { rooms: "2.25" }, { yearBuilt: "2000.5" }, { yearBuilt: 10000 },
-        { availableFrom: "2026-02-31" }, { availableFrom: "not a date" }, { objectType: "unsupported" }, { marketingType: "auction" }, { usageType: "whatever" }, { priceVisibility: "all" }, { projectId: "broken" }, { title: "x".repeat(301) }, { contactEmail: "broken" }]) {
+        { availableFrom: "2026-02-31" }, { availableFrom: "not a date" }, { objectType: "unsupported" }, { marketingType: "auction" }, { usageType: "whatever" }, { priceVisibility: "all" }, { projectId: "broken" }, { title: "" }, { address: "" }, { title: "x".repeat(301) }, { contactEmail: "broken" }]) {
         const response = await POST(request({ ...base, ...patch }));
         assert.equal(response.status, 400, JSON.stringify(patch) + ": " + await response.text());
       }
@@ -59,6 +63,53 @@ test("property direct creation validates, commits once and rechecks cookie autho
       assert.equal(replay.status, 200); assert.equal((await replay.json()).data.id, createdId);
       assert.equal((await POST(request({ ...base, title: "SYNTHETIC changed" }, idempotencyKey, correlation))).status, 409);
       assert.equal((await POST(request(base, idempotencyKey, randomUUID()))).status, 409);
+      assert.deepEqual(await counts(), { properties: 1, units: 1, receipts: 1 });
+    });
+    await t.test("complete editor explicitly clears optional stored numbers and keeps zero distinct", async () => {
+      const load = async () => {
+        const response = await GET(new Request(origin + path + `&operation=full&propertyId=${createdId}`, { headers: { cookie: "novalure_session=" + cookie } }));
+        assert.equal(response.status, 200, await response.clone().text()); return (await response.json()).data;
+      };
+      const loaded = await load(), draft = createPropertyCoreDraft(loaded.listing);
+      draft.propertyDetails = loaded.details; draft.coreEdit!.expectedFullSnapshot = loaded.snapshot;
+      draft.rooms = ""; draft.yearBuilt = ""; draft.publicPrice = "";
+      const cleared = await POST(request(propertyCoreUpdatePayload(draft, fixture.workspaceId, createdId)));
+      assert.equal(cleared.status, 200, await cleared.clone().text());
+      assert.deepEqual((await db.admin.query("select rooms,year_built,public_price_cents,target_price_cents from seller_listings where id=$1", [createdId])).rows[0],
+        { rooms: null, year_built: null, public_price_cents: null, target_price_cents: "25000012" });
+      const unknown = await load(), reopen = createPropertyCoreDraft(unknown.listing);
+      assert.equal(reopen.rooms, ""); assert.equal(reopen.yearBuilt, ""); assert.equal(reopen.publicPrice, "");
+      reopen.propertyDetails = unknown.details; reopen.coreEdit!.expectedFullSnapshot = unknown.snapshot;
+      reopen.rooms = "0"; reopen.publicPrice = "0";
+      const zero = await POST(request(propertyCoreUpdatePayload(reopen, fixture.workspaceId, createdId)));
+      assert.equal(zero.status, 200, await zero.clone().text());
+      const zeros = createPropertyCoreDraft((await load()).listing); assert.equal(zeros.rooms, "0"); assert.equal(zeros.publicPrice, "0");
+      const stale = await POST(request(propertyCoreUpdatePayload(draft, fixture.workspaceId, createdId)));
+      assert.equal(stale.status, 409);
+    });
+    await t.test("known area/price clear to unknown and explicit zero survives a complete reload", async () => {
+      const load = async () => {
+        const response = await GET(new Request(origin + path + `&operation=full&propertyId=${createdId}`, { headers: { cookie: "novalure_session=" + cookie } }));
+        assert.equal(response.status, 200); return (await response.json()).data;
+      };
+      let loaded = await load();
+      const edit = () => { const draft = createPropertyCoreDraft(loaded.listing); draft.propertyDetails = loaded.details; draft.coreEdit!.expectedFullSnapshot = loaded.snapshot; return draft; };
+      const clear = edit(); clear.areaSqm = ""; clear.price = "";
+      clear.propertyDetails!.values["areas.nutzfl_che"] = 30;
+      const response = await POST(request(propertyCoreUpdatePayload(clear, fixture.workspaceId, createdId)));
+      assert.equal(response.status, 200, await response.clone().text());
+      loaded = await load(); const unknown = createPropertyCoreDraft(loaded.listing);
+      assert.equal(unknown.areaSqm, ""); assert.equal(unknown.price, "");
+      assert.equal((await db.admin.query("select market_value_cents from seller_listings where id=$1", [createdId])).rows[0].market_value_cents, "25000012", "Clearing asking price preserves the separate internal valuation");
+      assert.equal(propertyCoreNumberIsKnown(loaded.listing.canonicalPayload, "areaSqm", loaded.listing.areaSqm), false);
+      assert.equal(propertyCoreNumberIsKnown(loaded.listing.canonicalPayload, "price", loaded.listing.targetPrice), false);
+      const zero = edit(); zero.areaSqm = "0"; zero.price = "0";
+      const saved = await POST(request(propertyCoreUpdatePayload(zero, fixture.workspaceId, createdId)));
+      assert.equal(saved.status, 200, await saved.clone().text());
+      loaded = await load(); const reopened = createPropertyCoreDraft(loaded.listing);
+      assert.equal(reopened.areaSqm, "0"); assert.equal(reopened.price, "0");
+      assert.equal(propertyCoreNumberIsKnown(loaded.listing.canonicalPayload, "areaSqm", 0), true);
+      assert.equal(propertyCoreNumberIsKnown(loaded.listing.canonicalPayload, "price", 0), true);
       assert.deepEqual(await counts(), { properties: 1, units: 1, receipts: 1 });
     });
     await t.test("existing cookie and receipt cannot bypass a newly restricted membership/project", async () => {

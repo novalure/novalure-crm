@@ -7,6 +7,7 @@ import { propertyPurchaseCostsPayload } from "./property-purchase-costs-draft";
 import { normalizePropertyEnergyCertificate, normalizePropertyGeography, normalizePropertyRegion, readPropertyGeography } from "./property-country";
 import { readPropertyDetails, propertyDetailsInput, propertyDetailsLegacyFields } from "./property-details";
 import { propertyFullSnapshot } from "./property-full-editing";
+import { propertyCoreNumberIsKnown } from "./property-core-numbers";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const propertyObjectTypes = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"] as const;
@@ -52,10 +53,10 @@ export function createPropertyCoreDraft(listing: SellerListing): PropertyDraft {
     city:listing.city??"",street:listing.street??"",internalNotes:listing.internalNotes??"",
     geography,
     energyCertificate: normalizePropertyEnergyCertificate(listing.canonicalPayload?.energyCertificate) ?? { version: 1, countryCode: geography?.countryCode },
-    address: listing.address, areaSqm: String(listing.areaSqm), availableFrom: listing.availableFrom?.slice(0,10)??"", availableFromText: listing.availableFromText??"", availabilityNote: listing.availabilityNote??"",
+    address: listing.address, areaSqm: propertyCoreNumberIsKnown(listing.canonicalPayload, "areaSqm", listing.areaSqm) ? String(listing.areaSqm) : "", availableFrom: listing.availableFrom?.slice(0,10)??"", availableFromText: listing.availableFromText??"", availabilityNote: listing.availabilityNote??"",
     channelPriceVisibility: listing.channelPriceVisibility??{}, contactEmail: listing.contactEmail??"", contactName: listing.contactName??"", contactPhone: listing.contactPhone??"", costItems: [], fieldValues: propertyDetailsLegacyFields(readPropertyDetails(listing)),
     gdprStatus: listing.gdprStatus??"needs_review", internalReference: listing.internalReference??"", marketingType: listing.marketingType || "sale", monthlyCostsGross: listing.monthlyCostsGross==null?"":String(listing.monthlyCostsGross), objectType: listing.objectType,
-    objectNumber: listing.objectNumber??"", portalMappingStatus: listing.portalMappingStatus??"needs_review", postalCode: listing.postalCode??"", price: String(listing.targetPrice), priceVisibility: listing.priceVisibility??"price_on_request",
+    objectNumber: listing.objectNumber??"", portalMappingStatus: listing.portalMappingStatus??"needs_review", postalCode: listing.postalCode??"", price: propertyCoreNumberIsKnown(listing.canonicalPayload, "price", listing.targetPrice) ? String(listing.targetPrice) : "", priceVisibility: listing.priceVisibility??"price_on_request",
     projectId: listing.projectId || "", publicPrice: listing.publicPrice == null ? "" : String(listing.publicPrice),
     purchaseAncillaryCosts: listing.purchaseAncillaryCosts == null ? "" : String(listing.purchaseAncillaryCosts),
     purchaseAncillaryMode: calculation && geography?.countryCode === "AT" ? "percentage" : "manual",
@@ -72,18 +73,20 @@ export function propertyCoreUpdatePayload(draft: PropertyDraft, workspaceId: str
   }
   const title = draft.title.trim();
   const address = draft.address.trim();
-  const areaSqm = parsePropertyAreaSqm(draft.areaSqm);
+  const complete = !!draft.coreEdit.expectedFullSnapshot;
+  const areaSqm = complete && draft.areaSqm.trim() === "" ? null : parsePropertyAreaSqm(draft.areaSqm);
   const editorPrice = (value: string) => /^\d+(?:[.,]\d{1,2})?$/.test(value.trim()) ? parsePropertyEuroCents(value) : null;
-  const price = editorPrice(draft.price);
-  const publicPrice = draft.publicPrice.trim() === "" ? undefined : editorPrice(draft.publicPrice);
-  const rooms = draft.rooms.trim() === "" ? undefined : Number(draft.rooms.replace(",", "."));
-  const yearBuilt = draft.yearBuilt.trim() === "" ? undefined : Number(draft.yearBuilt);
+  const price = complete && draft.price.trim() === "" ? null : editorPrice(draft.price);
+  const emptyOptional = complete ? null : undefined;
+  const publicPrice = draft.publicPrice.trim() === "" ? emptyOptional : editorPrice(draft.publicPrice);
+  const rooms = draft.rooms.trim() === "" ? emptyOptional : Number(draft.rooms.replace(",", "."));
+  const yearBuilt = draft.yearBuilt.trim() === "" ? emptyOptional : Number(draft.yearBuilt);
   const geography = normalizePropertyGeography(draft.geography);
   const energyCertificate = normalizePropertyEnergyCertificate(draft.energyCertificate);
-  if (!title || title.length > 300 || !address || address.length > 1000 || areaSqm === null || price === null || publicPrice === null ||
+  if (!title || title.length > 300 || !address || address.length > 1000 || (areaSqm === null && (!complete || draft.areaSqm.trim() !== "")) || (price === null && (!complete || draft.price.trim() !== "")) || (draft.publicPrice.trim() !== "" && publicPrice === null) ||
       !geography || geography.region !== normalizePropertyRegion(draft.region) || !energyCertificate || energyCertificate.countryCode !== geography.countryCode || !objectTypes.has(draft.objectType) || !["", "residential", "commercial", "mixed", "investment"].includes(draft.usageType) ||
-      (rooms !== undefined && (!/^\d+(?:[.,]\d)?$/.test(draft.rooms) || !Number.isFinite(rooms) || rooms > 999.9)) ||
-      (yearBuilt !== undefined && (!/^\d{1,4}$/.test(draft.yearBuilt) || yearBuilt < 1 || yearBuilt > 9999))) {
+      (rooms != null && (!/^\d+(?:[.,]\d)?$/.test(draft.rooms) || !Number.isFinite(rooms) || rooms > 999.9)) ||
+      (yearBuilt != null && (!/^\d{1,4}$/.test(draft.yearBuilt) || yearBuilt < 1 || yearBuilt > 9999))) {
     throw new Error("Invalid property editor input");
   }
   // Only editable core values are sent. No links, publication flags or content fragments.
@@ -97,7 +100,7 @@ export function propertyCoreUpdatePayload(draft: PropertyDraft, workspaceId: str
   return {
     operation: draft.coreEdit.expectedFullSnapshot ? "update_property_full" : "update_property_core", propertyId,
     property: { title, address, region: geography.region, objectType: draft.objectType, areaSqm, rooms, yearBuilt,
-      price: price / 100, publicPrice: publicPrice === undefined ? undefined : publicPrice / 100, expectedCore: expected,
+      price: price === null ? null : price / 100, publicPrice: publicPrice == null ? publicPrice : publicPrice / 100, expectedCore: expected,
       geography, expectedGeography: draft.coreEdit.expectedGeography ?? null,
       energyCertificate, expectedEnergyCertificate: draft.coreEdit.expectedEnergyCertificate ?? null,
       usageType: draft.usageType, expectedUsageType: draft.coreEdit.expectedUsageType ?? "",

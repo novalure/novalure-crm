@@ -57,9 +57,9 @@ function canPersistRouting(session: AppSession) {
 function getWriteStatus(reason: string) {
   const lower = reason.toLowerCase();
   if (lower.startsWith("conflict:")) return 409;
+  if (lower.includes("invalid") || lower.includes("title") || lower.includes("address")) return 400;
   if (lower.includes("permission") || lower.includes("forbidden") || lower.includes("required")) return 403;
   if (lower.includes("not found")) return 404;
-  if (lower.includes("invalid") || lower.includes("title") || lower.includes("address")) return 400;
   return 503;
 }
 
