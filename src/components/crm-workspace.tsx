@@ -79,6 +79,7 @@ import {
 import {
   createDefaultCrmScope,
   createSelectedCrmScope,
+  getCrmWorkspaceRestoreTarget,
   resolveCrmScope,
   serializeCrmScopeUrl,
   writeCrmScopePreference,
@@ -2940,6 +2941,7 @@ export function CrmWorkspace({
   const [mailboxFocus,setMailboxFocus] = useState<{workspaceId:string;messageId:string}|null>(null);
   const [scopeHydrated, setScopeHydrated] = useState(false);
   const scopeInitializedWorkspaceRef = useRef("");
+  const workspaceUrlRestoredRef = useRef(false);
   const [workspaceSetup, setWorkspaceSetup] = useState(() => ({
     activeCalendarProvider: initialProductContext.activeCalendarProvider,
     customerType: initialProductContext.customerType,
@@ -3057,6 +3059,66 @@ export function CrmWorkspace({
     }
   }, [activeWorkspace.id, sessionWorkspace.id]);
 
+  const handleWorkspaceSwitch = useCallback(async (workspaceId: string, options: ManagedWorkspaceOption[], projectId?: string | null, replaceHistory = false) => {
+    const nextWorkspace = options.find((item) => item.id === workspaceId);
+    if (!nextWorkspace) {
+      setWorkspaceSwitchState("error");
+      return false;
+    }
+    if (nextWorkspace.id === activeWorkspace.id) return true;
+
+    setWorkspaceSwitchState("loading");
+    setScopeHydrated(false);
+
+    try {
+      const query = nextWorkspace.id !== sessionWorkspace.id
+        ? `?workspaceId=${encodeURIComponent(nextWorkspace.id)}`
+        : "";
+      const response = await fetch(`/api/crm/core${query}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("CRM data refresh failed");
+
+      const payload = (await response.json()) as { data?: CoreCrmDataResult };
+      if (!payload.data) throw new Error("CRM data refresh failed");
+
+      const nextScope = projectId !== undefined ? createSelectedCrmScope({
+        projectId,
+        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
+        workspaceId: nextWorkspace.id,
+      }) : resolveCrmScope({
+        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
+        search: "",
+        storage: getBrowserCrmScopeStorage(),
+        userId: sessionUserId,
+        workspaceId: nextWorkspace.id,
+      });
+
+      scopeInitializedWorkspaceRef.current = nextWorkspace.id;
+      setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
+      setCrmScope(nextScope);
+      setUnitBoardFocusScope(null);
+      setPropertyFocusAssetId(undefined);
+      setActiveWorkspace(nextWorkspace);
+      setWorkspaceSetup({
+        activeCalendarProvider: nextWorkspace.activeCalendarProvider ?? "none",
+        customerType: nextWorkspace.customerType ?? "real_estate_broker",
+        operatingModel: nextWorkspace.operatingModel ?? "self_service_customer",
+        teamStructure: nextWorkspace.teamStructure ?? "small_team",
+      });
+      const nextUrl = serializeCrmScopeUrl(window.location.href, nextScope);
+      if (replaceHistory) window.history.replaceState(null, "", nextUrl);
+      else window.history.pushState(null, "", nextUrl);
+      setScopeHydrated(true);
+      setCoreDataStatus("fresh");
+      setWorkspaceSwitchState("idle");
+      return true;
+    } catch {
+      setScopeHydrated(true);
+      setCoreDataStatus("error");
+      setWorkspaceSwitchState("error");
+      return false;
+    }
+  }, [activeWorkspace.id, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
+
   useEffect(() => {
     if (!canUseWorkspaceSwitch) return;
 
@@ -3084,6 +3146,18 @@ export function CrmWorkspace({
           ? payload.workspaces
           : [fallbackWorkspace];
         setAvailableWorkspaces(nextWorkspaces);
+        if (!workspaceUrlRestoredRef.current) {
+          workspaceUrlRestoredRef.current = true;
+          const restoreTarget = getCrmWorkspaceRestoreTarget({
+            availableWorkspaces: nextWorkspaces,
+            currentWorkspaceId: activeWorkspace.id,
+            search: window.location.search,
+          });
+          if (restoreTarget) {
+            void handleWorkspaceSwitch(restoreTarget.workspaceId, nextWorkspaces, restoreTarget.projectId, true);
+            return;
+          }
+        }
         const currentWorkspace = nextWorkspaces.find((item) => item.id === activeWorkspace.id);
         if (currentWorkspace) {
           setActiveWorkspace((current) => {
@@ -3127,69 +3201,8 @@ export function CrmWorkspace({
     activeWorkspace.setupState,
     activeWorkspace.teamStructure,
     canUseWorkspaceSwitch,
+    handleWorkspaceSwitch,
   ]);
-
-  async function handleWorkspaceSwitch(workspaceId: string, options = availableWorkspaces, projectId?: string) {
-    const nextWorkspace = options.find((item) => item.id === workspaceId);
-    if (!nextWorkspace) {
-      setWorkspaceSwitchState("error");
-      return false;
-    }
-    if (nextWorkspace.id === activeWorkspace.id) return true;
-
-    setWorkspaceSwitchState("loading");
-    setScopeHydrated(false);
-
-    try {
-      const query = nextWorkspace.id !== sessionWorkspace.id
-        ? `?workspaceId=${encodeURIComponent(nextWorkspace.id)}`
-        : "";
-      const response = await fetch(`/api/crm/core${query}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("CRM data refresh failed");
-
-      const payload = (await response.json()) as { data?: CoreCrmDataResult };
-      if (!payload.data) throw new Error("CRM data refresh failed");
-
-      const nextScope = projectId ? createSelectedCrmScope({
-        projectId,
-        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
-        workspaceId: nextWorkspace.id,
-      }) : resolveCrmScope({
-        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
-        search: "",
-        storage: getBrowserCrmScopeStorage(),
-        userId: sessionUserId,
-        workspaceId: nextWorkspace.id,
-      });
-
-      scopeInitializedWorkspaceRef.current = nextWorkspace.id;
-      setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
-      setCrmScope(nextScope);
-      setUnitBoardFocusScope(null);
-      setPropertyFocusAssetId(undefined);
-      setActiveWorkspace(nextWorkspace);
-      setWorkspaceSetup({
-        activeCalendarProvider: nextWorkspace.activeCalendarProvider ?? "none",
-        customerType: nextWorkspace.customerType ?? "real_estate_broker",
-        operatingModel: nextWorkspace.operatingModel ?? "self_service_customer",
-        teamStructure: nextWorkspace.teamStructure ?? "small_team",
-      });
-      window.history.pushState(
-        null,
-        "",
-        serializeCrmScopeUrl(window.location.href, nextScope),
-      );
-      setScopeHydrated(true);
-      setCoreDataStatus("fresh");
-      setWorkspaceSwitchState("idle");
-      return true;
-    } catch {
-      setScopeHydrated(true);
-      setCoreDataStatus("error");
-      setWorkspaceSwitchState("error");
-      return false;
-    }
-  }
 
   async function handleCustomerWorkspaceCreated(result: CreatedCustomerWorkspace) {
     const response = await fetch("/api/workspaces", { cache: "no-store" });
@@ -5219,7 +5232,7 @@ export function CrmWorkspace({
               copy={copy}
               leads={visibleLeads}
               onChange={handleWorkspaceSetupChange}
-              onSwitch={(workspaceId) => void handleWorkspaceSwitch(workspaceId)}
+              onSwitch={(workspaceId) => void handleWorkspaceSwitch(workspaceId, availableWorkspaces)}
               profileLabel={activePresetProfile.label}
               saveState={workspaceSetupSaveState}
               switchState={workspaceSwitchState}
