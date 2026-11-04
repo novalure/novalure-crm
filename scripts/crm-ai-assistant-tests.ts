@@ -46,6 +46,7 @@ test("real assistant HTTP flow stays tenant scoped, metered and idempotent", { t
     const leadId = randomUUID(), foreignLead = randomUUID(), propertyId = randomUUID(), taskId = randomUUID();
     await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,type,status,intent,next_action) values($1,$2,$3,$4,'Käufer','Neu','SYNTHETIC CUSTOMER A: sucht Wohnung','Rückruf vereinbaren')", [leadId, customer.workspaceId, customer.projectId, customer.developerContactId]);
     await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,type,status,intent) values($1,$2,$3,$4,'Käufer','Neu','FOREIGN TENANT SECRET')", [foreignLead, foreign.workspaceId, foreign.projectId, foreign.developerContactId]);
+    await db.admin.query("insert into leads(workspace_id,project_id,type,status,intent,metadata) values($1,$2,'Käufer','Neu','EXCLUDED SYNTHETIC WEBSITE TEST','{\"websiteSales\":{\"syntheticTest\":true}}')", [customer.workspaceId, customer.projectId]);
     await db.admin.query("insert into seller_listings(id,workspace_id,project_id,title,address,region,object_type,area_sqm,rooms) values($1,$2,$3,'SYNTHETIC Wohnung','Teststraße 1','Tirol','Wohnung',80,3)", [propertyId, customer.workspaceId, customer.projectId]);
     await db.admin.query("insert into tasks(id,workspace_id,project_id,lead_id,owner_user_id,title,due_at) values($1,$2,$3,$4,$5,'SYNTHETIC Rückruf',now()-interval '1 day')", [taskId, customer.workspaceId, customer.projectId, leadId, customer.userId]);
     const secret = randomBytes(48).toString("base64url"), origin = "http://127.0.0.1:3000", path = "/api/crm/ai-assistant";
@@ -81,8 +82,9 @@ test("real assistant HTTP flow stays tenant scoped, metered and idempotent", { t
       await post(body(), 403, { headers: { origin: "https://foreign.invalid" } });
       await post(body(), 400, { query: "" });
       await post(body("crm_question", { prompt: "hello", context: "FORGED DATA" }), 400);
-      const initial = await get(); assert.equal(initial.credits.availableCredits, 1000); assert.equal(initial.metrics.overdueTasks, 1);
+      const initial = await get(); assert.equal(initial.credits.availableCredits, 1000); assert.equal(initial.metrics.overdueTasks, 1); assert.equal(initial.metrics.openLeads, 1);
       assert.ok(initial.options.leads.some((l: { id: string }) => l.id === leadId)); assert.ok(!JSON.stringify(initial).includes("FOREIGN TENANT SECRET"));
+      assert.ok(!JSON.stringify(initial).includes("EXCLUDED SYNTHETIC WEBSITE TEST"));
       assert.equal(providerCalls, 0);
     });
     await t.test("a real metered call generates one durable response and retry is free", async () => {

@@ -19,7 +19,8 @@ const modules: Record<string, string> = { l: "leadInbox", t: "tasks", e: "calend
 function access(alias: string, module = modules[alias]) {
   return `${alias}.workspace_id=$1::uuid and ($2::uuid is null or ${alias}.project_id=$2::uuid) and
     ((${alias}.project_id is null and crm_workspace_manager($1::uuid)) or (${alias}.project_id is not null and crm_project_access($1::uuid,${alias}.project_id,false)))
-    ${module ? `and not exists(select 1 from workspace_module_settings ms where ms.workspace_id=$1::uuid and ms.module_key='${module}' and not ms.enabled)` : ""}`;
+    ${module ? `and not exists(select 1 from workspace_module_settings ms where ms.workspace_id=$1::uuid and ms.module_key='${module}' and not ms.enabled)` : ""}
+    ${["l", "t", "e", "d"].includes(alias) ? `and (${alias}.metadata #>> '{websiteSales,syntheticTest}') is distinct from 'true'` : ""}`;
 }
 export async function assistantAuthority(tx: TenantTransaction, session: AppSession, projectId?: string) {
   assertAssistantSession(session);
@@ -79,12 +80,12 @@ export async function loadAssistantContext(tx: TenantTransaction, fresh: AppSess
       from calendar_events e where ${access("e")} and lower(e.status) not in('abgesagt','cancelled','canceled') and e.starts_at>=now()-interval '1 day' and e.starts_at<now()+interval '8 days'
       and ($3::uuid is null or e.lead_id=$3::uuid or e.contact_id=$4::uuid) and (not $5::boolean or e.owner_user_id=$6::uuid or e.owner_user_id is null) order by e.starts_at limit 8`, [...params, selectedLead, contextLead?.contactId ?? null, personal, fresh.userId]),
     analyticsAllowed ? tx.query<Fact>(`select d.id,d.project_id as "projectId",d.name as label,jsonb_build_object('name',d.name,'stage',d.stage,'valueCents',d.value_cents,'currency','EUR','expectedCloseDate',d.expected_close_date,'nextAction',left(d.next_action,600),'updatedAt',d.updated_at) as facts
-      from deals d where ${access("d")} and lower(d.stage) not in ${closedDeals} and ($3::uuid is null or d.lead_id=$3::uuid) order by d.updated_at asc limit 12`, [...params, selectedLead]) : Promise.resolve([] as Fact[]),
+      from deals d where ${access("d")} and d.closed_at is null and d.lost_at is null and lower(d.stage) not in ${closedDeals} and ($3::uuid is null or d.lead_id=$3::uuid) order by d.updated_at asc limit 12`, [...params, selectedLead]) : Promise.resolve([] as Fact[]),
     tx.queryOne<AssistantSnapshot["metrics"]>(`select
       (select count(*)::int from leads l where ${access("l")} and lower(l.status) not in ${closedLeads}) as "openLeads",
       (select count(*)::int from tasks t where ${access("t")} and lower(t.status) not in ${closedTasks} and t.due_at<now() and(t.owner_user_id=$3::uuid or t.owner_user_id is null)) as "overdueTasks",
       (select count(*)::int from calendar_events e where ${access("e")} and lower(e.status) not in('abgesagt','cancelled','canceled') and (e.starts_at at time zone $4)::date=(now() at time zone $4)::date and(e.owner_user_id=$3::uuid or e.owner_user_id is null)) as "todayMeetings",
-      case when $5::boolean then (select coalesce(sum(d.value_cents),0)::text from deals d where ${access("d")} and lower(d.stage) not in ${closedDeals}) else '0' end as "pipelineValueCents"`, [...params, fresh.userId, timeZone, analyticsAllowed]),
+      case when $5::boolean then (select coalesce(sum(d.value_cents),0)::text from deals d where ${access("d")} and d.closed_at is null and d.lost_at is null and lower(d.stage) not in ${closedDeals}) else '0' end as "pipelineValueCents"`, [...params, fresh.userId, timeZone, analyticsAllowed]),
     input.projectId ? tx.queryOne<{ name: string }>("select name from projects where workspace_id=$1::uuid and id=$2::uuid", params) : Promise.resolve(null),
   ]);
   const sources: AssistantSource[] = [];
