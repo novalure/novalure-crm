@@ -2,7 +2,7 @@
 import { PropertyCostWorkspace } from "@/components/property-cost-workspace";
 import { PropertyTextWorkspace } from "@/components/property-text-workspace";
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -67,6 +67,8 @@ import { PropertyEnergyFields } from "@/components/property-energy-fields";
 import { PropertyDetailsEditor } from "@/components/property-details-editor";
 import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput,type PropertyDetails } from "@/lib/property-details";
 import type { PropertyEnergyCertificate } from "@/lib/property-country";
+import { confirmedPropertyCreation, propertyWorkspaceEndpoint } from "@/lib/property-interactions";
+import { PROPERTY_AREA_MAX_SQM } from "@/lib/property-area-input";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -369,6 +371,18 @@ export function PropertyCommandCenter({
   const [selectedChannel, setSelectedChannel] = useState<(typeof PROPERTY_CHANNEL_TYPES)[number]>("Immobilienportal");
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const propertyCreateBusy = useRef(false);
+  const pendingPropertyCreate = useRef<{
+    workspaceId: string; projectId: string; endpoint: string;
+    body: string; key: string; correlation: string;
+  } | null>(null);
+  const [propertyCreateUncertain, setPropertyCreateUncertain] = useState(false);
+  useEffect(() => {
+    if (!propertyCreateUncertain) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [propertyCreateUncertain]);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
@@ -616,7 +630,7 @@ export function PropertyCommandCenter({
 
   async function submitProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!actions.createProperty.enabled || saving) return;
+    if (!actions.createProperty.enabled || saving || propertyCreateBusy.current) return;
     if (!draftProjects.some((project) => project.id === draft.projectId)) {
       setNotice({
         kind: "error",
@@ -624,12 +638,22 @@ export function PropertyCommandCenter({
       });
       return;
     }
+    propertyCreateBusy.current = true;
     setSaving(true);
     setNotice(null);
-
+    let committed = false;
     try {
+      if (pendingPropertyCreate.current && (pendingPropertyCreate.current.workspaceId !== context.workspaceId ||
+        pendingPropertyCreate.current.projectId !== draft.projectId)) {
+        throw new Error(language === "de"
+          ? "Bitte zum ursprünglichen Arbeitsbereich und Projekt zurückkehren, um den offenen Speichervorgang zu prüfen."
+          : "Return to the original workspace and project to check the pending save.");
+      }
       const completeDetails=propertyDetailsInput({...draft,costItems:toCostItems(draft)});
-      const response = await csrfFetch("/api/crm/properties", {
+      pendingPropertyCreate.current ??= {
+        workspaceId: context.workspaceId,
+        projectId: draft.projectId,
+        endpoint: propertyWorkspaceEndpoint("/api/crm/properties", context.workspaceId),
         body: JSON.stringify({
           operation: "create_property",
           ...draft,
@@ -638,13 +662,26 @@ export function PropertyCommandCenter({
           publicPrice: draft.publicPrice || draft.price,
           textBlocks: toTextBlocks(draft),
         }),
-        headers: { "Content-Type": "application/json" },
+        key: crypto.randomUUID(),
+        correlation: crypto.randomUUID(),
+      };
+      const attempt = pendingPropertyCreate.current;
+      const response = await csrfFetch(attempt.endpoint, {
+        body: attempt.body,
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key, "X-Correlation-Id": attempt.correlation },
         method: "POST",
       });
       const payload = await response.json().catch(() => ({ error: copy.notices.propertySaveFailed }));
       if (!response.ok) {
+        if (response.status < 500) pendingPropertyCreate.current = null;
         throw new Error(typeof payload.error === "string" ? payload.error : copy.notices.propertySaveFailed);
       }
+      if (!confirmedPropertyCreation(payload, attempt.workspaceId, attempt.projectId)) {
+        throw new Error(copy.notices.propertySaveFailed);
+      }
+      committed = true;
+      pendingPropertyCreate.current = null;
+      setPropertyCreateUncertain(false);
       setNotice({ kind: "success", message: copy.notices.propertySaved });
       setDraft((current) => ({
         ...current,
@@ -666,8 +703,14 @@ export function PropertyCommandCenter({
       }));
       await onPropertyChanged?.();
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.propertySaveFailed });
+      setPropertyCreateUncertain(Boolean(pendingPropertyCreate.current));
+      setNotice({ kind: "error", message: committed
+        ? (language === "de" ? "Objekt gespeichert. Die Ansicht konnte noch nicht aktualisiert werden; bitte neu laden." : "Property saved. The view could not be refreshed; please reload it.")
+        : pendingPropertyCreate.current
+          ? (language === "de" ? "Speicherergebnis ungeklärt. Bitte denselben Vorgang erneut prüfen; die Eingaben bleiben bis zur Bestätigung gesperrt." : "Save result is unknown. Check the same operation again; inputs stay locked until confirmed.")
+          : error instanceof Error ? error.message : copy.notices.propertySaveFailed });
     } finally {
+      propertyCreateBusy.current = false;
       setSaving(false);
     }
   }
@@ -957,13 +1000,15 @@ export function PropertyCommandCenter({
                   <span className={`rounded-md border px-3 py-2 text-sm font-semibold ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>{notice.message}</span>
                 ) : null}
                 <button className="min-h-12 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!actions.createProperty.enabled || saving || !draftProjects.some((project) => project.id === draft.projectId)} type="submit">
-                  {saving ? copy.form.saving : actions.createProperty.label}
+                  {saving ? copy.form.saving : propertyCreateUncertain ? (language === "de" ? "Speicherergebnis erneut prüfen" : "Check save result again") : actions.createProperty.label}
                 </button>
               </div>
             </div>
             {!actions.createProperty.enabled && actions.createProperty.reason ? <p className="mt-3 text-sm text-stone-600">{actions.createProperty.reason}</p> : null}
           </div>
 
+          <fieldset className="min-w-0" disabled={saving || propertyCreateUncertain}>
+          <legend className="sr-only">{language === "de" ? "Objektangaben" : "Property details"}</legend>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="grid min-w-0 gap-5">
               <PropertyFormSection
@@ -1043,15 +1088,15 @@ export function PropertyCommandCenter({
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <label className={propertyFieldClass}>
                     <span>{copy.form.livingArea}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("areaSqm", event.target.value)} type="number" value={draft.areaSqm} />
+                    <input className={propertyInputClass} min="0" max={PROPERTY_AREA_MAX_SQM} onChange={(event) => updateDraft("areaSqm", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.areaSqm} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.rooms}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rooms", event.target.value)} type="number" value={draft.rooms} />
+                    <input className={propertyInputClass} min="0" max="999.9" onChange={(event) => updateDraft("rooms", event.target.value)} type="number" step="0.1" inputMode="decimal" value={draft.rooms} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.yearBuilt}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("yearBuilt", event.target.value)} type="number" value={draft.yearBuilt} />
+                    <input className={propertyInputClass} min="1" max="9999" onChange={(event) => updateDraft("yearBuilt", event.target.value)} type="number" step="1" inputMode="numeric" value={draft.yearBuilt} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.availableFrom}</span>
@@ -1076,19 +1121,19 @@ export function PropertyCommandCenter({
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <label className={propertyFieldClass}>
                     <span>{copy.form.purchasePrice}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("price", event.target.value)} type="number" value={draft.price} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("price", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.price} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.rentNet}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentNet", event.target.value)} type="number" value={draft.rentNet} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentNet", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.rentNet} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.rentGross}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentPrice", event.target.value)} type="number" value={draft.rentPrice} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentPrice", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.rentPrice} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.purchaseAncillaryCosts}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("purchaseAncillaryCosts", event.target.value)} type="number" value={draft.purchaseAncillaryCosts} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("purchaseAncillaryCosts", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.purchaseAncillaryCosts} />
                   </label>
                 </div>
                 <div className="mt-5 grid gap-4">
@@ -1101,9 +1146,9 @@ export function PropertyCommandCenter({
                           return item.groupKey === group.key ? (
                           <div className="grid gap-3 rounded-md bg-white p-3 md:grid-cols-[minmax(160px,1fr)_repeat(3,minmax(110px,150px))_minmax(90px,auto)]" key={item.costKey}>
                             <span className="self-center text-sm font-semibold text-slate-900">{itemLabel}</span>
-                            <input aria-label={`${itemLabel} ${copy.form.net}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyNet" : "oneTimeNet", event.target.value)} placeholder={copy.form.net} type="number" value={group.key === "monthly" ? item.monthlyNet : item.oneTimeNet} />
-                            <input aria-label={`${itemLabel} ${copy.form.vat}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyVat" : "oneTimeVat", event.target.value)} placeholder={copy.form.vat} type="number" value={group.key === "monthly" ? item.monthlyVat : item.oneTimeVat} />
-                            <input aria-label={`${itemLabel} ${copy.form.gross}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyGross" : "oneTimeGross", event.target.value)} placeholder={copy.form.gross} type="number" value={group.key === "monthly" ? item.monthlyGross : item.oneTimeGross} />
+                            <input aria-label={`${itemLabel} ${copy.form.net}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyNet" : "oneTimeNet", event.target.value)} placeholder={copy.form.net} type="number" min="0" step="0.01" inputMode="decimal" value={group.key === "monthly" ? item.monthlyNet : item.oneTimeNet} />
+                            <input aria-label={`${itemLabel} ${copy.form.vat}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyVat" : "oneTimeVat", event.target.value)} placeholder={copy.form.vat} type="number" min="0" step="0.01" inputMode="decimal" value={group.key === "monthly" ? item.monthlyVat : item.oneTimeVat} />
+                            <input aria-label={`${itemLabel} ${copy.form.gross}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyGross" : "oneTimeGross", event.target.value)} placeholder={copy.form.gross} type="number" min="0" step="0.01" inputMode="decimal" value={group.key === "monthly" ? item.monthlyGross : item.oneTimeGross} />
                             <label className="flex min-h-12 items-center gap-2 text-sm font-semibold text-stone-700">
                               <input checked={item.exposeVisible} onChange={(event) => updateCostItem(index, "exposeVisible", event.target.checked)} type="checkbox" />
                               {copy.form.exposeVisible}
@@ -1157,7 +1202,7 @@ export function PropertyCommandCenter({
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.publicPrice}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("publicPrice", event.target.value)} type="number" value={draft.publicPrice} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("publicPrice", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.publicPrice} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.gdprStatus}</span>
@@ -1210,6 +1255,7 @@ export function PropertyCommandCenter({
               </section>
             </aside>
           </div>
+          </fieldset>
         </form>
         </details>
         </div>
