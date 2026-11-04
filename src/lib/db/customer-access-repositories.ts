@@ -18,6 +18,8 @@ import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isProductRole, mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
+import { changeCustomerProjectGrant } from "./customer-project-grant-repository";
+import type { TenantTransactionOptions } from "../crm-command";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
 export type CustomerAccessProjectRole = WorkspaceRole;
@@ -188,7 +190,6 @@ const customerAccessStatuses: CustomerWorkspaceAccessStatus[] = [
 const customerAccessHealthValues: CustomerAccessHealth[] = ["healthy", "attention", "risk"];
 const workspaceRoles: WorkspaceRole[] = ["owner", "admin", "agent", "assistant"];
 const grantAccessLevels: CustomerAccessLevel[] = ["viewer", "editor", "admin"];
-const grantStatuses: CustomerAccessGrantStatus[] = ["active", "invited", "suspended"];
 
 export async function listCustomerAccessCockpit(input: {
   projectId?: string | null;
@@ -360,190 +361,24 @@ export async function upsertCustomerProjectGrant(input: {
   session: AppSession;
   status?: unknown;
   userId: string;
-}) {
-  if (
-    !canPersist()
-    || !isUuid(input.session.workspaceId)
-    || !isUuid(input.accessId)
-    || !isUuid(input.projectId)
-    || !isUuid(input.userId)
-  ) {
-    return { ok: false as const, reason: "Grant input is incomplete" };
-  }
-
-  const existing = await queryOne<IdRow>(
-    `
-      select ca.id
-      from customer_workspace_access ca
-      join projects p on p.id = $3 and p.workspace_id = ca.workspace_id
-      join workspace_users wu on wu.id = $4 and wu.workspace_id = ca.workspace_id
-      where ca.workspace_id = $1 and ca.id = $2
-      limit 1
-    `,
-    [input.session.workspaceId, input.accessId, input.projectId, input.userId],
-  );
-  if (!existing) return { ok: false as const, reason: "Customer, user or project not found" };
-
-  const accessLevel = normalizeAccessLevel(input.accessLevel) ?? "viewer";
-  const projectRole = normalizeWorkspaceRole(input.projectRole) ?? "assistant";
-  const grantStatus = normalizeGrantStatus(input.status) ?? "active";
-  const defaults = defaultsForAccessLevel(accessLevel);
-  const canViewProject = input.canViewProject === undefined ? defaults.canViewProject : Boolean(input.canViewProject);
-  const canEditProject = input.canEditProject === undefined ? defaults.canEditProject : Boolean(input.canEditProject);
-  const canViewContacts = input.canViewContacts === undefined ? defaults.canViewContacts : Boolean(input.canViewContacts);
-  const canExportData = input.canExportData === undefined ? defaults.canExportData : Boolean(input.canExportData);
-  const grantIsActive = grantStatus === "active";
-  const pipelineCanEdit = grantIsActive && canEditProject;
-  const pipelineCanClose = grantIsActive && accessLevel === "admin";
-
-  const row = await queryOne<CustomerAccessGrantRow>(
-    `
-      insert into customer_project_access (
-        workspace_id,
-        customer_access_id,
-        project_id,
-        user_id,
-        project_role,
-        access_level,
-        can_view_project,
-        can_edit_project,
-        can_view_contacts,
-        can_export_data,
-        status,
-        metadata
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
-      on conflict (workspace_id, customer_access_id, project_id, user_id)
-      do update set
-        project_role = excluded.project_role,
-        access_level = excluded.access_level,
-        can_view_project = excluded.can_view_project,
-        can_edit_project = excluded.can_edit_project,
-        can_view_contacts = excluded.can_view_contacts,
-        can_export_data = excluded.can_export_data,
-        status = excluded.status,
-        metadata = customer_project_access.metadata || excluded.metadata,
-        updated_at = now()
-      returning
-        id,
-        workspace_id as "workspaceId",
-        customer_access_id as "customerAccessId",
-        project_id as "projectId",
-        user_id as "userId",
-        project_role as "projectRole",
-        access_level as "accessLevel",
-        can_view_project as "canViewProject",
-        can_edit_project as "canEditProject",
-        can_view_contacts as "canViewContacts",
-        can_export_data as "canExportData",
-        status,
-        updated_at as "updatedAt",
-        (select name from organizations where id = (
-          select organization_id from customer_workspace_access where id = customer_access_id
-        )) as "customerName",
-        (select name from projects where id = project_id) as "projectName",
-        (select name from workspace_users where id = user_id) as "userName",
-        (select email from workspace_users where id = user_id) as "userEmail"
-    `,
-    [
-      input.session.workspaceId,
-      input.accessId,
-      input.projectId,
-      input.userId,
-      projectRole,
-      accessLevel,
-      canViewProject,
-      canEditProject,
-      canViewContacts,
-      canExportData,
-      grantStatus,
-      JSON.stringify({ updatedByUserId: input.session.userId, source: "customer_access_cockpit" }),
-    ],
-  );
-
-  await queryOne<IdRow>(
-    `
-      insert into project_pipeline_permissions (
-        workspace_id,
-        project_id,
-        user_id,
-        can_edit_deals,
-        can_move_deals,
-        can_close_deals,
-        can_reopen_deals,
-        metadata
-      )
-      values ($1, $2, $3, $4, $4, $5, $5, $6::jsonb)
-      on conflict (workspace_id, project_id, user_id)
-      do update set
-        can_edit_deals = excluded.can_edit_deals,
-        can_move_deals = excluded.can_move_deals,
-        can_close_deals = excluded.can_close_deals,
-        can_reopen_deals = excluded.can_reopen_deals,
-        metadata = project_pipeline_permissions.metadata || excluded.metadata,
-        updated_at = now()
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      input.projectId,
-      input.userId,
-      pipelineCanEdit,
-      pipelineCanClose,
-      JSON.stringify({
-        customerAccessId: input.accessId,
-        grantStatus,
-        source: "customer_access_cockpit",
-      }),
-    ],
-  );
-
-  if (!row) return { ok: false as const, reason: "Project access could not be saved" };
-
-  await Promise.all([
-    writeAuditLog({
-      action: "customer_access.project_grant_upserted",
-      after: {
-        ...toProjectGrant(row),
-        pipelinePermissions: {
-          canCloseDeals: pipelineCanClose,
-          canEditDeals: pipelineCanEdit,
-          canMoveDeals: pipelineCanEdit,
-          canReopenDeals: pipelineCanClose,
-        },
-      },
-      entityId: row.id,
-      entityType: "customer_project_access",
-      projectId: row.projectId,
-      session: input.session,
-    }),
-    writeCrmAnalyticsEvent({
-      entityId: row.id,
-      entityType: "customer_project_access",
-      eventType: "customer_project_access_updated",
-      metadata: {
-        accessLevel,
-        canEditProject,
-        canExportData,
-        canViewContacts,
-        canViewProject,
-        grantStatus,
-        pipelineCanClose,
-        pipelineCanEdit,
-        projectRole,
-        userId: input.userId,
-      },
-      module: "dashboard",
-      projectId: row.projectId,
-      source: "customer_access_cockpit",
-      userId: input.session.userId,
-      workspaceId: input.session.workspaceId,
-    }),
-  ]);
-
-  return { data: toProjectGrant(row), ok: true as const };
+  expectedStateDigest?: unknown;
+  idempotencyKey: string;
+  correlationId: string;
+}, options: TenantTransactionOptions = {}) {
+  const accessLevel = input.accessLevel === undefined ? "viewer" : input.accessLevel;
+  const defaults = defaultsForAccessLevel(normalizeAccessLevel(accessLevel) ?? "viewer");
+  const result = await changeCustomerProjectGrant(input.session, {
+    accessId: input.accessId, projectId: input.projectId, userId: input.userId,
+    accessLevel, projectRole: input.projectRole === undefined ? "assistant" : input.projectRole,
+    status: input.status === undefined ? "active" : input.status,
+    canViewProject: input.canViewProject === undefined ? defaults.canViewProject : input.canViewProject,
+    canEditProject: input.canEditProject === undefined ? defaults.canEditProject : input.canEditProject,
+    canViewContacts: input.canViewContacts === undefined ? defaults.canViewContacts : input.canViewContacts,
+    canExportData: input.canExportData === undefined ? defaults.canExportData : input.canExportData,
+    expectedStateDigest: input.expectedStateDigest,
+  }, { idempotencyKey: input.idempotencyKey, correlationId: input.correlationId }, options);
+  return { ok: true as const, data: result.data.grant, mutation: { ...result.data, replayed: result.replayed, commandId: result.commandId, auditReference: result.auditReference } };
 }
-
 function canInviteWorkspaceUsers(session: AppSession) {
   if (session.role === "owner" || session.role === "admin") return true;
   return (
@@ -1249,12 +1084,6 @@ function normalizeAccessLevel(value: unknown) {
 function normalizeCustomerAccessStatus(value: unknown) {
   return typeof value === "string" && customerAccessStatuses.includes(value as CustomerWorkspaceAccessStatus)
     ? value as CustomerWorkspaceAccessStatus
-    : null;
-}
-
-function normalizeGrantStatus(value: unknown) {
-  return typeof value === "string" && grantStatuses.includes(value as CustomerAccessGrantStatus)
-    ? value as CustomerAccessGrantStatus
     : null;
 }
 

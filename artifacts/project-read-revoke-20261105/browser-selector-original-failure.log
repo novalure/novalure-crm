@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.selectOption: Error: strict mode violation: locator('section').filter({ has: getByRole('heading', { name: 'Workspace and project access', exact: true }) }).getByRole('combobox', { name: 'User', exact: true }) resolved to 2 elements:
+    1) <select class="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal">…</select> aka getByLabel('UserSYNTHETIC A / a@example.').first()
+    2) <select class="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal">…</select> aka getByLabel('UserSYNTHETIC A / a@example.').nth(1)
+
+Call log:
+  - waiting for locator('section').filter({ has: getByRole('heading', { name: 'Workspace and project access', exact: true }) }).getByRole('combobox', { name: 'User', exact: true })
+
+    at C:\Projects\novalure-crm-project-read-revoke-20261105\scripts\customer-project-grant-browser-tests.mjs:60:63 {
+  log: [
+    "  - waiting for locator('section').filter({ has: getByRole('heading', { name: 'Workspace and project access', exact: true }) }).getByRole('combobox', { name: 'User', exact: true })"
+  ]
+}
+
+Node.js v24.18.0
