@@ -104,4 +104,4 @@ exception when others then perform set_config('app.lead_request_hash',coalesce(p
 end $$;
 revoke all on lead_customer_request_settings,lead_customer_requests,lead_customer_request_submissions from public,novalure_app;
 revoke all on function crm_lead_request_staff_guard(),crm_lead_request_lookup(text),crm_lead_request_submit(text,text,text,jsonb,jsonb),crm_lead_request_upload_retained(text,uuid) from public;
-grant execute on function crm_lead_request_lookup(text),crm_lead_request_submit(text,text,text,jsonb,jsonb),crm_lead_request_upload_retained(text,uuid) to novalure_app;
+grant execute on function crm_lead_request_lookup(text),crm_lead_request_submit(text,text,text,jsonb,jsonb),crm_lead_request_upload_retained(text,uuid) to novalure_app,novalure_tenant_app;

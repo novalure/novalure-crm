@@ -73,7 +73,7 @@ create function crm_web_expose_live_resources(p_hash text) returns jsonb languag
  and(r.asset_id is null or(m.storage_access='private' and not m.is_public and m.public_token is null and m.mime_type=item.value->>'mimeType' and lower(m.folder) not like 'lead-proof-private-%' and lower(m.folder) not like 'knowledge-private-%'))
 $$;
 revoke all on function crm_web_expose_live_resources(text) from public;
-grant execute on function crm_web_expose_live_resources(text) to novalure_app;
+grant execute on function crm_web_expose_live_resources(text) to novalure_app,novalure_tenant_app;
 
 create or replace function crm_web_expose_asset(p_hash text,p_asset uuid) returns jsonb language sql stable security definer set search_path=pg_catalog,public as $$
  select jsonb_build_object('id',m.id,'workspaceId',v.workspace_id,'name',m.name,'originalName',m.original_name,'folder',m.folder,'mimeType',m.mime_type,'sizeBytes',m.size_bytes,'relativePath',m.relative_path,'storageProvider',m.storage_provider,'storageAccess',m.storage_access,'createdAt',m.created_at,'url','','isPublic',false,'hasActivePublicShare',false)

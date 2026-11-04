@@ -27,4 +27,4 @@ begin
  return jsonb_build_object('units',rows,'priceCents',price::text,'priceVisibility',effective_visibility,'asOf',clock_timestamp());
 end $$;
 revoke all on function crm_web_expose_inventory(text) from public;
-grant execute on function crm_web_expose_inventory(text) to novalure_app;
+grant execute on function crm_web_expose_inventory(text) to novalure_app,novalure_tenant_app;

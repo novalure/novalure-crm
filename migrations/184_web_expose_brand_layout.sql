@@ -49,13 +49,13 @@ begin
 end $$;
 create trigger c_template_brand_guard before insert on web_expose_template_versions for each row execute function crm_template_brand_guard();
 alter function crm_web_expose_asset(text,uuid) rename to crm_web_expose_property_asset;
-revoke all on function crm_web_expose_property_asset(text,uuid) from novalure_app;
+revoke all on function crm_web_expose_property_asset(text,uuid) from novalure_app,novalure_tenant_app;
 create function crm_web_expose_asset(p_hash text,p_asset uuid) returns jsonb language sql stable security definer set search_path=pg_catalog,public as $$
  select coalesce(crm_web_expose_property_asset(p_hash,p_asset),(select jsonb_build_object('id',m.id,'workspaceId',v.workspace_id,'name',m.name,'originalName',m.original_name,'folder',m.folder,'mimeType',m.mime_type,'sizeBytes',m.size_bytes,'relativePath',m.relative_path,'storageProvider',m.storage_provider,'storageAccess',m.storage_access,'createdAt',m.created_at,'url','','isPublic',false,'hasActivePublicShare',false)
  from web_expose_links l join web_expose_versions v on v.id=l.version_id and v.workspace_id=l.workspace_id join media_assets m on m.id=p_asset and m.workspace_id=v.workspace_id::text
  where l.token_hash=p_hash and crm_web_expose_lookup(p_hash) is not null and exists(select 1 from jsonb_array_elements(coalesce(v.snapshot->'template'->'brandAssets','[]'::jsonb)) b where b->>'assetId'=p_asset::text and crm_brand_asset_allowed(v.workspace_id,p_asset,b->>'purpose',b->>'contentHash')) limit 1))
 $$;
-revoke all on function crm_web_expose_asset(text,uuid),crm_brand_asset_guard(),crm_template_brand_guard() from public;grant execute on function crm_web_expose_asset(text,uuid) to novalure_app;
+revoke all on function crm_web_expose_asset(text,uuid),crm_brand_asset_guard(),crm_template_brand_guard() from public;grant execute on function crm_web_expose_asset(text,uuid) to novalure_app,novalure_tenant_app;
 
 -- Preserve the deletion protocol's complete incoming-reference check. Artwork
 -- is retained while its immutable registration or a published version uses it.

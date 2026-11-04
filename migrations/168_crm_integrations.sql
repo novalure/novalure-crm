@@ -106,4 +106,4 @@ begin
  return '{"status":"recorded"}';
 end $$;
 revoke all on function crm_record_resend_delivery_event(jsonb) from public;
-grant execute on function crm_record_resend_delivery_event(jsonb) to novalure_app;
+grant execute on function crm_record_resend_delivery_event(jsonb) to novalure_app,novalure_tenant_app;

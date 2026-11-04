@@ -6,7 +6,7 @@ Stand: 4. November 2026. Dieser Nachweis gilt ausschließlich für den Release-C
 
 Die tatsächliche Produktion besitzt bereits `120_shared_behavior_package4` sowie146/152/153. Die bisher lokal geprüften Livelisted-Dateien120–145 und147–151 waren dort noch nicht angewendet. Eine zweite, fachlich andere Migration120 würde der offizielle Runner ausdrücklich ablehnen. Deshalb erhält der neue zusammenhängende Block die freien Nummern154–184. Die vier bereits produktiven SQL-Dateien bleiben bytegleich. Das JSON daneben enthält Original-/Release-Dateinamen, Originalhash, Releasehash und normalisierten Ledgerchecksum.
 
-Bis auf181 sind die31 SQL-Inhalte unverändert; neue Namen bedeuten keine zweite Ausführung derselben bereits produktiven Migration. Die lokale Funktionsfamilie136 heißt im Release beispielsweise170, die persönliche Automatik149 heißt182. Historische Modulbezeichnungen sind anhand dieser Tabelle zu lesen.
+Die31 Dateien behalten ihre fachlichen Abläufe.181 erhält die unten beschriebene Cutoverhärtung.155/162/163/166/168/181/184 erhalten außerdem ausschließlich die unten dokumentierten expliziten Runtime-Funktionsrechte. Die übrigen24 SQL-Inhalte bleiben unverändert. Neue Namen bedeuten keine zweite Ausführung derselben bereits produktiven Migration. Die lokale Funktionsfamilie136 heißt im Release beispielsweise170, die persönliche Automatik149 heißt182. Historische Modulbezeichnungen sind anhand dieser Tabelle zu lesen.
 
 | Ursprünglicher lokaler Name | Kanonischer Release-Name |
 | --- | --- |
@@ -49,6 +49,21 @@ Vor neu erzwungener RLS prüft181 vorhandene Funnelantworten auf bereits ausdrü
 Alte aktive/eingebaute Funnels ohne gültig geformte neue `livePublication` werden ausdrücklich zum Entwurf mit `tracking.publicationReview`. Bestehende Trackingwerte einschließlich alter Tokens und unveränderte Versionshistorie bleiben erhalten; nur der aktuelle bearbeitbare Status wird angeglichen. Es entsteht ein technischer Auditbeleg mit `actor_user_id=NULL`, Migrationsname und ursprünglichem Status. Der Auditbeleg enthält keine Linktokens und behauptet keine Benutzerfreigabe. Vorherige Links werden nicht ungeprüft als neue Publikation aktiviert. Eine bereits geformte neue Veröffentlichung bleibt unverändert.
 
 Diese Zustandsänderung wird im Release offengelegt. Eine erneute Veröffentlichung erfolgt über den aktuellen Prüf-/Publishweg. Die dafür kurzzeitig benötigten eigentümergebundenen Migrationspolicies werden innerhalb derselben Transaktion wieder entfernt; RLS bleibt eingeschaltet. Der Hauptagent hat einen aktiven älteren Seed-Funnel ohne neue Publikation festgestellt. Dieser benötigt nach dem Cutover eine einmalige bewusste Prüfung; es wurden keine tatsächlichen Funnelantworten festgestellt.
+
+## Tatsächliche öffentliche Runtime-Rolle
+
+Die produktive Anwendung verwendet `novalure_tenant_app` auch für serverseitige öffentliche Abfragen. Diese Rolle besitzt weder Superuser- noch RLS-Bypassrechte und ist kein Mitglied von `novalure_app`. Deshalb genügt ein ausschließlicher Funktionsgrant an die ältere Rolle nicht. Die sieben genannten neuen Migrationen gewähren zusätzlich explizit `EXECUTE` auf genau diese vorhandenen serverseitigen Einstiegspunkte:
+
+- 155: `crm_web_expose_lookup`, `crm_web_expose_start`, `crm_web_expose_withdraw`, `crm_web_expose_events`, `crm_web_expose_inquire`, `crm_web_expose_asset`.
+- 162: `crm_lead_request_lookup`, `crm_lead_request_submit`, `crm_lead_request_upload_retained`.
+- 163/166: `crm_web_expose_live_resources`, `crm_web_expose_inventory`.
+- 168: `crm_record_resend_delivery_event`, ausschließlich hinter dem vorhandenen serverseitigen Signaturprüfer.
+- 181: `crm_funnel_live_lookup`.
+- 184: der aktuelle autorisierungsprüfende `crm_web_expose_asset`-Wrapper. Die umbenannte interne Funktion `crm_web_expose_property_asset` wird beiden Runtime-Rollen entzogen und bleibt vom Wrapper aus nur als Eigentümerfunktion erreichbar.
+
+Es gibt keine neue Rollenmitgliedschaft, keinen pauschalen Funktionsgrant und keine allgemeine Tabellenfreigabe. Bestehende Token-, Ablauf-, Freigabe-, Mandanten- und Zweckprüfungen bleiben erhalten. Die öffentlichen Bookingfunktionen169 und Newsletter-Abmeldung157 hatten bereits die ausdrücklichen Tenant-Rollenrechte. Der tatsächliche Produktions-Migrationseigentümer besitzt laut Prüfung des Hauptagenten `BYPASSRLS`; seine Rechte werden hier nicht verändert.
+
+Die neue rollengetreue Prüfung wechselt ausdrücklich zu `novalure_tenant_app`, bestätigt `NOSUPERUSER`, `NOBYPASSRLS` und fehlende alte Rollenmitgliedschaft und ruft gültige und ungültige Funnel-/Exposécapabilities tatsächlich auf. Gleichzeitig muss direkter Funnelzugriff ohne Actor-Kontext unsichtbar bleiben, und die interne Assetfunktion darf nicht ausführbar sein. Die vollständigen Signaturen der22 öffentlichen, benötigten Einstiegspunkte werden geprüft.
 
 ## Abhängigkeiten und Standardzustände
 

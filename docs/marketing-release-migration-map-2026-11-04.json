@@ -21,9 +21,9 @@
       "original": "121_web_expose.sql",
       "release": "155_web_expose.sql",
       "originalSha256": "3c0f7fe7675c494adffd211850f739443676fadc1c0e1ef73ddddb13177bebc0",
-      "releaseSha256": "3c0f7fe7675c494adffd211850f739443676fadc1c0e1ef73ddddb13177bebc0",
-      "releaseLedgerChecksum": "513f4b9f60e76d94de25a0a4c25e765f2013144d6aa6d035fb7083bc07f30992",
-      "semanticChange": null,
+      "releaseSha256": "7a9582c730bc59e09d0f013ff5828760bc29a23948055c0fa61585aeb129989b",
+      "releaseLedgerChecksum": "b6cf2893e000c8213b8a5e3bf5e458aee46eb5d90d013d4b430d6e62709e77d7",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on six opaque-link public Expos\u00e9 entrypoints; no role inheritance.",
       "originalLedgerChecksum": "513f4b9f60e76d94de25a0a4c25e765f2013144d6aa6d035fb7083bc07f30992"
     },
     {
@@ -84,18 +84,18 @@
       "original": "128_lead_customer_requests.sql",
       "release": "162_lead_customer_requests.sql",
       "originalSha256": "67cd77161257b7da0466684cd6c365081e6d84007b690d6b1d7e207b90495d1b",
-      "releaseSha256": "67cd77161257b7da0466684cd6c365081e6d84007b690d6b1d7e207b90495d1b",
-      "releaseLedgerChecksum": "67cd77161257b7da0466684cd6c365081e6d84007b690d6b1d7e207b90495d1b",
-      "semanticChange": null,
+      "releaseSha256": "099f867d70c16df5eaa7a3cadb62003c0e66addd42b6a9f8034ab569f9cdad01",
+      "releaseLedgerChecksum": "099f867d70c16df5eaa7a3cadb62003c0e66addd42b6a9f8034ab569f9cdad01",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on three opaque-token customer-request entrypoints.",
       "originalLedgerChecksum": "67cd77161257b7da0466684cd6c365081e6d84007b690d6b1d7e207b90495d1b"
     },
     {
       "original": "129_web_expose_resources.sql",
       "release": "163_web_expose_resources.sql",
       "originalSha256": "46854cd20ee9616596856b9e74c100c3a8aeac0fda433e5e9c3ef09c76829f11",
-      "releaseSha256": "46854cd20ee9616596856b9e74c100c3a8aeac0fda433e5e9c3ef09c76829f11",
-      "releaseLedgerChecksum": "46854cd20ee9616596856b9e74c100c3a8aeac0fda433e5e9c3ef09c76829f11",
-      "semanticChange": null,
+      "releaseSha256": "2ed0aacda1246ca858fc16bbac63bcadc2b98bb0110678e7e98e3f883162a35b",
+      "releaseLedgerChecksum": "2ed0aacda1246ca858fc16bbac63bcadc2b98bb0110678e7e98e3f883162a35b",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on public link-scoped resource lookup.",
       "originalLedgerChecksum": "46854cd20ee9616596856b9e74c100c3a8aeac0fda433e5e9c3ef09c76829f11"
     },
     {
@@ -120,9 +120,9 @@
       "original": "132_web_expose_live_inventory.sql",
       "release": "166_web_expose_live_inventory.sql",
       "originalSha256": "31b55ff649d36afc1bb3c2e0e3b90006d7427c6d2ac71576de45eb63d0dddfcd",
-      "releaseSha256": "31b55ff649d36afc1bb3c2e0e3b90006d7427c6d2ac71576de45eb63d0dddfcd",
-      "releaseLedgerChecksum": "cff7cd9667d51cd97eafe6bcc6c0ef5158e4ba27b429ceb0c8a0aa5e94182d00",
-      "semanticChange": null,
+      "releaseSha256": "c5864225b78ba53446c26e90404b807d273aeda6f5b38b574d559b9d835eba67",
+      "releaseLedgerChecksum": "ac628b41cc76e9b04a34efd0924123d015c4b7efe9168fad4c379759e2ae9354",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on public link-scoped inventory lookup.",
       "originalLedgerChecksum": "cff7cd9667d51cd97eafe6bcc6c0ef5158e4ba27b429ceb0c8a0aa5e94182d00"
     },
     {
@@ -138,9 +138,9 @@
       "original": "134_crm_integrations.sql",
       "release": "168_crm_integrations.sql",
       "originalSha256": "305b35d26e05b5e010763df51c9aed5c2fba2080088374e8a07dba09d0567697",
-      "releaseSha256": "305b35d26e05b5e010763df51c9aed5c2fba2080088374e8a07dba09d0567697",
-      "releaseLedgerChecksum": "305b35d26e05b5e010763df51c9aed5c2fba2080088374e8a07dba09d0567697",
-      "semanticChange": null,
+      "releaseSha256": "648131a0bf742b2193ada1675db92dcedca58b220ef65d11b7e1df2716d8b18a",
+      "releaseLedgerChecksum": "648131a0bf742b2193ada1675db92dcedca58b220ef65d11b7e1df2716d8b18a",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app server runtime on the signature-verified adapter event sink.",
       "originalLedgerChecksum": "305b35d26e05b5e010763df51c9aed5c2fba2080088374e8a07dba09d0567697"
     },
     {
@@ -255,9 +255,9 @@
       "original": "148_funnel_live_templates.sql",
       "release": "181_funnel_live_templates.sql",
       "originalSha256": "028d7b597a15f7a8e0b3ee8bbb3d78249e5d9d8211261099af1cc6280218f508",
-      "releaseSha256": "5036a4d66d5a2e72de32accb080ceceb64d10973d8d644a7d78de3cfd6eba04a",
-      "releaseLedgerChecksum": "5036a4d66d5a2e72de32accb080ceceb64d10973d8d644a7d78de3cfd6eba04a",
-      "semanticChange": "Fail-closed classification guard; legacy active funnels without reviewed publication become an explicitly marked draft. Original tracking and version history retained; token-free technical audit; temporary owner-only policies removed before commit.",
+      "releaseSha256": "405d70da3529410e94f27266dd9f0f5441da9996bdde4a3e7b18c3e6b3433fc3",
+      "releaseLedgerChecksum": "405d70da3529410e94f27266dd9f0f5441da9996bdde4a3e7b18c3e6b3433fc3",
+      "semanticChange": "Fail-closed historical-response guard; transparent legacy-review draft reconciliation with preserved tracking/history and token-free technical audit; explicit tenant runtime EXECUTE on opaque-token lookup.",
       "originalLedgerChecksum": "028d7b597a15f7a8e0b3ee8bbb3d78249e5d9d8211261099af1cc6280218f508"
     },
     {
@@ -282,11 +282,12 @@
       "original": "151_web_expose_brand_layout.sql",
       "release": "184_web_expose_brand_layout.sql",
       "originalSha256": "60af34fe0b68e853ea9e49c0f8b00fa0150a12738751783b60846d89c201bdf7",
-      "releaseSha256": "60af34fe0b68e853ea9e49c0f8b00fa0150a12738751783b60846d89c201bdf7",
-      "releaseLedgerChecksum": "60af34fe0b68e853ea9e49c0f8b00fa0150a12738751783b60846d89c201bdf7",
-      "semanticChange": null,
+      "releaseSha256": "bc0601343c06f421961d0909bf2616611004651d8f86f48e9b08fb434bfd250b",
+      "releaseLedgerChecksum": "bc0601343c06f421961d0909bf2616611004651d8f86f48e9b08fb434bfd250b",
+      "semanticChange": "Explicit tenant runtime EXECUTE on the public authorization-rechecking asset wrapper; revoke tenant EXECUTE on the renamed internal property-asset helper.",
       "originalLedgerChecksum": "60af34fe0b68e853ea9e49c0f8b00fa0150a12738751783b60846d89c201bdf7"
     }
   ],
-  "hashFormat": "Raw UTF-8 file bytes; official ledger checksum normalizes CRLF to LF."
+  "hashFormat": "Raw UTF-8 file bytes; official ledger checksum normalizes CRLF to LF.",
+  "publicRuntimeRole": "novalure_tenant_app: NOSUPERUSER, NOBYPASSRLS, not a member of novalure_app; explicit capability-function EXECUTE only."
 }

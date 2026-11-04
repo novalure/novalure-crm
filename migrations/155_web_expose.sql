@@ -266,4 +266,4 @@ $$;
 
 revoke all on function crm_web_expose_access(uuid,uuid,boolean),crm_web_expose_lookup(text),crm_web_expose_start(text,text,text),crm_web_expose_withdraw(text,text),crm_web_expose_events(text,text,jsonb),crm_web_expose_inquire(text,text,text,text,text,jsonb),crm_web_expose_asset(text,uuid) from public;
 grant execute on function crm_web_expose_access(uuid,uuid,boolean) to novalure_tenant_app;
-grant execute on function crm_web_expose_lookup(text),crm_web_expose_start(text,text,text),crm_web_expose_withdraw(text,text),crm_web_expose_events(text,text,jsonb),crm_web_expose_inquire(text,text,text,text,text,jsonb),crm_web_expose_asset(text,uuid) to novalure_app;
+grant execute on function crm_web_expose_lookup(text),crm_web_expose_start(text,text,text),crm_web_expose_withdraw(text,text),crm_web_expose_events(text,text,jsonb),crm_web_expose_inquire(text,text,text,text,text,jsonb),crm_web_expose_asset(text,uuid) to novalure_app,novalure_tenant_app;

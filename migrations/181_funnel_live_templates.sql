@@ -83,7 +83,7 @@ create or replace function crm_funnel_live_lookup(p_id text,p_hash text) returns
  limit 1
 $$;
 revoke all on function crm_funnel_live_lookup(text,text) from public;
-grant execute on function crm_funnel_live_lookup(text,text) to novalure_app;
+grant execute on function crm_funnel_live_lookup(text,text) to novalure_app,novalure_tenant_app;
 
 alter table funnel_submissions add column if not exists data_classification text not null default 'UNCLASSIFIED';
 alter table funnel_submissions add column if not exists data_purpose text not null default 'crm_sales';

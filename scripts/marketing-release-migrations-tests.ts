@@ -7,9 +7,9 @@ import type { TenantPool } from "../src/lib/db/tenant-client";
 import { withCrmRead, type TenantTransactionOptions } from "../src/lib/crm-command";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 
-type MigrationMap = { migrations: Array<{ original: string; release: string; originalSha256: string; originalLedgerChecksum: string }> };
+type MigrationMap = { migrations: Array<{ original: string; release: string; originalSha256: string; originalLedgerChecksum: string; semanticChange: string | null }> };
 
-test("renumbered release chain applies transactionally after the existing billing baseline without changing old SQL", { timeout: 180000 }, async () => {
+test("renumbered release chain applies transactionally after existing billing; documented capability ACLs work for the real tenant runtime role", { timeout: 180000 }, async (t) => {
   const db = await startLocalSalesDb();
   try {
     const map = JSON.parse(await readFile("docs/marketing-release-migration-map-2026-11-04.json", "utf8")) as MigrationMap;
@@ -18,7 +18,7 @@ test("renumbered release chain applies transactionally after the existing billin
     const priorLedger = (await db.admin.query("select version,checksum from novalure_schema_migrations order by version")).rows;
     for (const item of map.migrations) {
       const sql = await readFile(`migrations/${item.release}`, "utf8");
-      if (!item.release.startsWith("181_")) assert.equal(createHash("sha256").update(sql.replace(/\r\n/g, "\n")).digest("hex"), item.originalLedgerChecksum);
+      if (!item.semanticChange) assert.equal(createHash("sha256").update(sql.replace(/\r\n/g, "\n")).digest("hex"), item.originalLedgerChecksum);
       const client = await db.admin.connect();
       try {
         await client.query("begin");
@@ -34,6 +34,43 @@ test("renumbered release chain applies transactionally after the existing billin
     assert.deepEqual(installed, { flows: true, marketing: true, mail: true, brand: true, funnels: true });
     assert.equal((await db.admin.query("select count(*)::integer as n from crm_mailbox_auto_settings where enabled")).rows[0].n, 0);
     assert.equal((await db.admin.query("select count(*)::integer as n from crm_marketing_contact_policy where rules->>'enabled'='true'")).rows[0].n, 0);
+    await t.test("NOBYPASS tenant role invokes exact capability functions without legacy-role inheritance or direct record access", async () => {
+      const workspaceId = randomUUID(), userId = randomUUID(), projectId = randomUUID(), funnelId = randomUUID(), propertyId = randomUUID(), versionId = randomUUID();
+      const funnelHash = "a".repeat(64), exposeHash = "b".repeat(64), sessionHash = "c".repeat(64), visitorHash = "d".repeat(64);
+      await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC public role','self_service_customer')", [workspaceId]);
+      await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC owner',$3,'owner','customer_owner','active')", [userId, workspaceId, `${userId}@example.invalid`]);
+      await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC public project','Service')", [projectId, workspaceId]);
+      const blueprint = { schemaVersion: 1, status: "aktiv", workspaceId, projectId };
+      await db.admin.query("insert into funnels(id,workspace_id,project_id,owner_user_id,name,goal,audience,entry_channel,status,tracking) values($1,$2,$3,$4,'SYNTHETIC public funnel','SYNTHETIC','Käufer','Website','aktiv',$5::jsonb)", [funnelId, workspaceId, projectId, userId, JSON.stringify({ livePublication: { schemaVersion: 1, tokenHash: funnelHash, versionId: randomUUID(), blueprint } })]);
+      await db.admin.query("insert into seller_listings(id,workspace_id,project_id,title,address,city,region,object_type,area_sqm,rooms,property_status) values($1,$2,$3,'SYNTHETIC public property','SYNTHETIC Street 1','Wien','Wien','Wohnung',92,3,'active')", [propertyId, workspaceId, projectId]);
+      const snapshot = { schemaVersion: 1, propertyId, title: "SYNTHETIC published property", language: "de", media: [], resources: [], units: [] };
+      await db.admin.query("insert into web_expose_versions(id,workspace_id,project_id,property_id,created_by,language,version,snapshot,source_fingerprint) values($1,$2,$3,$4,$5,'de',1,$6::jsonb,$7)", [versionId, workspaceId, projectId, propertyId, userId, JSON.stringify(snapshot), "f".repeat(64)]);
+      await db.admin.query("insert into web_expose_links(workspace_id,version_id,token_hash,label) values($1,$2,$3,'SYNTHETIC role capability')", [workspaceId, versionId, exposeHash]);
+      const client = await db.admin.connect();
+      try {
+        await client.query("set role novalure_tenant_app");
+        const role = (await client.query("select current_user as name,rolsuper,rolbypassrls,pg_has_role(current_user,'novalure_app','MEMBER') as legacy_member from pg_roles where rolname=current_user")).rows[0];
+        assert.deepEqual(role, { name: "novalure_tenant_app", rolsuper: false, rolbypassrls: false, legacy_member: false });
+        const functions = [
+          "crm_funnel_live_lookup(text,text)", "crm_web_expose_lookup(text)", "crm_web_expose_start(text,text,text)", "crm_web_expose_withdraw(text,text)", "crm_web_expose_events(text,text,jsonb)", "crm_web_expose_inquire(text,text,text,text,text,jsonb)", "crm_web_expose_asset(text,uuid)",
+          "crm_web_expose_live_resources(text)", "crm_web_expose_inventory(text)", "crm_lead_request_lookup(text)", "crm_lead_request_submit(text,text,text,jsonb,jsonb)", "crm_lead_request_upload_retained(text,uuid)", "crm_record_resend_delivery_event(jsonb)",
+          "crm_newsletter_public_check(text)", "crm_newsletter_public_unsubscribe(text)", "crm_property_booking_context(text,uuid)", "crm_property_booking_busy(text,uuid,timestamptz,timestamptz)", "crm_property_booking_create(text,uuid,text,text,text,timestamptz,timestamptz,uuid)", "crm_property_booking_action_lookup(uuid,text)", "crm_property_booking_action_update(uuid,text,text,timestamptz,timestamptz,jsonb)", "crm_property_booking_action_busy(uuid,text,timestamptz,timestamptz)", "crm_property_booking_notification_current(uuid,text)",
+        ];
+        for (const signature of functions) assert.equal((await client.query("select has_function_privilege(current_user,$1,'EXECUTE') as allowed", [signature])).rows[0].allowed, true, signature);
+        assert.equal((await client.query("select has_function_privilege(current_user,'crm_web_expose_property_asset(text,uuid)','EXECUTE') as allowed")).rows[0].allowed, false, "Internal pre-branding helper is owner-only");
+        assert.equal((await client.query("select crm_funnel_live_lookup($1,$2) as value", [funnelId, funnelHash])).rows[0].value.funnelId, funnelId);
+        assert.equal((await client.query("select crm_funnel_live_lookup($1,$2) as value", [funnelId, "0".repeat(64)])).rows[0].value, null);
+        assert.equal((await client.query("select count(*)::integer as n from funnels")).rows[0].n, 0, "No actor context means no direct tenant-row visibility");
+        assert.equal((await client.query("select crm_web_expose_lookup($1) as value", [exposeHash])).rows[0].value.versionId, versionId);
+        assert.equal((await client.query("select crm_web_expose_lookup($1) as value", ["0".repeat(64)])).rows[0].value, null);
+        assert.equal((await client.query("select crm_web_expose_start($1,$2,$3) as value", [exposeHash, sessionHash, visitorHash])).rows[0].value, true);
+        assert.equal((await client.query("select crm_web_expose_withdraw($1,$2) as value", [exposeHash, sessionHash])).rows[0].value, true);
+        assert.equal((await client.query("select crm_web_expose_asset($1,$2) as value", [exposeHash, randomUUID()])).rows[0].value, null);
+        assert.equal((await client.query("select crm_lead_request_lookup($1) as value", ["0".repeat(64)])).rows[0].value, null);
+        const event = { type: "email.delivered", eventId: "SYNTHETIC-role-event-0001", digest: "a".repeat(64), emailId: randomUUID(), occurredAt: new Date().toISOString(), to: "absent@example.invalid", from: "sender@example.invalid" };
+        assert.equal((await client.query("select crm_record_resend_delivery_event($1::jsonb) as value", [JSON.stringify(event)])).rows[0].value.status, "ignored");
+      } finally { await client.query("reset role"); client.release(); }
+    });
   } finally { await db.stop(); }
 });
 
