@@ -94,7 +94,6 @@ async function buildPlan(tx: TenantTransaction, session: AppSession, batchId: st
   const targets: Target[] = [];
   const dependencies: unknown[] = [];
   if (!ledger.length || ledger.length > LIMIT) blockers.push({ code: ledger.length ? "QA_BATCH_TOO_LARGE" : "QA_BATCH_EMPTY" });
-  const registered = new Set(ledger.map(row => `${row.type}:${row.id}`));
   for (const record of ledger.slice(0, LIMIT)) {
     if (record.scope !== "database" || !Object.hasOwn(supported, record.type)) { blockers.push({ code: "QA_RESOURCE_UNSUPPORTED", type: record.type }); continue; }
     const type = record.type as Kind;
@@ -109,6 +108,9 @@ async function buildPlan(tx: TenantTransaction, session: AppSession, batchId: st
     if (type === "bots" && ["inactive", "paused"].includes(row.status ?? "")) blockers.push({ code: "QA_ALREADY_RETIRED", type, id: record.id });
     targets.push({ type, id: record.id, projectId: row.projectId, action: rule.action, stateDigest: row.stateDigest });
     const fks = await foreignKeys(tx, type);
+    // No incoming relation has a reviewed complete-visibility contract. Apply
+    // this guard even when the bounded per-relation inspection stops early.
+    if (fks.length) blockers.push({ code: "QA_DEPENDENCY_VISIBILITY_UNPROVEN", type, id: record.id });
     if (fks.length > LIMIT) { blockers.push({ code: "QA_DEPENDENCY_LIMIT", type, id: record.id }); continue; }
     dependencies.push({ type, fks });
     const scanned = new Set<string>();
@@ -124,24 +126,13 @@ async function buildPlan(tx: TenantTransaction, session: AppSession, batchId: st
       // the historical single-column FK is also retained on the same table.
       const tenantBound = fks.some(candidate => candidate.schema === fk.schema && candidate.table === fk.table && candidate.validated && candidate.parentColumns.some((name, index) => name === "id" && candidate.columns[index] === column) && candidate.parentColumns.some((name, index) => name === "workspace_id" && candidate.columns[index] === "workspace_id"));
       if (fk.schema !== "public" || !fk.rls || !fk.forced || !fk.selectable || !tenantBound) { blockers.push({ code: "QA_DEPENDENCY_SCHEMA_UNPROVEN", type, id: record.id }); continue; }
-      if (!Object.hasOwn(supported, fk.table)) {
-        // Only a tenant-proven, RLS-enforced empty relation is safe to omit.
-        // Do not return unknown row contents or adopt unsupported successors.
-        const child = await tx.queryOne(`select 1 as present from ${quote(fk.table)} where workspace_id=$1::uuid and ${quote(column)}=$2::uuid limit 1`, [session.workspaceId, record.id]);
-        dependencies.push({ type, id: record.id, unsupportedChildType: fk.table, present: Boolean(child) });
-        if (child) blockers.push({ code: "QA_DEPENDENCY_TYPE_UNSUPPORTED", type, id: record.id });
-        continue;
-      }
-      const children = await tx.query<{ id: string }>(`select id::text from ${quote(fk.table)} where workspace_id=$1::uuid and ${quote(column)}=$2::uuid order by id limit 101 for update`, [session.workspaceId, record.id]);
-      if (children.length > LIMIT) blockers.push({ code: "QA_DEPENDENCY_LIMIT", type, id: record.id });
-      for (const child of children) if (!registered.has(`${fk.table}:${child.id}`)) blockers.push({ code: "QA_UNREGISTERED_SUCCESSOR", type, id: record.id });
-      dependencies.push({ type, id: record.id, childType: fk.table, childIds: children.map(child => child.id) });
-    }
-    if (type === "knowledge_areas") {
-      // The normal archive helper also archives its sources. Until a source
-      // adapter exists, require a proven empty source set rather than adopting it.
-      const source = await tx.queryOne("select id from knowledge_sources where workspace_id=$1::uuid and knowledge_area_id=$2::uuid limit 1", [session.workspaceId, record.id]);
-      if (source) blockers.push({ code: "QA_KNOWLEDGE_SOURCES_UNSUPPORTED", type, id: record.id });
+      // A tenant-composite FK prevents foreign-tenant references, but FORCE RLS
+      // and SELECT do not prove visibility of every row in that tenant. For
+      // example, 173 intentionally hides other actors' private drafts. No
+      // relation currently has a reviewed tenant-complete visibility contract;
+      // block the parent instead of treating an RLS-filtered empty set as proof.
+      // Do not query or expose the private successor, or widen runtime rights.
+      dependencies.push({ type, id: record.id, childType: fk.table, visibility: "unproven" });
     }
   }
   const counts: Record<string, number> = {};

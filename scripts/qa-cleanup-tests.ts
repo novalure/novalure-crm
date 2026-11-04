@@ -34,9 +34,9 @@ test("registered cleanup keeps real tenant/session/ledger/immutable evidence bou
     await applySalesSchema(db, { maxMigrationNumber: 106 });
     await db.admin.query(await readFile("migrations/173_property_creation_drafts.sql", "utf8"));
     await db.admin.query(await readFile("migrations/194_qa_registered_batch_lock.sql", "utf8"));
-    async function tenant() {
-      const workspaceId = randomUUID(), userId = randomUUID(), sessionId = randomUUID();
-      await db.admin.query("insert into workspaces(id,name,is_qa,operating_model) values($1,'SYNTHETIC QA CLEANUP',true,'self_service_customer')", [workspaceId]);
+    async function tenant(existingWorkspaceId?: string) {
+      const workspaceId = existingWorkspaceId ?? randomUUID(), userId = randomUUID(), sessionId = randomUUID();
+      if (!existingWorkspaceId) await db.admin.query("insert into workspaces(id,name,is_qa,operating_model) values($1,'SYNTHETIC QA CLEANUP',true,'self_service_customer')", [workspaceId]);
       const member = await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC QA owner',$3,'owner','customer_owner','active') returning auth_identity_id", [userId, workspaceId, `qa-cleanup-${userId}@example.invalid`]);
       const authIdentityId = member.rows[0].auth_identity_id as string;
       await db.admin.query("update auth_identities set credential_state='active' where id=$1", [authIdentityId]);
@@ -45,9 +45,9 @@ test("registered cleanup keeps real tenant/session/ledger/immutable evidence bou
       return { workspaceId, userId, sessionId, session };
     }
     const a = await tenant(), b = await tenant();
-    async function draft(owner = a) {
+    async function draft(owner = a, projectId?: string) {
       const id = randomUUID();
-      await withCrmRead(owner.session, (tx, fresh) => savePropertyCreationDraft(tx, fresh, { id, draft: emptyPropertyCreationDraft(), step: 0, expectedRevision: 0, requestId: randomUUID() }), options);
+      await withCrmRead(owner.session, (tx, fresh) => savePropertyCreationDraft(tx, fresh, { id, draft: { ...emptyPropertyCreationDraft(), ...(projectId ? { projectId } : {}) }, step: 0, expectedRevision: 0, requestId: randomUUID() }), options);
       return id;
     }
     async function batch(records: { type: string; id: string; scope?: string }[], owner = a) {
@@ -177,20 +177,38 @@ test("registered cleanup keeps real tenant/session/ledger/immutable evidence bou
       await db.admin.query("insert into qa_reset_audit_events(id,workspace_id,batch_id,actor_user_id,mode,outcome,plan_digest,target_counts,target_manifest,blocker_codes,occurred_at) select $1,workspace_id,batch_id,actor_user_id,mode,outcome,plan_digest,target_counts,target_manifest,blocker_codes,now()-interval '16 minutes' from qa_reset_audit_events where id=$2", [oldPlanId, p.planId]);
       await assert.rejects(runQaCleanup(a.session, { ...executeInput(p, batchId), planId: oldPlanId }, metadata(), options), error => error instanceof CrmCommandError && error.code === "QA_PLAN_EXPIRED"); assert.equal((await state(id)).status, "active");
     });
-    await t.test("registered parent cannot implicitly adopt an unregistered supported successor", async () => {
+    await t.test("same-tenant hidden personal draft blocks its registered parent and stays private and active", async () => {
+      const projectId = randomUUID(), otherActor = await tenant(a.workspaceId);
+      await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC private successor project','Service')", [projectId, a.workspaceId]);
+      const privateDraft = await draft(otherActor, projectId), batchId = await batch([{ type: "projects", id: projectId }]);
+      const hidden = await withCrmRead(a.session, tx => tx.query("select id from crm_property_creation_drafts where workspace_id=$1::uuid and project_id=$2::uuid", [a.workspaceId, projectId]), options);
+      assert.deepEqual(hidden, []);
+      const before = (await db.admin.query("select status,version from projects where id=$1", [projectId])).rows[0];
+      const p = await plan(batchId);
+      assert.equal(p.outcome, "blocked");
+      assert.ok(p.plan.blockers.some(x => x.code === "QA_DEPENDENCY_VISIBILITY_UNPROVEN" && x.type === "projects" && x.id === projectId));
+      assert.equal(JSON.stringify(p).includes(privateDraft), false);
+      await assert.rejects(runQaCleanup(a.session, executeInput(p, batchId), metadata(), options), error => error instanceof CrmCommandError && error.code === "QA_PLAN_MISMATCH");
+      assert.deepEqual((await db.admin.query("select status,version from projects where id=$1", [projectId])).rows[0], before);
+      assert.deepEqual(await state(privateDraft), { status: "active", revision: 1 });
+      const stillHidden = await withCrmRead(a.session, tx => tx.query("select id from crm_property_creation_drafts where id=$1::uuid", [privateDraft]), options);
+      assert.deepEqual(stillHidden, []);
+      assert.equal((await db.admin.query("select count(*)::int as n from qa_reset_audit_events where batch_id=$1 and outcome='executed'", [batchId])).rows[0].n, 0);
+    });
+    await t.test("registered parent cannot claim complete visibility of a supported successor", async () => {
       await db.admin.query("alter table crm_property_creation_drafts add constraint synthetic_cleanup_pair unique(workspace_id,id)");
       await db.admin.query("alter table crm_property_creation_drafts add column synthetic_parent_draft_id uuid");
       await db.admin.query("alter table crm_property_creation_drafts add foreign key(workspace_id,synthetic_parent_draft_id) references crm_property_creation_drafts(workspace_id,id)");
       const parent = await draft(), child = await draft(), batchId = await batch([{ type: "crm_property_creation_drafts", id: parent }]);
       await db.admin.query("update crm_property_creation_drafts set synthetic_parent_draft_id=$1,revision=revision+1 where id=$2", [parent, child]);
-      const p = await plan(batchId); assert.equal(p.outcome, "blocked"); assert.ok(p.plan.blockers.some(x => x.code === "QA_UNREGISTERED_SUCCESSOR")); assert.equal((await state(parent)).status, "active");
+      const p = await plan(batchId); assert.equal(p.outcome, "blocked"); assert.ok(p.plan.blockers.some(x => x.code === "QA_DEPENDENCY_VISIBILITY_UNPROVEN")); assert.equal((await state(parent)).status, "active");
     });
     await t.test("unregistered successor and unproven foreign relation block closed", async () => {
       const id = await draft(), batchId = await batch([{ type: "crm_property_creation_drafts", id }]);
       await db.admin.query("create table synthetic_cleanup_successors(id uuid primary key,workspace_id uuid not null,draft_id uuid not null,foreign key(workspace_id,draft_id) references crm_property_creation_drafts(workspace_id,id))");
       await db.admin.query("alter table synthetic_cleanup_successors enable row level security"); await db.admin.query("alter table synthetic_cleanup_successors force row level security"); await db.admin.query("create policy synthetic_cleanup_tenant on synthetic_cleanup_successors to novalure_tenant_app using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid)"); await db.admin.query("grant select on synthetic_cleanup_successors to novalure_tenant_app");
       await db.admin.query("insert into synthetic_cleanup_successors values($1,$2,$3)", [randomUUID(), a.workspaceId, id]);
-      const p = await plan(batchId); assert.equal(p.outcome, "blocked"); assert.ok(p.plan.blockers.some(x => x.code === "QA_DEPENDENCY_TYPE_UNSUPPORTED")); assert.equal((await state(id)).status, "active");
+      const p = await plan(batchId); assert.equal(p.outcome, "blocked"); assert.ok(p.plan.blockers.some(x => x.code === "QA_DEPENDENCY_VISIBILITY_UNPROVEN")); assert.equal((await state(id)).status, "active");
       await db.admin.query("create table synthetic_unscoped_cleanup_successors(id uuid primary key,workspace_id uuid not null,draft_id uuid references crm_property_creation_drafts(id))");
       await db.admin.query("insert into synthetic_unscoped_cleanup_successors values($1,$2,$3)", [randomUUID(), b.workspaceId, id]);
       const unsafe = await plan(batchId); assert.equal(unsafe.outcome, "blocked"); assert.ok(unsafe.plan.blockers.some(x => x.code === "QA_DEPENDENCY_SCHEMA_UNPROVEN")); assert.equal(JSON.stringify(unsafe).includes(b.workspaceId), false);

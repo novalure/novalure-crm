@@ -1,0 +1,160 @@
+TAP version 13
+# Subtest: cleanup protocol requires exact IDs/counts/digest and rejects actor or workspace payload claims
+ok 1 - cleanup protocol requires exact IDs/counts/digest and rejects actor or workspace payload claims
+  ---
+  duration_ms: 10.7228
+  type: 'test'
+  ...
+# Subtest: registered cleanup keeps real tenant/session/ledger/immutable evidence boundaries
+    # Subtest: two tenants: exact registered own draft retires once and survives a new process replay
+    ok 1 - two tenants: exact registered own draft retires once and survives a new process replay
+      ---
+      duration_ms: 800.2549
+      type: 'test'
+      ...
+    # Subtest: non-QA marker is denied without automatic adoption
+    ok 2 - non-QA marker is denied without automatic adoption
+      ---
+      duration_ms: 11.8544
+      type: 'test'
+      ...
+    # Subtest: foreign batch does not leak or act
+    ok 3 - foreign batch does not leak or act
+      ---
+      duration_ms: 10.9978
+      type: 'test'
+      ...
+    # Subtest: foreign registered ID stays unavailable and blocks the entire plan
+    ok 4 - foreign registered ID stays unavailable and blocks the entire plan
+      ---
+      duration_ms: 20.7184
+      type: 'test'
+      ...
+    # Subtest: accounts, tenant rows, audit, settings and provider resources are never adopted
+    ok 5 - accounts, tenant rows, audit, settings and provider resources are never adopted
+      ---
+      duration_ms: 56.2597
+      type: 'test'
+      ...
+    # Subtest: digest, count, target ID and confirmation mismatch cannot mutate
+    ok 6 - digest, count, target ID and confirmation mismatch cannot mutate
+      ---
+      duration_ms: 40.0036
+      type: 'test'
+      ...
+    # Subtest: changed row invalidates plan without partially retiring its peer
+    ok 7 - changed row invalidates plan without partially retiring its peer
+      ---
+      duration_ms: 37.7358
+      type: 'test'
+      ...
+    # Subtest: late registration invalidates plan
+    ok 8 - late registration invalidates plan
+      ---
+      duration_ms: 29.1165
+      type: 'test'
+      ...
+    # Subtest: stored role revocation defeats both plan and successful receipt replay
+    ok 9 - stored role revocation defeats both plan and successful receipt replay
+      ---
+      duration_ms: 33.4203
+      type: 'test'
+      ...
+    # Subtest: revoked stored session defeats stale caller claims
+    ok 10 - revoked stored session defeats stale caller claims
+      ---
+      duration_ms: 8.6023
+      type: 'test'
+      ...
+    # Subtest: 194 owner stays NOLOGIN/NOINHERIT/NOBYPASSRLS and runtime cannot update or assume it
+    ok 11 - 194 owner stays NOLOGIN/NOINHERIT/NOBYPASSRLS and runtime cannot update or assume it
+      ---
+      duration_ms: 4.6585
+      type: 'test'
+      ...
+    # Subtest: 194 owner row visibility is exact-tenant and append-only trigger also denies owner DML
+    ok 12 - 194 owner row visibility is exact-tenant and append-only trigger also denies owner DML
+      ---
+      duration_ms: 7.4954
+      type: 'test'
+      ...
+    # Subtest: 194 direct function rejects foreign tenant arguments and current non-admin
+    ok 13 - 194 direct function rejects foreign tenant arguments and current non-admin
+      ---
+      duration_ms: 9.6187
+      type: 'test'
+      ...
+    # Subtest: batch FK lock excludes concurrent new registrations
+    ok 14 - batch FK lock excludes concurrent new registrations
+      ---
+      duration_ms: 222.5324
+      type: 'test'
+      ...
+    # Subtest: expired first-execution plan cannot mutate
+    ok 15 - expired first-execution plan cannot mutate
+      ---
+      duration_ms: 21.7233
+      type: 'test'
+      ...
+    # Subtest: same-tenant hidden personal draft blocks its registered parent and stays private and active
+    not ok 16 - same-tenant hidden personal draft blocks its registered parent and stays private and active
+      ---
+      duration_ms: 36.1326
+      type: 'test'
+      location: 'C:\\Projects\\novalure-crm-qa-cleanup-20261104\\scripts\\qa-cleanup-tests.ts:2:19852'
+      failureType: 'testCodeFailure'
+      error: |-
+        The expression evaluated to a falsy value:
+        
+          assert.ok(p.plan.blockers.some(x => x.code === "QA_DEPENDENCY_VISIBILITY_UNPROVEN" && x.type === "projects" && x.id === projectId))
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        TestContext.<anonymous> (C:\Projects\novalure-crm-qa-cleanup-20261104\scripts\qa-cleanup-tests.ts:189:14)
+        process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        async Test.run (node:internal/test_runner/test:1332:7)
+        async TestContext.<anonymous> (C:\Projects\novalure-crm-qa-cleanup-20261104\scripts\qa-cleanup-tests.ts:180:5)
+        async Test.run (node:internal/test_runner/test:1332:7)
+        async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+      ...
+    # Subtest: registered parent cannot claim complete visibility of a supported successor
+    ok 17 - registered parent cannot claim complete visibility of a supported successor
+      ---
+      duration_ms: 24.8121
+      type: 'test'
+      ...
+    # Subtest: unregistered successor and unproven foreign relation block closed
+    ok 18 - unregistered successor and unproven foreign relation block closed
+      ---
+      duration_ms: 31.1916
+      type: 'test'
+      ...
+    # Subtest: ledger and audit remain append-only; no business rows were deleted
+    ok 19 - ledger and audit remain append-only; no business rows were deleted
+      ---
+      duration_ms: 133.173
+      type: 'test'
+      ...
+    1..19
+not ok 2 - registered cleanup keeps real tenant/session/ledger/immutable evidence boundaries
+  ---
+  duration_ms: 7199.7677
+  type: 'test'
+  location: 'C:\\Projects\\novalure-crm-qa-cleanup-20261104\\scripts\\qa-cleanup-tests.ts:2:2809'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..2
+# tests 21
+# suites 0
+# pass 19
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8016.2505

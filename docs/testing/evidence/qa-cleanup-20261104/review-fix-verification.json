@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-11-04T23:00:48.0591697Z",
+  "base": "3bf37caa54bc1c7b79dd433e00c64f9050ba0762",
+  "status": "LOCAL_REVIEW_CORRECTION_REQUIRES_EXACT_SOURCE_REREVIEW",
+  "resolvedFindings": [
+    "QA-REVIEW-M01",
+    "QA-REVIEW-L01"
+  ],
+  "sourceHashes": {
+    "src/lib/qa-cleanup.ts": "7fd963521d6b6be5264a5113ff2b09e745bde14e2c0f40ccecf3f218d93bc4d1",
+    "scripts/qa-cleanup-tests.ts": "6a3f14608aaa8aca3dfad394538b7638f436505b208a3debdda8a662112b801e",
+    "docs/tasks/qa-cleanup-20261104/usage.md": "68f50e71812d5012e37466bc5c81701c62c10b419ea026b6cc96711bd64b79aa",
+    "docs/tasks/qa-cleanup-20261104/handoff.md": "6e495e931827f6de1ffc1ad7b8fcf08108c0f012ea5052567731791612c1413a",
+    "docs/testing/evidence/qa-cleanup-20261104/review-fix-tests.tap": "de5b622c35272cd80c4f601bf07bc694af8ffb5a866fb268fd3d8bb3a89a7019",
+    "docs/testing/evidence/qa-cleanup-20261104/review-fix-initial-test-failure.tap": "bbc6a0aa94d20e49cca6b6cbca3c2277f25d45d2056d1e2bbabfe978b8583188"
+  },
+  "targetedTests": {
+    "skipped": 0,
+    "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 --test-reporter=tap scripts/qa-cleanup-tests.ts",
+    "firstAttempt": {
+      "tests": 21,
+      "fail": 2,
+      "reason": "Visibility guard originally followed dependency-count early stop; moved before stop; original TAP retained",
+      "pass": 19
+    },
+    "fail": 0,
+    "migrationTestsRepeated": false,
+    "exitCode": 0,
+    "sameTenantSecondActorHiddenActiveDraft": "INVISIBLE_TO_CLEANER_PARENT_PLAN_AND_EXECUTE_DENIED_PROJECT_AND_DRAFT_UNCHANGED_PRIVATE_AFTERWARD",
+    "pass": 21,
+    "syntheticOnly": true,
+    "tests": 21
+  },
+  "typecheck": {
+    "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "exitCode": 0
+  },
+  "affectedLint": {
+    "maxWarnings": 0,
+    "exitCode": 0
+  },
+  "totalTransactionDeadlineClaimed": false,
+  "runtimePrivilegeChanges": 0,
+  "migration194Changed": false,
+  "legacyRegistration": "NOT_IN_THIS_CORRECTION",
+  "productionConnections": 0,
+  "providerCalls": 0,
+  "modelCalls": 0,
+  "pushes": 0,
+  "deployments": 0,
+  "open": [
+    "EXACT_SHA_INDEPENDENT_REREVIEW",
+    "REVIEWED_TENANT_COMPLETE_PARENT_DEPENDENCY_CONTRACT",
+    "EXPLICIT_LEGACY_REGISTRATION_195",
+    "EIGHT_GROUP_LIFECYCLE",
+    "NATIVE_CI_APP_LIVE_ACCEPTANCE"
+  ]
+}
