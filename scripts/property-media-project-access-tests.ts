@@ -21,7 +21,28 @@ test("ordinary property files inherit project access in services and real Postgr
   const fixtureRoot = path.resolve(".npm-cache", "qa");
   const filesRoot = await mkdtemp(path.join(fixtureRoot, "project-media-"));
   try {
-    await applySalesSchema(db, { maxMigrationNumber: 188 });
+    const applyManual = async (name: string) => {
+      const sql = await readFile(`migrations/${name}`, "utf8");
+      const client = await db.admin.connect();
+      try {
+        await client.query("begin");
+        await client.query(sql);
+        await client.query("insert into novalure_schema_migrations(version,name,checksum) values($1,$2,$3) on conflict(version) do nothing",
+          [name.replace(/\.sql$/u, ""), name, createHash("sha256").update(sql).digest("hex")]);
+        await client.query("commit");
+      } catch (error) { await client.query("rollback"); throw error; }
+      finally { client.release(); }
+    };
+    await applySalesSchema(db, { maxMigrationNumber: 188, afterMigration: async (name: string) => {
+      if (Number(name.slice(0, 3)) === 90) {
+        // Match the already qualified gateway fixture: enforce actual table
+        // postconditions before applying original 092-096, without a fake091.
+        await db.admin.query("alter table company_profiles enable row level security;alter table company_profiles force row level security;alter table company_profile_versions enable row level security;alter table company_profile_versions force row level security");
+        await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");
+        for (const manual of ["092_crm_production_machine_identity.sql", "093_crm_machine_internal_context.sql", "094_website_sales_ingestion.sql", "095_form_tenant_isolation.sql", "096_public_integration_gateway.sql"]) await applyManual(manual);
+      }
+      if (Number(name.slice(0, 3)) === 114) await applyManual("121_webchat_customer_product.sql");
+    } });
     await seedSalesBrowser(db); // Existing synthetic HTTP-auth bootstrap grants only.
     for (const key of keys) delete process.env[key];
     const origin = "http://127.0.0.1:3000", secret = randomBytes(48).toString("base64url");
@@ -89,6 +110,9 @@ test("ordinary property files inherit project access in services and real Postgr
       await db.admin.query(`alter table ${relation} owner to synthetic_media_owner`);
     }
     await db.admin.query("alter function crm_property_media_access(text,text,uuid,boolean) owner to synthetic_media_owner; alter function crm_public_media_lookup(text) owner to synthetic_media_owner; alter function crm_workspace_media_usage(text) owner to synthetic_media_owner");
+    // Apply the real cumulative successor after the representative owner is fixed.
+    await db.admin.query(await readFile("migrations/191_webchat_partner_access_compatibility.sql", "utf8"));
+    assert.deepEqual((await db.admin.query("select has_function_privilege('synthetic_media_owner','crm_webchat_customer_member(uuid)','EXECUTE') as predicate, pg_has_role('synthetic_media_owner','novalure_tenant_app','MEMBER') as broad_role")).rows[0], { predicate: true, broad_role: false });
     await t.test("runtime and definer owner have no superuser/BYPASSRLS; media and parents retain FORCE RLS", async () => {
       assert.ok((await db.admin.query("select rolsuper,rolbypassrls from pg_roles where rolname=any($1::text[])", [ [db.role, "novalure_tenant_app", "synthetic_media_owner"] ])).rows.every(row => !row.rolsuper && !row.rolbypassrls));
       assert.ok((await db.admin.query("select relrowsecurity,relforcerowsecurity from pg_class where oid=any($1::regclass[])", [["media_assets", "media_asset_shares", "property_media", "property_documents", "seller_listings", "property_units"]])).rows.every(row => row.relrowsecurity && row.relforcerowsecurity));

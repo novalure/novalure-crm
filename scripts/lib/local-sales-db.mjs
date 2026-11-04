@@ -104,11 +104,11 @@ export async function startLocalSalesDb() {
  * This partial bootstrap is not a production upgrade plan or a full historical
  * or pgvector/RAG validation; dedicated predecessor fixtures cover those cutovers.
  */
-export async function applySalesSchema(db, {
-  includeD11Contract = true,
-  includeSales = true,
-  maxMigrationNumber = Number.POSITIVE_INFINITY,
-} = {}) {
+/** @param {{includeD11Contract?: boolean, includeSales?: boolean, maxMigrationNumber?: number, afterMigration?: (name: string) => (void | Promise<void>)}} [options] */
+export async function applySalesSchema(db, options = {}) {
+  const { includeD11Contract = true, includeSales = true,
+    maxMigrationNumber = Number.POSITIVE_INFINITY, afterMigration } = options;
+  if (afterMigration !== undefined && typeof afterMigration !== "function") throw new Error("Local migration callback must be a function");
   const names = (await readdir("migrations")).filter(name => /^\d+.*\.sql$/.test(name)).sort();
   const applied = [];
   for (const name of names) {
@@ -184,6 +184,9 @@ export async function applySalesSchema(db, {
     } finally {
       client.release();
     }
+    // Dedicated integration fixtures can apply their real manual predecessors
+    // at the original boundary; the generic default remains unchanged.
+    if (afterMigration) await afterMigration(name);
   }
   // The product regression suites exercise the final D11 schema. Production
   // still applies this separately: keeping Contract outside migrations/*.sql
