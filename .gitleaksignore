@@ -48,3 +48,7 @@ d9734433397d9a831ceb735091e5117995fa884c:scripts/booking-channel-adapter-tests.t
 # This UUID is an authorization selector, never a credential; current metadata
 # uses an unambiguous name. Only this historical exact finding is excluded.
 bd8d3920d74798d7458094e6ebfbd6e544306e00:config/operator-recovery-recipient.json:generic-api-key:6
+# Independently reviewed historical false positive: documented SHA-256 of the
+# unchanged personal mailbox access-policy source, not a credential. Current
+# evidence uses {path, sha256}; retain all rules and history/current-tree scans.
+4e0c8fb3885fc322768fbb39b7fddb1f2e822c76:artifacts/personal-mail-acl-replay/evidence.json:generic-api-key:12

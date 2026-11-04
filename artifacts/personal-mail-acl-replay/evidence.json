@@ -7,19 +7,52 @@
   "status": "LOCAL_MAIL_ACL_M01_REPLAY_CORRECTION_EXACT_REVIEW_PENDING",
   "finding": "MAIL-ACL-M01",
   "sourceBinding": "ACTUAL_EXECUTED_WORKTREE_BYTES_SHA256_BEFORE_COMMIT",
-  "sourceAndArtifactHashes": {
-    "src/lib/db/crm-mailbox-reply-repository.ts": "4f4eb8227f18b7af0f6397408eb3d2c78d85c2109d45bee70de79efadb4748ef",
-    "src/lib/db/crm-mailbox-message-access.ts": "2ab6b1b0989ea5444516b8739d26abe84a4d2ef2cd377fe9cef669cb4e7816cf",
-    "scripts/personal-mail-reply-tests.ts": "def8589f0ea5444f9f23f9533bf3bc978b6297f5156de9403cf19c3df98b9fa8",
-    "docs/testing/personal-mail-acl-replay-2026-11-05.md": "f6e21fdd26e4b6f1f9109531560262e5400393f1a2651ca7ec4ef7cb440d918d",
-    "artifacts/personal-mail-acl-replay/after-fix.tap": "bbd3060a3f135ad336bb466e44c24ad6530021e08fd74c45577bdce5abd01327",
-    "artifacts/personal-mail-acl-replay/before-fix.transport.json": "a192a01ca69c629c7193b1811bf7aa408e15836d93d6bdba1f94638686a787e2",
-    "artifacts/personal-mail-acl-replay/typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "artifacts/personal-mail-acl-replay/lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "migrations/192_personal_mail_reply_and_attachments.sql": "c4c446ce73d27b7c983fd9ef26ece2383ad4eceae65e30cc9d487260d9ac500b",
-    "package.json": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d",
-    "package-lock.json": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea"
-  },
+  "sourceAndArtifactHashes": [
+    {
+      "path": "src/lib/db/crm-mailbox-reply-repository.ts",
+      "sha256": "4f4eb8227f18b7af0f6397408eb3d2c78d85c2109d45bee70de79efadb4748ef"
+    },
+    {
+      "path": "src/lib/db/crm-mailbox-message-access.ts",
+      "sha256": "2ab6b1b0989ea5444516b8739d26abe84a4d2ef2cd377fe9cef669cb4e7816cf"
+    },
+    {
+      "path": "scripts/personal-mail-reply-tests.ts",
+      "sha256": "def8589f0ea5444f9f23f9533bf3bc978b6297f5156de9403cf19c3df98b9fa8"
+    },
+    {
+      "path": "docs/testing/personal-mail-acl-replay-2026-11-05.md",
+      "sha256": "63812321a4a928a92a3c86a8b43bdf6f8f39e070b6111703c1b2074f7f464729"
+    },
+    {
+      "path": "artifacts/personal-mail-acl-replay/after-fix.tap",
+      "sha256": "bbd3060a3f135ad336bb466e44c24ad6530021e08fd74c45577bdce5abd01327"
+    },
+    {
+      "path": "artifacts/personal-mail-acl-replay/before-fix.transport.json",
+      "sha256": "a192a01ca69c629c7193b1811bf7aa408e15836d93d6bdba1f94638686a787e2"
+    },
+    {
+      "path": "artifacts/personal-mail-acl-replay/typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/personal-mail-acl-replay/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "migrations/192_personal_mail_reply_and_attachments.sql",
+      "sha256": "c4c446ce73d27b7c983fd9ef26ece2383ad4eceae65e30cc9d487260d9ac500b"
+    },
+    {
+      "path": "package.json",
+      "sha256": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea"
+    }
+  ],
   "beforeFix": {
     "fail": 2,
     "logRoundTrip": "PASS",
@@ -100,5 +133,19 @@
     "NATIVE_CI_LINUX",
     "SCHEMA_UPGRADE_RESTORE",
     "REAL_APP_PROVIDER_ACCEPTANCE"
-  ]
+  ],
+  "secretScanOriginal": {
+    "globalException": false,
+    "findingCount": 1,
+    "scannerVersion": "8.30.1",
+    "qualification": "INDEPENDENTLY_QUALIFIED_EXACT_NONCREDENTIAL_SOURCE_HASH_ONLY_RAW_FAILURE_PRESERVED",
+    "comparison": "C:/Projects/crm-live-acceptance-20261104/reviews/personal-mail-acl-replay-sourcehash-comparison.json",
+    "exactFingerprint": "4e0c8fb3885fc322768fbb39b7fddb1f2e822c76:artifacts/personal-mail-acl-replay/evidence.json:generic-api-key:12",
+    "rawExitCode": 1,
+    "originalReport": "C:/Projects/crm-live-acceptance-20261104/reviews/personal-mail-acl-replay-470eccdd-gitleaks.json",
+    "range": "88a2e71daa6fd13158b416d7de0c0a9547b46aff..470eccdd1250b91d3f91e5a2c8852b97fb4a89bc",
+    "independentReceipt": "C:/Projects/crm-live-acceptance-20261104/reviews/personal-mail-acl-replay-sourcehash-qualification.json",
+    "independentReceiptSha256": "029e34f2352a3172498e5a5adbf71b9027650d0ae452785bcfafbf2d044f6b7c",
+    "historicalExactFingerprintOnly": true
+  }
 }
