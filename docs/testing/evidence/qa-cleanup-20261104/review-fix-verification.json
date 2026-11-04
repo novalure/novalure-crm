@@ -11,9 +11,9 @@
     "src/lib/qa-cleanup.ts": "7fd963521d6b6be5264a5113ff2b09e745bde14e2c0f40ccecf3f218d93bc4d1",
     "scripts/qa-cleanup-tests.ts": "6a3f14608aaa8aca3dfad394538b7638f436505b208a3debdda8a662112b801e",
     "docs/tasks/qa-cleanup-20261104/usage.md": "68f50e71812d5012e37466bc5c81701c62c10b419ea026b6cc96711bd64b79aa",
-    "docs/tasks/qa-cleanup-20261104/handoff.md": "6e495e931827f6de1ffc1ad7b8fcf08108c0f012ea5052567731791612c1413a",
+    "docs/tasks/qa-cleanup-20261104/handoff.md": "90a35309916452de2927e3756f7081067c167113561726fdf647f04e178eae85",
     "docs/testing/evidence/qa-cleanup-20261104/review-fix-tests.tap": "de5b622c35272cd80c4f601bf07bc694af8ffb5a866fb268fd3d8bb3a89a7019",
-    "docs/testing/evidence/qa-cleanup-20261104/review-fix-initial-test-failure.tap": "bbc6a0aa94d20e49cca6b6cbca3c2277f25d45d2056d1e2bbabfe978b8583188"
+    "docs/testing/evidence/qa-cleanup-20261104/review-fix-initial-test-failure.transport.json": "028b9292350dbf6bda36bedcba2e6ca0474b721c149c52637cec81bd2c0dbeb9"
   },
   "targetedTests": {
     "skipped": 0,
@@ -22,7 +22,13 @@
       "tests": 21,
       "fail": 2,
       "reason": "Visibility guard originally followed dependency-count early stop; moved before stop; original TAP retained",
-      "pass": 19
+      "pass": 19,
+      "losslessOriginal": {
+        "byteLength": 6259,
+        "sha256": "bbc6a0aa94d20e49cca6b6cbca3c2277f25d45d2056d1e2bbabfe978b8583188",
+        "path": "docs/testing/evidence/qa-cleanup-20261104/review-fix-initial-test-failure.transport.json",
+        "plaintextHistoricalCommit": "807eb4104676b2495206734b96feb9a230e59c77"
+      }
     },
     "fail": 0,
     "migrationTestsRepeated": false,
