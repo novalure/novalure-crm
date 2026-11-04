@@ -1792,6 +1792,9 @@ async function upsertCalendarEventRecordInTransaction(input: {
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const inputMetadata = asObject(input.event.metadata);
+  if (existing?.metadata?.source === "personal_standalone_calendar" || inputMetadata.source === "personal_standalone_calendar" || Object.hasOwn(inputMetadata,"personalCalendarState")) {
+    return { persisted: false, reason: "Personal calendar event must only be changed through its personal calendar workflow" };
+  }
   const notes = cleanString(input.event.notes) || cleanString(inputMetadata.notes);
   const metadata = {
     ...(existing?.metadata ?? {}),

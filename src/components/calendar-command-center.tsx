@@ -13,6 +13,8 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { PersonalCalendarWorkspace } from "@/components/personal-calendar-workspace";
+import type { PersonalCalendarClientStore } from "@/lib/personal-calendar-client-store";
 
 type CalendarCommandCenterProps = {
   activeProjectId: string | null;
@@ -30,6 +32,7 @@ type CalendarCommandCenterProps = {
   workspaceId: string;
   sessionWorkspaceId: string;
   workspacePublicKey?: string;
+  personalCalendarStore?: PersonalCalendarClientStore;
 };
 
 type CalendarCommandCenterCopy = ReturnType<typeof getCalendarCommandCenterCopy>;
@@ -303,14 +306,6 @@ function mergeOAuthConnectionStatus(
   } satisfies CalendarConnectionConfig;
 }
 
-type LiveCalendarResponse = {
-  error?: string | null;
-  ok?: boolean;
-  onlineMeetingUrl?: string | null;
-  status?: string | null;
-  webLink?: string | null;
-};
-
 const statusStyles = {
   abgesagt: "border-stone-200 bg-stone-50 text-stone-500",
   geplant: "border-blue-200 bg-blue-50 text-blue-900",
@@ -485,15 +480,6 @@ function getMeetingStatusLabel(event: CalendarEvent | undefined, text: CalendarC
   if (event.location === "Teams") return text.meetingStatusLabels.teamsMissing;
   if (event.location === "Telefon") return text.meetingStatusLabels.phone;
   return text.meetingStatusLabels.missing;
-}
-
-function escapeHtml(value: string | undefined) {
-  return (value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function resolveMeetingTokens(value: string, tokens: Record<string, string>) {
@@ -713,6 +699,7 @@ export function CalendarCommandCenter({
   workspaceId,
   sessionWorkspaceId,
   workspacePublicKey,
+  personalCalendarStore,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
   const calendarStatusLabels={...text.statusLabels,abgesagt:language==="en"?"Cancelled":"Abgesagt"};
@@ -1646,72 +1633,7 @@ export function CalendarCommandCenter({
             ? text.liveSyncIdle
             : text.calendarSetup.missingConnection);
 
-  const syncLiveTeamsMeeting = async () => {
-    if (!isHomeWorkspace) return;
-    setLiveCalendarAction({ status: "running" });
-
-    try {
-      if (!selectedEvent) {
-        throw new Error(text.noEvents);
-      }
-
-      if (oauthStatus !== "ready" || !selectedProviderConfig.connected) {
-        throw new Error(oauthStatus !== "ready" ? oauthStatusMessage : text.calendarSetup.missingConnection);
-      }
-
-      const body = [
-        `<p><strong>${escapeHtml(text.project)}:</strong> ${escapeHtml(selectedEvent.project?.name ?? projectLabel)}</p>`,
-        `<p><strong>${escapeHtml(text.contact)}:</strong> ${escapeHtml(selectedEvent.contact?.name ?? text.noContact)}</p>`,
-        `<p><strong>${escapeHtml(text.leadContext)}:</strong> ${escapeHtml(selectedEvent.lead?.intent ?? text.noLead)}</p>`,
-        `<p><strong>${escapeHtml(text.outcomeGoal)}:</strong> ${escapeHtml(selectedEvent.event.outcomeGoal)}</p>`,
-        `<p><strong>${escapeHtml(text.preparation)}:</strong> ${escapeHtml(selectedEvent.event.preparation.join(", "))}</p>`,
-      ].join("");
-      const attendees = selectedEvent.contact?.email ? [selectedEvent.contact.email] : [];
-
-      const response = await csrfFetch(
-        calendarIntegrations.defaultProvider === "google"
-          ? "/api/calendar/google"
-          : "/api/calendar/microsoft",
-        {
-        body: JSON.stringify({
-          attendees,
-          body,
-          calendarEventId: selectedEvent.event.id,
-          createOnlineMeeting:
-            calendarIntegrations.defaultMeetingProvider === "microsoft-teams" ||
-            calendarIntegrations.defaultMeetingProvider === "google-meet",
-          endsAt: selectedEvent.event.endsAt,
-          location:
-            calendarIntegrations.defaultMeetingProvider === "microsoft-teams"
-              ? "Microsoft Teams"
-              : calendarIntegrations.defaultMeetingProvider === "google-meet"
-                ? "Google Meet"
-                : selectedEvent.event.location,
-          startsAt: selectedEvent.event.startsAt,
-          subject: selectedEvent.event.title,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-        },
-      );
-      const data = (await response.json()) as LiveCalendarResponse;
-
-      if (!response.ok || !data.ok) {
-        throw new Error(data.error || text.liveSyncError);
-      }
-
-      setLiveCalendarAction({
-        detail: text.liveSyncSuccess.replace("{{title}}", selectedEvent.event.title),
-        status: "success",
-        url: data.onlineMeetingUrl || data.webLink || null,
-      });
-    } catch (error) {
-      setLiveCalendarAction({
-        detail: error instanceof Error ? error.message : text.liveSyncError,
-        status: "error",
-      });
-    }
-  };
+  const openPersonalCalendar = () => document.getElementById("personal-calendar-workspace")?.focus();
 
   if (meetingBuilderOpen) {
     return (
@@ -2396,6 +2318,7 @@ export function CalendarCommandCenter({
 
   return (
     <section className="grid gap-4">
+      <PersonalCalendarWorkspace key={`${sessionUserId}:${workspaceId}`} workspaceId={workspaceId} sessionUserId={sessionUserId} language={language} activeProjectId={activeProjectId} projects={projects} store={personalCalendarStore} onEventsChanged={onEventsChanged} />
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -3247,7 +3170,7 @@ export function CalendarCommandCenter({
             </p>
             <h4 className="mt-1 break-words text-lg font-semibold">{text.liveIntegrationTitle}</h4>
             <p className="mt-2 max-w-3xl break-words text-sm text-emerald-900">
-              {text.liveSyncDescription}
+              {language === "de" ? "Persönliche Termine werden oben mit ausdrücklicher Kontobindung und Anbieterabgleich verwaltet." : "Manage personal events above with an explicit account binding and provider readback."}
             </p>
             <p
               aria-live={liveCalendarAction.status === "error" ? "assertive" : "polite"}
@@ -3266,13 +3189,10 @@ export function CalendarCommandCenter({
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
             <button
               className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-              disabled={!isHomeWorkspace || oauthStatus !== "ready" || liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
-              onClick={syncLiveTeamsMeeting}
+              onClick={openPersonalCalendar}
               type="button"
             >
-              {liveCalendarAction.status === "running"
-                ? text.liveSyncRunning
-                : text.syncWithProvider(selectedProviderLabel)}
+              {language === "de" ? "Persönlichen Kalender öffnen" : "Open personal calendar"}
             </button>
             {liveCalendarAction.url ? (
               <a

@@ -1,0 +1,18 @@
+PASS scoped personal connection selection excludes protected writers and states honest series scope
+PASS a location-only draft is protected on unload while a fully reverted form is clean
+PASS create sends explicit zone-correct UTC, provider, project and stable command ID; verified readback alone confirms
+PASS managed workspace uses the resolved member rather than the home login actor
+PASS lost or malformed response survives real section unmount with identical explicit replay
+PASS delayed double submission across remount sends one operation and late success clears only its scope
+PASS late success after same-scope section remount refreshes the active event list automatically
+PASS a stale project selection cannot be silently retargeted by a new project filter
+PASS processing journal result is not success and permits only status reconciliation
+PASS terminal validation keeps editable inputs but retires the failed intent
+PASS a permission denial after an unknown result cannot retire the original replay key
+PASS first permission denial without proof of non-start retains the exact command across remount
+PASS editing preserves original optimistic version and attendee names, explicit invitation and cancellation confirmation
+PASS removing every attendee retains confirmation of the previous recipient union
+PASS text-only edit preserves provider seconds and milliseconds including a DST fold and locks project binding
+PASS external conflict is compared and imported only explicitly with the reviewed ETag
+PASS a reviewed external cancellation can be imported with a null ETag without an outgoing write intent
+PASS definitively rejected local create can be discarded without a connection or cancellation invitation
