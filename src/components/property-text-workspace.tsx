@@ -22,20 +22,26 @@ export function PropertyTextWorkspace(props: PropertyTextWorkspaceProps) {
   }
   // Replacement saves allocate new block IDs. A confirmed refresh must load
   // those saved values, while the shared scoped store retains any newer draft.
-  const revision = JSON.stringify(props.blocks.map((block) => [block.id, block.updatedAt]));
-  return <PropertyTextWorkspaceForm key={`${props.workspaceId}:${props.listing.id}:${revision}`} {...props} />;
+  const scopedBlocks = props.blocks.filter(block => !block.unitId);
+  const revision = JSON.stringify(scopedBlocks.map((block) => [block.id, block.updatedAt]));
+  return <PropertyTextWorkspaceForm key={`${props.workspaceId}:${props.listing.id}:${props.language}:${revision}`} {...props} blocks={scopedBlocks} />;
 }
 
 function PropertyTextWorkspaceForm({ listing, workspaceId, blocks, language, canEdit, draftStore, draftUserId, onSaved }: PropertyTextWorkspaceProps) {
   const de = language === "de";
+  const contentLanguage = ["de","en","es"].includes(language) ? language : "de";
+  const sourceLanguage = (listing.canonicalPayload?.geography as {contentLanguage?:string})?.contentLanguage ?? "de";
+  const isCurrentLanguage = (block:PropertyTextBlock) => (block.metadata?.language ?? sourceLanguage) === contentLanguage;
+  const currentBlock = (key:string) => blocks.find(item=>item.textKey===key && isCurrentLanguage(item));
   const [initialDraft, setInitialDraft] = useState<PropertyDraft>(() => ({
     ...createPropertyCoreDraft(listing),
-    textBlocks: Object.fromEntries(PROPERTY_TEXT_FIELDS.map((field) => [field.key, blocks.find((item) => item.textKey === field.key)?.content ?? ""])),
-    textDocuments: Object.fromEntries(PROPERTY_TEXT_FIELDS.map((field) => [field.key, blocks.find((item) => item.textKey === field.key)?.metadata?.editorDocument as PropertyEditorValue["document"]])),
+    textBlocks: Object.fromEntries(PROPERTY_TEXT_FIELDS.map((field) => [field.key, currentBlock(field.key)?.content ?? ""])),
+    textDocuments: Object.fromEntries(PROPERTY_TEXT_FIELDS.map((field) => [field.key, currentBlock(field.key)?.metadata?.editorDocument as PropertyEditorValue["document"]])),
   }));
-  const scopeKey = JSON.stringify(["property-text", draftUserId, workspaceId, listing.id]);
+  const scopeKey = JSON.stringify(["property-text", draftUserId, workspaceId, listing.id, contentLanguage]);
   const { draft, setDraft, clearSubmittedDraft, resetDraft, isDraftDirty, isMutationBusy, acquireMutation, releaseMutation } = usePropertyDraft(draftStore, scopeKey, initialDraft);
   const [saving, setSaving] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -56,26 +62,27 @@ function PropertyTextWorkspaceForm({ listing, workspaceId, blocks, language, can
     setSaving(true);
     setNotice(null);
     try {
-      const textBlocks = [...blocks.filter((block) => !PROPERTY_TEXT_FIELDS.some((field) => field.key === block.textKey)), ...PROPERTY_TEXT_FIELDS.map((field) => {
-        const existing = blocks.find((item) => item.textKey === field.key);
+      const textBlocks = [...blocks.filter((block) => !isCurrentLanguage(block) || !PROPERTY_TEXT_FIELDS.some((field) => field.key === block.textKey)), ...PROPERTY_TEXT_FIELDS.map((field) => {
+        const existing = currentBlock(field.key);
         const text = submittedDraft.textBlocks[field.key] ?? "";
         const document = submittedDraft.textDocuments?.[field.key];
         return { ...existing, textKey: field.key, title: existing?.title || field.label, channel: existing?.channel ?? field.channel,
           content: text, visibility: existing?.visibility ?? (field.key === "internal" ? "internal" : "public"),
-          status: text === existing?.content && JSON.stringify(document) === JSON.stringify(existing?.metadata?.editorDocument)
+          status: reviewed && field.key !== "internal" ? "approved" : text === existing?.content && JSON.stringify(document) === JSON.stringify(existing?.metadata?.editorDocument)
             ? existing?.status : (field.key === "internal" ? "approved" : "draft"),
-          metadata: { ...existing?.metadata, editorDocument: document },
+          metadata: { ...existing?.metadata, language:contentLanguage, editorDocument: document },
         };
       })];
       const response = await csrfFetch(propertyWorkspaceEndpoint("/api/crm/properties", workspaceId), {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operation: "save_text_blocks", propertyId: listing.id, projectId: listing.projectId, textBlocks }),
+        body: JSON.stringify({ operation: "save_text_blocks", propertyId: listing.id, projectId: listing.projectId, textBlocks, expectedSnapshot: blocks.map(({id,updatedAt})=>({id,updatedAt})) }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || payload?.persisted !== true || !Number.isSafeInteger(payload?.data?.count) || payload.data.count < PROPERTY_TEXT_FIELDS.length) {
+      if (!response.ok || payload?.persisted !== true || !Number.isSafeInteger(payload?.data?.count) || payload.data.count < 0) {
         throw new Error("property_text_save_unconfirmed");
       }
       clearSubmittedDraft(submittedDraft);
+      setReviewed(false);
       if (mounted.current) {
         setInitialDraft(submittedDraft);
         setNotice({ error: false, text: de ? "Texte gespeichert." : "Texts saved." });
@@ -108,7 +115,8 @@ function PropertyTextWorkspaceForm({ listing, workspaceId, blocks, language, can
     <p role={notice?.error ? "alert" : "status"} aria-atomic="true">{notice?.text || (isDraftDirty ? (de ? "Ungespeicherte Änderungen" : "Unsaved changes") : (de ? "Keine ungespeicherten Änderungen" : "No unsaved changes"))}</p>
     {PROPERTY_TEXT_FIELDS.map((field) => <PropertyTextEditor key={field.key} label={de ? field.label : ({ expose: "Exposé", website: "Website", portal: "Portals", internal: "Internal", newsletter: "Newsletter" }[field.key])} language={language} disabled={!canEdit || isMutationBusy}
       value={{ text: draft.textBlocks[field.key] ?? "", document: draft.textDocuments?.[field.key] }}
-      onChange={(value) => setDraft((current) => ({ ...current, textBlocks: { ...current.textBlocks, [field.key]: value.text }, textDocuments: { ...current.textDocuments, [field.key]: value.document } }))} />)}
+      onChange={(value) => { setReviewed(false); setDraft((current) => ({ ...current, textBlocks: { ...current.textBlocks, [field.key]: value.text }, textDocuments: { ...current.textDocuments, [field.key]: value.document } })); }} />)}
+    <label className="flex min-h-11 items-center gap-3 rounded-lg bg-stone-50 p-3 text-sm"><input type="checkbox" checked={reviewed} disabled={!canEdit || isMutationBusy || !isDraftDirty} onChange={event=>setReviewed(event.target.checked)}/>{de ? "Geänderte öffentliche Texte geprüft und für Exposé/Website freigeben" : "Reviewed changed public texts: approve for brochure/website"}</label>
     <div className="flex flex-wrap gap-3">
       <button className="min-h-11 rounded-md bg-slate-950 px-4 py-2 font-semibold text-white disabled:opacity-50" type="button" disabled={!canEdit || !isDraftDirty || isMutationBusy} onClick={() => void save()}>{de ? "Texte speichern" : "Save texts"}</button>
       <button className="min-h-11 rounded-md border border-stone-300 px-4 py-2 font-semibold disabled:opacity-50" type="button" disabled={!isDraftDirty || isMutationBusy} onClick={discard}>{de ? "Textentwurf verwerfen" : "Discard text draft"}</button>

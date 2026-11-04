@@ -4,6 +4,7 @@ import { queryOne } from "@/lib/db/client";
 import { queryPropertyMediaMutation } from "@/lib/db/property-media-mutation";
 import { hasProductCapability } from "@/lib/product-model";
 import type { PropertyExposeOptions, PropertyExposeSource } from "@/lib/property-expose";
+import { publicPropertyDetailPayloadSql, publicUnitDetailsSql, publicPropertyCostKeys } from "@/lib/property-expose-details";
 
 export class PropertyExposeError extends Error {
   constructor(public readonly code: string, public readonly status: number, message: string) { super(message); }
@@ -64,7 +65,10 @@ export const exposeSourceSql = `jsonb_build_object(
     'purchaseAncillaryCalculation',p.canonical_payload->'purchaseAncillaryCalculation',
     'contactName',p.contact_name,'contactEmail',p.contact_email,'contactPhone',p.contact_phone,
     'availableFrom',p.available_from,'availableFromText',p.available_from_text,
-    'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until),
+    'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until,
+    'countryCode',p.canonical_payload->'geography'->>'countryCode',
+    'publicDetails',${publicPropertyDetailPayloadSql("p")},
+    'linkedUnitDetails',(select ${publicUnitDetailsSql("u")} from property_units u where u.id=p.unit_id and u.workspace_id=p.workspace_id and u.project_id=p.project_id)),
   'media',coalesce((select jsonb_agg(m.item order by m.item->>'id') from (
     select jsonb_build_object('id',pm.id,'assetId',ma.id,'kind',case when pm.media_type='floorplan' or pm.category='floorplan' then 'floorplan' else 'image' end,
       'title',pm.title,'isCover',pm.is_cover,'position',pm.position,'updatedAt',pm.updated_at,'mimeType',ma.mime_type,
@@ -90,10 +94,10 @@ export const exposeSourceSql = `jsonb_build_object(
   'texts',coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'key',t.text_key,'content',t.content,'updatedAt',t.updated_at) order by t.position,t.id)
     from property_text_blocks t where t.workspace_id=p.workspace_id and t.property_id=p.id and t.project_id is not distinct from p.project_id
       and t.unit_id is null and t.text_key='expose' and t.visibility in ('public','channel') and t.status in ('draft','needs_review','approved','published')),'[]'::jsonb),
-  'costs',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'label',c.label,'monthlyGrossCents',c.monthly_gross_cents,
+  'costs',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'costKey',c.cost_key,'label',c.label,'exposeVisible',true,'monthlyGrossCents',c.monthly_gross_cents,
     'oneTimeGrossCents',c.one_time_gross_cents,'optional',c.optional,'updatedAt',c.updated_at) order by c.position,c.id)
     from property_cost_items c where c.workspace_id=p.workspace_id and c.property_id=p.id and c.project_id is not distinct from p.project_id
-      and c.unit_id is null and c.expose_visible=true),'[]'::jsonb),
+      and (c.unit_id is null or c.unit_id=p.unit_id) and c.expose_visible=true and c.cost_key in (${publicPropertyCostKeys.map(key => `'${key}'`).join(",")})),'[]'::jsonb),
   'company',crm_property_expose_company_profile(p.workspace_id)
 )`;
 const scopedPropertySql = `p.id=$1::uuid and p.workspace_id=$2::uuid and

@@ -12,6 +12,8 @@ import { DEFAULT_PURCHASE_ANCILLARY_RATE } from "@/lib/property-purchase-costs";
 import { normalizePropertyGeography } from "@/lib/property-country";
 import { PropertyGeographyFields } from "./property-geography-fields";
 import { PropertyEnergyFields } from "./property-energy-fields";
+import { PropertyDetailsEditor } from "./property-details-editor";
+import { bindPropertyDetails,readPropertyDetails,type PropertyDetails } from "@/lib/property-details";
 
 export type PropertyCoreEditorProps = {
   listing: SellerListing;
@@ -32,10 +34,17 @@ export function PropertyCoreEditor(props: PropertyCoreEditorProps) {
   if (props.listing.workspaceId !== props.workspaceId || !/^[0-9a-f-]{36}$/i.test(props.listing.id)) {
     return <p role="alert">{props.language === "de" ? "Kein gespeichertes Objekt in diesem Workspace ausgewählt." : "No saved property selected in this workspace."}</p>;
   }
-  return <PropertyCoreEditorForm key={`${props.workspaceId}:${props.listing.id}`} {...props} />;
+  return <PropertyCoreEditorLoader key={`${props.workspaceId}:${props.listing.id}`} {...props}/>;
 }
 
-function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draftStore: suppliedStore, draftUserId = "current-user", onChanged, onClose }: PropertyCoreEditorProps) {
+function PropertyCoreEditorLoader(props:PropertyCoreEditorProps){
+ const [state,setState]=useState<{listing:SellerListing;details:PropertyDetails;snapshot:Record<string,unknown>}|null>(null),[failed,setFailed]=useState(false),[retry,setRetry]=useState(0);
+ useEffect(()=>{const controller=new AbortController();void fetch(`/api/crm/properties?${new URLSearchParams({workspaceId:props.workspaceId,operation:"full",propertyId:props.listing.id})}`,{cache:"no-store",signal:controller.signal}).then(async response=>{const value=await response.json();if(!response.ok||!value.data||value.data.listing.id!==props.listing.id||value.data.listing.workspaceId!==props.workspaceId)throw new Error("full_property_unavailable");setState(value.data);}).catch(()=>{if(!controller.signal.aborted)setFailed(true);});return()=>controller.abort();},[props.workspaceId,props.listing.id,retry]);
+ if(!state)return <section className="rounded-xl border border-slate-200 bg-white p-5" role="status"><p>{failed?(props.language==="de"?"Vollständige Objektdaten konnten nicht sicher geladen werden. Es werden keine leeren Detailwerte zum Speichern angeboten.":"Complete property data could not be loaded safely. No empty details are offered for saving."):(props.language==="de"?"Vollständige Objektdaten werden geladen …":"Loading complete property data …")}</p><div className="mt-3 flex gap-3">{failed?<button className={buttonClass} type="button" onClick={()=>{setFailed(false);setRetry(n=>n+1);}}>{props.language==="de"?"Erneut laden":"Retry"}</button>:null}<button className={buttonClass} type="button" onClick={props.onClose}>{props.language==="de"?"Schließen":"Close"}</button></div></section>;
+ return <PropertyCoreEditorForm {...props} listing={state.listing} loadedDetails={state.details} loadedSnapshot={state.snapshot}/>;
+}
+
+function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draftStore: suppliedStore, draftUserId = "current-user", onChanged, onClose,loadedDetails,loadedSnapshot }: PropertyCoreEditorProps&{loadedDetails:PropertyDetails;loadedSnapshot:Record<string,unknown>}) {
   const de = language === "de";
   const headingId = useId();
   const helpId = useId();
@@ -46,7 +55,7 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const [standaloneStore] = useState(createPropertyDraftStore);
   const store = suppliedStore ?? standaloneStore;
-  const [initialDraft, setInitialDraft] = useState(() => createPropertyCoreDraft(listing));
+  const [initialDraft, setInitialDraft] = useState<PropertyDraft>(() => {const value=createPropertyCoreDraft(listing);return {...value,propertyDetails:loadedDetails,coreEdit:{...value.coreEdit!,expectedFullSnapshot:loadedSnapshot}};});
   const scopeKey = propertyCoreDraftKey(draftUserId, workspaceId, listing.id);
   const { draft, setDraft, resetDraft, isDraftDirty, isMutationBusy } = usePropertyDraft(store, scopeKey, initialDraft);
   const [notice, setNotice] = useState<{ error: boolean; text: string; conflict?: boolean } | null>(null);
@@ -69,6 +78,11 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
   const regionSupported = Boolean(normalizePropertyGeography(draft.geography));
   const hasUnsupportedValue = !objectTypeSupported || !regionSupported;
   const change = (key: keyof PropertyDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
+  const extraFields: Array<[keyof PropertyDraft,string,string,string?]> = [
+    ["objectNumber","Objektnummer","Property number"],["internalReference","Interne Referenz","Internal reference"],["postalCode",draft.geography?.countryCode==="IE"?"Eircode":"Postleitzahl",draft.geography?.countryCode==="IE"?"Eircode":"Postcode"],["city","Ort","City / locality"],["street","Straße (strukturiert)","Street (structured)"],["subObjectType","Unterobjektart","Property subtype"],
+    ["availableFrom","Verfügbar ab","Available from","date"],["availableFromText","Verfügbarkeit – Freitext","Availability – free text"],["availabilityNote","Verfügbarkeit – Hinweis","Availability note"],["contactName","Ansprechpartner","Contact name"],["contactEmail","Kontakt-E-Mail","Contact email","email"],["contactPhone","Kontakt-Telefon","Contact phone","tel"],
+    ["rentNet","Nettomiete EUR / Monat","Net monthly rent EUR","number"],["rentPrice","Bruttomiete EUR / Monat","Gross monthly rent EUR","number"],["monthlyCostsGross","Monatliche Gesamtkosten EUR","Gross monthly costs EUR","number"],
+  ];
 
   // Shared sessions already install the global draft guard. The standalone
   // editor needs the same browser-exit protection without storing customer data.
@@ -123,7 +137,7 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
 
   return <section ref={sectionRef} aria-labelledby={headingId} className="min-w-0 rounded-2xl border border-slate-300 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0"><h3 ref={headingRef} tabIndex={-1} id={headingId} className="text-xl font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4">{de ? "Stammdaten bearbeiten" : "Edit core data"}</h3>
+      <div className="min-w-0"><h3 ref={headingRef} tabIndex={-1} id={headingId} className="text-xl font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4">{de ? "Objekt vollständig bearbeiten" : "Edit complete property"}</h3>
         <p className="mt-1 break-words text-sm text-slate-600">{listing.title} · {de ? "Objekt-ID" : "Property ID"}: {listing.id}</p></div>
       <button type="button" className={buttonClass} disabled={isMutationBusy} onClick={onClose}>{de ? "Schließen – Entwurf behalten" : "Close – keep draft"}</button>
     </div>
@@ -150,6 +164,12 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
         <label className="text-sm font-medium text-slate-700">{de ? "Angebotspreis (EUR) *" : "Asking price (EUR) *"}<input className={inputClass} name="price" type="number" min="0" step="0.01" inputMode="decimal" required value={draft.price} onChange={(event) => change("price", event.target.value)} /></label>
         <label className="text-sm font-medium text-slate-700">{de ? "Öffentlicher Preis (EUR, optional)" : "Public price (EUR, optional)"}<input className={inputClass} name="publicPrice" type="number" min="0" step="0.01" inputMode="decimal" aria-describedby={optionalNumberHelpId} value={draft.publicPrice} onChange={(event) => change("publicPrice", event.target.value)} /></label>
       </fieldset>
+      <fieldset disabled={disabled} className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <legend className="mb-3 font-semibold">{de?"Kennungen, Kontakt, Verfügbarkeit und Miete":"References, contact, availability and rent"}</legend>
+        <label className="text-sm font-medium text-slate-700">{de?"Vermarktungsart":"Marketing type"}<select className={inputClass} value={draft.marketingType} onChange={e=>change("marketingType",e.target.value)}><option value="sale">{de?"Verkauf":"Sale"}</option><option value="rent">{de?"Vermietung":"Rent"}</option><option value="sale_or_rent">{de?"Verkauf oder Vermietung":"Sale or rent"}</option></select></label>
+        {extraFields.map(([key,labelDE,labelEN,type])=><label key={key} className="min-w-0 text-sm font-medium text-slate-700">{de?labelDE:labelEN}<input className={inputClass} name={key} type={type??"text"} min={type==="number"?0:undefined} step={type==="number"?"0.01":undefined} maxLength={1000} value={typeof draft[key]==="string"?draft[key] as string:""} onChange={e=>change(key,e.target.value)}/></label>)}
+        <label className="text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-3">{de?"Interne Notizen (privat)":"Internal notes (private)"}<textarea className={inputClass} rows={3} maxLength={10000} value={draft.internalNotes??""} onChange={e=>change("internalNotes",e.target.value)}/></label>
+      </fieldset>
       <PropertyGeographyFields geography={draft.geography ?? null} region={draft.region} language={language} disabled={disabled}
         onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,
           energyCertificate: current.geography?.countryCode !== geography.countryCode ? { version: 1, countryCode: geography.countryCode } : current.energyCertificate,
@@ -161,6 +181,9 @@ function PropertyCoreEditorForm({ listing, workspaceId, language, canEdit, draft
         mode={draft.purchaseAncillaryMode ?? "manual"} rate={draft.purchaseAncillaryRate ?? DEFAULT_PURCHASE_ANCILLARY_RATE}
         manualAmount={draft.purchaseAncillaryCosts} disabled={disabled}
         onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))} />
+      <PropertyDetailsEditor details={bindPropertyDetails(draft.propertyDetails??readPropertyDetails(listing),draft as unknown as Record<string,unknown>)} language={language} countryCode={draft.geography?.countryCode} disabled={disabled}
+        onChange={propertyDetails=>setDraft(current=>({...current,propertyDetails}))}/>
+      <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{de?"Die einzelnen Kostenpositionen mit Netto/USt/Brutto sowie alle fünf Textkanäle werden im Bereich Dokumente / Exposé desselben Objekts bearbeitet. Private Abgeber-, Kataster- und Notizangaben werden nicht automatisch veröffentlicht.":"Edit individual net/VAT/gross cost items and all five text channels in Documents / Exposé for this property. Private seller, cadastre and note details are never published automatically."}</p>
       <p id={optionalNumberHelpId} className="mt-3 text-sm text-slate-600">{de ? "Optionale Zahlen: leer lassen behält den gespeicherten Wert; es löscht ihn nicht." : "Optional numbers: leaving a field blank preserves its saved value; it does not clear it."}</p>
       <p role="status" aria-atomic="true" className="mt-3 text-sm text-slate-600">{isMutationBusy ? (de ? "Speichervorgang läuft …" : "Save in progress …") : isDraftDirty ? (de ? "Ungespeicherte Änderungen an diesem Objekt." : "Unsaved changes to this property.") : (de ? "Keine ungespeicherten Änderungen." : "No unsaved changes.")}</p>
       <div className="mt-4 flex flex-wrap gap-3"><button type="submit" disabled={disabled || hasUnsupportedValue || !isDraftDirty} aria-describedby={hasUnsupportedValue ? unsupportedValueHelpId : undefined} className="min-h-11 rounded-full bg-[var(--brand-primary,#f6d95d)] px-5 py-2 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:cursor-not-allowed disabled:opacity-50">{de ? "Änderungen speichern" : "Save changes"}</button>

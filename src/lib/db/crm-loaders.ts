@@ -1,3 +1,4 @@
+import { UNIT_DETAIL_SELECT, mapUnitDetails } from "@/lib/property-unit-details";
 import type {
   AppSession,
 } from "@/lib/auth/session";
@@ -386,7 +387,7 @@ type PropertyBuildingRow = {
   workspaceId: string;
 };
 
-type PropertyUnitRow = {
+type PropertyUnitRow = Record<string, unknown> & {
   version?: number | string;
   areaSqm: number | string;
   buildingId: string | null;
@@ -1893,6 +1894,7 @@ async function loadPropertyUnitsForAssetSummaries(
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
@@ -2388,6 +2390,7 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
@@ -2409,6 +2412,7 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
 
 function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
   return {
+    ...mapUnitDetails(row),
     version: row.version === undefined ? undefined : Number(row.version),
     areaSqm: Number(row.areaSqm ?? 0),
     buildingId: row.buildingId ?? "",
@@ -2505,6 +2509,7 @@ export async function loadPaginatedPropertyUnits(
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",

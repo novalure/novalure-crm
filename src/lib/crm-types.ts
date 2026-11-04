@@ -668,7 +668,22 @@ export type PropertyBuilding = {
   floors: number;
 };
 
-export type PropertyUnit = {
+/** Unknown details are null; zero is an explicitly recorded value. */
+export type PropertyUnitDetails = {
+  balconyAreaSqm: number | null;
+  terraceAreaSqm: number | null;
+  gardenAreaSqm: number | null;
+  loggiaAreaSqm: number | null;
+  roofTerraceAreaSqm: number | null;
+  undergroundParkingCount: number | null;
+  carportCount: number | null;
+  outdoorParkingCount: number | null;
+  investorPriceCents: number | null;
+  bedrooms: number | null;
+  heatingYear: number | null;
+};
+
+export type PropertyUnit = Partial<PropertyUnitDetails> & {
   version?: number;
   id: ID;
   workspaceId: ID;

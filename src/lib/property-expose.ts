@@ -1,6 +1,6 @@
 /** Client-safe contract. Only the server builds document content from saved, scoped records. */
 export type PropertyExposeSource = "generated" | "uploaded";
-export type PropertyExposeLanguage = "de" | "en";
+export type PropertyExposeLanguage = "de" | "en" | "es";
 export type PropertyExposeOptions = {
   template: "compact" | "full";
   language: PropertyExposeLanguage;
@@ -75,6 +75,7 @@ export type PropertyExposeDocument = {
   address?: string;
   price?: string;
   facts: PropertyExposeFact[];
+  detailGroups?: { id: string; heading: string; facts: PropertyExposeFact[] }[];
   sections: PropertyExposeSection[];
   costs: PropertyExposeFact[];
   energy: PropertyExposeFact[];

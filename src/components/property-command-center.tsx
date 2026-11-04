@@ -1,4 +1,6 @@
 "use client";
+import { PropertyCostWorkspace } from "@/components/property-cost-workspace";
+import { PropertyTextWorkspace } from "@/components/property-text-workspace";
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import type {
@@ -26,7 +28,6 @@ import {
   createPropertyUnitBoardScope,
   getPropertyDepartmentTabs,
   getPropertyActionStates,
-  getPropertyFieldSections,
   PROPERTY_CHANNEL_TYPES,
   PROPERTY_CHANNEL_PRICE_KEYS,
   PROPERTY_COST_GROUPS,
@@ -62,6 +63,10 @@ import { createPropertyDraftStore } from "@/lib/property-draft-store";
 import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
 import { createPropertyGeography, type PropertyGeography } from "@/lib/property-country";
 import { PropertyGeographyFields } from "@/components/property-geography-fields";
+import { PropertyEnergyFields } from "@/components/property-energy-fields";
+import { PropertyDetailsEditor } from "@/components/property-details-editor";
+import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput,type PropertyDetails } from "@/lib/property-details";
+import type { PropertyEnergyCertificate } from "@/lib/property-country";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -95,6 +100,10 @@ type PropertyCommandCenterProps = {
 };
 
 type PropertyDraft = {
+  propertyDetails?:PropertyDetails;
+  energyCertificate?:PropertyEnergyCertificate;
+  city?:string;
+  street?:string;
   geography: PropertyGeography;
   address: string;
   areaSqm: string;
@@ -186,10 +195,6 @@ function ActionButton({
   );
 }
 
-function fieldKey(sectionId: string, label: string) {
-  return `${sectionId}.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-}
-
 function parseMoney(value: string | undefined) {
   if (!value) return undefined;
   const multiplier = value.toLowerCase().includes("mio") ? 1_000_000 : 1;
@@ -250,7 +255,6 @@ const propertyFieldClass = "grid min-w-0 gap-2 text-sm font-semibold text-slate-
 const propertyInputClass = "min-h-12 w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-base font-medium leading-6 text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 const propertySelectClass = `${propertyInputClass} pr-9`;
 const propertyTextareaClass = `${propertyInputClass} min-h-[168px] resize-y align-top`;
-const defaultOpenPropertyDetailSections = new Set(["location", "areas", "costs", "energy"]);
 
 function PropertyFormSection({
   children,
@@ -336,7 +340,6 @@ export function PropertyCommandCenter({
 }: PropertyCommandCenterProps) {
   const copy = getPropertyDepartmentCopy(language);
   const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
-  const localizedFieldSections = useMemo(() => getPropertyFieldSections(language), [language]);
   const assets = useMemo(
     () => buildPropertyAssets({
       brokerMandates,
@@ -495,14 +498,6 @@ export function PropertyCommandCenter({
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function updateField(sectionId: string, label: string, value: string) {
-    const key = fieldKey(sectionId, label);
-    setDraft((current) => ({
-      ...current,
-      fieldValues: { ...current.fieldValues, [key]: value },
-    }));
-  }
-
   function updateTextBlock(key: string, value: string) {
     setDraft((current) => ({
       ...current,
@@ -633,10 +628,12 @@ export function PropertyCommandCenter({
     setNotice(null);
 
     try {
+      const completeDetails=propertyDetailsInput({...draft,costItems:toCostItems(draft)});
       const response = await csrfFetch("/api/crm/properties", {
         body: JSON.stringify({
           operation: "create_property",
           ...draft,
+          ...completeDetails,
           costItems: toCostItems(draft),
           publicPrice: draft.publicPrice || draft.price,
           textBlocks: toTextBlocks(draft),
@@ -657,6 +654,9 @@ export function PropertyCommandCenter({
         availableFromText: "",
         availabilityNote: "",
         costItems: createCostDrafts(),
+        propertyDetails:undefined,
+        energyCertificate:undefined,
+        city:"",street:"",
         projectId: activeProjectId ?? "",
         price: "",
         publicPrice: "",
@@ -910,7 +910,7 @@ export function PropertyCommandCenter({
                     }}
                     type="button"
                   >
-                    {language === "de" ? "Stammdaten & Kaufnebenkosten bearbeiten" : "Edit property core & purchase costs"}
+                    {language === "de" ? "Objekt vollständig bearbeiten" : "Edit complete property"}
                   </button>
                   <button
                     className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
@@ -938,7 +938,7 @@ export function PropertyCommandCenter({
       {activeTab === "create" ? (
         <div className="grid gap-5">
         {actions.createProperty.enabled ? <GuidedPropertyCreateWorkspace workspaceId={context.workspaceId} projectId={activeProjectId} language={language}
-          onCreated={async listing=>{await refreshPropertyData();onClearPropertyFocus?.();setQuery("");setStatusFilter("all");setSelectedAssetId(`listing:${listing.id}`);setActiveTab("overview");}}/> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{actions.createProperty.reason}</p>}
+          onCreated={async listing=>{await refreshPropertyData();onClearPropertyFocus?.();setQuery("");setStatusFilter("all");setSelectedAssetId(`listing:${listing.id}`);setActiveTab("overview");setEditingListingId(listing.id);}}/> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{actions.createProperty.reason}</p>}
         <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">{language==="de"?"Erweiterte Direkterfassung mit allen Feldern":"Advanced direct entry with all fields"}</summary><p className="my-4 text-sm text-stone-600">{language==="de"?"Für fortsetzbare Serverentwürfe den Assistenten oben verwenden. Ungespeicherte Eingaben in dieser Direkterfassung bleiben nur in der aktuellen Ansicht.":"Use the wizard above for resumable server drafts. Unsaved direct-entry values stay only in the current view."}</p>
         <form className="grid gap-5" onSubmit={submitProperty}>
           <div className="sticky top-3 z-20 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
@@ -1034,7 +1034,9 @@ export function PropertyCommandCenter({
                   </label>
                 </div>
                 <PropertyGeographyFields geography={draft.geography} region={draft.region} language={language} disabled={saving}
-                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region }))} />
+                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,energyCertificate:current.geography.countryCode===geography.countryCode?current.energyCertificate:{version:1,countryCode:geography.countryCode} }))} />
+                <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className={propertyFieldClass}>{language==="de"?"Ort":"City / locality"}<input className={propertyInputClass} value={draft.city??""} onChange={e=>updateDraft("city",e.target.value)}/></label><label className={propertyFieldClass}>{language==="de"?"Straße (strukturiert)":"Street (structured)"}<input className={propertyInputClass} value={draft.street??""} onChange={e=>updateDraft("street",e.target.value)}/></label></div>
+                <PropertyEnergyFields geography={draft.geography} energy={draft.energyCertificate??{version:1,countryCode:draft.geography.countryCode}} usageType={draft.usageType} yearBuilt={Number(draft.yearBuilt)||0} language={language} disabled={saving} onChange={energyCertificate=>updateDraft("energyCertificate",energyCertificate)}/>
               </PropertyFormSection>
 
               <PropertyFormSection title={copy.form.areasAvailability}>
@@ -1137,25 +1139,7 @@ export function PropertyCommandCenter({
                 description={copy.form.legalDetailsDescription}
                 title={copy.form.legalDetails}
               >
-                <div className="grid gap-4">
-                  {localizedFieldSections.map((section) => (
-                    <details className="rounded-md border border-stone-200 bg-stone-50 p-4" key={section.id} open={defaultOpenPropertyDetailSections.has(section.id)}>
-                      <summary className="cursor-pointer text-base font-semibold text-slate-950">{section.title}</summary>
-                      <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                        {section.fields.map((field) => (
-                          <label className={propertyFieldClass} key={field.key}>
-                            <span>{field.label}</span>
-                            <input
-                              className={propertyInputClass}
-                              onChange={(event) => updateField(section.id, field.key, event.target.value)}
-                              value={draft.fieldValues[fieldKey(section.id, field.key)] ?? ""}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                  ))}
-                </div>
+                <PropertyDetailsEditor details={bindPropertyDetails(draft.propertyDetails??readPropertyDetails({canonicalPayload:{fieldValues:draft.fieldValues}}),draft as unknown as Record<string,unknown>)} language={language} countryCode={draft.geography.countryCode} disabled={saving} onChange={details=>updateDraft("propertyDetails",details)}/>
               </PropertyFormSection>
             </div>
 
@@ -1454,6 +1438,8 @@ export function PropertyCommandCenter({
             role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</p> : null}
           {selectedListing ? (
             <div className="mt-4">
+              <PropertyCostWorkspace draftStore={workflowDraftStore} draftUserId={draftUserId} listing={selectedListing} workspaceId={context.workspaceId} items={selectedCostItems} language={language} canEdit={workflowCapabilities.canEditProperty} onSaved={refreshPropertyData} />
+              <PropertyTextWorkspace listing={selectedListing} workspaceId={context.workspaceId} blocks={selectedTextBlocks} language={language} canEdit={workflowCapabilities.canEditProperty} draftStore={workflowDraftStore} draftUserId={draftUserId} onSaved={refreshPropertyData} />
               <PropertyExposeWorkspace
                 draftStore={workflowDraftStore}
                 draftUserId={draftUserId}

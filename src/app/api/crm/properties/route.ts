@@ -15,6 +15,8 @@ import {
   updatePropertyMediaOrder,
   updatePropertyPriceVisibility,
   updateSellerListingRecord,
+  loadFullPropertyRecord,
+  updateFullPropertyRecord,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
 import { canReviewPropertyDocuments, reviewPropertyDocument } from "@/lib/db/property-document-review";
@@ -109,6 +111,13 @@ export async function GET(request: Request) {
       canReviewDocuments: canReviewPropertyDocuments(auth.session),
       canAssignInquiry: canAssignPropertyInquiry(auth.session),
     } }, { headers: privateHeaders });
+  }
+  if(readOperation==="full"){
+    const allowed=["workspaceId","operation","propertyId"],id=url.searchParams.get("propertyId")??"";
+    if(!uuidPattern.test(id)||!url.searchParams.has("workspaceId")||[...url.searchParams.keys()].some(key=>!allowed.includes(key))||allowed.some(key=>url.searchParams.getAll(key).length!==1))return NextResponse.json({error:"Invalid complete property scope"},{status:400,headers:privateHeaders});
+    if(!canWriteProperty(auth.session))return NextResponse.json({error:"Property operating rights required"},{status:403,headers:privateHeaders});
+    try{return NextResponse.json({data:await loadFullPropertyRecord(auth.session,id),persisted:true},{headers:privateHeaders});}
+    catch(error){return NextResponse.json({error:error instanceof CrmCommandError?error.message:"Complete property data unavailable"},{status:error instanceof CrmCommandError?error.status:503,headers:privateHeaders});}
   }
   if (readOperation === "inquiry_assignments") {
     const allowed = ["workspaceId", "operation", "projectId"];
@@ -294,6 +303,10 @@ export async function POST(request: Request) {
       });
     }
 
+    if(operation==="update_property_full"){
+      const result=await updateFullPropertyRecord({session,propertyId:input.propertyId,property:asObject(input.property)});
+      return NextResponse.json(result.persisted?{data:result.data,persisted:true}:{error:result.reason},{status:result.persisted?200:getWriteStatus(result.reason)});
+    }
     if (operation === "update_property_core") {
       const propertyPayload = asObject(input.property);
       const result = await updateSellerListingRecord({
@@ -308,11 +321,13 @@ export async function POST(request: Request) {
     }
 
     if (operation === "save_text_blocks") {
+      if (!Array.isArray(input.expectedSnapshot) || !Array.isArray(input.textBlocks) || input.textBlocks.length > 300) return NextResponse.json({error:"Invalid fragment comparison snapshot"},{status:400});
       const result = await savePropertyTextBlocks({
         projectId: input.projectId,
         propertyId: input.propertyId,
         session,
         textBlocks: input.textBlocks,
+        expectedSnapshot: input.expectedSnapshot,
       });
       if (!result.persisted) {
         return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
@@ -321,8 +336,10 @@ export async function POST(request: Request) {
     }
 
     if (operation === "save_cost_items") {
+      if (!Array.isArray(input.expectedSnapshot) || !Array.isArray(input.costItems) || input.costItems.length > 300) return NextResponse.json({error:"Invalid fragment comparison snapshot"},{status:400});
       const result = await savePropertyCostItems({
         costItems: input.costItems,
+        expectedSnapshot: input.expectedSnapshot,
         projectId: input.projectId,
         propertyId: input.propertyId,
         session,

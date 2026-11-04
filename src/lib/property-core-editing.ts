@@ -5,6 +5,8 @@ import { parsePropertyEuroCents } from "./property-money";
 import { DEFAULT_PURCHASE_ANCILLARY_RATE, readPurchaseAncillaryCalculation } from "./property-purchase-costs";
 import { propertyPurchaseCostsPayload } from "./property-purchase-costs-draft";
 import { normalizePropertyEnergyCertificate, normalizePropertyGeography, normalizePropertyRegion, readPropertyGeography } from "./property-country";
+import { readPropertyDetails, propertyDetailsInput, propertyDetailsLegacyFields } from "./property-details";
+import { propertyFullSnapshot } from "./property-full-editing";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const propertyObjectTypes = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"] as const;
@@ -45,19 +47,21 @@ export function createPropertyCoreDraft(listing: SellerListing): PropertyDraft {
     coreEdit: { propertyId: listing.id, workspaceId: listing.workspaceId, expected: propertyCoreSnapshot(listing), expectedAncillaryCosts: {
       amountCents: listing.purchaseAncillaryCosts == null ? null : parsePropertyEuroCents(listing.purchaseAncillaryCosts), calculation,
     }, expectedGeography: listing.canonicalPayload?.geography as Record<string, unknown> | null ?? null,
-      expectedEnergyCertificate: listing.canonicalPayload?.energyCertificate as Record<string, unknown> | null ?? null, expectedUsageType: listing.usageType ?? "" },
+      expectedEnergyCertificate: listing.canonicalPayload?.energyCertificate as Record<string, unknown> | null ?? null, expectedUsageType: listing.usageType ?? "",expectedFullSnapshot:propertyFullSnapshot(listing) },
+    propertyDetails:readPropertyDetails(listing),
+    city:listing.city??"",street:listing.street??"",internalNotes:listing.internalNotes??"",
     geography,
     energyCertificate: normalizePropertyEnergyCertificate(listing.canonicalPayload?.energyCertificate) ?? { version: 1, countryCode: geography?.countryCode },
-    address: listing.address, areaSqm: String(listing.areaSqm), availableFrom: "", availableFromText: "", availabilityNote: "",
-    channelPriceVisibility: {}, contactEmail: "", contactName: "", contactPhone: "", costItems: [], fieldValues: {},
-    gdprStatus: "", internalReference: "", marketingType: listing.marketingType || "sale", monthlyCostsGross: "", objectType: listing.objectType,
-    objectNumber: "", portalMappingStatus: "", postalCode: "", price: String(listing.targetPrice), priceVisibility: "publish_price",
+    address: listing.address, areaSqm: String(listing.areaSqm), availableFrom: listing.availableFrom?.slice(0,10)??"", availableFromText: listing.availableFromText??"", availabilityNote: listing.availabilityNote??"",
+    channelPriceVisibility: listing.channelPriceVisibility??{}, contactEmail: listing.contactEmail??"", contactName: listing.contactName??"", contactPhone: listing.contactPhone??"", costItems: [], fieldValues: propertyDetailsLegacyFields(readPropertyDetails(listing)),
+    gdprStatus: listing.gdprStatus??"needs_review", internalReference: listing.internalReference??"", marketingType: listing.marketingType || "sale", monthlyCostsGross: listing.monthlyCostsGross==null?"":String(listing.monthlyCostsGross), objectType: listing.objectType,
+    objectNumber: listing.objectNumber??"", portalMappingStatus: listing.portalMappingStatus??"needs_review", postalCode: listing.postalCode??"", price: String(listing.targetPrice), priceVisibility: listing.priceVisibility??"price_on_request",
     projectId: listing.projectId || "", publicPrice: listing.publicPrice == null ? "" : String(listing.publicPrice),
     purchaseAncillaryCosts: listing.purchaseAncillaryCosts == null ? "" : String(listing.purchaseAncillaryCosts),
     purchaseAncillaryMode: calculation && geography?.countryCode === "AT" ? "percentage" : "manual",
     purchaseAncillaryRate: calculation ? String(calculation.rateBps / 100) : DEFAULT_PURCHASE_ANCILLARY_RATE,
-    region: listing.region, rentNet: "", rentPrice: "", rooms: listing.rooms == null ? "" : String(listing.rooms),
-    subObjectType: "", textBlocks: {}, title: listing.title, usageType: listing.usageType ?? "", yearBuilt: listing.yearBuilt ? String(listing.yearBuilt) : "",
+    region: listing.region, rentNet: listing.rentNet==null?"":String(listing.rentNet), rentPrice: listing.rentPrice==null?"":String(listing.rentPrice), rooms: listing.rooms == null ? "" : String(listing.rooms),
+    subObjectType: listing.subObjectType??"", textBlocks: {}, title: listing.title, usageType: listing.usageType ?? "", yearBuilt: listing.yearBuilt ? String(listing.yearBuilt) : "",
   };
 }
 
@@ -83,14 +87,21 @@ export function propertyCoreUpdatePayload(draft: PropertyDraft, workspaceId: str
     throw new Error("Invalid property editor input");
   }
   // Only editable core values are sent. No links, publication flags or content fragments.
+  const full = draft.coreEdit.expectedFullSnapshot ? {
+    expectedFullSnapshot:draft.coreEdit.expectedFullSnapshot,
+    objectNumber:draft.objectNumber,internalReference:draft.internalReference,postalCode:draft.postalCode,city:draft.city??"",street:draft.street??"",contactName:draft.contactName,contactEmail:draft.contactEmail,contactPhone:draft.contactPhone,
+    subObjectType:draft.subObjectType,availableFrom:draft.availableFrom,availableFromText:draft.availableFromText,availabilityNote:draft.availabilityNote,internalNotes:draft.internalNotes??"",marketingType:draft.marketingType,
+    ...Object.fromEntries((["rentNet","rentPrice","monthlyCostsGross"] as const).map(key=>{const value=draft[key].trim()===""?null:editorPrice(draft[key]);if(value===null&&draft[key].trim()!=="")throw new Error("Invalid property editor money");return[key,value===null?null:value/100];})),
+    ...propertyDetailsInput({...draft,propertyDetails:draft.propertyDetails??readPropertyDetails({canonicalPayload:{fieldValues:draft.fieldValues}})}),
+  } : {};
   return {
-    operation: "update_property_core", propertyId,
+    operation: draft.coreEdit.expectedFullSnapshot ? "update_property_full" : "update_property_core", propertyId,
     property: { title, address, region: geography.region, objectType: draft.objectType, areaSqm, rooms, yearBuilt,
       price: price / 100, publicPrice: publicPrice === undefined ? undefined : publicPrice / 100, expectedCore: expected,
       geography, expectedGeography: draft.coreEdit.expectedGeography ?? null,
       energyCertificate, expectedEnergyCertificate: draft.coreEdit.expectedEnergyCertificate ?? null,
       usageType: draft.usageType, expectedUsageType: draft.coreEdit.expectedUsageType ?? "",
-      ...propertyPurchaseCostsPayload(draft), expectedAncillaryCosts: draft.coreEdit.expectedAncillaryCosts },
+      ...propertyPurchaseCostsPayload(draft), expectedAncillaryCosts: draft.coreEdit.expectedAncillaryCosts,...full },
   };
 }
 

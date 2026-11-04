@@ -1,4 +1,5 @@
 import type { FrozenWebExposeTemplate } from "@/lib/web-expose-templates";
+import type { PublicPropertyDetailGroup, PublicPropertyFact } from "@/lib/property-expose-details";
 /** Shared public contract. Never serialize a SellerListing or a CRM contact here. */
 export type WebExposeLanguage = "de" | "en" | "es";
 export function webExposePropertyType(value:string,language:WebExposeLanguage){
@@ -17,9 +18,11 @@ export type WebExposeSnapshot = {
   priceVisibility?: "publish_price" | "price_on_request" | "hide_price";
   inventoryAsOf?: string;
   facts: { label: string; value: string }[];
+  detailGroups?: PublicPropertyDetailGroup[];
+  costs?: PublicPropertyFact[];
   media: { id: string; title: string; kind: "image" | "floorplan"; assetId: string }[];
   resources?: WebExposePublicResource[];
-  units: { id: string; number: string; area: string; rooms: string; price: string | null; status: string }[];
+  units: { id: string; number: string; area: string; rooms: string; price: string | null; status: string; facts?: PublicPropertyFact[] }[];
   contact: { name: string; email: string; phone: string };
   privacyUrl: string; legalUrl: string; controller: string; publishedAt: string;
 };

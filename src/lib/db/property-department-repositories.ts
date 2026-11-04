@@ -1,4 +1,6 @@
-import { withCrmRead, CrmCommandError } from "@/lib/crm-command";
+import { bindPropertyDetails, readPropertyDetails, propertyDetailsLegacyFields, propertyDetailCostBindings, propertyDetailsInput } from "@/lib/property-details";
+import { fullPropertyInputKeys,propertyFullSnapshot,samePropertySnapshot } from "@/lib/property-full-editing";
+import { withCrmRead, CrmCommandError,assertProjectGrant } from "@/lib/crm-command";
 import type { AppSession } from "@/lib/auth/session";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
 import type {
@@ -154,6 +156,8 @@ async function createSellerListingRecordInTransaction(input: {
     return { persisted: false, reason: "Database persistence is not configured" };
   }
 
+  try { input={...input,property:{...input.property,...propertyDetailsInput(input.property)}}; }
+  catch { return {persisted:false,reason:"Invalid typed property details"}; }
   const fields = asPlainObject(input.property.fieldValues);
   const country = propertyGeographyFromInput(input.property);
   if (!country.ok) return { persisted: false, reason: country.reason };
@@ -236,6 +240,7 @@ async function createSellerListingRecordInTransaction(input: {
     },
     channelPriceVisibility,
     fieldValues: fields,
+    propertyDetails:input.property.propertyDetails,
   };
 
   if (!title || !address) {
@@ -807,6 +812,7 @@ async function updateSellerListingRecordInTransaction(input: {
         ...(geography ? { geography } : {}),
         ...(energyCertificate ? { energyCertificate } : {}),
         ...(Object.hasOwn(input.property, "fieldValues") ? { fieldValues: fields } : {}),
+        ...(Object.hasOwn(input.property, "propertyDetails") ? { propertyDetails:input.property.propertyDetails } : {}),
         updatedByUserId: input.session.userId,
         updatedFrom: "property_department",
       }),
@@ -850,10 +856,25 @@ async function updateSellerListingRecordInTransaction(input: {
   return { data: listing, persisted: true };
 }
 
+async function lockPropertyFragments(session: AppSession, propertyId: string, requestedProject: unknown,
+  table: "property_text_blocks" | "property_cost_items", expected: unknown): Promise<RepositoryWriteResult<{projectId: string | null}>> {
+  const property = await queryOne<{projectId:string|null; allowed:boolean}>(`select project_id as "projectId",crm_project_access(workspace_id,project_id,true) as allowed from seller_listings where workspace_id=$1 and id=$2::uuid for update`, [session.workspaceId, propertyId]);
+  if (!property || !property.allowed) return {persisted:false,reason:"Forbidden property fragment scope"};
+  if (requestedProject && requestedProject !== property.projectId) return {persisted:false,reason:"Invalid property project"};
+  if (expected !== undefined) {
+    if (!Array.isArray(expected) || expected.length > 300 || expected.some(x=>!x || !isUuid(x.id) || typeof x.updatedAt !== "string" || !Number.isFinite(Date.parse(x.updatedAt)))) return {persisted:false,reason:"Invalid fragment comparison snapshot"};
+    const current = await queryOne<{items:{id:string;updatedAt:string}[]}>(`select coalesce(jsonb_agg(jsonb_build_object('id',id,'updatedAt',updated_at) order by id),'[]') as items from ${table} where workspace_id=$1 and property_id=$2::uuid and unit_id is null`,[session.workspaceId,propertyId]);
+    const normalize=(items:{id:string;updatedAt:string}[])=>JSON.stringify(items.map(x=>[x.id,new Date(x.updatedAt).toISOString()]).sort((a,b)=>a[0].localeCompare(b[0])));
+    if (normalize(expected)!==normalize(current?.items??[])) return {persisted:false,reason:"Conflict: property fragments changed; reload before saving"};
+  }
+  return {persisted:true,data:{projectId:property.projectId}};
+}
+
 async function savePropertyTextBlocksInTransaction(input: {
   projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
+  expectedSnapshot?: unknown;
   textBlocks: unknown;
 }): Promise<RepositoryWriteResult<{ count: number }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -863,9 +884,12 @@ async function savePropertyTextBlocksInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const locked = await lockPropertyFragments(input.session, propertyId, input.projectId, "property_text_blocks", input.expectedSnapshot);
+  if (!locked.persisted) return locked;
+  const projectId = locked.data.projectId;
   const textBlocks = asObjectArray(input.textBlocks);
-  await executeQuery("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid", [
+  if (!Array.isArray(input.textBlocks) || input.textBlocks.length !== textBlocks.length || textBlocks.some(block=>!(cleanString(block.textKey)||cleanString(block.key)) || typeof block.content!=="string" || (block.unitId!=null))) return {persisted:false,reason:"Invalid text block entries"};
+  await executeQuery("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid and unit_id is null", [
     input.session.workspaceId,
     propertyId,
   ]);
@@ -925,6 +949,7 @@ async function savePropertyTextBlocksInTransaction(input: {
     title: "Objekttexte gespeichert",
   });
 
+  await executeQuery("update seller_listings set updated_at=clock_timestamp() where workspace_id=$1 and id=$2::uuid", [input.session.workspaceId, propertyId]);
   return { data: { count }, persisted: true };
 }
 
@@ -933,6 +958,7 @@ async function savePropertyCostItemsInTransaction(input: {
   projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
+  expectedSnapshot?: unknown;
 }): Promise<RepositoryWriteResult<{ count: number }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "Database persistence is not configured" };
@@ -941,9 +967,14 @@ async function savePropertyCostItemsInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const locked = await lockPropertyFragments(input.session, propertyId, input.projectId, "property_cost_items", input.expectedSnapshot);
+  if (!locked.persisted) return locked;
+  const projectId = locked.data.projectId;
   const costItems = asObjectArray(input.costItems);
-  await executeQuery("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid", [
+  if (!Array.isArray(input.costItems) || input.costItems.length !== costItems.length || costItems.some(item=>!(cleanString(item.costKey)||cleanString(item.key)) || !cleanString(item.label) || item.unitId!=null)) return {persisted:false,reason:"Invalid cost item entries"};
+  const invalidMoney = validateCostItemMoney(costItems);
+  if (invalidMoney) return { persisted: false, reason: invalidMoney };
+  await executeQuery("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid and unit_id is null", [
     input.session.workspaceId,
     propertyId,
   ]);
@@ -1034,6 +1065,11 @@ async function savePropertyCostItemsInTransaction(input: {
     title: "Kostenmatrix gespeichert",
   });
 
+  const savedSource=await queryOne<{canonical:Record<string,unknown>}>("select canonical_payload as canonical from seller_listings where workspace_id=$1 and id=$2::uuid",[input.session.workspaceId,propertyId]);
+  const priorDetails=readPropertyDetails({canonicalPayload:savedSource?.canonical});
+  for(const id of Object.values(propertyDetailCostBindings)) priorDetails.values[id]=null;
+  const details=bindPropertyDetails(priorDetails,{costItems});
+  await executeQuery("update seller_listings set canonical_payload=coalesce(canonical_payload,'{}')||jsonb_build_object('propertyDetails',$3::jsonb,'fieldValues',$4::jsonb),updated_at=clock_timestamp() where workspace_id=$1 and id=$2::uuid", [input.session.workspaceId, propertyId,JSON.stringify(details),JSON.stringify(propertyDetailsLegacyFields(details))]);
   return { data: { count }, persisted: true };
 }
 
@@ -2134,12 +2170,52 @@ function toOptionalIso(value: string | Date | null) {
   return value ? toIso(value) : undefined;
 }
 
+export async function loadFullPropertyRecord(session:AppSession,propertyId:string){
+ return withCrmRead(session,async(tx,fresh)=>{
+  if(!isUuid(propertyId))throw new CrmCommandError("INVALID_INPUT","Invalid property identifier");
+  const row=await queryOne<SellerListingRow&{legacyRow:Record<string,unknown>}>(`select ${sellerListingReturningSql},to_jsonb(seller_listings) as "legacyRow" from seller_listings where id=$1::uuid and workspace_id=$2::uuid`,[propertyId,fresh.workspaceId]);
+  if(!row)throw new CrmCommandError("NOT_FOUND","Property not found",404);
+  if(row.projectId)await assertProjectGrant(tx,fresh,row.projectId);
+  const listing=toSellerListing(row),details=readPropertyDetails(listing,row.legacyRow);return {listing,details,snapshot:propertyFullSnapshot(listing,details)};
+ });
+}
+
+export async function updateFullPropertyRecord(input:{session:AppSession;propertyId:unknown;property:Record<string,unknown>}):Promise<RepositoryWriteResult<SellerListing>>{
+ return withCrmRead(input.session,async(tx,fresh)=>{
+  if(!fresh.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission required",403);
+  const id=normalizeEntityId(input.propertyId);if(!id)return{persisted:false,reason:"Invalid property identifier"};
+  if(Object.keys(input.property).some(key=>!(fullPropertyInputKeys as readonly string[]).includes(key))||!Object.hasOwn(input.property,"expectedFullSnapshot")||!Object.hasOwn(input.property,"propertyDetails"))return{persisted:false,reason:"Invalid complete property comparison snapshot"};
+  const row=await queryOne<SellerListingRow&{legacyRow:Record<string,unknown>}>(`select ${sellerListingReturningSql},to_jsonb(seller_listings) as "legacyRow" from seller_listings where id=$1::uuid and workspace_id=$2::uuid for update`,[id,fresh.workspaceId]);
+  if(!row)return{persisted:false,reason:"Property not found"};
+  if(row.projectId)await assertProjectGrant(tx,fresh,row.projectId,true);
+  const before=toSellerListing(row);
+  if(!samePropertySnapshot(propertyFullSnapshot(before,readPropertyDetails(before,row.legacyRow)),input.property.expectedFullSnapshot))return{persisted:false,reason:"Conflict: property content changed; reload before editing again"};
+  let property:Record<string,unknown>;
+  try{property={...input.property,...propertyDetailsInput(input.property)};}catch{return{persisted:false,reason:"Invalid typed property details"};}
+  const textKeys=["objectNumber","internalReference","postalCode","city","street","contactName","contactEmail","contactPhone","subObjectType","availableFromText","availabilityNote","internalNotes"];
+  if(textKeys.some(key=>typeof property[key]!=="string"||String(property[key]).length>(key==="internalNotes"?10000:1000)||/[\u0000-\u0008\u000b\u000c\u000e-\u001f<>]/.test(String(property[key])))||!["sale","rent","sale_or_rent"].includes(String(property.marketingType)))return{persisted:false,reason:"Invalid complete property input"};
+  if(property.contactEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(property.contactEmail)))return{persisted:false,reason:"Invalid property contact email"};
+  if(property.availableFrom&&!dateOnly(property.availableFrom))return{persisted:false,reason:"Invalid property availability date"};
+  for(const key of ["rentNet","rentPrice","monthlyCostsGross"])if(property[key]!==null&&parsePropertyEuroCents(property[key])===null)return{persisted:false,reason:"Invalid complete property money"};
+  const saved=await updateSellerListingRecordInTransaction({session:fresh,propertyId:id,property});
+  if(!saved.persisted)return saved;
+  // Full editing permits intentional clearing of optional fields. The legacy
+  // partial editor retains its previous coalesce semantics for old callers.
+  await tx.execute(`update seller_listings set object_number=$3,internal_reference=$4,postal_code=$5,city=$6,street=$7,contact_name=$8,contact_email=$9,contact_phone=$10,sub_object_type=$11,available_from=$12::date,available_from_text=$13,availability_note=$14,internal_notes=$15,marketing_type=$16,rent_net_cents=$17::bigint,rent_price_cents=$18::bigint,monthly_costs_gross_cents=$19::bigint,updated_at=now() where id=$1::uuid and workspace_id=$2::uuid`,[id,fresh.workspaceId,...textKeys.slice(0,9).map(key=>property[key]),property.availableFrom?dateOnly(property.availableFrom):null,property.availableFromText,property.availabilityNote,property.internalNotes,property.marketingType,...["rentNet","rentPrice","monthlyCostsGross"].map(key=>property[key]===null?null:parsePropertyEuroCents(property[key]))]);
+  const updated=toSellerListing((await queryOne<SellerListingRow>(`select ${sellerListingReturningSql} from seller_listings where id=$1::uuid and workspace_id=$2::uuid`,[id,fresh.workspaceId]))!);
+  await writeAuditLog({action:"property.full_updated",after:updated,before,entityId:id,entityType:"seller_listing",projectId:row.projectId??undefined,session:fresh});
+  return{persisted:true,data:updated};
+ });
+}
+
 export async function createSellerListingRecord(input:Parameters<typeof createSellerListingRecordInTransaction>[0]):ReturnType<typeof createSellerListingRecordInTransaction>{
  if(!canPersist())return createSellerListingRecordInTransaction(input);
  return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return createSellerListingRecordInTransaction({...input,session})});
 }
 
 export async function updateSellerListingRecord(input:Parameters<typeof updateSellerListingRecordInTransaction>[0]):ReturnType<typeof updateSellerListingRecordInTransaction>{
+ if(Object.hasOwn(input.property,"expectedFullSnapshot"))return updateFullPropertyRecord(input);
+ if(Object.hasOwn(input.property,"propertyDetails")||Object.hasOwn(input.property,"fieldValues"))return{persisted:false,reason:"Invalid complete property comparison snapshot"};
  if(!canPersist())return updateSellerListingRecordInTransaction(input);
  return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return updateSellerListingRecordInTransaction({...input,session})});
 }

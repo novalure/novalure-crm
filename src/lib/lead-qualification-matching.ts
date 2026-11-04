@@ -1,8 +1,8 @@
 /** Explainable property fit only; no personal, demographic or creditworthiness score. */
 import {leadObjectiveFeatureLabels,leadPurchaseWindowExpired,type LeadFeatureRules,type LeadObjectiveFeature,type LeadPurchaseWindow} from './lead-qualification-plan';
-export const leadMatchAlgorithmVersion = "property-fit-2";
+export const leadMatchAlgorithmVersion = "property-fit-3";
 export type LeadMatchProfile = { countryCode: string; location: string; propertyType: string; budgetFromCents: number; budgetToCents: number; areaSqm: number | null; rooms: number | null; useCase: "Eigennutzung" | "Anlage" | null; manualCriteria?: string[];purchaseWindow?:LeadPurchaseWindow|null;featureRules?:LeadFeatureRules;requirementsReviewed?:boolean };
-export type LeadMatchProperty = { id: string; title: string; countryCode: string; region: string; city: string; propertyType: string; priceCents: number | null; areaSqm: number | null; rooms: number | null; marketingType: string; usageType: string; available: boolean;features?:Partial<Record<LeadObjectiveFeature,boolean|null>> };
+export type LeadMatchProperty = { id: string; title: string; countryCode: string; region: string; city: string; propertyType: string; priceCents: number | null; areaSqm: number | null; rooms: number | null; marketingType: string; usageType: string; available: boolean;unitUpdatedAt?:string|null;features?:Partial<Record<LeadObjectiveFeature,boolean|null>> };
 export type LeadMatchReason = { criterion: string; result: "match" | "mismatch" | "unknown" | "not_requested"; points: number; possible: number; explanation: string };
 export type LeadMatchResult = { score: number; coverage: number; eligible: boolean; reasons: LeadMatchReason[] };
 const folded = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();

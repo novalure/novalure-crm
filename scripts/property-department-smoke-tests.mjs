@@ -237,8 +237,12 @@ test("property create view uses focused, grouped form sections instead of a cram
   assert.match(component, /propertyInputClass = "min-h-12/);
   assert.match(component, /propertyTextareaClass = `\$\{propertyInputClass\} min-h-\[168px\]/);
   assert.match(component, /min-h-\[240px\]/);
-  assert.match(component, /defaultOpenPropertyDetailSections/);
-  assert.match(component, /md:grid-cols-2 2xl:grid-cols-3/);
+  const details = read("src/components/property-details-editor.tsx");
+  assert.match(component, /PropertyDetailsEditor details=\{bindPropertyDetails/);
+  assert.match(details, /Object\.keys\(groups\)\.map\(group=><details/);
+  assert.match(details, /sm:grid-cols-2 lg:grid-cols-3/);
+  assert.match(details, /def\.kind==="boolean"\|\|def\.kind==="enum"/);
+  assert.match(details, /Nicht angegeben \/ unbekannt/);
   assert.doesNotMatch(component, /xl:grid-cols-4[\s\S]{0,120}PROPERTY_FIELD_SECTIONS/);
 });
 
@@ -418,8 +422,12 @@ test("phase 2 property KPIs use unit scope, default units and non-multiplying pr
   const repository = read("src/lib/db/property-department-repositories.ts");
   const qa = read("scripts/qa-phase2-property-kpis.mjs");
 
-  assert.match(domain, /const unitById = new Map\(input\.units\.map/);
-  assert.match(domain, /listing\.unitId[\s\S]*unitById\.get\(listing\.unitId\)/);
+  // Listings may own several units through saved metadata, in addition to the
+  // primitive link. Project membership alone never establishes ownership.
+  assert.match(domain, /const unitsByProject = groupBy\(input\.units/);
+  assert.match(domain, /const listingUnits = \(unitsByProject\.get\(listing\.projectId\)[\s\S]*unit\.workspaceId === listing\.workspaceId && \(unit\.id === listing\.unitId \|\| unit\.sellerListingId === listing\.id\)/);
+  assert.match(domain, /const listingUnitIds = new Set\(listingUnits\.map/);
+  assert.match(domain, /listingUnitIds\.has\(reservation\.unitId\)/);
   assert.match(domain, /const unitValue = listingUnits\.reduce/);
   assert.doesNotMatch(domain, /const internalPrice = listing\.targetPrice \|\| listing\.marketValue/);
   assert.match(domain, /projectIdsCoveredByListing/);

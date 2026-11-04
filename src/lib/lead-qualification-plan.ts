@@ -1,7 +1,7 @@
 import {parsePropertyEuroCents} from './property-money';
-export const leadObjectiveFeatures=['balcony','terrace','garden','garage','cellar'] as const;
+export const leadObjectiveFeatures=['balcony','terrace','garden','garage','cellar','elevator','accessible','touristRental','locationLake','locationMountains','locationCity','locationRural'] as const;
 export type LeadObjectiveFeature=typeof leadObjectiveFeatures[number];
-export const leadObjectiveFeatureLabels:Record<LeadObjectiveFeature,string>={balcony:'Balkon',terrace:'Terrasse',garden:'Garten',garage:'Garage',cellar:'Keller'};
+export const leadObjectiveFeatureLabels:Record<LeadObjectiveFeature,string>={balcony:'Balkon',terrace:'Terrasse',garden:'Garten',garage:'Garage',cellar:'Keller',elevator:'Aufzug',accessible:'Barrierefrei',touristRental:'Touristische Vermietung erlaubt',locationLake:'Lage am See',locationMountains:'Lage in den Bergen',locationCity:'Städtische Lage',locationRural:'Ländliche Lage'};
 export type LeadFeatureRules=Partial<Record<LeadObjectiveFeature,'must'|'exclude'>>;
 export type LeadPurchaseWindow={from:string;to:string};
 export type LeadQualificationPreferences={purchaseWindow:LeadPurchaseWindow|null;featureRules:LeadFeatureRules;requirementsReviewed:boolean;version:number};
@@ -16,7 +16,7 @@ export function normalizeLeadPurchaseWindow(value:unknown):LeadPurchaseWindow|nu
  if(!valid(value.from)||!valid(value.to)||String(value.from)>String(value.to))throw new LeadQualificationPlanError('Gültiges Kaufzeitfenster mit Anfang vor Ende erforderlich.');return{from:String(value.from),to:String(value.to)};
 }
 export function normalizeLeadFeatureRules(value:unknown):LeadFeatureRules{
- if(!plain(value)||Object.keys(value).length>5)throw new LeadQualificationPlanError('Objektive Merkmale sind ungültig.');const result:LeadFeatureRules={};
+ if(!plain(value)||Object.keys(value).length>leadObjectiveFeatures.length)throw new LeadQualificationPlanError('Objektive Merkmale sind ungültig.');const result:LeadFeatureRules={};
  for(const[key,rule]of Object.entries(value)){if(!(leadObjectiveFeatures as readonly string[]).includes(key)||!['must','exclude'].includes(String(rule)))throw new LeadQualificationPlanError('Nur angebotene objektive Objektmerkmale können verglichen werden.');result[key as LeadObjectiveFeature]=rule as'must'|'exclude';}return result;
 }
 export function leadQualificationDay(countryCode:string,at=new Date()){
