@@ -1,0 +1,32 @@
+{
+  "format": "crm-authorized-combined-backup-execution-v2",
+  "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "expectedSnapshotId": "snap-ancient-hat-al16xd1i",
+  "cronEnabled": false,
+  "credentialPrintedOrPersistedLocally": false,
+  "productionEndpointId": "ep-wandering-union-alem0781",
+  "sourceBranchId": "br-spring-night-alyu48yp",
+  "deploymentId": "dpl_6gwzyB92ej3QFQgajGpYsbekk1pU",
+  "deploymentUrl": "knowledge-ops-restore-20261101-197wwfh6a-novalure.vercel.app",
+  "httpStatus": 200,
+  "observedAt": "2026-11-01T18:21:11.162Z",
+  "status": "FULL_RESPONSE_RECEIVED_REQUIRES_FINAL_READBACK",
+  "result": {
+    "status": "FULL",
+    "scope": "FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES",
+    "wholeApplicationBackup": false,
+    "backupId": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+    "snapshotId": "snap-ancient-hat-al16xd1i",
+    "isolatedBranchId": "br-late-bonus-alphwux4",
+    "manifestSha256": "eec51b47c3a1eedb68263952634f77f97ce087cff4dd52b9203607f3edf3468b",
+    "fileCount": 5,
+    "fileBytes": 44260,
+    "historicalReferenceCount": 2,
+    "cleanup": "OBSERVED_DISABLED_AND_IDLE",
+    "completedAt": "2026-11-01T18:21:08.928Z",
+    "enabled": true,
+    "mode": "EXECUTE",
+    "code": "BACKUP_FULL"
+  },
+  "sourceReceiptSha256": "38f4443aa6ffdbfc1532fc723e6d98d895f79a1a02d2a6863268d2523c050d17"
+}

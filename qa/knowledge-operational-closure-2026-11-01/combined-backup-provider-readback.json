@@ -1,0 +1,41 @@
+{
+  "format": "crm-combined-backup-provider-readback-v1",
+  "observedAt": "2026-11-01 18:21:40 UTC",
+  "sourceProjectId": "misty-cloud-70835427",
+  "crmProductionDeploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+  "productionUnchanged": true,
+  "ownedRestoreDisabledAndIdle": true,
+  "productionEndpoint": {
+    "id": "ep-wandering-union-alem0781",
+    "branchId": "br-spring-night-alyu48yp",
+    "currentState": "active",
+    "disabled": false
+  },
+  "isolatedBranch": {
+    "id": "br-late-bonus-alphwux4",
+    "projectId": "misty-cloud-70835427",
+    "default": false,
+    "primary": false,
+    "restoreStatus": "restored",
+    "restoredFrom": "snap-ancient-hat-al16xd1i",
+    "snapshotPoint": "2026-11-01T17:59:39Z"
+  },
+  "isolatedEndpoints": [
+    {
+      "id": "ep-fancy-dawn-al0gh7wn",
+      "branchId": "br-late-bonus-alphwux4",
+      "disabled": true,
+      "currentState": "idle",
+      "minCu": 0.25,
+      "maxCu": 0.25
+    }
+  ],
+  "snapshotSchedule": [
+    {
+      "frequency": "daily",
+      "hour": 3,
+      "retention_seconds": 604800
+    }
+  ],
+  "sourceReceiptSha256": "68227cf9d6799192e3fef544ae769b2155282247948b1c82de83ec80c2d8801f"
+}

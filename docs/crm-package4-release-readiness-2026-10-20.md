@@ -1,3 +1,5 @@
+> **Aktueller CRM-Knowledge-Betriebsabgleich vom 01.11.2026:** [Tatsächliche Ergebnisse, Vorfall, isolierter DB-Restore und offene Datei-Recovery](knowledge-operational-closure-2026-11-01.md). Der folgende CRM-Bericht bleibt der historische Stand vom 20.10.; er ist keine Abnahme von Paket 4 der gemeinsamen Lernplattform.
+
 # Evelyn CRM — Paket 4: Gesamtintegration und Releasebereitschaft
 
 Stand: 20.10.2026, Fortschreibung nach der ausdrücklich erteilten Produktionsfreigabe. **Gesamtstatus BLOCKIERT durch offene technische Gates.**

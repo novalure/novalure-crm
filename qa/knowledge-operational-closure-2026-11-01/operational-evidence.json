@@ -1,0 +1,1652 @@
+{
+  "format": "knowledge-ops-operational-evidence-2026-11-01-v1",
+  "scope": "Knowledge Center / novalure/novalure-crm / merged PR120, PR122 and PR123 with subsequent provider-diagnostic update; independent of package4 of the shared learning platform",
+  "baselineReuse": {
+    "sourceHead": "51af3de033cb8d6fb52ab12c8d44526718c63fb7",
+    "qualityRun": "https://github.com/novalure/novalure-crm/actions/runs/41243432576",
+    "secretScanRun": "https://github.com/novalure/novalure-crm/actions/runs/41243432595",
+    "unchangedAcceptedEvidence": "Monitoring configuration, completed scheduled runs, six migration source checksums, dependency fix, independent code review; no repeat acceptance suite was manually started."
+  },
+  "applicationBinding": {
+    "format": "knowledge-ops-regular-application-binding-v1",
+    "observedAt": "2026-11-01T14:08:53.584Z",
+    "method": "User opened existing protected diagnostic in an already signed-in CRM browser; the returned correlation ID was independently matched against native production runtime logs.",
+    "deploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+    "gitSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+    "branch": "codex/continuous-operation-20261029-crm",
+    "environment": "production",
+    "correlationId": "975b89af-e93d-4af5-89cb-47c9edaccd4f",
+    "nativeLogRequestId": "5dkft-1793542132810-cb38581615f2",
+    "database": "neondb",
+    "currentUser": "novalure_app",
+    "sessionUser": "novalure_app",
+    "neonProjectId": "misty-cloud-70835427",
+    "neonBranchId": "br-spring-night-alyu48yp",
+    "runtimeProofStatus": "PASS",
+    "leastPrivilege": true,
+    "bindingMatchesExpectedProject": true,
+    "superuser": false,
+    "bypassRls": false,
+    "createDatabase": false,
+    "createRole": false,
+    "replication": false,
+    "sessionSuperuser": false,
+    "sessionBypassRls": false,
+    "sessionCreateDatabase": false,
+    "sessionCreateRole": false,
+    "sessionReplication": false,
+    "databaseOwner": false,
+    "sessionDatabaseOwner": false,
+    "databaseCreate": false,
+    "sessionDatabaseCreate": false,
+    "schemaCreate": false,
+    "sessionSchemaCreate": false,
+    "readAllData": false,
+    "sessionReadAllData": false,
+    "writeAllData": false,
+    "sessionWriteAllData": false,
+    "tenantRuntimeMember": true,
+    "relevantMemberships": [
+      "novalure_app",
+      "novalure_tenant_app"
+    ],
+    "reachableElevatedRoles": 0,
+    "ownedOrInheritedPublicTables": 0,
+    "forbiddenCompanyProfilesSelect": false,
+    "requiredRlsTablesProtected": true,
+    "diagnosticEnvelopeOk": false,
+    "migrationLedgerError": "migration_ledger_unavailable",
+    "migrationStatus": {
+      "checksumRows": 0,
+      "currentVersion": null,
+      "rows": 0
+    },
+    "diagnosticMissingTables": [
+      "company_profile_versions",
+      "company_profiles"
+    ],
+    "independentOwnerCatalogRead": {
+      "role": "neondb_owner",
+      "company_profiles_exists": true,
+      "company_profile_versions_exists": true
+    },
+    "interpretation": "The runtime proof confirms the actual running artifact and restricted DB connection. The administrative ledger and company profile tables are intentionally inaccessible to this runtime role, so its catalog listing is not a production migration inventory. Both tables exist under the separate owner catalog check.",
+    "incidentLimitation": "The production endpoint was moved by the unintended first restore. Its current data and subsequent legitimate writes were retained, and the branch name/default were aligned to that actual production binding. This is not a rollback or an isolated success claim for the first attempt. The later explicit finalize:false isolated database comparison is recorded separately."
+  },
+  "normalPrivateFileRead": {
+    "format": "knowledge-ops-authorized-private-file-read-v1",
+    "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+    "bytes": 996,
+    "sha256": "67f9107c8362338fd6630e15c29c55ec840b8236c75ff3ebebc12a3ec9bf74cc",
+    "method": "User performed normal signed-in CRM download and supplied the resulting bytes; no cookie or token was supplied. Native request log confirms the same private file route.",
+    "authenticatedRequest": {
+      "timestamp": "2026-11-01T14:12:27.469Z",
+      "requestId": "wpnqb-1793542347469-c0091ece9130",
+      "httpStatus": 200,
+      "deploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+      "environment": "production",
+      "cacheResult": "MISS"
+    },
+    "independentNoCookieControl": {
+      "httpStatus": 401,
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "contentType": "application/json"
+    }
+  },
+  "previewIsolation": {
+    "schemaVersion": 1,
+    "purpose": "Prepare a protected build-only Preview with application authentication and database access intentionally unconfigured.",
+    "state": "NATIVE_PREVIEW_CHECK_SUCCESS",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "gitBranch": "codex/knowledge-operational-closure-20261031",
+    "sourceHeadAtPreparation": "51af3de033cb8d6fb52ab12c8d44526718c63fb7",
+    "target": [
+      "preview"
+    ],
+    "inventoryReadAt": "2026-11-01T14:17:16.743Z",
+    "verifiedAt": "2026-11-01T14:17:42.294Z",
+    "mutation": {
+      "tool": "vercel_create_project_env",
+      "createdCount": 70,
+      "failedCount": 0,
+      "neutralizedInheritedKeys": 65,
+      "minimalGuardFlags": 5,
+      "productionTargetWrites": 0,
+      "existingRecordUpdates": 0,
+      "integrationChanges": 0,
+      "resourceChanges": 0,
+      "databaseChanges": 0,
+      "deploymentsCreated": 0
+    },
+    "verification": {
+      "pass": true,
+      "totalPreviewRecords": 509,
+      "genericCount": 65,
+      "ownCount": 70,
+      "expectedKeysPresent": true,
+      "genericMetadataUnchanged": true,
+      "allOwnValuesMatch": true,
+      "allOwnScopesMatch": true,
+      "allOwnIdsAreCreated": true
+    },
+    "valueHandling": {
+      "apiDecryptionRequested": false,
+      "credentialValuesPrinted": false,
+      "credentialValuesWritten": false,
+      "valueComparison": "In memory only; per-key Boolean matches recorded."
+    },
+    "previewResourceMetadata": [
+      {
+        "storeId": "store_iC0dv0mmYWCDj7ww",
+        "providerProjectId": "super-block-59791927",
+        "prefix": "G27_QA",
+        "environments": [
+          "preview"
+        ],
+        "deploymentAction": {
+          "required": true,
+          "slug": "Neon",
+          "environments": [
+            "preview"
+          ]
+        },
+        "defaultBranchId": "br-dry-thunder-awmimouk",
+        "defaultReadWriteEndpointId": "ep-super-dew-awqyp0tr"
+      },
+      {
+        "storeId": "store_3n3qzgGn0jnR4PSr",
+        "providerProjectId": "weathered-term-98273025",
+        "prefix": "QA_TENANT",
+        "environments": [
+          "preview",
+          "development"
+        ],
+        "deploymentAction": {
+          "required": true,
+          "actions": []
+        },
+        "defaultBranchId": "br-lucky-heart-alrm9dlw",
+        "defaultReadWriteEndpointId": "ep-morning-fog-al1enszq"
+      }
+    ],
+    "limitations": [
+      "The preparation operation itself created no deployment; the later native Preview deployment and its successful check are recorded separately.",
+      "Native Preview success applies to the final reviewed head only; it is not authenticated acceptance of a restored application and private-file set.",
+      "Known QA integrations may inject prefixed QA variables at deployment time; application runtime database fallback variables remain intentionally empty."
+    ],
+    "automaticDeploymentPolicy": {
+      "mainRemainsDisabled": true,
+      "ownBranchEnabledAfterIsolationVerified": true
+    },
+    "nativeCheck": {
+      "headSha": "52f009c8b4709fd36647634b6f7ce54444fe3799",
+      "deploymentId": "dpl_AJdxskiWDGx67nPU6G1nHNnSrsHw",
+      "conclusion": "SUCCESS",
+      "productionReleaseChanged": false
+    }
+  },
+  "initialRestoreIncident": {
+    "format": "knowledge-ops-unexpected-restore-finalization-v1",
+    "status": "INCIDENT_STOPPED_NO_SUCCESS_CLAIM",
+    "snapshotRequest": {
+      "tool": "neon_create_snapshot",
+      "args": {
+        "project_id": "misty-cloud-70835427",
+        "branch_id": "br-snowy-fog-aldx77v8",
+        "name": "knowledge-ops-recovery-20261101-point-1405z"
+      }
+    },
+    "snapshot": {
+      "id": "snap-quiet-rice-alihtu8r",
+      "name": "knowledge-ops-recovery-20261101-point-1405z",
+      "source_branch_id": "br-snowy-fog-aldx77v8",
+      "created_at": "2026-11-01T14:02:10Z",
+      "manual": true
+    },
+    "restoreRequest": {
+      "tool": "neon_restore_snapshot",
+      "args": {
+        "project_id": "misty-cloud-70835427",
+        "snapshot_id": "snap-quiet-rice-alihtu8r",
+        "name": "knowledge-ops-recovery-20261101-restored-1405z"
+      },
+      "target_branch_id_omitted": true,
+      "finalize_omitted": true,
+      "finalize_false_required_but_not_supplied": true
+    },
+    "restoreInitialResponse": {
+      "id": "br-spring-night-alyu48yp",
+      "project_id": "misty-cloud-70835427",
+      "parent_lsn": "0/A098B140",
+      "name": "knowledge-ops-recovery-20261101-restored-1405z",
+      "slug": "br-spring-night-alyu48yp",
+      "current_state": "init",
+      "pending_state": "ready",
+      "state_changed_at": "2026-11-01T14:02:20Z",
+      "creation_source": "console",
+      "primary": false,
+      "default": false,
+      "protected": false,
+      "cpu_used_sec": 0,
+      "compute_time_seconds": 0,
+      "active_time_seconds": 0,
+      "written_data_bytes": 0,
+      "data_transfer_bytes": 0,
+      "created_at": "2026-11-01T14:02:20Z",
+      "updated_at": "2026-11-01T14:02:20Z",
+      "init_source": "parent-data",
+      "restore_status": "restored",
+      "restored_from": "snap-quiet-rice-alihtu8r",
+      "restored_as": "br-snowy-fog-aldx77v8"
+    },
+    "observedBranches": [
+      {
+        "id": "br-snowy-fog-aldx77v8",
+        "name": "knowledge-ops-recovery-20261101-restored-1405z (1)",
+        "default": false,
+        "primary": false,
+        "current_state": "ready",
+        "created_at": "2026-05-12T17:50:28Z",
+        "updated_at": "2026-11-01T14:02:42Z"
+      },
+      {
+        "id": "br-spring-night-alyu48yp",
+        "name": "main",
+        "default": true,
+        "primary": true,
+        "current_state": "ready",
+        "restore_status": "finalized",
+        "restored_from": "snap-quiet-rice-alihtu8r",
+        "restored_as": "br-snowy-fog-aldx77v8",
+        "parent_lsn": "0/A098B140",
+        "parent_timestamp": "2026-11-01T14:01:49Z",
+        "created_at": "2026-11-01T14:02:20Z",
+        "updated_at": "2026-11-01T14:02:41Z"
+      }
+    ],
+    "observedRelevantEndpoints": [
+      {
+        "id": "ep-young-queen-alvm4ypc",
+        "branch_id": "br-snowy-fog-aldx77v8",
+        "type": "read_write",
+        "disabled": false,
+        "current_state": "idle",
+        "last_active": "2000-01-01T00:00:00Z",
+        "created_at": "2026-11-01T14:02:20Z",
+        "updated_at": "2026-11-01T14:02:20Z"
+      },
+      {
+        "id": "ep-wandering-union-alem0781",
+        "branch_id": "br-spring-night-alyu48yp",
+        "type": "read_write",
+        "disabled": false,
+        "current_state": "active",
+        "last_active": "2026-11-01T13:59:50Z",
+        "created_at": "2026-05-12T17:50:28Z",
+        "updated_at": "2026-11-01T14:02:40Z"
+      }
+    ],
+    "actionsAfterDetection": [
+      "Stopped all remote mutations",
+      "Did not disable or delete any endpoint, branch or snapshot",
+      "Read branch and endpoint metadata only",
+      "Immediately notified root coordinator"
+    ],
+    "productionWritesAfterMove": "POSSIBLE_NOT_YET_PROVEN_OR_EXCLUDED",
+    "firstFingerprintAttempt": {
+      "status": "FAIL",
+      "remoteWrites": 0,
+      "error": "NeonDbError: syntax error at or near \"space\"",
+      "cause": "Local query adapter matched relname as prefix of relnamespace; corrected word-boundary replacement before successful baseline.",
+      "preservedSql": "fingerprint-syntax-failure.sql"
+    },
+    "successfulBaselineFile": "source-before.json",
+    "fullRecoveryClaimed": false,
+    "currentDisposition": "Current production data retained and names/default aligned; no second production reset or endpoint move. See productionStabilization."
+  },
+  "productionStabilization": {
+    "format": "knowledge-ops-production-stabilization-v1",
+    "status": "ACTIVE_DATA_PRESERVED_METADATA_ALIGNED",
+    "actualProductionBranchId": "br-spring-night-alyu48yp",
+    "actualProductionBranchName": "main",
+    "defaultBranchMatchesActualProduction": true,
+    "productionEndpointId": "ep-wandering-union-alem0781",
+    "productionEndpointUnchangedSinceIncident": true,
+    "productionEndpointActive": true,
+    "productionEndpointDisabled": false,
+    "decision": "Keep the currently serving consistent restored data and all subsequent legitimate writes. Rebinding the older original branch would now require reconciliation and could discard later changes. Only branch names and the default pointer were aligned; there was no further production reset, endpoint move, SQL reconciliation, schema/grant change or deployment.",
+    "preservedPreincidentBranch": {
+      "id": "br-snowy-fog-aldx77v8",
+      "name": "knowledge-ops-preincident-20261101",
+      "laterWritesIncluded": false,
+      "immediateRollbackCertified": false,
+      "computeId": "ep-young-queen-alvm4ypc",
+      "computeDisabled": true
+    },
+    "integrityBasis": "Original source remained identical across all200tables/5551rows/28catalogcategories/twoSequences at14:04. Restored data differed only in a completed empty reminder admission row, with one provider-created role. Actual signed-in production role and private-file bytes were subsequently verified. Later table changes are recorded separately.",
+    "incidentRemainsDisclosed": true,
+    "initialAttemptClaimedAsIsolatedRestore": false
+  },
+  "subsequentTableDeltas": {
+    "format": "knowledge-ops-safe-current-table-count-deltas-v1",
+    "scope": "Metadata only; not a data-loss diagnosis",
+    "before": "2026-11-01T14:04:19.625232+00:00",
+    "after": "2026-11-01T14:23:33.906881+00:00",
+    "changes": [
+      {
+        "table": "public.auth_audit_events",
+        "beforeRows": 505,
+        "afterRows": 509
+      },
+      {
+        "table": "public.auth_login_challenges",
+        "beforeRows": 86,
+        "afterRows": 88
+      },
+      {
+        "table": "public.auth_rate_limit_buckets",
+        "beforeRows": 1,
+        "afterRows": 0
+      },
+      {
+        "table": "public.auth_sessions",
+        "beforeRows": 301,
+        "afterRows": 302
+      },
+      {
+        "table": "public.csrf_token_consumptions",
+        "beforeRows": 469,
+        "afterRows": 4
+      }
+    ]
+  },
+  "isolatedDatabaseRestore": {
+    "format": "knowledge-ops-isolated-database-recovery-comparison-v1",
+    "status": "PASS_DATABASE_HASH_EQUIVALENCE_ONLY",
+    "scope": "All stored rows across all200 non-system tables in public and neon_auth,28 catalogue/database/ledger categories,2 logical sequence states; no raw row values returned",
+    "summaries": [
+      {
+        "phase": "current-source-before-isolated",
+        "capturedAt": "2026-11-01T14:23:33.906881+00:00",
+        "branchId": "br-spring-night-alyu48yp",
+        "tables": 200,
+        "rows": 5092,
+        "catalogCategories": 28,
+        "sequences": 2,
+        "dataSha256": "f60ef7e6800273ee809ecabbccef1788eefa0176084beccc057534df7c41a28b",
+        "catalogSha256": "9e5e4ddc4ad3eeb99a440ab2c0c66c7684ab635cb5bdf0740aaaeb1a4a0d1d71",
+        "sequenceSha256": "52fca969922f35790469c580530d7067e5d59bec3cfdf54d9ab9819c7f50b8d7",
+        "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4"
+      },
+      {
+        "phase": "isolated-target",
+        "capturedAt": "2026-11-01T14:25:02.788985+00:00",
+        "branchId": "br-orange-brook-al5f6n0f",
+        "tables": 200,
+        "rows": 5092,
+        "catalogCategories": 28,
+        "sequences": 2,
+        "dataSha256": "f60ef7e6800273ee809ecabbccef1788eefa0176084beccc057534df7c41a28b",
+        "catalogSha256": "9e5e4ddc4ad3eeb99a440ab2c0c66c7684ab635cb5bdf0740aaaeb1a4a0d1d71",
+        "sequenceSha256": "52fca969922f35790469c580530d7067e5d59bec3cfdf54d9ab9819c7f50b8d7",
+        "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4"
+      },
+      {
+        "phase": "current-source-after-isolated",
+        "capturedAt": "2026-11-01T14:25:06.586131+00:00",
+        "branchId": "br-spring-night-alyu48yp",
+        "tables": 200,
+        "rows": 5092,
+        "catalogCategories": 28,
+        "sequences": 2,
+        "dataSha256": "f60ef7e6800273ee809ecabbccef1788eefa0176084beccc057534df7c41a28b",
+        "catalogSha256": "9e5e4ddc4ad3eeb99a440ab2c0c66c7684ab635cb5bdf0740aaaeb1a4a0d1d71",
+        "sequenceSha256": "52fca969922f35790469c580530d7067e5d59bec3cfdf54d9ab9819c7f50b8d7",
+        "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4"
+      }
+    ],
+    "comparisons": {
+      "beforeVsTarget": {
+        "dataEqual": true,
+        "catalogEqual": true,
+        "sequenceEqual": true,
+        "changedData": [],
+        "changedCategories": []
+      },
+      "beforeVsAfter": {
+        "dataEqual": true,
+        "catalogEqual": true,
+        "sequenceEqual": true,
+        "changedData": [],
+        "changedCategories": []
+      },
+      "targetVsAfter": {
+        "dataEqual": true,
+        "catalogEqual": true,
+        "sequenceEqual": true,
+        "changedData": [],
+        "changedCategories": []
+      }
+    },
+    "privateFileBytesRestored": true,
+    "fullDatabaseAndPrivateFilesRecovery": "PASS_MANUAL_DATABASE_AND_ALL_REFERENCED_PRIVATE_ORIGINALS_PAIRED",
+    "freshAuthenticatedRestoredApplicationAcceptance": false,
+    "priorIncident": "Preserved separately; this isolated finalize:false run is not a relabelling of the earlier finalization incident.",
+    "privateFileBytesRestoredScope": "The original database-only run restored no Blob bytes. All five referenced private originals were subsequently restored manually and paired with this same snapshot database using a narrow read-only metadata query; see manualDataRecovery.",
+    "privateFileBytesRestoredDuringDatabaseOnlyPhase": false
+  },
+  "isolatedRestoreBinding": {
+    "sourceBranchId": "br-spring-night-alyu48yp",
+    "sourceEndpointId": "ep-wandering-union-alem0781",
+    "snapshotId": "snap-fragrant-breeze-al24d0gr",
+    "snapshotCreatedAt": "2026-11-01T14:24:08Z",
+    "snapshotPointTimestamp": "2026-11-01T14:23:47Z",
+    "targetBranchId": "br-orange-brook-al5f6n0f",
+    "targetBranchName": "knowledge-ops-isolated-restore-20261101-1424z",
+    "finalizeExplicitlyFalse": true,
+    "targetBranchIdParameterSupplied": false,
+    "targetDefault": false,
+    "targetPrimary": false,
+    "targetRestoreStatus": "restored",
+    "targetEndpointId": "ep-raspy-union-al4lz6jx",
+    "productionEndpointBindingPreservedDuringIsolatedRun": true,
+    "targetComputeMinCu": 0.25,
+    "targetComputeMaxCu": 0.25,
+    "targetComputeDisabledAfterVerification": true,
+    "targetComputeIdleReceipt": "Confirmed by native endpoint readback: ep-raspy-union-al4lz6jx is disabled=true/current_state=idle; production ep-wandering-union-alem0781 remains active/disabled=false on br-spring-night-alyu48yp."
+  },
+  "privateMediaInventory": {
+    "format": "knowledge-ops-isolated-private-media-full-database-inventory-v1",
+    "branchId": "br-orange-brook-al5f6n0f",
+    "physicalObjectsRestored": true,
+    "physicalBytesAndSha256Verified": true,
+    "scope": "ALL_MEDIA_ASSETS_AND_ALL_KNOWLEDGE_VERSIONS_NO_TENANT_FILTER",
+    "allMediaCount": 6,
+    "allPrivateMediaCount": 5,
+    "mediaCountsByBinding": [
+      {
+        "objects": 1,
+        "is_public": false,
+        "recorded_bytes": 362780,
+        "storage_access": "legacy-public",
+        "storage_provider": "vercel-blob"
+      },
+      {
+        "objects": 5,
+        "is_public": false,
+        "recorded_bytes": 44260,
+        "storage_access": "private",
+        "storage_provider": "vercel-blob"
+      }
+    ],
+    "allPrivateRecordedBytes": 44260,
+    "privateMediaMissingObjectKey": 0,
+    "privateMediaGenericPublicExposure": 0,
+    "privateMediaReferencedByKnowledge": 1,
+    "knowledgeFileVersionBindingsSha256": "6467f35dc3073d0ed99bcf64cfb55b9e3fc4087c20d667a937c51f9446e3765f",
+    "knowledgeVersionFileReferenceCount": 2,
+    "privateMediaWithoutKnowledgeReference": 4,
+    "knowledgeVersionMissingAssetReferences": 0,
+    "observationPhase": "Original complete isolated database metadata inventory was captured during the database-only restore. Physical verification flags now include the later five-file manual restoration and 17:16 read-only pairing; the original inventory artifact remains unchanged.",
+    "currentPhysicalRecovery": "PASS: all five referenced private originals, 44260 bytes, restored under their original keys in the separate target store, individually source/target SHA256 verified and anonymously denied; matched to the isolated database and both historical document references.",
+    "physicalObjectsRestoredAtInventoryCapture": false
+  },
+  "privateStoreAuthorization": {
+    "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+    "metadataAccess": "private",
+    "providerObjectCount": 6,
+    "providerRecordedBytes": 47047,
+    "databaseReferencedPrivateObjects": 5,
+    "databaseReferencedPrivateBytes": 44260,
+    "metadataDifferenceNotSilentlyIncluded": true,
+    "knownProductionSecretGetter": {
+      "id": "BqSjOf4aUOm0KXCS",
+      "decrypted": false,
+      "valuePresent": false,
+      "result": "WITHHELD_NO_RETRY_OR_BYPASS"
+    },
+    "normalDevelopmentOidcAttempt": {
+      "requests": 1,
+      "teamClaimsMatch": true,
+      "projectClaimsMatch": true,
+      "developmentClaimsMatch": true,
+      "tokenCurrentlyValid": true,
+      "sourceBlobGetRequests": 1,
+      "httpStatus": 403,
+      "result": "STOPPED_NO_CLAIM_OR_PERMISSION_CHANGE",
+      "observationScope": "Historical initial denied Development request before normal Production connections and the separately authorized temporary operator grant; current post-rollback Development denial is recorded in manualRestore."
+    },
+    "physicalArchiveComplete": true,
+    "physicalPrivateStoreRestoreComplete": true,
+    "targetStoreCreated": true,
+    "credentialsPrintedOrPersisted": false,
+    "targetStore": {
+      "id": "store_Xq45pbZfYunmR6ah",
+      "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+      "access": "private",
+      "oidcEnvironments": [
+        "development",
+        "production"
+      ],
+      "productionOidcConnectionEstablished": true
+    },
+    "partialRestore": {
+      "format": "private-blob-partial-restore-v1",
+      "status": "PARTIAL_2_OF_5",
+      "observedAt": "2026-11-01T15:49:38.985Z",
+      "finishedAt": "2026-11-01T15:49:43.119Z",
+      "receiptSource": "scratch/knowledge-ops-blob-phase1-20261101/partial-restore-2-of-5-receipt.json",
+      "receiptSha256": "b04b46dc60e9748b70aca0d9795f45b339c9756df465a8f6fe857153a1f9973c",
+      "method": "User supplied two normally downloaded PDFs; bytes were verified and restored to the separate private target using its legitimate Development OIDC access.",
+      "scopeAssetCount": 5,
+      "scopeBytes": 44260,
+      "restoredAssetCount": 2,
+      "restoredBytes": 21323,
+      "remainingAssetCount": 3,
+      "remainingBytes": 22937,
+      "restoredMimeTypes": [
+        "application/pdf"
+      ],
+      "targetInventory": {
+        "exhaustive": true,
+        "assetCount": 2,
+        "bytes": 21323,
+        "expectedKeysetMatch": true
+      },
+      "secondAssetReadback": {
+        "bytes": 20327,
+        "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+        "sizeMatch": true,
+        "shaMatch": true,
+        "exactKeyMatch": true,
+        "privateTargetOriginMatch": true
+      },
+      "firstAssetReference": "normalPrivateFileRead and the preceding one-file restore receipt; existing exact target object was verified and not put again in the second-file operation.",
+      "existingAssetGuard": {
+        "exhaustiveKeysetOne": true,
+        "sizeMatch": true,
+        "shaMatch": true,
+        "noExistingAssetReput": true
+      },
+      "unauthenticatedTargetRead": {
+        "httpStatus": 403,
+        "denied": true,
+        "noAuthorizationHeader": true,
+        "noCookies": true
+      },
+      "secondFileOperation": {
+        "sourceStoreWrites": 0,
+        "sourceAuthRequests": 0,
+        "sourceBlobReads": 0,
+        "productionDatabaseWrites": 0,
+        "secretGetterCalls": 0,
+        "credentialFilesWritten": 0,
+        "targetSdkPutCalls": 1
+      },
+      "fullPrivateArchiveOrRestoreClaimed": false,
+      "missingImageBytesReconstructed": false,
+      "privateFilenamesOrObjectKeysIncluded": false,
+      "observationScope": "Historical two-of-five checkpoint at 15:49; all counts and receipts here describe that earlier phase and are superseded for current completeness by manualRestore.",
+      "supersededBy": "manualRestore"
+    },
+    "credentialValueHandlingScope": "No credential values printed or persisted locally in this evidence; later normal sensitive provisioning in the backup project is recorded separately and is not proof of credential validity.",
+    "productionOidcConnections": {
+      "format": "crm-backup-production-blob-connections-v1",
+      "status": "NORMAL_OIDC_CONNECTIONS_CONFIGURED",
+      "observedAt": "2026-11-01T16:40:19.787Z",
+      "receipt": "backup-blob-connections.json",
+      "receiptSha256": "cbf8c7ed4b6d9777bf9c6946991e792c0668a488789bbabfcecac308b67ac4b6",
+      "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+      "targetStoreId": "store_Xq45pbZfYunmR6ah",
+      "sourceBackup": {
+        "connectionId": "spc_mFUHkGw3AuUfslt0",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "environments": [
+          "production"
+        ],
+        "envVarPrefix": "BACKUP_SOURCE_BLOB"
+      },
+      "targetBackup": {
+        "connectionId": "spc_rDycowIUHZ7rBFcQ",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "environments": [
+          "development",
+          "production"
+        ],
+        "envVarPrefix": "BLOB"
+      },
+      "existingCrm": {
+        "connectionId": "spc_kYVPVyeV690yocE2",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "environments": [
+          "production"
+        ],
+        "envVarPrefix": "NOVALURE_PRIVATE_BLOB"
+      },
+      "existingCrmConnectionIdentityEnvironmentAndPrefixPreserved": true,
+      "targetDevelopmentConnectionPreserved": true,
+      "skipReadWriteToken": true,
+      "productionCredentialsCopied": false,
+      "sourceGrantProviderReadOnlyClaimed": false,
+      "sourceAdapterOperations": [
+        "get",
+        "list"
+      ],
+      "productionEndpointChanged": false,
+      "nativeResponseHandling": "Source POST succeeded with an empty response and was not repeated; target PATCH was subsequently applied once; both desired connections confirmed by readback",
+      "successfulFullBackupProvenByConnectionsAlone": false
+    },
+    "manualRestore": {
+      "receipt": "manual-private-file-restore.json",
+      "receiptSha256": "bd6b09fc017cde10964751a371a63fcafd870942021b2593813ab228ad4041ce",
+      "format": "private-blob-five-asset-operator-restore-v1",
+      "status": "FINAL_FIVE_ASSET_RESTORE_PASS",
+      "observedAt": "2026-11-01T17:06:44.520Z",
+      "finishedAt": "2026-11-01T17:06:54.738Z",
+      "scopeAssetCount": 5,
+      "scopeBytes": 44260,
+      "restoredAssetCount": 5,
+      "restoredBytes": 44260,
+      "remainingAssetCount": 0,
+      "remainingBytes": 0,
+      "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+      "targetStoreId": "store_Xq45pbZfYunmR6ah",
+      "originalKeysRestored": true,
+      "sourceTargetFiveAssetProof": "PASS",
+      "sourceSdkReadCalls": 5,
+      "targetSdkPutCalls": 3,
+      "existingPdfGuard": {
+        "bothKnownHashesMatch": true,
+        "existingKeysNeverReput": true
+      },
+      "sourceStoreWrites": 0,
+      "sourcePutCalls": 0,
+      "sourceDeleteCalls": 0,
+      "productionDatabaseWrites": 0,
+      "neonCallsDuringFilePhase": 0,
+      "jobRetries": 0,
+      "inventoryAfter": {
+        "exhaustive": true,
+        "totalObjectCount": 5,
+        "originalAssetCount": 5,
+        "originalAssetBytes": 44260,
+        "backupNamespaceObjectCount": 0,
+        "otherObjectCount": 0
+      },
+      "assetChecks": [
+        {
+          "assetId": "36510a74-dc15-4b6a-a5bd-45c44d400aa7",
+          "bytes": 20327,
+          "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+          "bytes": 996,
+          "sha256": "67f9107c8362338fd6630e15c29c55ec840b8236c75ff3ebebc12a3ec9bf74cc",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "c9730956-1590-4b64-87b7-8fc19fedf69f",
+          "bytes": 6868,
+          "sha256": "14677678104dd339b7a0b836f69039d658488264cedfd4d225c498b12e69a2a8",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+          "bytes": 953,
+          "sha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        },
+        {
+          "assetId": "e8209f86-93a1-4f0e-a455-e2aa65407b6a",
+          "bytes": 15116,
+          "sha256": "da5ab6148bb774f361322658410eda62ba067fafac80ae2c48bb4443b19a22ed",
+          "sourceTargetShaMatch": true,
+          "sizeMatch": true,
+          "exactKeyMatch": true,
+          "privateOriginMatch": true,
+          "anonymousStatus": 403,
+          "anonymousDenied": true
+        }
+      ],
+      "temporarySourceOperatorGrant": {
+        "kind": "temporary_operator_grant",
+        "connectionId": "spc_mFUHkGw3AuUfslt0",
+        "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "tokenEnvironment": "development",
+        "providerReadonlyGrant": false,
+        "requiresRootRollback": false,
+        "rootActivationConfirmed": true,
+        "rollbackPending": false,
+        "rollbackConfirmed": true,
+        "rollbackConfirmedAt": "2026-11-01T17:07:18.836Z"
+      },
+      "operatorGrantRollback": {
+        "confirmed": true,
+        "confirmedAt": "2026-11-01T17:07:18.836Z",
+        "sourceConnectionEnvironments": [
+          "production"
+        ],
+        "originalCrmProductionConnectionPreserved": true,
+        "rootGrantReceiptSha256": "a206ce505344d33b64752cad454a02306f3647dacf8a297a4ad5ac4202df1b1b",
+        "freshDevelopmentAccessDenied": {
+          "format": "temporary-operator-source-development-revocation-check-v1",
+          "checkedAt": "2026-11-01T17:09:50.039Z",
+          "sourceSdkGetCalls": 1,
+          "bodyExported": false,
+          "bodyInterpreted": false,
+          "storeWrites": 0,
+          "credentialFilesWritten": 0,
+          "freshDevelopmentClaimsMatch": true,
+          "httpStatus": 403,
+          "expected403": true,
+          "permissionCode": "HTTP_403",
+          "status": "REVOCATION_DENIAL_PASS",
+          "finishedAt": "2026-11-01T17:09:50.852Z"
+        }
+      },
+      "sourceManifestProvenance": {
+        "snapshotId": "snap-quiet-rice-alihtu8r",
+        "snapshotAt": "2026-11-01T14:01:49Z",
+        "manifestSha256": "ab9fc80e34bc4f3c59441a95d4a47c68407bfb5401998b293afd22c316c3f72c",
+        "assetCount": 5,
+        "totalBytes": 44260,
+        "historicalKnowledgeVersionReferenceCount": 2
+      },
+      "localArchiveVerification": {
+        "fileCount": 5,
+        "totalBytes": 44260,
+        "allFileModes600": true,
+        "directoryMode700": true,
+        "allSourceArchiveHashesMatch": true
+      },
+      "missingImageBytesReconstructed": false,
+      "additionalUserFileZipRequired": false,
+      "normalApplicationTextDownloadHttp200Claimed": false,
+      "scheduledCombinedBackupFullJobProven": false,
+      "secretOrPrivatePathValuesIncluded": false
+    }
+  },
+  "recoveryAssessment": {
+    "historyRetentionSeconds": 21600,
+    "automaticSnapshotScheduleForActualProduction": [
+      {
+        "frequency": "daily",
+        "hour": 3,
+        "retention_seconds": 604800
+      }
+    ],
+    "newManualSnapshotIsPeriodicBackupPolicy": false,
+    "sixHoursMeaning": "Retained historical recovery lookback, not a measured data-loss RPO. Six-hour PITR alone is inadequate for delayed CRM error detection after an overnight period or weekend; recovery then requires an independently retained usable snapshot and matching files.",
+    "businessAdequacy": "Manual recovery of the older 14:23:47 UTC database and all five referenced private originals remains proven. A new actual FULL cycle for snapshot point 17:59:39 UTC passed with five files/44260 bytes/two historical references, independent private FULL-marker/manifest readback and provider cleanup/unchanged-production readback. Native DB snapshots at 03:00 UTC retain seven days; the combined daily cron at 03:15 UTC is natively active. Six-hour PITR alone remains inadequate for delayed overnight/weekend CRM errors. The first scheduled execution is not yet observed; whole-application recovery, agreed business RPO, measured whole-application RTO and automatic retention deletions are not claimed.",
+    "endToEndApplicationAndFilesRtoMeasured": false,
+    "retentionOrScheduleOrPlanChanged": true,
+    "automaticSnapshotScheduleVerifiedAt": "2026-11-01T15:59:27Z",
+    "automaticSnapshotScheduleTimezone": "UTC",
+    "automaticSnapshotScheduleSourceBranchId": "br-spring-night-alyu48yp",
+    "automaticSnapshotScheduleReceipt": "native-database-backup-schedule.json",
+    "nativeScheduleStatus": "ACTIVE_DATABASE_ONLY_SCHEDULE_READBACK",
+    "nativeScheduleCoverage": "DATABASE_ONLY",
+    "laterScheduledExecutionObserved": false,
+    "productionEndpointReadback": {
+      "id": "ep-wandering-union-alem0781",
+      "branchId": "br-spring-night-alyu48yp",
+      "type": "read_write",
+      "disabled": false,
+      "currentState": "active"
+    },
+    "productionEndpointBindingChanged": false,
+    "changeScope": {
+      "historyRetentionChanged": false,
+      "nativeSnapshotScheduleActivated": true,
+      "nativeSnapshotRetentionSeconds": 604800,
+      "billingPlanChanged": false,
+      "existingWebsiteTeamsCalendarSchedulesChanged": false
+    },
+    "pairedBackupRunner": {
+      "status": "ACTUAL_FULL_AND_INDEPENDENT_READBACK_PASS_DAILY_CRON_ACTIVE",
+      "documentation": "../../docs/crm-full-backup-runner.md",
+      "entrypoint": "scripts/crm-full-backup.mjs",
+      "dailyPairedJobDeployed": true,
+      "dailyPairedJobActive": true,
+      "backupProjectProductionOidcSourceAndTargetGrantsEstablished": true,
+      "developmentTargetAccessIsProductionBackupAccess": false,
+      "actualFullPairedBackupRunCompleted": true,
+      "callerProductionDeployed": true,
+      "productionOidcProvidedByNativeWorkload": true,
+      "productionOidcForwardedViaSdkContext": true,
+      "externalProductionOidcSecretMissing": false,
+      "missingExternalAccess": [],
+      "pendingOperationalSetup": [],
+      "operationalStoreGrantsAreOurPendingSetup": false,
+      "deploymentPreflight": {
+        "format": "crm-backup-preflight-deployment-v1",
+        "observedAt": "2026-11-01T16:27:57.624Z",
+        "receipt": "backup-preflight-deployment.json",
+        "receiptSha256": "2971d8c5979444d4b493709b6905ca233b7498cb42757c51315d0425c81c46bd",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "deploymentId": "dpl_FYQUe8K9oFtufsgfRVpRpcNHy522",
+        "deploymentUrl": "knowledge-ops-restore-20261101-e0tl83mpx-novalure.vercel.app",
+        "environment": "production",
+        "readyState": "READY",
+        "nodeVersion": "24.x",
+        "existingDeploymentProtectionPreserved": true,
+        "newSensitiveSecretName": "CRON_SECRET",
+        "newSensitiveSecretCount": 1,
+        "secretScope": "Existing backup project only",
+        "secretPrintedOrPersistedLocally": false,
+        "cronEnabled": false,
+        "crons": [],
+        "fullBackupEnabled": false,
+        "CRM_FULL_BACKUP_ENABLED": false,
+        "authenticatedPreflight": {
+          "httpStatus": 200,
+          "mode": "PLAN_ONLY_NO_REMOTE_IO",
+          "status": "BLOCKED",
+          "enabled": false,
+          "missing": [
+            "NEON_API_KEY"
+          ],
+          "code": "BACKUP_PLAN_BLOCKED"
+        },
+        "unauthorizedCronRequest": {
+          "rejected": true,
+          "httpStatus": 401
+        },
+        "productionOidcProvidedByNativeWorkload": true,
+        "sourceStoreConnectionsChanged": false,
+        "sourceStoreRequests": 0,
+        "databaseRequests": 0,
+        "applicationProjectChanged": false,
+        "productionEndpointChanged": false,
+        "fullOperationalAcceptanceClaimed": false,
+        "observationScope": "Historical 16:27 preflight of dpl_FYQUe8K9oFtufsgfRVpRpcNHy522 before later normal store-connection setup, sensitive credential handoff and failed actual attempt; original preflight response is preserved."
+      },
+      "projectScopedNeonManagementKeyValidated": true,
+      "managementCredentialHandoff": {
+        "credentialValueStoredAsSensitiveBackupProductionVariable": true,
+        "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "normalExactProjectAuthenticationReadHttpStatus": 200,
+        "validationReadOnly": true,
+        "validationMutations": 0,
+        "validManagementAccessProven": true,
+        "validKeyCreationOrHandoffClaimed": true,
+        "currentHandoffBoundary": "Completed: genuine project-scoped key returned HTTP 200 with matching project identity, native CLI saved Sensitive Production at 18:19:48.409 UTC; subsequent actual FULL and independent readbacks passed.",
+        "productionOidcIsMissingExternalSecret": false,
+        "storeConnectionGapResolved": true,
+        "credentialValuesIncluded": false,
+        "normalBrowserAuthenticated": true,
+        "normalBrowserAuthenticationMissing": false,
+        "normalBrowserReadOnlySensitiveProductionRowObserved": true,
+        "nativeKeyMetadataUpdatedAt": "2026-11-01T18:19:48.409Z",
+        "browserSaveReportIsNativeAuthenticationProof": false,
+        "nativeExactProjectIdentityMatches": true,
+        "nativeProjectValidationContext": "Coordinator native helper using the genuine newly created project-scoped key; this is distinct from earlier failed deployed-workload diagnoses.",
+        "correctedCredentialHandoffComplete": true,
+        "handoffMethod": "Native CLI Sensitive Production upsert from the newly created key held only in RAM",
+        "earlierGuiSaveReportConfirmed": false,
+        "nativeCliSensitiveProductionUpsertConfirmed": true,
+        "credentialHandoffReceipt": "neon-management-credential-handoff.json",
+        "branchAndEndpointNativeSuccessClaimed": false,
+        "previous1806DiagnosisReceipt": "readonly-neon-access-diagnosis.json",
+        "preHandoffNativeDiagnosisReceipt": "neon-management-credential-handoff.json",
+        "preHandoffNativeDiagnosisField": "preHandoffNativeWorkloadDiagnosis",
+        "preHandoffNativeDiagnosisAt": "2026-11-01T18:18:34.994Z",
+        "preHandoffProjectBranchEndpointStatuses": [
+          {
+            "resource": "PROJECT",
+            "httpStatus": 401,
+            "identityMatches": false
+          },
+          {
+            "resource": "BRANCH",
+            "httpStatus": 401,
+            "identityMatches": false
+          },
+          {
+            "resource": "ENDPOINT",
+            "httpStatus": 401,
+            "identityMatches": false
+          }
+        ],
+        "unusedOwnKeyCleanup": {
+          "observationSource": "Coordinator-reported normal browser UI result only; no independent native API verification",
+          "normalNeonUiRunId": "007a1988-3e9e-47d9-98ff-a1af69ff3dca",
+          "reportedCompletedSteps": 14,
+          "reportedDurationSeconds": 75,
+          "neonProjectId": "misty-cloud-70835427",
+          "bothRevokedKeysAbsentAfterReload": true,
+          "active1820KeyPresent": true,
+          "activeKeyName": "crm-full-backup-20261101-1820z",
+          "blockerReported": false,
+          "independentNativeApiVerificationClaimed": false,
+          "credentialValuesIncluded": false,
+          "revokedOwnKeyNameSuffixes": [
+            "1810z",
+            "1750z"
+          ]
+        }
+      },
+      "actualRunAttempt": {
+        "attemptedAt": "2026-11-01T16:44:52Z",
+        "deploymentId": "dpl_GXFQ6g8yBAmFX6NDABDYUEcfYEZ6",
+        "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "httpStatus": 503,
+        "status": "INCOMPLETE",
+        "sourceSnapshot": {
+          "id": "snap-silent-shape-alvreahy",
+          "sourceBranchId": "br-spring-night-alyu48yp",
+          "createdAt": "2026-11-01T16:42:48Z",
+          "expiresAtReported": "2026-11-08 16:45 UTC"
+        },
+        "targetNamespaceObservation": {
+          "prefix": "crm-full-backups/",
+          "observedAt": "2026-11-01T16:47:40Z",
+          "exhaustive": true,
+          "objectCount": 0
+        },
+        "branchListObservation": {
+          "branchCount": 16,
+          "matchingCrmBackupBranchesObserved": 0,
+          "interpretation": "No matching crm-backup branch was observed in that list; this is not a claim about every intermediate provider action."
+        },
+        "productionEndpointReadback": {
+          "id": "ep-wandering-union-alem0781",
+          "branchId": "br-spring-night-alyu48yp",
+          "currentState": "active",
+          "disabled": false,
+          "bindingChanged": false
+        },
+        "targetOriginalAssetsStillVerified": 2,
+        "fullBackupSetProven": false,
+        "successfulIsolatedFullRestoreClaimed": false,
+        "observationScope": "Historical failed unattended attempt at 16:44 before the separate successful manual five-file restoration; its two-file checkpoint and empty backup namespace are preserved as observed."
+      },
+      "currentExecutionState": {
+        "status": "FULL_VERIFIED_DAILY_CRON_ACTIVE",
+        "deploymentId": "dpl_D2reD5otiHjAHvFgRqohV4KCPwSy",
+        "readyState": "READY",
+        "fullBackupEnabled": true,
+        "flag": "CRM_FULL_BACKUP_ENABLED=true",
+        "cronEnabled": true,
+        "crons": [
+          {
+            "path": "/api/backup",
+            "schedule": "15 3 * * *"
+          }
+        ],
+        "cronDisabledAt": null,
+        "verifiedAt": "2026-11-01T18:22:55.562Z",
+        "firstScheduledRunObserved": false,
+        "nextScheduledRunUtc": "2026-11-02T03:15:00Z",
+        "nextScheduledRunEuropeVienna": "2026-11-02 04:15 CET",
+        "manualDataRecoveryPass": true,
+        "currentManualOriginalFileCount": 5,
+        "actualFullExecutionCompleted": true
+      },
+      "pendingManagementCredentialValidation": false,
+      "latestAuthorizedRunAttempt": {
+        "receipt": "combined-backup-full-execution.json",
+        "observedAt": "2026-11-01T18:21:11.162Z",
+        "deploymentId": "dpl_6gwzyB92ej3QFQgajGpYsbekk1pU",
+        "httpStatus": 200,
+        "result": {
+          "status": "FULL",
+          "scope": "FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES",
+          "wholeApplicationBackup": false,
+          "backupId": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+          "snapshotId": "snap-ancient-hat-al16xd1i",
+          "isolatedBranchId": "br-late-bonus-alphwux4",
+          "manifestSha256": "eec51b47c3a1eedb68263952634f77f97ce087cff4dd52b9203607f3edf3468b",
+          "fileCount": 5,
+          "fileBytes": 44260,
+          "historicalReferenceCount": 2,
+          "cleanup": "OBSERVED_DISABLED_AND_IDLE",
+          "completedAt": "2026-11-01T18:21:08.928Z",
+          "enabled": true,
+          "mode": "EXECUTE",
+          "code": "BACKUP_FULL"
+        },
+        "independentIndexReadbackReceipt": "combined-backup-index-readback.json",
+        "providerReadbackReceipt": "combined-backup-provider-readback.json"
+      },
+      "latestNativeAccessDiagnosis": {
+        "receipt": "neon-management-credential-handoff.json",
+        "receiptField": "preHandoffNativeWorkloadDiagnosis",
+        "observedAt": "2026-11-01T18:18:34.994Z",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+        "deploymentId": "dpl_641Xv4z6qVGUprJW2DDhp3vACLqW",
+        "applicationHttpStatus": 503,
+        "resultStatus": "ACCESS_FAILED",
+        "keyConfigured": true,
+        "checks": [
+          {
+            "resource": "PROJECT",
+            "httpStatus": 401,
+            "identityMatches": false
+          },
+          {
+            "resource": "BRANCH",
+            "httpStatus": 401,
+            "identityMatches": false
+          },
+          {
+            "resource": "ENDPOINT",
+            "httpStatus": 401,
+            "identityMatches": false
+          }
+        ],
+        "neonMutations": 0,
+        "sourceSqlConnections": 0,
+        "blobRequests": 0,
+        "fullBackupEnabled": false,
+        "cronEnabled": false,
+        "beforeSuccessfulNewKeyHandoff": true,
+        "notCurrentKeyValidation": true,
+        "separateFrom1800Execution": true,
+        "earlierExecutionProviderHttpStatusInferred": false
+      },
+      "previousNativeAccessDiagnoses": [
+        {
+          "receipt": "readonly-neon-access-diagnosis.json",
+          "observedAt": "2026-11-01T18:06:10.804Z",
+          "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+          "deploymentId": "dpl_2MAUirQhzhcGsftFmBYwK3Wi1xwZ",
+          "applicationHttpStatus": 503,
+          "resultStatus": "ACCESS_FAILED",
+          "keyConfigured": true,
+          "checks": [
+            {
+              "resource": "PROJECT",
+              "httpStatus": 401,
+              "identityMatches": false
+            },
+            {
+              "resource": "BRANCH",
+              "httpStatus": 401,
+              "identityMatches": false
+            },
+            {
+              "resource": "ENDPOINT",
+              "httpStatus": 401,
+              "identityMatches": false
+            }
+          ],
+          "neonMutations": 0,
+          "sourceSqlConnections": 0,
+          "blobRequests": 0,
+          "fullBackupEnabled": false,
+          "cronEnabled": false,
+          "separateFrom1800Execution": true,
+          "earlierExecutionProviderHttpStatusInferred": false
+        }
+      ],
+      "nativeCredentialHandoff": {
+        "receipt": "neon-management-credential-handoff.json",
+        "status": "NATIVE_PROJECT_ACCESS_200_AND_SENSITIVE_PRODUCTION_HANDOFF_CONFIRMED",
+        "keyCreation": {
+          "neonProjectId": "misty-cloud-70835427",
+          "keyName": "crm-full-backup-20261101-1820z",
+          "scope": "Exact Neon project",
+          "normalNeonUiRunId": "57487e11-87c7-4820-a803-73deaae35fca",
+          "reportedCompletedSteps": 15,
+          "status": "COMPLETED",
+          "secretHeldInMemoryOnly": true
+        },
+        "nativeValidation": {
+          "resource": "PROJECT",
+          "neonProjectId": "misty-cloud-70835427",
+          "httpStatus": 200,
+          "identityMatches": true,
+          "method": "Coordinator native helper exact-project GET using the genuine newly created key",
+          "branchAndEndpointSuccessClaimed": false
+        },
+        "nativeSensitiveProductionUpsert": {
+          "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+          "variableName": "NEON_API_KEY",
+          "type": "sensitive",
+          "target": [
+            "production"
+          ],
+          "nativeCliResult": "SAVED",
+          "metadataUpdatedAt": "2026-11-01T18:19:48.409Z",
+          "crmApplicationProjectUpdated": false,
+          "credentialValuePrintedOrWrittenLocally": false
+        },
+        "sourceArtifactHashAvailable": false,
+        "sourceArtifactHashInvented": false,
+        "credentialValuesIncluded": false
+      },
+      "previousAuthorizedRunAttempt": {
+        "receipt": "authorized-combined-backup-execution.json",
+        "execution": {
+          "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+          "expectedSnapshotId": "snap-ancient-hat-al16xd1i",
+          "cronEnabled": false,
+          "credentialPrintedOrPersistedLocally": false,
+          "productionEndpointId": "ep-wandering-union-alem0781",
+          "sourceBranchId": "br-spring-night-alyu48yp",
+          "deploymentId": "dpl_Kj5bXmJUtYhpeD4Uem3jEQkKtZdj",
+          "deploymentUrl": "knowledge-ops-restore-20261101-8cl2phob8-novalure.vercel.app",
+          "httpStatus": 503,
+          "observedAt": "2026-11-01T18:00:09.614Z",
+          "status": "INCOMPLETE_OR_BLOCKED_NO_RETRY",
+          "result": {
+            "status": "INCOMPLETE",
+            "scope": "FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES",
+            "wholeApplicationBackup": false,
+            "failureCode": "NEON_REQUEST_FAILED",
+            "enabled": true,
+            "code": "BACKUP_INCOMPLETE"
+          }
+        },
+        "targetNamespaceReadback": {
+          "reportedBy": "Existing read-only observation from publication_proposals; no repeat provider request for this evidence",
+          "observedAt": "2026-11-01T18:02:57.414Z",
+          "storeId": "store_Xq45pbZfYunmR6ah",
+          "namespaceClass": "Dedicated combined-backup namespace",
+          "exhaustive": true,
+          "objectCount": 0,
+          "claimObjectObserved": false,
+          "fullMarkerObserved": false,
+          "privateObjectPathsIncluded": false,
+          "startedAt": "2026-11-01T18:02:55.969Z",
+          "pages": 1,
+          "hasMore": false,
+          "totalBytes": 0,
+          "expectedClaimPresent": false,
+          "controlReads": 0,
+          "provenance": "Existing publication_proposals tool-output projection; no original separate receipt file or source artifact hash was created."
+        },
+        "neonBranchAndProductionObservation": {
+          "reportedBy": "Coordinator existing read-only Neon branch/endpoint observation",
+          "reportedTimeUtc": "2026-11-01 around 18:00 UTC; exact timestamp not provided in this artifact",
+          "newCrmBackupBranchObserved": false,
+          "sourceBranchId": "br-spring-night-alyu48yp",
+          "sourceBranchName": "main",
+          "defaultBranchMatchesSource": true,
+          "productionEndpointId": "ep-wandering-union-alem0781",
+          "productionEndpointCurrentState": "active",
+          "productionEndpointStillBoundToSource": true,
+          "expectedSnapshotRestoreProven": false
+        },
+        "earlierExecutionNeonProviderStatusInferredFromLaterDiagnosis": false
+      },
+      "firstScheduledRunObserved": false
+    },
+    "combinedDailyCron": {
+      "receipt": "backup-cron-activation.json",
+      "status": "CRON_ENABLED_AFTER_VERIFIED_FULL",
+      "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+      "deployment": {
+        "id": "dpl_D2reD5otiHjAHvFgRqohV4KCPwSy",
+        "url": "knowledge-ops-restore-20261101-ex5m9awac-novalure.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk"
+      },
+      "cron": {
+        "path": "/api/backup",
+        "schedule": "15 3 * * *"
+      },
+      "cronReadback": {
+        "definitions": [
+          {
+            "path": "/api/backup",
+            "schedule": "15 3 * * *"
+          }
+        ],
+        "disabledAt": null,
+        "observedAt": "2026-11-01T18:22:55.562Z"
+      },
+      "executionFlag": true,
+      "packagedCodeHashCount": 9,
+      "packagedCodeSameAsSuccessfulFull": true,
+      "cronSecretPreserved": true,
+      "managementCredentialMetadataPreserved": true,
+      "productionOidcConnectionsPreserved": true,
+      "sourceCrmMutations": 0,
+      "neonCalls": 0,
+      "backupInvocations": 0,
+      "deploymentAttempts": 1,
+      "firstScheduledRunObserved": false,
+      "nextScheduledRunUtc": "2026-11-02T03:15:00Z",
+      "nextScheduledRunEuropeVienna": "2026-11-02 04:15 CET",
+      "retentionMode": "PLAN_ONLY_NO_DELETIONS"
+    },
+    "businessRpoAgreed": false,
+    "automaticRetentionDeletionsActive": false,
+    "retentionMode": "PLAN_ONLY_NO_DELETIONS"
+  },
+  "cliHelperCleanup": {
+    "format": "knowledge-ops-cli-probe-cleanup-v1",
+    "status": "UNINTENDED_HELPER_PROJECT_REMOVED",
+    "cause": "CLI65.9 native env run invocation unexpectedly performed deployments of the presence.cjs helper instead of executing the requested child probe. Three calls were made before the dispatch error was recognized. This command path is no longer used.",
+    "projectId": "prj_yq7Ef9QawjBbgVBppkjlPHQ7oqxn",
+    "projectName": "presence",
+    "deploymentIds": [
+      "dpl_5iUPGrdvAMry2K3xhtmxYyEtRr53",
+      "dpl_GwBoZPXkM6deuHLDJM1VzNmVXY4t",
+      "dpl_Dpt7DG3i46soUJKsQHbDbLbe4Nwo"
+    ],
+    "crmProjectModified": false,
+    "crmDeploymentCreated": false,
+    "beforeCleanup": {
+      "paused": true,
+      "gitConnectionPresent": false,
+      "environmentRecordCount": 0,
+      "source": "Helper contains only Boolean checks of two known variable names; no file bytes, credentials or business data."
+    },
+    "cleanup": "Paused the exact new helper project, verified its identity and zero env records, then deleted it via native vercel project delete presence --scope novalure --yes. CLI returned Deleted presence.",
+    "noCredentialInjectionProofClaimed": true
+  },
+  "finalNativeChecksAndMerge": {
+    "finalHeadSha": "52f009c8b4709fd36647634b6f7ce54444fe3799",
+    "nativeQuality": {
+      "runId": 41316658465,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41316658465",
+      "conclusion": "SUCCESS",
+      "attempt": 1,
+      "completedAt": "2026-11-01T14:43:10Z",
+      "fullGateJobId": 124878029666,
+      "fullGateConclusion": "SUCCESS",
+      "auditJobId": 124878029880,
+      "auditConclusion": "SUCCESS",
+      "includes": [
+        "Production build",
+        "Integrated Design C and Knowledge acceptance",
+        "Whitespace check"
+      ]
+    },
+    "nativeSecretScan": {
+      "runId": 41316658454,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41316658454",
+      "conclusion": "SUCCESS",
+      "attempt": 1,
+      "completedAt": "2026-11-01T14:32:10Z"
+    },
+    "nativePreview": {
+      "deploymentId": "dpl_AJdxskiWDGx67nPU6G1nHNnSrsHw",
+      "conclusion": "SUCCESS",
+      "headSha": "52f009c8b4709fd36647634b6f7ce54444fe3799"
+    },
+    "manualTrustedCandidate": {
+      "jobId": 124880764810,
+      "conclusion": "SKIPPED",
+      "countedAsPass": false
+    },
+    "merge": {
+      "pullRequest": 120,
+      "url": "https://github.com/novalure/novalure-crm/pull/120",
+      "state": "MERGED",
+      "mergeCommitShaPrefix": "a45625d",
+      "mergedAt": "2026-11-01T14:44:11Z"
+    },
+    "productionDeploymentChangedByMerge": false,
+    "selfCreatedSuccessStatusUsed": false
+  },
+  "fullOperationalAcceptance": "PASS_FULL_DATABASE_AND_ALL_DATABASE_REFERENCED_PRIVATE_FILES_WITH_DAILY_CRON_ACTIVE",
+  "updatedThrough": "2026-11-01T18:22:55.562Z",
+  "knowledgeTxtDocumentDiagnosis": {
+    "scope": "Historical generic-route diagnosis and exact production code read, supplemented by later direct original-byte restoration and isolated database-reference pairing.",
+    "productionSourceSha": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+    "neonProjectId": "misty-cloud-70835427",
+    "branchId": "br-spring-night-alyu48yp",
+    "endpointId": "ep-wandering-union-alem0781",
+    "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+    "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+    "assetExists": true,
+    "mimeType": "text/plain",
+    "bytes": 953,
+    "storageProvider": "vercel-blob",
+    "storageAccess": "private",
+    "isPublic": false,
+    "folderClass": "knowledge-private-",
+    "relativePathSha256": "50a6ceb9a7846fa6ec277051827f5b85bdfac6a482aab77890d720c0b57d7d74",
+    "urlSha256": "4d2d5f16e5041ca8889b89b31189d4e8e6ecebf32b0a963ca312e2501aad54d0",
+    "manifestMatchesAssetMetadata": true,
+    "publicTokenPresent": false,
+    "shareCount": 0,
+    "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+    "approvedVersionId": "258d0747-f470-49a2-b2c5-9c1143ac014c",
+    "historicalVersionIds": [
+      "37c77c9a-c8e7-481a-9000-05360398a61a",
+      "258d0747-f470-49a2-b2c5-9c1143ac014c"
+    ],
+    "knowledgeVersionReferences": 2,
+    "genericMedia404Meaning": "The ordinary media database lookup intentionally excludes knowledge-private assets before any Blob read; this 404 does not diagnose missing physical bytes.",
+    "normalDocumentUrl": "https://www.novalure-crm.app/api/knowledge-center/sources/6a4b1ef0-9196-4bdc-a965-8c1aa832aac5/document?versionId=258d0747-f470-49a2-b2c5-9c1143ac014c&workspaceId=8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+    "explicitWorkspaceQuerySupported": true,
+    "normalDurableSessionRequired": true,
+    "workspaceMembershipAndMfaChecksPreserved": true,
+    "txtDownloadBytesVerified": false,
+    "txtBytesRestored": true,
+    "privateFilenamesOrObjectKeysIncluded": false,
+    "txtDownloadBytesVerifiedScope": "A successful authenticated normal application document download is not claimed; direct SDK source and target byte verification is separately proven.",
+    "txtSourceBytesReadAndShaVerified": true,
+    "txtTargetBytesReadAndShaVerified": true,
+    "txtContentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+    "bothHistoricalDocumentHashesMatchRestoredOriginal": true,
+    "normalApplicationTextDownloadHttp200Claimed": false,
+    "normalApplicationRuntimeObservation": {
+      "format": "knowledge-ops-regular-txt-runtime-receipt-v1",
+      "sourceCategory": "vercel-native-runtime-logs",
+      "deploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+      "window": {
+        "since": "2026-11-01T18:03:00.000Z",
+        "until": "2026-11-01T18:11:00.000Z"
+      },
+      "evidenceUnavailable": true,
+      "requestReceiptCount": 0,
+      "targetedUiChecks": 1,
+      "targetedNativeLogQueries": 1,
+      "requestOccurredInferred": false,
+      "httpFailureInferred": false,
+      "normalHttp200Claimed": false,
+      "interpretation": "One focused native production runtime-log query returned no indexed records for the route in the selected window. This does not establish that an HTTP request occurred or failed. No retry or new application request was made.",
+      "additionalApplicationRequestsForThisEvidenceUpdate": 0
+    }
+  },
+  "followUpNativeChecksAndMerge": {
+    "pullRequest": 122,
+    "url": "https://github.com/novalure/novalure-crm/pull/122",
+    "finalHeadSha": "ad7f64757dcb06c7af0414bc6b251fc0efeb2385",
+    "nativeQuality": {
+      "runId": 41326808191,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41326808191",
+      "conclusion": "SUCCESS",
+      "durationSeconds": 643
+    },
+    "nativeSecretScan": {
+      "runId": 41326808327,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41326808327",
+      "conclusion": "SUCCESS"
+    },
+    "nativePreview": {
+      "deploymentId": "dpl_J78PwN5rssmgNRtVTRPrLTHiCqZ1",
+      "conclusion": "SUCCESS"
+    },
+    "merge": {
+      "state": "MERGED",
+      "mergeCommitSha": "8baace9abaa4bf8dc44d904f541a90ff39c5b9dc",
+      "mergedAt": "2026-11-01T16:44:00Z"
+    },
+    "nativeCodeChecksAreSuccessfulOperationalBackupProof": false,
+    "selfCreatedSuccessStatusUsed": false
+  },
+  "manualDataRecovery": {
+    "status": "PASS_DATABASE_AND_ALL_REFERENCED_PRIVATE_ORIGINALS_PAIRED",
+    "operationalDataRecovery": "PASS",
+    "scope": "MANUAL_SNAPSHOT_DATABASE_AND_ALL_DATABASE_REFERENCED_PRIVATE_ORIGINAL_FILES",
+    "verifiedAt": "2026-11-01T17:16:48.371910+00:00",
+    "receipt": "database-file-reference-pairing.json",
+    "receiptSha256": "fb1081bfdaf1afbf308b506f0e4becdc2027a590f694cdf8f2521b1cf0b897af",
+    "databaseSnapshotId": "snap-fragrant-breeze-al24d0gr",
+    "databaseSnapshotPoint": "2026-11-01T14:23:47Z",
+    "reusedFullDatabaseComparison": {
+      "tables": 200,
+      "rows": 5092,
+      "catalogCategories": 28,
+      "sequences": 2,
+      "combinedSha256": "349aea3e534def11ba511028029c5730d567368f98de75be06d095f1d9c982c4",
+      "mediaAssetsTableSha256": "793a854ca9f7cf5152a83b872d3553cdc6cceff39571515112d23c27933f748d",
+      "knowledgeSourceVersionsTableSha256": "1c3206e9e5c617fc703e0bda92c3aaae5dee253b659d9416e8ac0effa7164fb7",
+      "unchangedProofReused": true
+    },
+    "narrowTargetReadIdentity": {
+      "role": "neondb_owner",
+      "branchId": "br-orange-brook-al5f6n0f",
+      "readOnly": true,
+      "projectId": "misty-cloud-70835427",
+      "databaseName": "neondb",
+      "mediaRlsActive": false,
+      "versionRlsActive": false
+    },
+    "targetEndpointId": "ep-raspy-union-al4lz6jx",
+    "narrowTargetAssetRows": 5,
+    "narrowTargetHistoricalReferenceRows": 2,
+    "matchingOriginalAssetCount": 5,
+    "matchingOriginalBytes": 44260,
+    "historicalVersionReferencesWithMatchingOriginalSha256": 2,
+    "references": [
+      {
+        "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+        "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+        "versionId": "258d0747-f470-49a2-b2c5-9c1143ac014c",
+        "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+        "documentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+        "documentSizeBytes": 953
+      },
+      {
+        "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+        "sourceId": "6a4b1ef0-9196-4bdc-a965-8c1aa832aac5",
+        "versionId": "37c77c9a-c8e7-481a-9000-05360398a61a",
+        "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+        "documentSha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+        "documentSizeBytes": 953
+      }
+    ],
+    "privateManifestOrigin": {
+      "snapshotId": "snap-quiet-rice-alihtu8r",
+      "snapshotAt": "2026-11-01T14:01:49Z",
+      "manifestSha256": "ab9fc80e34bc4f3c59441a95d4a47c68407bfb5401998b293afd22c316c3f72c",
+      "assetCount": 5,
+      "totalBytes": 44260,
+      "historicalKnowledgeVersionReferenceCount": 2
+    },
+    "fileRestoreReceipt": "manual-private-file-restore.json",
+    "fileRestoreReceiptSha256": "bd6b09fc017cde10964751a371a63fcafd870942021b2593813ab228ad4041ce",
+    "allFiveOriginalSourceTargetHashesMatch": true,
+    "allFiveOriginalTargetKeysMatch": true,
+    "allFiveAnonymousRequestsDenied403": true,
+    "fullDatabaseScanRepeated": false,
+    "isolatedComputeCleanup": {
+      "id": "ep-raspy-union-al4lz6jx",
+      "branchId": "br-orange-brook-al5f6n0f",
+      "disabled": true,
+      "currentState": "idle"
+    },
+    "productionEndpoint": {
+      "id": "ep-wandering-union-alem0781",
+      "branchId": "br-spring-night-alyu48yp",
+      "disabled": false,
+      "currentState": "active"
+    },
+    "productionEndpointChanged": false,
+    "laterSnapshotRestoredClaimed": false,
+    "laterSnapshotId": "snap-silent-shape-alvreahy",
+    "scheduledCombinedJobSucceeded": false,
+    "restoredApplicationAcceptanceClaimed": false,
+    "wholeApplicationBackupClaimed": false,
+    "additionalUserFileZipRequired": false,
+    "initialProductionRestoreIncidentRemainsDisclosed": true
+  },
+  "currentCodeFixPullRequest": {
+    "pullRequest": 123,
+    "url": "https://github.com/novalure/novalure-crm/pull/123",
+    "state": "MERGED",
+    "checkedFinalHeadSha": "aa9536b3b875fb3eebba05a9e64c8d7b9fa37ccd",
+    "nativeQuality": {
+      "runId": 41331277944,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41331277944",
+      "conclusion": "SUCCESS",
+      "durationSeconds": 478
+    },
+    "nativeSecretScan": {
+      "runId": 41331277640,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/41331277640",
+      "conclusion": "SUCCESS",
+      "durationSeconds": 12
+    },
+    "nativePreview": {
+      "deploymentId": "dpl_7zE64Br4DrMJLkni9Kf9KGGqnQrz",
+      "readyState": "READY"
+    },
+    "manualCandidate": {
+      "conclusion": "SKIPPED",
+      "countedAsPass": false
+    },
+    "merge": {
+      "mergedAt": "2026-11-01T17:33:20Z",
+      "mergeCommitSha": "ed6db844e3850c05b344c923b5c92151fe486c6c"
+    },
+    "earlierCodeFixChecks": {
+      "headShaPrefix": "cd6015ef",
+      "nativeQuality": {
+        "runId": 41329232214,
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/41329232214",
+        "conclusion": "SUCCESS"
+      },
+      "nativeSecretScan": {
+        "runId": 41329232375,
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/41329232375",
+        "conclusion": "SUCCESS"
+      },
+      "nativePreview": {
+        "deploymentId": "dpl_5rHKVuUmThcYkZi8jQCJXJtXHscR",
+        "conclusion": "SUCCESS"
+      }
+    },
+    "finalEvidenceCommitPending": false,
+    "checksForSubsequentProviderFixClaimed": false
+  },
+  "operationalDataRecovery": "PASS",
+  "unattendedAutomationAcceptance": "ACTUAL_FULL_PASS_DAILY_CRON_ACTIVE_FIRST_SCHEDULED_RUN_NOT_YET_OBSERVED",
+  "pendingProviderDiagnosticFix": {
+    "scope": "Preserve allowlisted numeric Neon HTTP failure codes such as NEON_HTTP_401 without exposing raw provider responses or credentials",
+    "focusedLocalProviderChecks": {
+      "passed": 15,
+      "failed": 0,
+      "source": "Existing coordinator-reported focused checks; no test rerun for this evidence update"
+    },
+    "nativeCiStatusAtEvidenceCommit": "PENDING",
+    "finalNativeCiReceiptLocation": "Associated closure pull request final-head checks and merge receipt",
+    "newBroadManualSuiteClaimed": false,
+    "successfulOperationalFullRunClaimed": false
+  },
+  "actualCombinedFullBackup": {
+    "status": "PASS_ACTUAL_FULL_EXECUTION_AND_INDEPENDENT_READBACKS",
+    "scope": "FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES",
+    "wholeApplicationBackup": false,
+    "executionReceipt": "combined-backup-full-execution.json",
+    "observedAt": "2026-11-01T18:21:11.162Z",
+    "httpStatus": 200,
+    "result": {
+      "status": "FULL",
+      "scope": "FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES",
+      "wholeApplicationBackup": false,
+      "backupId": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+      "snapshotId": "snap-ancient-hat-al16xd1i",
+      "isolatedBranchId": "br-late-bonus-alphwux4",
+      "manifestSha256": "eec51b47c3a1eedb68263952634f77f97ce087cff4dd52b9203607f3edf3468b",
+      "fileCount": 5,
+      "fileBytes": 44260,
+      "historicalReferenceCount": 2,
+      "cleanup": "OBSERVED_DISABLED_AND_IDLE",
+      "completedAt": "2026-11-01T18:21:08.928Z",
+      "enabled": true,
+      "mode": "EXECUTE",
+      "code": "BACKUP_FULL"
+    },
+    "databaseSnapshotPoint": "2026-11-01T17:59:39Z",
+    "newDataPointDistinctFromEarlierManualRestore": true,
+    "olderManualDatabaseSnapshotPoint": "2026-11-01T14:23:47Z",
+    "earlierManualTableCountsReusedAsNewCounts": false,
+    "independentIndex": {
+      "receipt": "combined-backup-index-readback.json",
+      "status": "PRIVATE_FULL_INDEX_READBACK_PASS",
+      "finishedAt": "2026-11-01T18:21:31.813Z",
+      "backupId": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+      "snapshotId": "snap-ancient-hat-al16xd1i",
+      "isolatedBranchId": "br-late-bonus-alphwux4",
+      "manifestSha256": "eec51b47c3a1eedb68263952634f77f97ce087cff4dd52b9203607f3edf3468b",
+      "assetCount": 5,
+      "assetBytes": 44260,
+      "historicalReferenceCount": 2,
+      "fullCommitMarkerVerified": true,
+      "manifestShaVerified": true,
+      "noIncompleteMarker": true,
+      "indexListPages": 1,
+      "targetControlReadCalls": 4,
+      "sourceRequests": 0,
+      "neonCalls": 0,
+      "storeWrites": 0,
+      "jobRetries": 0,
+      "retention": {
+        "mode": "PLAN_ONLY_NO_DELETIONS",
+        "candidateCount": 0,
+        "protectedLatestFull": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+        "deletions": 0
+      }
+    },
+    "providerReadback": {
+      "receipt": "combined-backup-provider-readback.json",
+      "observedAt": "2026-11-01 18:21:40 UTC",
+      "productionUnchanged": true,
+      "crmProductionDeploymentId": "dpl_HPDsGkXp4M4LVp7TSpuHh7jKyAeC",
+      "productionEndpoint": {
+        "id": "ep-wandering-union-alem0781",
+        "branchId": "br-spring-night-alyu48yp",
+        "currentState": "active",
+        "disabled": false
+      },
+      "isolatedBranch": {
+        "id": "br-late-bonus-alphwux4",
+        "projectId": "misty-cloud-70835427",
+        "default": false,
+        "primary": false,
+        "restoreStatus": "restored",
+        "restoredFrom": "snap-ancient-hat-al16xd1i",
+        "snapshotPoint": "2026-11-01T17:59:39Z"
+      },
+      "isolatedEndpoints": [
+        {
+          "id": "ep-fancy-dawn-al0gh7wn",
+          "branchId": "br-late-bonus-alphwux4",
+          "disabled": true,
+          "currentState": "idle",
+          "minCu": 0.25,
+          "maxCu": 0.25
+        }
+      ],
+      "ownedRestoreDisabledAndIdle": true,
+      "snapshotSchedule": [
+        {
+          "frequency": "daily",
+          "hour": 3,
+          "retention_seconds": 604800
+        }
+      ]
+    },
+    "excludedScope": [
+      "Public and legacy-public files",
+      "Source-store objects without database references"
+    ],
+    "restoredWholeApplicationAcceptanceClaimed": false,
+    "businessRpoAgreed": false,
+    "endToEndApplicationRtoMeasured": false
+  }
+}
