@@ -183,27 +183,39 @@ export async function mutatePersonalCalendar(s:AppSession,input:Record<string,un
   },o);
   if(!staged)return mutatePersonalCalendar(s,input,o);
   const {row,op}=staged;
-  let attempted=false;
+  let writePhase: "not_started" | "in_flight" | "acknowledged" = "not_started";
+  let providerEventId = row.providerEventId;
   try{
     const port=await provider(s,row,o,op,lease);
     const p=op.payload.event;
     // Even injected offline transports must pass the same fresh journal/recipient boundary.
     await authorizedWrite(s,row.id,op,lease,o,async()=>new Response(null,{status:204}),p.attendees.length||row.event.attendees.length?{attendees:action==="cancel"?[]:p.attendees,previousAttendees:action==="create"?[]:row.event.attendees}:undefined);
     const write={bookingId:row.id,operationId:op.id,title:p.title,startsAt:p.startsAt,endsAt:p.endsAt,timeZone:p.timeZone,location:p.location,kind:"office" as const,standaloneAttendees:p.attendees};
-    attempted=true;
+    writePhase = "in_flight";
     if(action==="cancel")await port.delete({bookingId:row.id,operationId:op.id,eventId:row.providerEventId!,etag:row.providerEtag,standaloneAttendees:[]});
-    else if(action==="create")await port.create(write);
+    else if(action==="create")providerEventId = (await port.create(write)).eventId;
     else await port.update({...write,eventId:row.providerEventId!,etag:row.providerEtag});
-    const remote=await port.lookup({bookingId:row.id,operationId:op.id,...(row.providerEventId?{eventId:row.providerEventId}:{})});
+    writePhase = "acknowledged";
+    const remote=await port.lookup({bookingId:row.id,operationId:op.id,...(providerEventId?{eventId:providerEventId}:{})});
     if(!remote||action==="cancel"&&!remote.cancelled)throw new BookingProviderError("personal_calendar_outcome_unknown","unknown");
     return await finish(s,row,op,lease,remote,o);
   }catch(error){
-    const unknown=error instanceof BookingProviderError?error.outcome==="unknown":attempted;
+    // A rejected control read says nothing about a write the provider already accepted.
+    const unknown = writePhase === "acknowledged" ||
+      (error instanceof BookingProviderError ? error.outcome === "unknown" : writePhase === "in_flight");
     const code=error instanceof BookingError?error.code:"personal_calendar_outcome_unknown";
     return txRun(s,async(tx,fresh)=>{
       const current=await read(tx,fresh,row.id);
       const claimed=await tx.queryOne(`update crm_personal_calendar_operations set state=$5,error_code=$6,lease_owner=null,lease_until=null,updated_at=now() where workspace_id=$1 and actor_id=$2 and id=$3 and lease_owner=$4 and state='processing' returning id`,[fresh.workspaceId,fresh.userId,op.id,lease,unknown?"uncertain":"rejected",code]);
-      if(claimed&&current.operationId===op.id){const updated=(await tx.queryOne<Row>(`update crm_personal_calendar_events set state=$4,error_code=$5,version=version+1,updated_at=now() where workspace_id=$1 and actor_id=$2 and id=$3 returning ${columns}`,[fresh.workspaceId,fresh.userId,row.id,unknown?"uncertain":"failed",code]))!;if(!unknown)await tx.execute(`update crm_personal_calendar_operations set result=$4::jsonb where workspace_id=$1 and actor_id=$2 and id=$3`,[fresh.workspaceId,fresh.userId,op.id,JSON.stringify(dto(updated))]);await mirror(tx,fresh,updated);await audit(tx,fresh,updated,"personal_calendar.unconfirmed");return dto(updated);}return dto(current);
+      if (!claimed || current.operationId !== op.id) return dto(current);
+      const updated = (await tx.queryOne<Row>(`update crm_personal_calendar_events
+        set state=$4,error_code=$5,provider_event_id=coalesce(provider_event_id,$6),version=version+1,updated_at=now()
+        where workspace_id=$1 and actor_id=$2 and id=$3 returning ${columns}`,
+        [fresh.workspaceId,fresh.userId,row.id,unknown?"uncertain":"failed",code,providerEventId]))!;
+      if (!unknown) await tx.execute(`update crm_personal_calendar_operations set result=$4::jsonb where workspace_id=$1 and actor_id=$2 and id=$3`,[fresh.workspaceId,fresh.userId,op.id,JSON.stringify(dto(updated))]);
+      await mirror(tx,fresh,updated);
+      await audit(tx,fresh,updated,"personal_calendar.unconfirmed");
+      return dto(updated);
     },o);
   }
 }
@@ -229,10 +241,15 @@ async function refresh(s:AppSession,input:Record<string,unknown>,o:PersonalCalen
   const row=await txRun(s,async(tx,fresh)=>{const r=await read(tx,fresh,id);if(r.version!==assertExpectedVersion(input.expectedVersion))throw new BookingError("personal_calendar_version_conflict",409);await binding(tx,fresh,r);return r;},o);
   if(input.action==="import_remote")return txRun(s,async(tx,fresh)=>{
     const previous=await tx.queryOne<Operation>(`select ${opColumns} from crm_personal_calendar_operations where workspace_id=$1 and actor_id=$2 and id=$3`,[fresh.workspaceId,fresh.userId,input.idempotencyKey]);
-    if(previous){if(previous.action!=="import_remote"||previous.eventId!==id||previous.requestHash!==crmPayloadDigest(input))throw new BookingError("personal_calendar_idempotency_conflict",409);return previous.result??dto(await read(tx,fresh,id));}
+    if(previous){if(previous.action!=="import_remote"||previous.eventId!==id||previous.requestHash!==crmPayloadDigest(input))throw new BookingError("personal_calendar_idempotency_conflict",409);const current=await read(tx,fresh,id);return previous.result??dto(current);}
     const r=await read(tx,fresh,id);await binding(tx,fresh,r);
     if(r.version!==input.expectedVersion||r.state!=="conflict"||!r.remoteSnapshot||(!r.remoteSnapshot.cancelled&&!r.remoteSnapshot.etag)||r.remoteSnapshot.etag!==input.remoteEtag)throw new BookingError("personal_calendar_snapshot_changed",409);
     const event=r.remoteSnapshot.cancelled?r.event:draft({projectId:r.event.projectId,title:r.remoteSnapshot.title,startsAt:r.remoteSnapshot.startsAt,endsAt:r.remoteSnapshot.endsAt,timeZone:r.event.timeZone,location:r.remoteSnapshot.location,attendees:r.remoteSnapshot.attendees});
+    // Keep the original intent's conflict receipt distinct from the accepted import.
+    await tx.execute(`update crm_personal_calendar_operations
+      set state='rejected',error_code='personal_calendar_conflict_resolved_by_import',result=$4::jsonb,updated_at=now()
+      where workspace_id=$1 and actor_id=$2 and id=$3 and event_id=$5 and state='uncertain'`,
+      [fresh.workspaceId,fresh.userId,r.operationId,JSON.stringify(dto(r)),id]);
     const updated=(await tx.queryOne<Row>(`update crm_personal_calendar_events set event=$4::jsonb,state=$6,provider_etag=$5,error_code=null,version=version+1,updated_at=now() where workspace_id=$1 and actor_id=$2 and id=$3 returning ${columns}`,[fresh.workspaceId,fresh.userId,id,JSON.stringify(event),r.remoteSnapshot.etag,r.remoteSnapshot.cancelled?"cancelled":"synced"]))!;
     await tx.execute(`insert into crm_personal_calendar_operations(id,workspace_id,actor_id,event_id,action,request_hash,payload,result,state) values($1,$2,$3,$4,'import_remote',$5,$6::jsonb,$7::jsonb,'succeeded')`,[input.idempotencyKey,fresh.workspaceId,fresh.userId,id,crmPayloadDigest(input),JSON.stringify({event,invitationsConfirmed:false}),JSON.stringify(dto(updated))]);
     await mirror(tx,fresh,updated);await audit(tx,fresh,updated,"personal_calendar.remote_imported");return dto(updated);
@@ -249,7 +266,7 @@ async function refresh(s:AppSession,input:Record<string,unknown>,o:PersonalCalen
   if(!remote)throw new BookingError("personal_calendar_remote_missing",409);
   const snap=snapshot(remote,row,o);
   return txRun(s,async(tx,fresh)=>{const current=await read(tx,fresh,id);await binding(tx,fresh,current);if(current.version!==row.version)throw new BookingError("personal_calendar_version_conflict",409);
-    const changed=remote.cancelled?row.state!=="cancelled":remote.etag!==row.providerEtag;
+    const changed = row.state === "conflict" || (remote.cancelled ? row.state !== "cancelled" : remote.etag !== row.providerEtag);
     const updated=(await tx.queryOne<Row>(`update crm_personal_calendar_events set remote_snapshot=$4::jsonb,state=$5,error_code=$6,version=version+1,updated_at=now() where workspace_id=$1 and actor_id=$2 and id=$3 returning ${columns}`,[fresh.workspaceId,fresh.userId,id,JSON.stringify(snap),changed?"conflict":remote.cancelled?"cancelled":"synced",changed?"personal_calendar_remote_changed":null]))!;await mirror(tx,fresh,updated);await audit(tx,fresh,updated,"personal_calendar.remote_checked");return dto(updated);
   },o);
 }

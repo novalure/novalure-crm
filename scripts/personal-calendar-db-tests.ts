@@ -31,6 +31,7 @@ class CalendarPort implements BookingProvider {
   events = new Map<string, ProviderEvent>();
   creates = 0; updates = 0; deletes = 0; lookups = 0;
   timeoutAfterCreate = false; missingLookup = false; rejectUpdate = false; rejectCreate = false;
+  rejectNextLookup = false;
   resolveReadbackNames = false; extraReadbackAttendee: { email: string; name: string } | null = null;
   factoryGate: Gate | null = null; afterCreateGate: Gate | null = null;
   async listBusy() { return []; }
@@ -48,7 +49,12 @@ class CalendarPort implements BookingProvider {
     return structuredClone(event);
   }
   async lookup(input: { bookingId: string }) {
-    this.lookups++; const event = this.missingLookup ? null : structuredClone(this.events.get(input.bookingId) ?? null);
+    this.lookups++;
+    if (this.rejectNextLookup) {
+      this.rejectNextLookup = false;
+      throw new BookingProviderError("provider_request_failed", "rejected", 503);
+    }
+    const event = this.missingLookup ? null : structuredClone(this.events.get(input.bookingId) ?? null);
     if (event?.content) {
       if (this.resolveReadbackNames) event.content.attendees = event.content.attendees.map(a => ({ ...a, name: "SYNTHETIC provider-resolved display name" }));
       if (this.extraReadbackAttendee) event.content.attendees.push(this.extraReadbackAttendee);
@@ -169,6 +175,65 @@ test("personal calendar journal: real local PostgreSQL and tenant boundaries, si
       const missingRequest = b.create(), missing = await b.mutate(missingRequest); assert.equal(missing.state, "uncertain");
       assert.equal((await b.mutate(missingRequest)).state, "uncertain"); assert.equal(b.ports.google.creates, 1);
       await assert.rejects(b.mutate(b.create()), code("personal_calendar_unresolved_operation"));
+    });
+    await t.test("a failed verification read after an acknowledged write is recoverable without another mutation", async () => {
+      for (const provider of ["google", "microsoft"] as const) {
+        const a = await actor(), port = a.ports[provider], create = a.create(provider);
+        port.rejectNextLookup = true;
+        const pending = await a.mutate(create);
+        assert.equal(pending.state, "uncertain");
+        assert.equal(pending.canCancel, false);
+        assert.equal(pending.providerEventId, port.events.get(pending.id)?.eventId);
+        await assert.rejects(a.mutate(a.create(provider)), code("personal_calendar_unresolved_operation"));
+        const cancel = (event: PersonalCalendarEvent) => ({
+          action: "cancel", eventId: event.id, expectedVersion: event.version, idempotencyKey: randomUUID()
+        });
+        await assert.rejects(a.mutate(cancel(pending)), code("personal_calendar_reconcile_required"));
+        const saved = await a.mutate(create);
+        assert.equal(saved.state, "synced");
+        const update = {action: "update", eventId: saved.id, expectedVersion: saved.version,
+          idempotencyKey: randomUUID(), event: a.draft({title: "SYNTHETIC acknowledged edit"})};
+        port.rejectNextLookup = true;
+        assert.equal((await a.mutate(update)).state, "uncertain");
+        const edited = await a.mutate(update);
+        assert.equal(edited.state, "synced");
+        assert.equal(edited.event.title, update.event.title);
+        const remove = cancel(edited);
+        port.rejectNextLookup = true;
+        assert.equal((await a.mutate(remove)).state, "uncertain");
+        assert.equal((await a.mutate(remove)).state, "cancelled");
+        assert.deepEqual([port.creates, port.updates, port.deletes], [1, 1, 1]);
+      }
+    });
+    await t.test("repeated reads of a conflict require explicit import before editing", async () => {
+      const a = await actor(), port = a.ports.google, command = a.create(), hold = gate();
+      port.afterCreateGate = hold;
+      const writing = a.mutate(command);
+      await hold.ready;
+      const [id, remote] = [...port.events.entries()][0];
+      remote.content!.title = "SYNTHETIC concurrent provider title";
+      hold.release();
+      const conflict = await writing;
+      assert.equal(conflict.state, "conflict");
+      const checked = await a.refresh(conflict);
+      assert.equal(checked.state, "conflict");
+      assert.equal(checked.canEdit, false);
+      assert.notEqual(checked.event.title, checked.remoteSnapshot?.title);
+      const update = { action: "update", eventId: id, idempotencyKey: randomUUID(),
+        expectedVersion: checked.version, event: a.draft({ location: "SYNTHETIC second room" }) };
+      await assert.rejects(a.mutate(update), code("personal_calendar_reconcile_required"));
+      assert.equal(port.updates, 0);
+      const imported = await a.mutate({action: "import_remote", eventId: id, expectedVersion: checked.version,
+        remoteEtag: checked.remoteSnapshot!.etag, idempotencyKey: randomUUID()});
+      assert.equal(imported.state, "synced");
+      assert.equal(imported.event.title, remote.content!.title);
+      const prior = await a.sql("select state,error_code from crm_personal_calendar_operations where id=$1",[command.idempotencyKey]);
+      assert.deepEqual(prior, [{state:"rejected",error_code:"personal_calendar_conflict_resolved_by_import"}]);
+      assert.equal((await a.mutate(command)).state, "conflict");
+      const updated = await a.mutate({...update, expectedVersion: imported.version,
+        event: {...imported.event, location: update.event.location}});
+      assert.equal(updated.event.title, remote.content!.title);
+      assert.equal(port.events.get(id)?.content?.title, remote.content!.title);
     });
     await t.test("expired/stolen lease cannot send or finalize an obsolete worker", async () => {
       const a = await actor(), wait = gate(); a.ports.google.factoryGate = wait;
