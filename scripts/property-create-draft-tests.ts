@@ -11,6 +11,7 @@ import { getProductRoleCapabilities } from "../src/lib/product-model";
 import { createPropertyGeography } from "../src/lib/property-country";
 import { emptyPropertyCreationDraft, parsePropertyCreationDraft, propertyCreationIssues, propertyCreationPayload, type PropertyCreationDraft } from "../src/lib/property-create-draft";
 import { completePropertyCreationDraft, loadPropertyCreationDrafts, savePropertyCreationDraft } from "../src/lib/db/property-create-draft-repository";
+import { propertyCoreNumberIsKnown } from "../src/lib/property-core-numbers";
 
 test("guided draft shares strict property values while retaining incomplete numbers for correction", () => {
   const draft = emptyPropertyCreationDraft(); assert.equal(draft.geography, null); assert.equal(draft.priceVisibility, "price_on_request");
@@ -20,7 +21,7 @@ test("guided draft shares strict property values while retaining incomplete numb
   const corrected = { ...draft, projectId: randomUUID(), geography: createPropertyGeography("ES", "Catalunya"), region: "Catalunya", title: "Synthetic", address: "Synthetic", energyCertificate: { version: 1 as const, countryCode: "ES" as const }, areaSqm: "bad", publicPrice: "10.001" };
   assert.equal(parsePropertyCreationDraft(corrected).areaSqm, "bad"); assert.deepEqual(propertyCreationIssues(corrected).map(issue => issue.field), ["areaSqm", "publicPrice"]);
   assert.throws(() => propertyCreationPayload(corrected));
-  const payload = propertyCreationPayload({ ...corrected, areaSqm: "52,75", publicPrice: "210000,99" }); assert.equal(payload.areaSqm, 52.75); assert.equal(payload.publicPrice, 210000.99); assert.equal(payload.price, 0);
+  const payload = propertyCreationPayload({ ...corrected, areaSqm: "52,75", publicPrice: "210000,99" }); assert.equal(payload.areaSqm, 52.75); assert.equal(payload.publicPrice, 210000.99); assert.equal(payload.price, null);
 });
 test("guided creation stores private resumable drafts and commits the existing property model atomically", { timeout: 180000 }, async t => {
   const db = await startLocalSalesDb();
@@ -67,6 +68,19 @@ test("guided creation stores private resumable drafts and commits the existing p
       }
       assert.equal(Number((await db.admin.query("select count(*) from seller_listings where workspace_id=$1", [workspaceId])).rows[0].count), 4);
       assert.equal((await run(loadPropertyCreationDrafts)).drafts.length, 0);
+    });
+    await t.test("guided blank and explicit zero create distinct persisted numeric states", async () => {
+      for (const supplied of ["", "0"]) {
+        const draftId = randomUUID(), value: PropertyCreationDraft = { ...emptyPropertyCreationDraft(projectId), title: `SYNTHETIC ${supplied === "" ? "unknown" : "zero"}`, address: "SYNTHETIC numeric state",
+          geography: createPropertyGeography("AT", "Wien"), region: "Wien", energyCertificate: { version: 1, countryCode: "AT" }, areaSqm: supplied, price: supplied };
+        const saved = await run((tx, fresh) => savePropertyCreationDraft(tx, fresh, { id: draftId, draft: value, step: 3, expectedRevision: 0, requestId: randomUUID() }));
+        const result = await completePropertyCreationDraft(session, { id: draftId, expectedRevision: saved.revision }, { idempotencyKey: randomUUID(), correlationId: randomUUID() }, options);
+        const persisted = (await db.admin.query("select area_sqm,target_price_cents,canonical_payload from seller_listings where id=$1", [result.data.id])).rows[0];
+        assert.equal(Number(persisted.area_sqm), 0); assert.equal(Number(persisted.target_price_cents), 0);
+        assert.equal(propertyCoreNumberIsKnown(persisted.canonical_payload, "areaSqm", persisted.area_sqm), supplied === "0");
+        assert.equal(propertyCoreNumberIsKnown(persisted.canonical_payload, "price", persisted.target_price_cents), supplied === "0");
+        assert.equal(persisted.canonical_payload.propertyDetails.values["areas.wohnfl_che"], supplied === "0" ? 0 : null);
+      }
     });
     await t.test("failure in the final audit rolls back the listing, helper unit and draft together", async () => {
       const draftId = randomUUID(), value = { ...emptyPropertyCreationDraft(projectId), title: "SYNTHETIC rollback", address: "SYNTHETIC", geography: createPropertyGeography("IE", "Dublin"), region: "Dublin", energyCertificate: { version: 1 as const, countryCode: "IE" as const } };

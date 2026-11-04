@@ -1,4 +1,4 @@
-import { CrmCommandError, withCrmRead } from "@/lib/crm-command";
+import { CrmCommandError, withCrmRead, executeCrmCommand, crmRequestMetadata, crmCommandErrorResponse } from "@/lib/crm-command";
 import { assignPropertyInquiry, canAssignPropertyInquiry, parsePropertyInquiryAssignment, readPropertyInquiryAssignments } from "@/lib/db/property-inquiry-assignment-repository";
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
@@ -57,9 +57,9 @@ function canPersistRouting(session: AppSession) {
 function getWriteStatus(reason: string) {
   const lower = reason.toLowerCase();
   if (lower.startsWith("conflict:")) return 409;
+  if (lower.includes("invalid") || lower.includes("title") || lower.includes("address")) return 400;
   if (lower.includes("permission") || lower.includes("forbidden") || lower.includes("required")) return 403;
   if (lower.includes("not found")) return 404;
-  if (lower.includes("invalid") || lower.includes("title") || lower.includes("address")) return 400;
   return 503;
 }
 
@@ -412,10 +412,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "CRM write and property operating rights are required" }, { status: 403 });
   }
 
-  const result = await createSellerListingRecord({ property: input, session });
-  if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+  try {
+    const metadata = crmRequestMetadata(request, input);
+    const capability = hasProductCapability(session.productRole, "workspace:operate") ? "workspace:operate"
+      : hasProductCapability(session.productRole, "pipeline:write") ? "pipeline:write"
+        : hasProductCapability(session.productRole, "settings:manage") ? "settings:manage"
+          : hasProductCapability(session.productRole, "workspace:admin") ? "workspace:admin" : "workspace:read";
+    const result = await executeCrmCommand(session, {
+      ...metadata, operation: "property.create", capability,
+      projectId: typeof input.projectId === "string" && input.projectId ? input.projectId : undefined,
+      payload: input,
+    }, async (_tx, context) => {
+      if (!canWriteProperty(context.session)) throw new CrmCommandError("FORBIDDEN", "Property operating rights are required", 403);
+      const saved = await createSellerListingRecord({ property: input, session: context.session });
+      if (!saved.persisted) throw new CrmCommandError("PROPERTY_CREATE_REJECTED", saved.reason, getWriteStatus(saved.reason));
+      return saved.data;
+    });
+    return NextResponse.json({ data: result.data, persisted: true, replayed: result.replayed });
+  } catch (error) {
+    return crmCommandErrorResponse(error);
   }
-
-  return NextResponse.json({ data: result.data, persisted: true });
 }
