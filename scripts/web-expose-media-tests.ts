@@ -6,6 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { PDFDocument } from "pdf-lib";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { applyMediaProjectRuntimeFunctions } from "./lib/media-project-runtime-fixture.mjs";
 import { withCrmRead, type TenantTransaction } from "../src/lib/crm-command";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import type { AppSession } from "../src/lib/auth/session";
@@ -51,6 +52,7 @@ test("resource upload, review, private preview and public revocation are real sc
   const db = await startLocalSalesDb(), files: string[] = [];
   try {
     await applySalesSchema(db, { maxMigrationNumber: 106 });
+    await applyMediaProjectRuntimeFunctions(db);
     for (const name of ["155_web_expose.sql", "159_lead_qualification.sql", "163_web_expose_resources.sql"]) await db.admin.query(await readFile(`migrations/${name}`, "utf8"));
     // Generic sales fixtures deliberately omit the independently gated Studio cutover.
     // Install its empty FK dependency and its unchanged production counter only;

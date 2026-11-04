@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
+import { applyMediaProjectRuntimeFunctions } from "./lib/media-project-runtime-fixture.mjs";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { AppSession } from "../src/lib/auth/session";
 import { withCrmRead, type TenantTransaction } from "../src/lib/crm-command";
@@ -32,6 +33,7 @@ test("company artwork remains private, versioned and revocable across actual pub
   const previous = Object.fromEntries(["NODE_ENV", "DATABASE_URL", "CRM_LOCAL_TEST_DATABASE", "NOVALURE_AUTH_ENCRYPTION_KEY"].map(key => [key, process.env[key]]));
   try {
     await applySalesSchema(db, { maxMigrationNumber: 106 });
+    await applyMediaProjectRuntimeFunctions(db);
     for (const name of ["155_web_expose.sql", "159_lead_qualification.sql", "163_web_expose_resources.sql", "166_web_expose_live_inventory.sql", "175_web_expose_templates.sql", "184_web_expose_brand_layout.sql"]) await db.admin.query(await readFile(`migrations/${name}`, "utf8"));
     // The generic fixture deliberately omits the separate Studio cutover. Install
     // only its empty media-reference dependency, as in existing media DB checks.
