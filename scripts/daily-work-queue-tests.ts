@@ -26,3 +26,19 @@ test('workspace and project boundaries exclude unrelated records and never resol
  base.contacts=[{...base.contacts[0],workspaceId:'foreign',name:'PRIVATE FOREIGN'}];base.users=[{...base.users[0],workspaceId:'foreign',name:'PRIVATE OWNER'}];
  const queue=buildDailyWorkQueue(base);assert.equal(queue.length,1);assert.doesNotMatch(JSON.stringify(queue),/PRIVATE/);assert.equal(queue[0].title,lead.intent);assert.equal(queue[0].owner,'Zuständigkeit nicht verfügbar');
 });
+
+test('known system lead text is translated for display while saved and personal text stay unchanged',()=>{
+ const base=input();
+ const systemLead={...lead,intent:'Verkaufsabsicht in 3 Monaten',nextAction:'Rückruf heute'};
+ const before=JSON.stringify(systemLead);
+ const translated=buildDailyWorkQueue({...base,language:'en',contacts:[],tasks:[],events:[],leads:[systemLead]});
+ assert.equal(translated[0].title,'Selling intent within 3 months');
+ assert.ok(translated[0].meta.includes('Callback today'));
+ assert.equal(JSON.stringify(systemLead),before);
+ const personal=buildDailyWorkQueue({...base,language:'en',contacts:[],tasks:[],events:[],leads:[{...systemLead,intent:'Mein eigener Objekttext',nextAction:'Persönlich mit Anna klären'}]});
+ assert.equal(personal[0].title,'Mein eigener Objekttext');
+ assert.ok(personal[0].meta.includes('Persönlich mit Anna klären'));
+ const german=buildDailyWorkQueue({...base,contacts:[],tasks:[],events:[],leads:[systemLead]});
+ assert.equal(german[0].title,systemLead.intent);
+ assert.ok(german[0].meta.includes(systemLead.nextAction));
+});

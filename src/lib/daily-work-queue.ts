@@ -19,8 +19,8 @@ export function buildDailyWorkQueue(input:Input):DailyWorkItem[]{
     const pending=lead.status==='Neu'&&!lead.lastContactAt,hot=lead.hotStatus||lead.score>=80;
     if(!pending&&!hot)return [];
     const due=taskDueState(lead.slaDueAt,input.now,input.timeZone),received=Date.parse(lead.receivedAt);
-    return [{id:`lead:${lead.id}`,leadId:lead.id,kind:pending?'newLead':'hotLead',title:contact(lead.contactId,lead)?.name||lead.intent,
-      meta:compact([getCrmSystemTextLabel(lead.status,input.language),lead.nextAction,Number.isFinite(received)?new Intl.DateTimeFormat(de?'de-AT':'en-IE',{dateStyle:'short',timeStyle:'short',timeZone:input.timeZone}).format(new Date(received)):undefined,due.dueAt?formatTaskDue(lead.slaDueAt,input.language,input.timeZone,input.now):undefined]),
+    return [{id:`lead:${lead.id}`,leadId:lead.id,kind:pending?'newLead':'hotLead',title:contact(lead.contactId,lead)?.name||getCrmSystemTextLabel(lead.intent,input.language),
+      meta:compact([getCrmSystemTextLabel(lead.status,input.language),getCrmSystemTextLabel(lead.nextAction,input.language),Number.isFinite(received)?new Intl.DateTimeFormat(de?'de-AT':'en-IE',{dateStyle:'short',timeStyle:'short',timeZone:input.timeZone}).format(new Date(received)):undefined,due.dueAt?formatTaskDue(lead.slaDueAt,input.language,input.timeZone,input.now):undefined]),
       source:getCrmSourceLabel(lead.source,input.language),owner:owner(lead.assignedToUserId),projectName:project(lead.projectId),actionSection:'leadInbox',rank:pending?(due.overdue?0:2000):8000-lead.score}];
   });
   const tasks=input.tasks.filter(scope).filter(task=>task.status==='open').flatMap<DailyWorkItem>(task=>{

@@ -41,5 +41,5 @@ export async function handleWebExposeRetentionCron(request: Request, env: NodeJS
     } catch (error) { results.push({ workspaceId: scope.workspaceId, status: "blocked", code: error instanceof CrmCommandError ? error.code : "RETENTION_UNAVAILABLE" }); }
   }
   const ok = results.every(r => r.status === "completed");
-  return Response.json({ ok, configured: scopes.length, attempted: results.length, results }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ok, runId: host.runId, durationMs: host.durationMs(), configured: scopes.length, attempted: results.length, results }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }
