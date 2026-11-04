@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "type": "EXACT_CONSOLE_OUTPUT_LOSSLESS_TRANSPORT",
+  "encoding": "base64",
+  "originalPath": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.txt",
+  "originalBytes": 52,
+  "originalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+  "originalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488",
+  "reason": "Preserve exact console trailing spaces and empty EOF without introducing whitespace errors into the source diff.",
+  "dataBase64": "DQo+IG5vdmFsdXJlLWNybUAwLjEuMCB0eXBlY2hlY2sNCj4gdHNjIC0tbm9FbWl0DQoNCg=="
+}

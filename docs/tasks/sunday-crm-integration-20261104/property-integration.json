@@ -264,7 +264,8 @@
       "exitCode": 0
     },
     "finalWholeNextBuildExecuted": false,
-    "finalBuildQualification": "44b full Next build retained only for unchanged components; final exact donor UI delta independently browser-bundled and full-typechecked, not claimed as a new complete Next build."
+    "finalBuildQualification": "44b full Next build retained only for unchanged components; final exact donor UI delta independently browser-bundled and full-typechecked, not claimed as a new complete Next build.",
+    "consoleArtifactTransport": "Original stdout retained byte-for-byte in Git18f563c and Base64 JSON transports. No test/build output was normalized or rerun."
   },
   "sourceQualification": {
     "backendDonorFilesUnchanged": true,
@@ -341,9 +342,12 @@
       "bytes": 612
     },
     {
-      "path": "artifacts/sunday-crm-integration-20261104/property-typecheck.txt",
-      "sha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
-      "bytes": 52
+      "path": "artifacts/sunday-crm-integration-20261104/property-typecheck.raw.json",
+      "sha256": "ddd4ac15c676c4fea2ba815e750a4f8446c9cc63e57b1f4fbd88dc4fcbb7ff94",
+      "bytes": 599,
+      "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-typecheck.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
     },
     {
       "path": "artifacts/sunday-crm-integration-20261104/property-lint.txt",
@@ -351,9 +355,12 @@
       "bytes": 0
     },
     {
-      "path": "artifacts/sunday-crm-integration-20261104/property-build.txt",
-      "sha256": "156bee32bfb134e51908e7a63dfb1157e24633d337b7cc21132f013d136b3ee5",
-      "bytes": 8912
+      "path": "artifacts/sunday-crm-integration-20261104/property-build.raw.json",
+      "sha256": "7908127390d9907acb8af5ee4773c82f9be0c9f3e5958c1740dd3b1211b25653",
+      "bytes": 12409,
+      "decodedOriginalSha256": "156bee32bfb134e51908e7a63dfb1157e24633d337b7cc21132f013d136b3ee5",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-build.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
     },
     {
       "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-targeted.txt",
@@ -361,9 +368,12 @@
       "bytes": 2931
     },
     {
-      "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.txt",
-      "sha256": "f4b3d111813fe6e05c8b0c8d87b4c9aa9ee7317abbd71ddbac3fc5cd15d708b8",
-      "bytes": 8910
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.raw.json",
+      "sha256": "26e33189019b483434fcf5b64d41e698fb3f9aaec5047a5cf65ceeedc143c02d",
+      "bytes": 12410,
+      "decodedOriginalSha256": "f4b3d111813fe6e05c8b0c8d87b4c9aa9ee7317abbd71ddbac3fc5cd15d708b8",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
     },
     {
       "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-lint.txt",
@@ -381,9 +391,12 @@
       "bytes": 1298
     },
     {
-      "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.txt",
-      "sha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
-      "bytes": 52
+      "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.raw.json",
+      "sha256": "d84a6e3b86554e1626411dea93d9b2e157c9e34b3c94be35270a4ae1de6d72a7",
+      "bytes": 610,
+      "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
     },
     {
       "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-lint.txt",
@@ -422,5 +435,44 @@
       "successorCommitIncluded": false
     }
   ],
-  "localClusterReadbackScope": "Four actual initial Property32 fixture clusters, checked stopped after that run; not a new final whole-runtime campaign."
+  "localClusterReadbackScope": "Four actual initial Property32 fixture clusters, checked stopped after that run; not a new final whole-runtime campaign.",
+  "historicalInitialReceiptResolution": {
+    "originalReceipt": "docs/tasks/sunday-crm-integration-20261104/property-integration-b26.json",
+    "rawTextRevision": "18f563cbc301ef30d634d306b1191caac3854488",
+    "losslessCurrentTransports": [
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/property-build.raw.json",
+        "sha256": "7908127390d9907acb8af5ee4773c82f9be0c9f3e5958c1740dd3b1211b25653",
+        "bytes": 12409,
+        "decodedOriginalSha256": "156bee32bfb134e51908e7a63dfb1157e24633d337b7cc21132f013d136b3ee5",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-build.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      },
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.raw.json",
+        "sha256": "d84a6e3b86554e1626411dea93d9b2e157c9e34b3c94be35270a4ae1de6d72a7",
+        "bytes": 610,
+        "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      },
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/property-typecheck.raw.json",
+        "sha256": "ddd4ac15c676c4fea2ba815e750a4f8446c9cc63e57b1f4fbd88dc4fcbb7ff94",
+        "bytes": 599,
+        "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-typecheck.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      },
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.raw.json",
+        "sha256": "26e33189019b483434fcf5b64d41e698fb3f9aaec5047a5cf65ceeedc143c02d",
+        "bytes": 12410,
+        "decodedOriginalSha256": "f4b3d111813fe6e05c8b0c8d87b4c9aa9ee7317abbd71ddbac3fc5cd15d708b8",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      }
+    ],
+    "frozenHistoricalReceiptNotRewritten": true
+  }
 }

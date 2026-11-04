@@ -36,6 +36,8 @@ Der anschließende `5416515`-Diff ändert nur die eine Property-Übersichtskompo
 
 Die Backendfälle wurden im Sammelstand erneut ausgeführt, weil dessen lokale Sales-Fixture die öffentlichen Chatvorgänger bewusst auslässt. Donorprüfungen wurden daher nicht pauschal auf diese Fixture übertragen. Die Browserfälle wurden ebenfalls erneut ausgeführt, weil der vereinte Editor nun die Backend-Ergänzungen verwendet. Die unveränderten Originalausgaben und der neue Browserbericht liegen unter `artifacts/sunday-crm-integration-20261104/property-*`.
 
+Vier Konsolenausgaben enthalten originale Leerzeichen/Leerzeilen am Zeilenende. Ihre vollständigen Bytes liegen unverändert im Belegcommit `18f563c` und verlustfrei als `*.raw.json` vor; Dekodierung und SHA256 wurden abgeglichen. Die Testausgaben wurden weder bereinigt noch erneut erzeugt. Die frühere b26-Receiptdatei bleibt unverändert und verweist auf diese ursprünglichen Bytes.
+
 ## Erhalt und offene Anschlüsse
 
 - Assistant-Schema188, aktuelle kommerzielle Guthaben-/Billingregeln, atomare Workspace-Einstellung/Audit, autorisierter Workspace nach Reload und eigene Kompatibilitätsmigration191 bleiben gegenüber `0abea1fa` unverändert. Die Assistant-Servicequelle wird ausdrücklich durch den aktuellen veröffentlichten `bb8bbaa9`-Nachfolger ergänzt. Keine Migration wird durch diesen Nachfolger ergänzt.
