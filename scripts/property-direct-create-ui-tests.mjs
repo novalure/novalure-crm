@@ -29,6 +29,7 @@ onPropertyChanged:async()=>{if(window.failPropertyRefresh)throw Error('SYNTHETIC
 projects:[{id:'${projectId}',workspaceId:'${workspaceId}',name:'SYNTHETIC QA project',type:'Immobilien',status:'Aktiv',leads:0,revenue:'—'}],
 propertyCostItems:[],propertyDocuments:[],propertyMedia:[],propertyTextBlocks:[],reservations:[],sellerListings:[],sessionProductRole:'workspace_admin',sessionRole:'admin',units:[],users:[]};
 window.setPropertyWorkspace=id=>{props={...props,context:{...props.context,workspaceId:id}};root.render(<PropertyCommandCenter {...props}/>)};
+window.setPropertyRecords=sellerListings=>{props={...props,sellerListings};root.render(<PropertyCommandCenter {...props}/>)};
 root.render(<PropertyCommandCenter {...props}/>);`, loader: "tsx", resolveDir: process.cwd() }, bundle: true,
 write: false, format: "iife", platform: "browser", jsx: "automatic", banner: { js: "var process={env:{NODE_ENV:'test'},browser:true};" }, define: { "process.env.NODE_ENV": '"test"' },
 plugins: baseline ? [{ name: "immutable-baseline-component", setup(builder) {
@@ -144,6 +145,16 @@ try {
     await page.evaluate(id => window.setPropertyWorkspace(id), otherWorkspaceId); await form.getByRole("button", { name: "Speicherergebnis erneut prüfen" }).click(); assert.equal(requests.length, 1);
     await page.evaluate(id => window.setPropertyWorkspace(id), workspaceId); await form.getByRole("button", { name: "Speicherergebnis erneut prüfen" }).click();
     await expect(form.getByLabel(copy.form.title, { exact: true })).toHaveValue(""); assert.equal(requests.length, 2); assert.deepEqual(requests[0], requests[1]);
+  });
+  await step("overview distinguishes explicit scalar area zero from unknown without certifying an unconfirmed unit price", async () => {
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    const listing = { id: propertyId, workspaceId, projectId, title: "SYNTHETIC area state", address: "MUSTER address", region: "Wien", objectType: "Wohnung", areaSqm: 0, targetPrice: 0, yearBuilt: 0, createdAt: "2026-11-04T12:00:00Z", priceVisibility: "price_on_request" };
+    const row = page.getByRole("row").filter({ hasText: listing.title });
+    for (const state of ["known", "unknown", "legacy"]) {
+      await page.evaluate(({ listing, state }) => window.setPropertyRecords([{ ...listing, canonicalPayload: state === "legacy" ? {} : { coreNumericState: { version: 1, areaSqm: state, price: "known" } } }]), { listing, state });
+      await expect(row.getByRole("cell").nth(3)).toHaveText(state === "known" ? "0 m2" : "-");
+      await expect(row.getByRole("cell").nth(2)).toHaveText("-");
+    }
   });
   }
   assert.deepEqual(errors, []);

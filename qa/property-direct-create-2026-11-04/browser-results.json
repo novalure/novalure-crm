@@ -35,6 +35,10 @@
     {
       "name": "an unconfirmed create cannot be retargeted to another workspace",
       "status": "PASS"
+    },
+    {
+      "name": "overview distinguishes explicit scalar area zero from unknown without certifying an unconfirmed unit price",
+      "status": "PASS"
     }
   ],
   "browserErrors": []

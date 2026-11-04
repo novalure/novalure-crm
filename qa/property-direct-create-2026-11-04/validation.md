@@ -11,9 +11,11 @@ Integration dependency: server commit `0a63bb46afe84619464077f7e97a543df4958e71`
 ## Checks
 
 - `CRM_QA_INPUT_BASELINE=1 node --import tsx scripts/property-direct-create-ui-tests.mjs`: the immutable original component reproduces both rejected valid decimals and the omitted workspace parameter. The source worktree is not changed for this run.
-- `node --import tsx scripts/property-direct-create-ui-tests.mjs`: eight browser scenarios pass using the real component and synthetic HTTP responses. They cover decimal submission, invalid numeric values, exact retry after network failure, unload cancellation, wrong-scope and malformed response rejection, terminal validation correction, double submission, post-save refresh failure and no retargeting to a different workspace.
+- `node --import tsx scripts/property-direct-create-ui-tests.mjs`: nine browser scenarios pass using the real component and synthetic HTTP responses. They cover decimal submission, invalid numeric values, exact retry after network failure, unload cancellation, wrong-scope and malformed response rejection, terminal validation correction, double submission, post-save refresh failure, no retargeting to a different workspace and explicit scalar area zero versus unknown.
 - `npm run typecheck`: passed.
 - Focused ESLint with `--max-warnings=0`: passed.
 - `git diff --check`: passed.
 
 These are local browser checks, not production acceptance or a database/role test. Browser requests remain on the owned loopback server. No provider calls, invitations, live changes or paid tests were made. Durable drafts continue to use the existing guided workflow; direct-entry inputs and pending command body are not written to browser storage.
+
+The overview uses shared knownness helper `4c0d45f7385c61159789849424b4f309fd3fc7c8` only to distinguish a newly explicit scalar area zero from legacy/unknown zero. Its price column represents a unit-price aggregate, not the separate asking price; without independent unit confirmation metadata, an aggregate zero remains unconfirmed. An asking-price marker must not falsely certify that aggregate as a known free unit.

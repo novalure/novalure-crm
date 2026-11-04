@@ -69,6 +69,7 @@ import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput,type Prope
 import type { PropertyEnergyCertificate } from "@/lib/property-country";
 import { confirmedPropertyCreation, propertyWorkspaceEndpoint } from "@/lib/property-interactions";
 import { PROPERTY_AREA_MAX_SQM } from "@/lib/property-area-input";
+import { propertyCoreNumberIsKnown } from "@/lib/property-core-numbers";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -444,6 +445,12 @@ export function PropertyCommandCenter({
   const selectedUnitBoardScope = createUnitBoardScope(selectedAsset);
   const selectedListingId = listingIdFromAssetId(selectedAsset?.id);
   const selectedListing = sellerListings.find((listing) => listing.id === selectedListingId && listing.workspaceId === context.workspaceId);
+  function propertyAreaLabel(asset: PropertyAssetSummary) {
+    const listing = sellerListings.find((item) => item.id === asset.sellerListingId && item.workspaceId === asset.workspaceId);
+    const knownZero = asset.areaSqm === 0 && listing?.areaSqm === 0 &&
+      propertyCoreNumberIsKnown(listing.canonicalPayload, "areaSqm", listing.areaSqm);
+    return asset.areaSqm || knownZero ? `${formatNumber(asset.areaSqm ?? 0, language)} m2` : "-";
+  }
   const editingListing = sellerListings.find((listing) => listing.id === editingListingId && listing.workspaceId === context.workspaceId);
   const editingRelationshipListing = sellerListings.find((listing) => listing.id === editingRelationshipListingId && listing.workspaceId === context.workspaceId);
   const selectedCostItems = selectedListingId ? propertyCostItems.filter((item) => item.propertyId === selectedListingId) : [];
@@ -881,7 +888,7 @@ export function PropertyCommandCenter({
                       </td>
                       <td className="py-3 pr-4"><StatusChip label={copy.statusLabels[asset.status]} status={asset.status} /></td>
                       <td className="py-3 pr-4 font-semibold text-slate-900">{asset.price ? formatCurrency(asset.price, language) : "-"}</td>
-                      <td className="py-3 pr-4 text-stone-700">{asset.areaSqm ? `${formatNumber(asset.areaSqm, language)} m2` : "-"}</td>
+                      <td className="py-3 pr-4 text-stone-700">{propertyAreaLabel(asset)}</td>
                       <td className="py-3 pr-4 text-stone-700">
                         {asset.unitCount ? (
                           <div className="flex min-w-[220px] flex-wrap gap-1.5">
