@@ -26,6 +26,10 @@
     {
       "name": "failed workspace switch keeps A authoritative and permits a fresh A retry",
       "status": "PASS"
+    },
+    {
+      "name": "the previous identity guard is retired by the synchronous commit layout boundary",
+      "status": "PASS"
     }
   ],
   "browserErrors": []

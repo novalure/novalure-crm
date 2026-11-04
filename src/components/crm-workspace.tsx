@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
@@ -2987,7 +2987,7 @@ export function CrmWorkspace({
     guard: createCrmCoreRequestGuard(activeWorkspace.id),
   }), [sessionUserId, activeWorkspace.id]);
   const coreRequestGuard = coreRequestSession.guard;
-  useEffect(() => {
+  useLayoutEffect(() => {
     coreRequestGuard.activate();
     return () => coreRequestGuard.dispose();
   }, [coreRequestGuard]);

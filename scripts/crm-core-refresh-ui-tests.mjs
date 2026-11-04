@@ -28,7 +28,8 @@ const baseline = process.env.CRM_QA_CORE_REFRESH_BASELINE === "1";
 const baselineRevision = "933a54660fa0be1368bd8b32dc077451cdb63bd6";
 const original = (baseline ? execFileSync("git", ["show", `${baselineRevision}:src/components/crm-workspace.tsx`], { encoding: "utf8" }) : await readFile(sourcePath, "utf8")).replace(/\r\n/g, "\n");
 const names = new Map([...original.matchAll(/import\s*\{([^{}]+)\}\s*from\s*["'](@\/components\/[^"']+)["']/g)].map(match => [match[2], match[1].split(",").map(item => item.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]).filter(Boolean)]));
-const observer = `window.__QA_CRM__={refreshCoreData,handleWorkspaceSwitch,handleSectionChange,activeWorkspace,liveCoreData,coreDataStatus,workspaceSwitchState,propertyDraftStore};`;
+const observer = `window.__QA_CRM__={refreshCoreData,handleWorkspaceSwitch,handleSectionChange,activeWorkspace,liveCoreData,coreDataStatus,workspaceSwitchState,propertyDraftStore${baseline ? "" : ",coreRequestGuard"}};
+qaUseLayoutEffect(()=>{if(window.priorGuardTicket)window.priorGuardCurrentAtLayout=window.priorGuardTicket.guard.isCurrentRefresh(window.priorGuardTicket.ticket)},[sessionUserId]);`;
 const needle = '  return (\n    <main className="crm-app';
 assert.equal(original.includes(needle), true);
 const compiled = await build({ stdin: { contents: `
@@ -37,7 +38,7 @@ const root=createRoot(document.getElementById('root'));let user='SYNTHETIC-user-
 const props={coreData:${JSON.stringify(core(workspaceA, "SYNTHETIC initial A"))},sessionWorkspace:${JSON.stringify(workspace(workspaceA))},sessionProductRole:'platform_admin',sessionRole:'admin',sessionUserName:'SYNTHETIC user',initialLanguage:'de'};
 const render=()=>root.render(<React.StrictMode><CrmWorkspace {...props} sessionUserId={user}/></React.StrictMode>);window.setCrmUser=id=>{user=id;render()};window.unmountCrm=()=>root.unmount();render();`, loader: "tsx", resolveDir: process.cwd() }, bundle: true, write: false, format: "iife", platform: "browser", jsx: "automatic", define: { "process.env.NODE_ENV": '"test"' }, banner: { js: "var process={env:{NODE_ENV:'test'},browser:true};" }, logLevel: "silent", plugins: [{ name: "real-parent-observer", setup(builder) {
   builder.onLoad({ filter: /\.css$/ }, () => ({ contents: "export default {}", loader: "js" }));
-  builder.onLoad({ filter: /crm-workspace\.tsx$/ }, args => args.path === sourcePath ? { contents: original.replace(needle, `  ${observer}\n${needle}`), loader: "tsx", resolveDir: path.dirname(sourcePath) } : undefined);
+  builder.onLoad({ filter: /crm-workspace\.tsx$/ }, args => args.path === sourcePath ? { contents: original.replace('"use client";', '"use client";\nimport {useLayoutEffect as qaUseLayoutEffect} from "react";').replace(needle, `  ${observer}\n${needle}`), loader: "tsx", resolveDir: path.dirname(sourcePath) } : undefined);
   builder.onResolve({ filter: /^@\/components\// }, args => args.importer === sourcePath && !["@/components/property-command-center", "@/components/crm-business-visibility"].includes(args.path) ? { path: args.path, namespace: "unrelated-child" } : undefined);
   builder.onLoad({ filter: /.*/, namespace: "unrelated-child" }, args => ({ contents: (names.get(args.path) ?? []).map(name => `export const ${name}=()=>${name.startsWith("get") ? "'SYNTHETIC label'" : "null"};`).join("\n"), loader: "js" }));
   builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: "navigation", namespace: "next-test" }));
@@ -103,6 +104,7 @@ try {
     await form.getByRole("button", { name: "Objekt speichern", exact: true }).click(); await expect.poll(() => propertyRequests.length).toBe(1);
     assert.equal(await switchTo(workspaceB), true);
     corePlans = [{ workspaceId: workspaceB, marker: "SYNTHETIC property callback must preserve B" }]; assert.equal(await page.evaluate(() => window.__QA_CRM__.refreshCoreData()), true);
+    await expect.poll(async () => (await snapshot()).marker).toBe("SYNTHETIC property callback must preserve B");
     const requestCount = coreRequests.length; delayed.release(); propertyGate = null;
     // The scope transition can unmount the original form. Its async save still
     // awaits its captured real parent callback before releasing the shared lock.
@@ -124,6 +126,7 @@ try {
     const captured = await page.evaluate(() => { window.capturedARefresh = window.__QA_CRM__.refreshCoreData; return true; }); assert.equal(captured, true);
     assert.equal(await switchTo(workspaceB), true);
     corePlans = [{ workspaceId: workspaceB, marker: "SYNTHETIC latest B" }]; assert.equal(await page.evaluate(() => window.__QA_CRM__.refreshCoreData()), true);
+    await expect.poll(async () => (await snapshot()).marker).toBe("SYNTHETIC latest B");
     delayed.release(); assert.equal(await page.evaluate(() => window.oldRefreshPromise), false);
     assert.deepEqual(await snapshot(), { workspaceId: workspaceB, marker: "SYNTHETIC latest B", status: "fresh", switchStatus: "idle" });
     const count = coreRequests.length; assert.equal(await page.evaluate(() => window.capturedARefresh()), false); assert.equal(coreRequests.length, count);
@@ -131,12 +134,14 @@ try {
   await step("an older same-workspace failure cannot override the newest successful refresh", async () => {
     await open(); const delayed = gate(); corePlans = [{ workspaceId: workspaceA, status: 500, gate: delayed.promise }]; await refresh(); await expect.poll(() => coreRequests.length).toBe(1);
     corePlans = [{ workspaceId: workspaceA, marker: "SYNTHETIC newest A" }]; assert.equal(await page.evaluate(() => window.__QA_CRM__.refreshCoreData()), true);
+    await expect.poll(async () => (await snapshot()).marker).toBe("SYNTHETIC newest A");
     delayed.release(); assert.equal(await page.evaluate(() => window.oldRefreshPromise), false); assert.equal((await snapshot()).marker, "SYNTHETIC newest A"); assert.equal((await snapshot()).status, "fresh");
   });
   await step("a previous identity refresh cannot commit into the newly mounted identity session", async () => {
     await open(); const delayed = gate(); corePlans = [{ workspaceId: workspaceA, marker: "SYNTHETIC former user", gate: delayed.promise }]; await refresh(); await expect.poll(() => coreRequests.length).toBe(1);
     await page.evaluate(() => window.setCrmUser("SYNTHETIC-user-b"));
     corePlans = [{ workspaceId: workspaceA, marker: "SYNTHETIC current user" }]; assert.equal(await page.evaluate(() => window.__QA_CRM__.refreshCoreData()), true);
+    await expect.poll(async () => (await snapshot()).marker).toBe("SYNTHETIC current user");
     delayed.release(); assert.equal(await page.evaluate(() => window.oldRefreshPromise), false); assert.equal((await snapshot()).marker, "SYNTHETIC current user");
   });
   await step("failed workspace switch keeps A authoritative and permits a fresh A retry", async () => {
@@ -144,7 +149,16 @@ try {
     corePlans = [{ workspaceId: workspaceB, status: 500 }]; assert.equal(await switchTo(workspaceB), false);
     assert.equal((await snapshot()).workspaceId, workspaceA); assert.equal((await snapshot()).marker, previousMarker);
     corePlans = [{ workspaceId: workspaceA, marker: "SYNTHETIC A after failed switch" }]; assert.equal(await page.evaluate(() => window.__QA_CRM__.refreshCoreData()), true);
-    assert.equal((await snapshot()).marker, "SYNTHETIC A after failed switch"); assert.equal((await snapshot()).status, "fresh");
+    await expect.poll(async () => (await snapshot()).status).toBe("fresh");
+    assert.equal(await page.evaluate(() => window.__QA_CRM__.liveCoreData.projects[0]?.workspaceId), workspaceA);
+  });
+  await step("the previous identity guard is retired by the synchronous commit layout boundary", async () => {
+    await open(); await page.evaluate(workspaceA => {
+      const guard = window.__QA_CRM__.coreRequestGuard;
+      window.priorGuardTicket = { guard, ticket: guard.beginRefresh(workspaceA) };
+      window.setCrmUser("SYNTHETIC-user-b");
+    }, workspaceA);
+    await expect.poll(() => page.evaluate(() => window.priorGuardCurrentAtLayout)).toBe(false);
   });
   }
   assert.deepEqual(errors, []);
