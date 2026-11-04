@@ -12,6 +12,8 @@ import { webExposeRetentionScheduled } from "@/lib/web-expose-maintenance";
 import { projectReportMoney } from "@/lib/project-sales-report";
 import { freezeWebExposeTemplate } from "@/lib/db/web-expose-template-repository";
 import { formatApprovedPropertyCosts, publicPropertyCostKeys, publicPropertyDetailGroups, publicPropertyDetailPayloadSql, publicPropertyUnitFacts, publicUnitDetailsSql, readPublicPropertyDetails, type PublicPropertyUnitDetails } from "@/lib/property-expose-details";
+import { propertyCoreNumberIsKnown, propertyOptionalPriceIsKnown } from "@/lib/property-core-numbers";
+import { publicPropertyEnergyFacts, sanitizePropertyExposeAddress } from "@/lib/property-expose-public-content";
 import { propertyDetailNumber } from "@/lib/property-details";
 
 export const webExposeToken = () => randomBytes(32).toString("base64url");
@@ -32,7 +34,7 @@ export function parseWebExposePublishInput(value: Record<string, unknown>): WebE
 }
 export async function buildWebExposeSnapshot(tx: TenantTransaction, session: AppSession, input: WebExposePublishInput) {
   const id = assertCrmUuid(input.propertyId);
-  const row = await tx.queryOne<{ projectId: string | null; unitId: string | null; title: string; address: string; city: string; region: string; objectType: string; area: string; rooms: string; yearBuilt: number; priceCents: string; priceVisibility: string; canonicalPayload: Record<string, unknown>; publicDetails: Record<string, unknown>; contactName: string; contactEmail: string; contactPhone: string }>(`select project_id as "projectId",unit_id::text as "unitId",title,address,city,region,object_type as "objectType",area_sqm::text as area,rooms::text,year_built as "yearBuilt",coalesce(public_price_cents,target_price_cents)::text as "priceCents",price_visibility as "priceVisibility",canonical_payload as "canonicalPayload",${publicPropertyDetailPayloadSql("p")} as "publicDetails",contact_name as "contactName",contact_email as "contactEmail",contact_phone as "contactPhone" from seller_listings p where id=$1::uuid and workspace_id=$2::uuid`, [id, session.workspaceId]);
+  const row = await tx.queryOne<{ projectId: string | null; unitId: string | null; title: string; address: string; street: string | null; city: string; region: string; objectType: string; area: string; rooms: string; yearBuilt: number; priceCents: string; publicPriceCents: string | null; targetPriceCents: string | null; priceVisibility: string; canonicalPayload: Record<string, unknown>; publicDetails: Record<string, unknown>; contactName: string; contactEmail: string; contactPhone: string }>(`select project_id as "projectId",unit_id::text as "unitId",title,address,street,city,region,object_type as "objectType",area_sqm::text as area,rooms::text,year_built as "yearBuilt",coalesce(public_price_cents,target_price_cents)::text as "priceCents",public_price_cents::text as "publicPriceCents",target_price_cents::text as "targetPriceCents",price_visibility as "priceVisibility",canonical_payload as "canonicalPayload",${publicPropertyDetailPayloadSql("p")} as "publicDetails",contact_name as "contactName",contact_email as "contactEmail",contact_phone as "contactPhone" from seller_listings p where id=$1::uuid and workspace_id=$2::uuid`, [id, session.workspaceId]);
   if (!row) throw new CrmCommandError("NOT_FOUND", "Immobilie nicht gefunden", 404);
   if (row.projectId) await assertProjectGrant(tx, session, row.projectId, false);
   const geography = readPropertyGeography({ canonicalPayload: row.canonicalPayload, region: row.region });
@@ -54,8 +56,8 @@ export async function buildWebExposeSnapshot(tx: TenantTransaction, session: App
     resources=await tx.query<NonNullable<WebExposeSnapshot["resources"]>[number]>(`select r.id::text,r.kind,r.title,r.asset_id::text as "assetId",r.url,a.mime_type as "mimeType" from web_expose_resources r left join media_assets a on a.id=r.asset_id and a.workspace_id=r.workspace_id::text where r.workspace_id=$1::uuid and r.property_id=$2::uuid and r.id=any($3::uuid[]) and r.status='approved' and r.visibility='published' and not r.archived order by array_position($3::uuid[],r.id)`,[session.workspaceId,id,input.resourceIds]);
     if(resources.length!==input.resourceIds.length) throw new CrmCommandError("MEDIA_REVIEW_REQUIRED","Ausgewählte Medien sind nicht mehr für dieses Exposé freigegeben",409);
   }
-  const units = row.projectId ? await tx.query<{ id: string; number: string; area: string; rooms: string; price: string; status: string; details: PublicPropertyUnitDetails }>(`select u.id::text,u.unit_number as number,u.area_sqm::text as area,u.rooms::text,u.price_cents::text as price,u.status,${publicUnitDetailsSql("u")} as details from property_units u join seller_listings p on p.id=$3::uuid and p.workspace_id=u.workspace_id and p.project_id=u.project_id where u.workspace_id=$1::uuid and u.project_id=$2::uuid and (u.metadata->>'sellerListingId'=p.id::text or u.id=p.unit_id) and coalesce(u.metadata->>'hidden','false')<>'true' order by u.unit_number limit 200`, [session.workspaceId, row.projectId, id]) : [];
-  const money = (cents: string | number) => { const valid = parsePropertyIntegerCents(cents); if (valid === null) throw new CrmCommandError("INVALID_PRICE", "Preis ist nicht darstellbar"); return valid>0?projectReportMoney(String(valid),geography.displayLocale):null; };
+  const units = row.projectId ? await tx.query<{ id: string; number: string; area: string; rooms: string; price: string; priceConfirmed: boolean; status: string; details: PublicPropertyUnitDetails }>(`select u.id::text,u.unit_number as number,u.area_sqm::text as area,u.rooms::text,u.price_cents::text as price,(u.metadata->'priceConfirmation'->>'sourceReference' is not null and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text) as "priceConfirmed",u.status,${publicUnitDetailsSql("u")} as details from property_units u join seller_listings p on p.id=$3::uuid and p.workspace_id=u.workspace_id and p.project_id=u.project_id where u.workspace_id=$1::uuid and u.project_id=$2::uuid and (u.metadata->>'sellerListingId'=p.id::text or u.id=p.unit_id) and coalesce(u.metadata->>'hidden','false')<>'true' order by u.unit_number limit 200`, [session.workspaceId, row.projectId, id]) : [];
+  const money = (cents: string | number, knownZero = false) => { const valid = parsePropertyIntegerCents(cents); if (valid === null) throw new CrmCommandError("INVALID_PRICE", "Preis ist nicht darstellbar"); return valid>0 || knownZero && valid===0?projectReportMoney(String(valid),geography.displayLocale):null; };
   const locale = geography.displayLocale;
   const num = (n: string | number) => new Intl.NumberFormat(locale).format(Number(n));
   const details = readPublicPropertyDetails(row.publicDetails);
@@ -65,28 +67,26 @@ export async function buildWebExposeSnapshot(tx: TenantTransaction, session: App
   if (linkedFacts.length) detailGroups.push({ id: "linked-unit", heading: input.language === "de" ? "Ausgewählte Einheit" : input.language === "es" ? "Unidad seleccionada" : "Selected unit", facts: linkedFacts });
   const labels = input.language === "de" ? ["Objektart", "Wohnfläche", "Zimmer", "Baujahr"] : input.language === "es" ? ["Tipo", "Superficie", "Habitaciones", "Año de construcción"] : ["Property type", "Area", "Rooms", "Year built"];
   const rooms = propertyDetailNumber(details, "rooms.zimmer") ?? row.rooms, yearBuilt = propertyDetailNumber(details, "construction.baujahr") ?? row.yearBuilt;
-  const facts = [{ label: labels[0], value: webExposePropertyType(row.objectType,input.language) }, ...(!detailGroups.some(group => group.id === "areas") && Number(row.area)>0?[{ label: labels[1], value: `${num(row.area)} m²` }]:[]), ...(Number(rooms)>0 ? [{ label: labels[2], value: num(rooms) }] : []), ...(yearBuilt ? [{ label: labels[3], value: String(yearBuilt) }] : [])];
-  if (energy.energyClass) facts.push({ label: input.language === "es" ? "Clase energética" : input.language === "de" ? "Energieklasse" : "Energy rating", value: energy.energyClass });
-  if (energy.heatingDemandKwhM2 !== undefined) facts.push({ label: "HWB", value: `${num(energy.heatingDemandKwhM2)} kWh/(m²a)` });
-  if (energy.finalEnergyDemandKwhM2 !== undefined) facts.push({ label: input.language === "de" ? "Endenergiebedarf" : input.language === "es" ? "Demanda de energía final" : "Final energy demand", value: `${num(energy.finalEnergyDemandKwhM2)} kWh/(m²a)` });
-  const energyLabels = input.language === "de" ? ["Endenergieverbrauch", "Wärmeenergie", "Stromenergie", "Energieträger", "Ausweistyp", "Ausgestellt", "Gültig bis", "Registrierung", "Ausweisnummer", "Skala"] : input.language === "es" ? ["Consumo de energía final", "Energía térmica", "Electricidad", "Fuente de energía", "Tipo de certificado", "Fecha de emisión", "Válido hasta", "Registro", "Número de certificado", "Escala"] : ["Final energy consumption", "Heating energy", "Electricity", "Energy source", "Certificate type", "Issued", "Valid until", "Registration", "Certificate number", "Rating scheme"];
-  [energy.finalEnergyConsumptionKwhM2, energy.heatingEnergyKwhM2, energy.electricityEnergyKwhM2].forEach((value, i) => { if (value !== undefined) facts.push({ label: energyLabels[i], value: `${num(value)} kWh/(m²a)` }); });
-  const certificateNames:Record<string,Record<WebExposeLanguage,string>>={demand:{de:"Bedarfsausweis",en:"Demand certificate",es:"Certificado de demanda"},consumption:{de:"Verbrauchsausweis",en:"Consumption certificate",es:"Certificado de consumo"},existing:{de:"Bestandsgebäude",en:"Existing building",es:"Edificio existente"},new:{de:"Neubau",en:"New build",es:"Obra nueva"}};
-  [energy.energySource, energy.certificateType?certificateNames[energy.certificateType]?.[input.language]??energy.certificateType:undefined, energy.issuedAt, energy.validUntil, energy.registration, energy.certificateNumber, energy.schemeVersion].forEach((value, i) => { if (value) facts.push({ label: energyLabels[i + 3], value }); });
+  const facts = [{ label: labels[0], value: webExposePropertyType(row.objectType,input.language) }, ...(!detailGroups.some(group => group.id === "areas") && propertyCoreNumberIsKnown(row.canonicalPayload, "areaSqm", row.area)?[{ label: labels[1], value: `${num(row.area)} m²` }]:[]), ...(Number(rooms)>0 ? [{ label: labels[2], value: num(rooms) }] : []), ...(yearBuilt ? [{ label: labels[3], value: String(yearBuilt) }] : [])];
+  facts.push(...publicPropertyEnergyFacts(row.canonicalPayload?.energyCertificate, geography.countryCode, input.language, locale));
   const visibility = ["publish_price", "price_on_request", "hide_price"].includes(extra?.webVisibility ?? "") ? extra!.webVisibility : row.priceVisibility;
   const costRows = visibility === "publish_price" ? await tx.query<Record<string, unknown>>(`select cost_key as "costKey",monthly_gross_cents::text as "monthlyGrossCents",one_time_gross_cents::text as "oneTimeGrossCents" from property_cost_items where workspace_id=$1::uuid and property_id=$2::uuid and project_id is not distinct from $3::uuid and (unit_id is null or unit_id=$4::uuid) and expose_visible and cost_key=any($5::text[]) order by position,id`, [session.workspaceId, id, row.projectId, row.unitId, publicPropertyCostKeys]) : [];
   const priceCents = extra?.marketingType === "rent" ? extra.rentPrice : row.priceCents;
+  const priceKnown = extra?.marketingType === "rent" ? propertyOptionalPriceIsKnown(row.canonicalPayload, "rentPrice", priceCents)
+    : row.publicPriceCents !== null ? propertyOptionalPriceIsKnown(row.canonicalPayload, "publicPrice", row.publicPriceCents)
+      : propertyCoreNumberIsKnown(row.canonicalPayload, "price", row.targetPriceCents);
   const authority = await tx.queryOne<{ developer: boolean; confirmed: boolean }>(`select (pr.developer_organization_id is not null or pr.customer_type='property_developer' or lower(pr.type) like '%bautr%' or w.customer_type='property_developer') as developer,exists(select 1 from property_units u where u.workspace_id=p.workspace_id and u.project_id=p.project_id and u.id=p.unit_id and u.price_cents=$3::bigint and u.metadata->'priceConfirmation'->>'sourceReference' is not null and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text) as confirmed from seller_listings p join workspaces w on w.id=p.workspace_id left join projects pr on pr.id=p.project_id and pr.workspace_id=p.workspace_id where p.id=$1::uuid and p.workspace_id=$2::uuid`, [id,session.workspaceId,priceCents ?? "0"]);
-  if (authority?.developer && visibility === "publish_price" && Number(priceCents)>0 && !authority.confirmed) checks.push({ id:"DEVELOPER-PRICE",ruleVersion:"sales-price-confirmation-1",status:"missing",message:"Bauträgerpreis zuerst über den bestätigten Einheitenpreis freigeben.",source:"" });
+  if (authority?.developer && visibility === "publish_price" && priceKnown && Number(priceCents)>=0 && !authority.confirmed) checks.push({ id:"DEVELOPER-PRICE",ruleVersion:"sales-price-confirmation-1",status:"missing",message:"Bauträgerpreis zuerst über den bestätigten Einheitenpreis freigeben.",source:"" });
+  const sanitizeAddress = (value: unknown) => sanitizePropertyExposeAddress(value, row.address, input.showAddress, input.language, row.street);
   const description = customDescription || texts.map(t => t.content).join("\n\n");
   const template = input.templateVersionId ? await freezeWebExposeTemplate(tx,session,input.templateVersionId) : undefined;
   const snapshot: WebExposeSnapshot = { schemaVersion: 1, language: input.language, locale, countryCode: geography.countryCode,
     ...(template?{template}:{}),
-    title: text(input.title) || row.title, description: !input.showAddress && row.address.length > 3 ? description.split(row.address).join("[…]") : description, location: input.showAddress ? row.address : row.city || row.region,
-    priceVisibility:visibility as WebExposeSnapshot["priceVisibility"],price: visibility === "publish_price" && priceCents !== null ? money(priceCents ?? row.priceCents) : null, facts,
-    detailGroups: detailGroups.map(group => ({ ...group, facts: group.facts.map(fact => ({ ...fact, value: !input.showAddress && row.address.length > 3 ? fact.value.split(row.address).join("[…]") : fact.value })) })),
-    costs: formatApprovedPropertyCosts(costRows, input.language, locale), media:input.includeLegacyMedia===false?[]:media,resources,
-    units: units.map(u => ({ id: u.id, number: u.number, status: u.status, area: Number(u.area)>0?num(u.area):"—", rooms: Number(u.rooms)>0?num(u.rooms):"—", price: visibility === "publish_price" ? money(u.price) : null, facts: publicPropertyUnitFacts(u.details, input.language, locale) })),
+    title: sanitizeAddress(text(input.title) || row.title), description: sanitizeAddress(description), location: input.showAddress ? row.address : sanitizeAddress(row.city || row.region),
+    priceVisibility:visibility as WebExposeSnapshot["priceVisibility"],price: visibility === "publish_price" && priceKnown && priceCents !== null ? money(priceCents, true) : null, facts: facts.map(fact => ({ ...fact, value: sanitizeAddress(fact.value) })),
+    detailGroups: detailGroups.map(group => ({ ...group, facts: group.facts.map(fact => ({ ...fact, value: sanitizeAddress(fact.value) })) })),
+    costs: formatApprovedPropertyCosts(costRows, input.language, locale), media:input.includeLegacyMedia===false?[]:media.map(item => ({ ...item, title: sanitizeAddress(item.title) })),resources:resources.map(item => ({ ...item, title: sanitizeAddress(item.title) })),
+    units: units.map(u => ({ id: u.id, number: sanitizeAddress(u.number), status: u.status, area: Number(u.area)>0?num(u.area):"—", rooms: Number(u.rooms)>0?num(u.rooms):"—", price: visibility === "publish_price" ? money(u.price, u.priceConfirmed) : null, facts: publicPropertyUnitFacts(u.details, input.language, locale) })),
     contact: input.showContact ? { name: text(row.contactName), email: text(row.contactEmail), phone: text(row.contactPhone) } : { name: "", email: "", phone: "" },
     privacyUrl, legalUrl, controller: text(input.controller), publishedAt: new Date().toISOString() };
   return { snapshot, checks, projectId: row.projectId, sourceFingerprint: webExposeHash(JSON.stringify({ ...snapshot, publishedAt: null })) };
@@ -134,7 +134,7 @@ export async function lookupWebExpose(token: string): Promise<WebExposePublic | 
     const live=await queryOne<{data:{units:{id:string;status:string;priceCents:string|null}[];priceCents:string|null;priceVisibility:NonNullable<WebExposeSnapshot["priceVisibility"]>;asOf:string}|null}>(`select crm_web_expose_inventory($1) as data`,[webExposeHash(token)]);
     if(!live?.data)return null;
     const inventory=live.data;
-    const money=(cents:string|null)=>{if(cents===null)return null;const value=parsePropertyIntegerCents(cents);return value===null||value<=0?null:projectReportMoney(cents,data.snapshot.locale);};
+    const money=(cents:string|null)=>{if(cents===null)return null;const value=parsePropertyIntegerCents(cents);return value===null||value<0?null:projectReportMoney(cents,data.snapshot.locale);};
     data.snapshot.price=money(inventory.priceCents);
     data.snapshot.priceVisibility=inventory.priceVisibility;
     if (inventory.priceVisibility !== "publish_price") data.snapshot.costs=[];
@@ -143,7 +143,11 @@ export async function lookupWebExpose(token: string): Promise<WebExposePublic | 
   }
   if(data?.snapshot.resources?.length){
     const live=await queryOne<{data:WebExposeSnapshot["resources"]}>(`select crm_web_expose_live_resources($1) as data`,[webExposeHash(token)]);
-    data.snapshot.resources=Array.isArray(live?.data)?live.data:[];
+    const frozenResources = data.snapshot.resources;
+    data.snapshot.resources=Array.isArray(live?.data)?live.data.flatMap(resource => {
+      const frozen = frozenResources.find(item => item.id === resource.id);
+      return frozen ? [{ ...resource, title: frozen.title }] : [];
+    }):[];
   }
   return data;
 }

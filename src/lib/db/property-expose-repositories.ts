@@ -4,6 +4,7 @@ import { queryOne } from "@/lib/db/client";
 import { queryPropertyMediaMutation } from "@/lib/db/property-media-mutation";
 import { hasProductCapability } from "@/lib/product-model";
 import type { PropertyExposeOptions, PropertyExposeSource } from "@/lib/property-expose";
+import { publicPropertyEnergySql } from "@/lib/property-expose-public-content";
 import { publicPropertyDetailPayloadSql, publicUnitDetailsSql, publicPropertyCostKeys } from "@/lib/property-expose-details";
 
 export class PropertyExposeError extends Error {
@@ -56,7 +57,7 @@ export function readExposeRegistry(raw: unknown): ExposeRegistry {
 // One statement produces a consistent, explicitly allowlisted saved-data snapshot.
 // No owner/lead fields, internal notes, market valuation, URLs or export registry.
 export const exposeSourceSql = `jsonb_build_object(
-  'listing', jsonb_build_object('id',p.id,'projectId',p.project_id,'title',p.title,'address',p.address,
+  'listing', jsonb_build_object('id',p.id,'projectId',p.project_id,'title',p.title,'address',p.address,'street',p.street,
     'city',p.city,'postalCode',p.postal_code,'region',p.region,'objectType',p.object_type,'areaSqm',p.area_sqm,
     'rooms',p.rooms,'yearBuilt',p.year_built,'objectNumber',p.object_number,'marketingType',p.marketing_type,
     'targetPriceCents',p.target_price_cents,'publicPriceCents',p.public_price_cents,'priceVisibility',p.price_visibility,
@@ -67,6 +68,10 @@ export const exposeSourceSql = `jsonb_build_object(
     'availableFrom',p.available_from,'availableFromText',p.available_from_text,
     'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until,
     'countryCode',p.canonical_payload->'geography'->>'countryCode',
+    'energyCertificate',${publicPropertyEnergySql("p")},'coreNumericState',jsonb_build_object(
+      'version',p.canonical_payload->'coreNumericState'->'version',
+      'areaSqm',p.canonical_payload->'coreNumericState'->'areaSqm','price',p.canonical_payload->'coreNumericState'->'price',
+      'publicPrice',p.canonical_payload->'coreNumericState'->'publicPrice','rentPrice',p.canonical_payload->'coreNumericState'->'rentPrice'),
     'publicDetails',${publicPropertyDetailPayloadSql("p")},
     'linkedUnitDetails',(select ${publicUnitDetailsSql("u")} from property_units u where u.id=p.unit_id and u.workspace_id=p.workspace_id and u.project_id=p.project_id)),
   'media',coalesce((select jsonb_agg(m.item order by m.item->>'id') from (
