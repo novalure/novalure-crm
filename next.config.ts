@@ -69,7 +69,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["pg", "pdfkit", "pdf-lib", "pdfjs-dist", "yauzl", "saxes"],
   outputFileTracingIncludes: {
-    "/api/crm/mailbox/attachments": [
+    "/api/crm/mailbox/{attachments,replies}": [
       "./src/lib/crm-mailbox-attachment-worker.cjs",
       "./src/lib/crm-mailbox-pdf-preflight.cjs",
       "./node_modules/pdfjs-dist/**/*",
