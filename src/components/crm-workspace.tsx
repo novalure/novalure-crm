@@ -65,6 +65,7 @@ import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
 import { OnboardingWorkspace } from "@/components/onboarding-workspace";
 import { WorkspaceNavigation } from "@/components/workspace-navigation";
+import { WorkspaceSectionTabs } from "@/components/workspace-section-tabs";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
 import { can as hasAppPermission } from "@/lib/auth/permissions";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
@@ -159,10 +160,6 @@ type DashboardSection =
   | "newsletter"
   | "forms"
   | "calendar";
-
-function usesFocusedWorkspaceSidebar(section: DashboardSection) {
-  return section === "pipelines" || section === "properties";
-}
 
 type HeaderActionModal = "import" | "project" | "customer" | null;
 
@@ -3011,7 +3008,7 @@ export function CrmWorkspace({
     teamStructure: workspaceSetup.teamStructure,
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
   const [propertyUnitNavigationWorkspaceId, setPropertyUnitNavigationWorkspaceId] = useState<string | null>(null);
@@ -3697,7 +3694,7 @@ export function CrmWorkspace({
       setActivePresetId(storedPresetId);
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
-      setSidebarCollapsed(usesFocusedWorkspaceSidebar(resolvedSection));
+
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -3713,7 +3710,7 @@ export function CrmWorkspace({
       const resolvedSection = navigationEntries[nextEntryId].section;
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
-      setSidebarCollapsed(usesFocusedWorkspaceSidebar(resolvedSection));
+
     };
 
     window.addEventListener("hashchange", syncSectionFromHash);
@@ -3739,7 +3736,7 @@ export function CrmWorkspace({
         const nextSection = navigationEntries[nextEntryId].section;
         setActiveNavigationEntryId(nextEntryId);
         setActiveSection(nextSection);
-        setSidebarCollapsed(usesFocusedWorkspaceSidebar(nextSection));
+
       }
     });
 
@@ -3936,7 +3933,7 @@ export function CrmWorkspace({
     if (matchingEntry) {
       setActiveNavigationEntryId(matchingEntry);
     }
-    setSidebarCollapsed(usesFocusedWorkspaceSidebar(nextSection));
+
 
     if ([
       "dashboard",
@@ -4117,24 +4114,16 @@ export function CrmWorkspace({
       <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]" data-crm-shell>
         <aside
           aria-hidden={mobileNavigationOpen ? true : undefined}
-          className={`hidden shrink-0 overflow-hidden border-r border-stone-200 bg-white py-6 transition-all duration-200 xl:block ${
-            sidebarCollapsed ? "w-16 px-2" : "w-80 px-5"
-          }`}
+          className="hidden shrink-0 border-r transition-all duration-200 xl:flex"
           data-collapsed={sidebarCollapsed ? "true" : "false"}
           data-crm-sidebar
           inert={mobileNavigationOpen ? true : undefined}
         >
-          <div
-            className={`mb-8 flex gap-3 ${
-              sidebarCollapsed ? "flex-col items-center" : "items-start justify-between"
-            }`}
-            data-crm-brand-row
-          >
+          <div data-crm-brand-row>
             {sidebarCollapsed ? <CrmBrand compact /> : <CrmBrand />}
             <button
               aria-expanded={!sidebarCollapsed}
               aria-label={sidebarToggleLabel}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100"
               data-crm-collapse
               onClick={() => setSidebarCollapsed((current) => !current)}
               title={sidebarToggleLabel}
@@ -4145,203 +4134,56 @@ export function CrmWorkspace({
           </div>
 
           {!sidebarCollapsed ? (
-            <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 p-4" data-crm-profile-card>
-              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                {copy.navigationPresets.label}
-                <select
-                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900"
-                  onChange={(event) =>
-                    handlePresetChange(event.target.value as NavigationPresetId)
-                  }
-                  value={normalizedActivePresetId}
-                >
-                  {presetOptionGroups.map((group) => (
-                    <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
-                      {group.presetIds.map((presetId) => (
-                        <option key={presetId} value={presetId}>
-                          {copy.navigationPresets.profiles[presetId].label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
-              <p className="mt-2 break-words text-sm font-medium text-slate-900">
-                {activePresetProfile.description}
-              </p>
-              <p className="mt-2 break-words text-xs text-stone-500">
-                {copy.navigationPresets.helper}
-              </p>
+            <div data-crm-sidebar-profile>
+              <p title={workspaceContext.workspaceName}>{workspaceContext.workspaceName}</p>
+              <select
+                aria-label={copy.navigationPresets.label}
+                data-crm-profile-select
+                onChange={(event) => handlePresetChange(event.target.value as NavigationPresetId)}
+                title={activePresetProfile.description}
+                value={normalizedActivePresetId}
+              >
+                {presetOptionGroups.map((group) => (
+                  <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
+                    {group.presetIds.map((presetId) => (
+                      <option key={presetId} value={presetId}>
+                        {copy.navigationPresets.profiles[presetId].label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
           ) : null}
 
-          <nav aria-label={copy.navigationPresets.mobileNavigationLabel} className="space-y-1 text-sm font-medium" data-crm-nav>
+          <nav aria-label={copy.navigationPresets.mobileNavigationLabel} data-crm-nav data-crm-primary-nav>
             <WorkspaceNavigation items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} collapsed={sidebarCollapsed} language={language}
-              onNavigate={handleNavigationChange} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
-            {canUseBookingNavigation ? (
-              <Link
-                aria-label={bookingNavigationLabel}
-                className={`flex w-full items-center rounded-md py-2.5 text-slate-600 hover:bg-stone-100 hover:text-slate-950 ${sidebarCollapsed ? "justify-center px-0" : "justify-between px-3"}`}
-                data-active="false"
-                data-crm-nav-item
-                href="/booking"
-                prefetch={false}
-                title={bookingNavigationLabel}
-              >
-                <NavigationIcon section="calendar" />
-                {!sidebarCollapsed ? <span className="min-w-0 break-words">{bookingNavigationLabel}</span> : null}
-              </Link>
-            ) : null}
+              area="primary" onNavigate={handleNavigationChange} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
           </nav>
 
-          {!sidebarCollapsed ? (
-            <>
-              <div className="mt-8 rounded-lg border border-stone-200 bg-stone-50 p-4" data-crm-workspace-card>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
-                  {copy.sidebar.workspace}
-                </p>
-                <p className="mt-2 break-words text-sm font-semibold">{workspaceContext.workspaceName}</p>
-                <p className="mt-1 break-words text-xs text-stone-600">
-                  {copy.workspaceMode.operatingModelLabels[workspaceContext.operatingModel]}
-                </p>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-md bg-white p-3">
-                    <p className="font-semibold">{projectCount}</p>
-                    <p className="break-words text-xs text-stone-500">{copy.sidebar.projects}</p>
-                  </div>
-                  <div className="rounded-md bg-white p-3">
-                    <p className="font-semibold">{sessionUserName}</p>
-                    <p className="break-words text-xs text-stone-500">{sessionProductRole}</p>
-                  </div>
-                </div>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-stone-200 bg-white p-4" data-crm-projects open>
-                <summary className="cursor-pointer select-none text-sm font-semibold text-slate-900">
-                  {copy.sidebar.projects}
-                </summary>
-                <div className="mt-4 space-y-2">
-                  <button
-                    aria-pressed={activeProjectId === "all"}
-                    className={`block w-full rounded-md border p-3 text-left text-sm ${
-                      activeProjectId === "all"
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
-                    }`}
-                    data-active={activeProjectId === "all" ? "true" : "false"}
-                    data-crm-project-button
-                    onClick={() => handleProjectScopeChange("all")}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="min-w-0">
-                        <span className="block break-words font-semibold">{copy.header.allProjects}</span>
-                        <span
-                          className={`mt-1 block break-words text-xs ${
-                            activeProjectId === "all" ? "text-slate-300" : "text-stone-500"
-                          }`}
-                        >
-                          {copy.header.allProjectsSubtitle}
-                        </span>
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                          activeProjectId === "all"
-                            ? "bg-white/10 text-white"
-                            : "bg-white text-stone-700"
-                        }`}
-                      >
-                        {projectCount}
-                      </span>
-                    </span>
-                  </button>
-                  {allProjects.map((project) => (
-                    <button
-                      aria-pressed={activeProjectId === project.id}
-                      className={`block w-full rounded-md border p-3 text-left text-sm ${
-                        activeProjectId === project.id
-                          ? "border-slate-950 bg-slate-950 text-white"
-                          : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
-                      }`}
-                      data-active={activeProjectId === project.id ? "true" : "false"}
-                      data-crm-project-button
-                      key={project.name}
-                      onClick={() => handleProjectScopeChange(project.id)}
-                      type="button"
-                    >
-                      <span className="flex min-w-0 items-start justify-between gap-2">
-                        <span className="min-w-0">
-                          <span
-                            className={`block break-words font-semibold ${
-                              activeProjectId === project.id ? "text-white" : "text-slate-900"
-                            }`}
-                          >
-                            {project.name}
-                          </span>
-                          <span
-                            className={`mt-1 block break-words text-xs ${
-                              activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
-                            }`}
-                          >
-                            {getCrmProjectTypeLabel(project.type, language)}
-                          </span>
-                        </span>
-                        <span
-                          className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                            statusStyles[project.status] ?? statusStyles.Review
-                          }`}
-                        >
-                          {getCrmStatusLabel(project.status, language)}
-                        </span>
-                      </span>
-                      <span className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <span
-                          className={`rounded-md p-2 ${
-                            activeProjectId === project.id ? "bg-white/10" : "bg-white"
-                          }`}
-                        >
-                          <span
-                            className={`block font-semibold ${
-                              activeProjectId === project.id ? "text-white" : "text-slate-900"
-                            }`}
-                          >
-                            {project.leads}
-                          </span>
-                          <span
-                            className={
-                              activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
-                            }
-                          >
-                            {copy.sidebar.leads}
-                          </span>
-                        </span>
-                        <span
-                          className={`rounded-md p-2 ${
-                            activeProjectId === project.id ? "bg-white/10" : "bg-white"
-                          }`}
-                        >
-                          <span
-                            className={`block break-words font-semibold ${
-                              activeProjectId === project.id ? "text-white" : "text-slate-900"
-                            }`}
-                          >
-                            {project.revenue}
-                          </span>
-                          <span
-                            className={
-                              activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
-                            }
-                          >
-                            {copy.sidebar.pipeline}
-                          </span>
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </>
-          ) : null}
+          <div data-crm-sidebar-footer>
+            <nav aria-label={language === "de" ? "Verwaltung" : "Management"} data-crm-nav>
+              <WorkspaceNavigation items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} collapsed={sidebarCollapsed} language={language}
+                area="utility" onNavigate={handleNavigationChange} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
+              {canUseBookingNavigation ? (
+                <Link
+                  aria-label={bookingNavigationLabel}
+                  data-active="false"
+                  data-crm-nav-item
+                  href="/booking"
+                  prefetch={false}
+                  title={bookingNavigationLabel}
+                >
+                  <NavigationIcon section="calendar" />
+                  {!sidebarCollapsed ? <span>{bookingNavigationLabel}</span> : null}
+                </Link>
+              ) : null}
+            </nav>
+            <div data-crm-sidebar-user title={`${sessionUserName} · ${sessionProductRole}`}>
+              <span data-crm-sidebar-avatar aria-hidden="true">{sessionUserName.slice(0, 1).toLocaleUpperCase(language)}</span>
+              {!sidebarCollapsed ? <span>{sessionUserName}<small>{sessionProductRole}</small></span> : null}
+            </div>
+          </div>
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col" data-crm-stage>
@@ -4442,22 +4284,14 @@ export function CrmWorkspace({
                   <section>
                     <h2 data-crm-mobile-section-label>{copy.navigationPresets.mobileNavigationLabel}</h2>
                     <nav aria-label={copy.navigationPresets.mobileNavigationLabel} data-crm-nav>
-                      {focusedNavigationItems.map((item) => (
-                        <button
-                          aria-current={visibleActiveNavigationEntry.id === item.id ? "page" : undefined}
-                          data-active={visibleActiveNavigationEntry.id === item.id ? "true" : "false"}
-                          data-crm-nav-item
-                          key={item.id}
-                          onClick={() => {
-                            focusPageTitleAfterNavigationRef.current = true;
-                            handleNavigationChange(item.id);
-                          }}
-                          type="button"
-                        >
-                          <NavigationIcon section={item.section} />
-                          <span className="min-w-0 break-words">{item.label}</span>
-                        </button>
-                      ))}
+                      <WorkspaceNavigation items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} collapsed={false} language={language}
+                        onActiveNavigate={() => {
+                          focusPageTitleAfterNavigationRef.current = true;
+                          setMobileNavigationOpen(false);
+                        }} onNavigate={id => {
+                          focusPageTitleAfterNavigationRef.current = true;
+                          handleNavigationChange(id);
+                        }} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
                       {canUseBookingNavigation ? (
                         <Link
                           data-active="false"
@@ -4608,6 +4442,19 @@ export function CrmWorkspace({
               </div>
             </div>
             <div className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-4 lg:flex-row lg:items-center lg:justify-between" data-crm-quickbar>
+              <label data-crm-project-scope>
+                <span>{copy.sidebar.projects}</span>
+                <select
+                  aria-label={copy.sidebar.projects}
+                  data-crm-project-select
+                  onChange={(event) => handleProjectScopeChange(event.target.value)}
+                  value={activeProjectId}
+                >
+                  <option value="all">{copy.header.allProjects} ({projectCount})</option>
+                  {projectScopeInvalid && crmScope.projectId ? <option value={crmScope.projectId}>{projectScopeLabel}</option> : null}
+                  {allProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </select>
+              </label>
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
                   {copy.navigationPresets.quickActionsLabel}
@@ -4669,6 +4516,11 @@ export function CrmWorkspace({
               </div>
             </div>
           </header>
+
+          <div aria-hidden={mobileNavigationOpen ? true : undefined} inert={mobileNavigationOpen ? true : undefined} data-crm-section-navigation>
+            <WorkspaceSectionTabs items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} language={language}
+              onNavigate={handleNavigationChange} />
+          </div>
 
           <div
             aria-hidden={mobileNavigationOpen ? true : undefined}

@@ -161,10 +161,11 @@ test("property navigation presets expose Immobilien while Studio keeps its focus
   }
   assert.match(workspace, /properties: \{ id: "properties", section: "properties" \}/);
   assert.match(workspace, /visibleActiveSection === "properties"/);
-  assert.match(workspace, /usesFocusedWorkspaceSidebar\(section: DashboardSection\)/);
-  assert.match(workspace, /section === "pipelines" \|\| section === "properties"/);
-  assert.match(workspace, /setSidebarCollapsed\(usesFocusedWorkspaceSidebar\(resolvedSection\)\)/);
-  assert.match(workspace, /setSidebarCollapsed\(usesFocusedWorkspaceSidebar\(nextSection\)\)/);
+  assert.match(workspace, /\[sidebarCollapsed, setSidebarCollapsed\] = useState\(false\)/);
+  assert.match(workspace, /onClick=\{\(\) => setSidebarCollapsed\(\(current\) => !current\)\}/);
+  assert.equal((workspace.match(/setSidebarCollapsed\(/g) ?? []).length, 1, "only the user toggle changes sidebar width");
+  assert.match(workspace, /WorkspaceNavigation items=\{focusedNavigationItems\}/);
+  assert.match(workspace, /WorkspaceSectionTabs items=\{focusedNavigationItems\}/);
   assert.match(read("src/lib/i18n.ts"), /properties: "Immobilien"/);
 });
 
@@ -348,8 +349,9 @@ test("phase 4 links property objects and unit inventory without changing role vi
   assert.match(i18n, /title: "Einheiten\/Bestand"/);
   assert.match(i18n, /clearFocusScope: "Alle Einheiten \/ Bestand anzeigen"/);
 
-  assert.match(workspace, /usesFocusedWorkspaceSidebar\(section: DashboardSection\)/);
-  assert.doesNotMatch(workspace, /section === "units"[\s\S]{0,80}\|\| section === "properties"/);
+  assert.match(workspace, /visibleActiveSection === "units"/);
+  assert.match(workspace, /visibleActiveSection === "properties"/);
+  assert.doesNotMatch(workspace, /usesFocusedWorkspaceSidebar/);
 });
 
 test("phase 3 complete brokerage preset is additive and covers the full broker workflow", () => {
