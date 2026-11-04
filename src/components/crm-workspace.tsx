@@ -61,6 +61,7 @@ import { WebExposeTemplateEditor } from "@/components/web-expose-template-editor
 import { ProjectReportPicker } from "@/components/project-report-picker";
 import { CrmNotifications } from "@/components/crm-notifications";
 import { PropertyCommandCenter } from "@/components/property-command-center";
+import { usePropertyDraftSessionStore } from "@/lib/use-property-draft";
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
@@ -2904,6 +2905,7 @@ export function CrmWorkspace({
   sessionUserName,
   sessionWorkspace,
 }: CrmWorkspaceProps) {
+  const propertyDraftStore = usePropertyDraftSessionStore(sessionUserId);
   const coreData = useMemo(() => selectAuthoritativeCrmPresentation(suppliedCoreData), [suppliedCoreData]);
   const workspace = { ...sessionWorkspace, plan: initialLanguage === "de" ? "Nicht verfügbar" : "Unavailable", activeProjects: coreData.projects.length, activeUsers: 1 };
   const sessionUsers: WorkspaceUser[] = [{ id: sessionUserId, workspaceId: sessionWorkspace.id, name: sessionUserName, email: "", role: sessionRole, productRole: sessionProductRole, status: "active" }];
@@ -4700,6 +4702,7 @@ export function CrmWorkspace({
                 units={propertyUnitRecords.filter((unit) => isProjectInActiveScope(unit.projectId))}
                 users={users}
                 draftUserId={sessionUserId}
+                draftStore={propertyDraftStore}
               />
             ) : null}
 

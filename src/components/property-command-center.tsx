@@ -2,7 +2,7 @@
 import { PropertyCostWorkspace } from "@/components/property-cost-workspace";
 import { PropertyTextWorkspace } from "@/components/property-text-workspace";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -59,14 +59,14 @@ import { PropertyBookingWorkspace } from "@/components/property-booking-workspac
 import { GuidedPropertyCreateWorkspace } from "@/components/guided-property-create-workspace";
 import type { PropertyInquiryState } from "@/lib/property-inquiries";
 import { PropertyExposeWorkspace } from "@/components/property-expose-workspace";
-import { createPropertyDraftStore } from "@/lib/property-draft-store";
+import { createPropertyDraftStore, propertyDraftScopeKey, protectPropertyDraftUnload, type PropertyDraftStore, type PropertyDraft, type PropertyCostDraft } from "@/lib/property-draft-store";
+import { usePropertyDraft } from "@/lib/use-property-draft";
 import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
-import { createPropertyGeography, type PropertyGeography } from "@/lib/property-country";
+import { createPropertyGeography } from "@/lib/property-country";
 import { PropertyGeographyFields } from "@/components/property-geography-fields";
 import { PropertyEnergyFields } from "@/components/property-energy-fields";
 import { PropertyDetailsEditor } from "@/components/property-details-editor";
-import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput,type PropertyDetails } from "@/lib/property-details";
-import type { PropertyEnergyCertificate } from "@/lib/property-country";
+import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput } from "@/lib/property-details";
 import { confirmedPropertyCreation, propertyWorkspaceEndpoint } from "@/lib/property-interactions";
 import { PROPERTY_AREA_MAX_SQM } from "@/lib/property-area-input";
 import { propertyCoreNumberIsKnown } from "@/lib/property-core-numbers";
@@ -100,60 +100,7 @@ type PropertyCommandCenterProps = {
   units: PropertyUnit[];
   users?: WorkspaceUser[];
   draftUserId?: string;
-};
-
-type PropertyDraft = {
-  propertyDetails?:PropertyDetails;
-  energyCertificate?:PropertyEnergyCertificate;
-  city?:string;
-  street?:string;
-  geography: PropertyGeography;
-  address: string;
-  areaSqm: string;
-  availableFrom: string;
-  availableFromText: string;
-  availabilityNote: string;
-  channelPriceVisibility: Record<string, PropertyPriceVisibility>;
-  contactEmail: string;
-  contactName: string;
-  contactPhone: string;
-  costItems: PropertyCostDraft[];
-  fieldValues: Record<string, string>;
-  gdprStatus: string;
-  internalReference: string;
-  marketingType: string;
-  monthlyCostsGross: string;
-  objectType: string;
-  objectNumber: string;
-  portalMappingStatus: string;
-  postalCode: string;
-  price: string;
-  priceVisibility: PropertyPriceVisibility;
-  projectId: string;
-  publicPrice: string;
-  purchaseAncillaryCosts: string;
-  region: string;
-  rentNet: string;
-  rentPrice: string;
-  rooms: string;
-  subObjectType: string;
-  textBlocks: Record<string, string>;
-  title: string;
-  usageType: string;
-  yearBuilt: string;
-};
-
-type PropertyCostDraft = {
-  costKey: string;
-  groupKey: string;
-  label: string;
-  monthlyGross: string;
-  monthlyNet: string;
-  monthlyVat: string;
-  oneTimeGross: string;
-  oneTimeNet: string;
-  oneTimeVat: string;
-  exposeVisible: boolean;
+  draftStore?: PropertyDraftStore;
 };
 
 const statusStyles: Record<PropertyAssetStatus, string> = {
@@ -340,6 +287,7 @@ export function PropertyCommandCenter({
   units,
   users = [],
   draftUserId = "current-user",
+  draftStore: suppliedDraftStore,
 }: PropertyCommandCenterProps) {
   const copy = getPropertyDepartmentCopy(language);
   const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
@@ -370,28 +318,27 @@ export function PropertyCommandCenter({
   const [query, setQuery] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState(() => assets[0]?.id ?? "");
   const [selectedChannel, setSelectedChannel] = useState<(typeof PROPERTY_CHANNEL_TYPES)[number]>("Immobilienportal");
-  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const propertyCreateBusy = useRef(false);
-  const pendingPropertyCreate = useRef<{
-    workspaceId: string; projectId: string; endpoint: string;
-    body: string; key: string; correlation: string;
-  } | null>(null);
-  const [propertyCreateUncertain, setPropertyCreateUncertain] = useState(false);
-  useEffect(() => {
-    if (!propertyCreateUncertain) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [propertyCreateUncertain]);
+  const [storedNotice, setStoredNotice] = useState<{ scopeKey: string; value: { kind: "success" | "error"; message: string } | null } | null>(null);
+  const [savingOther, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [editingRelationshipListingId, setEditingRelationshipListingId] = useState<string | null>(null);
-  const [workflowDraftStore] = useState(createPropertyDraftStore);
+  const standaloneDraftStore = useMemo(() => createPropertyDraftStore(draftUserId), [draftUserId]);
+  const workflowDraftStore = suppliedDraftStore?.ownerUserId === draftUserId ? suppliedDraftStore : standaloneDraftStore;
+  useEffect(() => () => standaloneDraftStore.clearAll(), [standaloneDraftStore]);
+  useEffect(() => {
+    if (workflowDraftStore === suppliedDraftStore) return; // The CRM parent also protects unmounted sections.
+    const warn = (event: BeforeUnloadEvent) => { protectPropertyDraftUnload(workflowDraftStore, event); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [suppliedDraftStore, workflowDraftStore]);
   const workflowMutationBusy = useSyncExternalStore(workflowDraftStore.subscribe,workflowDraftStore.isMutationBusy,()=>false);
+  const saving = savingOther || workflowMutationBusy;
   const workflowCapabilities = usePropertyWorkflowCapabilities(context.workspaceId);
-  const [draft, setDraft] = useState<PropertyDraft>(() => ({
+  const draftScopeKey = `property-create:${propertyDraftScopeKey({ userId: draftUserId, workspaceId: context.workspaceId, projectId: activeProjectId })}`;
+  const initialProjectId = activeProjectId && projects.some((project) => project.id === activeProjectId) ? activeProjectId : "";
+  const initialDraft = useMemo<PropertyDraft>(() => ({
     geography: createPropertyGeography("AT"),
     address: "",
     areaSqm: "",
@@ -414,9 +361,7 @@ export function PropertyCommandCenter({
     postalCode: "",
     price: "",
     priceVisibility: "publish_price",
-    projectId: activeProjectId && projects.some((project) => project.id === activeProjectId)
-      ? activeProjectId
-      : "",
+    projectId: initialProjectId,
     publicPrice: "",
     purchaseAncillaryCosts: "",
     region: "",
@@ -428,7 +373,26 @@ export function PropertyCommandCenter({
     title: "",
     usageType: "residential",
     yearBuilt: "",
-  }));
+  }), [initialProjectId]);
+  const { draft, setDraft: updateStoredDraft, clearSubmittedDraft } = usePropertyDraft(workflowDraftStore, draftScopeKey, initialDraft);
+  const pendingPropertyCreate = useSyncExternalStore(workflowDraftStore.subscribe, () => workflowDraftStore.readCreateAttempt(draftScopeKey), () => undefined);
+  const hasOtherPendingCreate = useSyncExternalStore(workflowDraftStore.subscribe, () => workflowDraftStore.hasCreateAttemptOutside(draftScopeKey), () => false);
+  const propertyCreateUncertain = pendingPropertyCreate?.phase === "uncertain";
+  const geography = draft.geography ?? initialDraft.geography!;
+  const scopeMismatchMessage = language === "de"
+    ? "Bitte zum ursprünglichen Arbeitsbereich und Projekt zurückkehren, um den offenen Speichervorgang zu prüfen."
+    : "Return to the original workspace and project to check the pending save.";
+  const uncertaintyMessage = language === "de"
+    ? "Speicherergebnis ungeklärt. Bitte denselben Vorgang erneut prüfen; die Eingaben bleiben bis zur Bestätigung gesperrt."
+    : "Save result is unknown. Check the same operation again; inputs stay locked until confirmed.";
+  const notice = (storedNotice?.scopeKey === draftScopeKey ? storedNotice.value : null) ??
+    (propertyCreateUncertain ? { kind: "error" as const, message: uncertaintyMessage } : null);
+  function setNotice(value: { kind: "success" | "error"; message: string } | null) {
+    setStoredNotice({ scopeKey: draftScopeKey, value });
+  }
+  function setDraft(update: Parameters<typeof updateStoredDraft>[0]) {
+    if (!workflowDraftStore.readCreateAttempt(draftScopeKey)) updateStoredDraft(update);
+  }
 
   const filteredAssets = assets.filter((asset) => {
     const matchesStatus = statusFilter === "all" || asset.status === statusFilter;
@@ -637,7 +601,12 @@ export function PropertyCommandCenter({
 
   async function submitProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!actions.createProperty.enabled || saving || propertyCreateBusy.current) return;
+    if (!actions.createProperty.enabled || saving) return;
+    const existingAttempt = workflowDraftStore.readCreateAttempt(draftScopeKey);
+    if (existingAttempt && (existingAttempt.workspaceId !== context.workspaceId || existingAttempt.projectId !== draft.projectId)) {
+      setNotice({ kind: "error", message: scopeMismatchMessage });
+      return;
+    }
     if (!draftProjects.some((project) => project.id === draft.projectId)) {
       setNotice({
         kind: "error",
@@ -645,19 +614,14 @@ export function PropertyCommandCenter({
       });
       return;
     }
-    propertyCreateBusy.current = true;
-    setSaving(true);
+    const mutationToken = workflowDraftStore.acquireMutation();
+    if (!mutationToken) return;
     setNotice(null);
     let committed = false;
+    let attempt = existingAttempt;
     try {
-      if (pendingPropertyCreate.current && (pendingPropertyCreate.current.workspaceId !== context.workspaceId ||
-        pendingPropertyCreate.current.projectId !== draft.projectId)) {
-        throw new Error(language === "de"
-          ? "Bitte zum ursprünglichen Arbeitsbereich und Projekt zurückkehren, um den offenen Speichervorgang zu prüfen."
-          : "Return to the original workspace and project to check the pending save.");
-      }
       const completeDetails=propertyDetailsInput({...draft,costItems:toCostItems(draft)});
-      pendingPropertyCreate.current ??= {
+      attempt ??= {
         workspaceId: context.workspaceId,
         projectId: draft.projectId,
         endpoint: propertyWorkspaceEndpoint("/api/crm/properties", context.workspaceId),
@@ -671,8 +635,10 @@ export function PropertyCommandCenter({
         }),
         key: crypto.randomUUID(),
         correlation: crypto.randomUUID(),
+        submittedDraft: draft,
+        phase: "in_flight",
       };
-      const attempt = pendingPropertyCreate.current;
+      workflowDraftStore.setCreateAttempt(draftScopeKey, { ...attempt, phase: "in_flight" });
       const response = await csrfFetch(attempt.endpoint, {
         body: attempt.body,
         headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key, "X-Correlation-Id": attempt.correlation },
@@ -680,50 +646,32 @@ export function PropertyCommandCenter({
       });
       const payload = await response.json().catch(() => ({ error: copy.notices.propertySaveFailed }));
       if (!response.ok) {
-        if (response.status < 500) pendingPropertyCreate.current = null;
+        if (response.status < 500) workflowDraftStore.clearCreateAttempt(draftScopeKey, attempt.key);
         throw new Error(typeof payload.error === "string" ? payload.error : copy.notices.propertySaveFailed);
       }
       if (!confirmedPropertyCreation(payload, attempt.workspaceId, attempt.projectId)) {
         throw new Error(copy.notices.propertySaveFailed);
       }
       committed = true;
-      pendingPropertyCreate.current = null;
-      setPropertyCreateUncertain(false);
+      // A late acknowledgement belongs only to the submitted scope and values.
+      if (workflowDraftStore.clearCreateAttempt(draftScopeKey, attempt.key)) clearSubmittedDraft(attempt.submittedDraft);
       setNotice({ kind: "success", message: copy.notices.propertySaved });
-      setDraft((current) => ({
-        ...current,
-        address: "",
-        areaSqm: "",
-        availableFrom: "",
-        availableFromText: "",
-        availabilityNote: "",
-        costItems: createCostDrafts(),
-        propertyDetails:undefined,
-        energyCertificate:undefined,
-        city:"",street:"",
-        projectId: activeProjectId ?? "",
-        price: "",
-        publicPrice: "",
-        rooms: "",
-        textBlocks: createTextDrafts(),
-        title: "",
-      }));
       await onPropertyChanged?.();
     } catch (error) {
-      setPropertyCreateUncertain(Boolean(pendingPropertyCreate.current));
+      const stillPending = attempt && workflowDraftStore.markCreateUncertain(draftScopeKey, attempt.key);
       setNotice({ kind: "error", message: committed
         ? (language === "de" ? "Objekt gespeichert. Die Ansicht konnte noch nicht aktualisiert werden; bitte neu laden." : "Property saved. The view could not be refreshed; please reload it.")
-        : pendingPropertyCreate.current
-          ? (language === "de" ? "Speicherergebnis ungeklärt. Bitte denselben Vorgang erneut prüfen; die Eingaben bleiben bis zur Bestätigung gesperrt." : "Save result is unknown. Check the same operation again; inputs stay locked until confirmed.")
+        : stillPending
+          ? uncertaintyMessage
           : error instanceof Error ? error.message : copy.notices.propertySaveFailed });
     } finally {
-      propertyCreateBusy.current = false;
-      setSaving(false);
+      workflowDraftStore.releaseMutation(mutationToken);
     }
   }
 
   return (
     <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      {hasOtherPendingCreate ? <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{scopeMismatchMessage}</p> : null}
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
@@ -989,7 +937,7 @@ export function PropertyCommandCenter({
         <div className="grid gap-5">
         {actions.createProperty.enabled ? <GuidedPropertyCreateWorkspace workspaceId={context.workspaceId} projectId={activeProjectId} language={language}
           onCreated={async listing=>{await refreshPropertyData();onClearPropertyFocus?.();setQuery("");setStatusFilter("all");setSelectedAssetId(`listing:${listing.id}`);setActiveTab("overview");setEditingListingId(listing.id);}}/> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{actions.createProperty.reason}</p>}
-        <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">{language==="de"?"Erweiterte Direkterfassung mit allen Feldern":"Advanced direct entry with all fields"}</summary><p className="my-4 text-sm text-stone-600">{language==="de"?"Für fortsetzbare Serverentwürfe den Assistenten oben verwenden. Ungespeicherte Eingaben in dieser Direkterfassung bleiben nur in der aktuellen Ansicht.":"Use the wizard above for resumable server drafts. Unsaved direct-entry values stay only in the current view."}</p>
+        <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">{language==="de"?"Erweiterte Direkterfassung mit allen Feldern":"Advanced direct entry with all fields"}</summary><p className="my-4 text-sm text-stone-600">{language==="de"?"Für fortsetzbare Serverentwürfe den Assistenten oben verwenden. Ungespeicherte Direkteingaben bleiben beim Bereichswechsel erhalten, getrennt nach Arbeitsbereich und Projektfilter. Beim Neuladen, Schließen oder Abmelden gehen sie verloren.":"Use the wizard above for resumable server drafts. Unsaved direct-entry values survive section changes, separately for each workspace and project filter. Reloading, closing or signing out loses them."}</p>
         <form className="grid gap-5" onSubmit={submitProperty}>
           <div className="sticky top-3 z-20 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -1085,10 +1033,10 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("availableFromText", event.target.value)} value={draft.availableFromText} />
                   </label>
                 </div>
-                <PropertyGeographyFields geography={draft.geography} region={draft.region} language={language} disabled={saving}
-                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,energyCertificate:current.geography.countryCode===geography.countryCode?current.energyCertificate:{version:1,countryCode:geography.countryCode} }))} />
+                <PropertyGeographyFields geography={geography} region={draft.region} language={language} disabled={saving}
+                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,energyCertificate:current.geography?.countryCode===geography.countryCode?current.energyCertificate:{version:1,countryCode:geography.countryCode} }))} />
                 <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className={propertyFieldClass}>{language==="de"?"Ort":"City / locality"}<input className={propertyInputClass} value={draft.city??""} onChange={e=>updateDraft("city",e.target.value)}/></label><label className={propertyFieldClass}>{language==="de"?"Straße (strukturiert)":"Street (structured)"}<input className={propertyInputClass} value={draft.street??""} onChange={e=>updateDraft("street",e.target.value)}/></label></div>
-                <PropertyEnergyFields geography={draft.geography} energy={draft.energyCertificate??{version:1,countryCode:draft.geography.countryCode}} usageType={draft.usageType} yearBuilt={Number(draft.yearBuilt)||0} language={language} disabled={saving} onChange={energyCertificate=>updateDraft("energyCertificate",energyCertificate)}/>
+                <PropertyEnergyFields geography={geography} energy={draft.energyCertificate??{version:1,countryCode:geography.countryCode}} usageType={draft.usageType} yearBuilt={Number(draft.yearBuilt)||0} language={language} disabled={saving} onChange={energyCertificate=>updateDraft("energyCertificate",energyCertificate)}/>
               </PropertyFormSection>
 
               <PropertyFormSection title={copy.form.areasAvailability}>
@@ -1191,7 +1139,7 @@ export function PropertyCommandCenter({
                 description={copy.form.legalDetailsDescription}
                 title={copy.form.legalDetails}
               >
-                <PropertyDetailsEditor details={bindPropertyDetails(draft.propertyDetails??readPropertyDetails({canonicalPayload:{fieldValues:draft.fieldValues}}),draft as unknown as Record<string,unknown>)} language={language} countryCode={draft.geography.countryCode} disabled={saving} onChange={details=>updateDraft("propertyDetails",details)}/>
+                <PropertyDetailsEditor details={bindPropertyDetails(draft.propertyDetails??readPropertyDetails({canonicalPayload:{fieldValues:draft.fieldValues}}),draft as unknown as Record<string,unknown>)} language={language} countryCode={geography.countryCode} disabled={saving} onChange={details=>updateDraft("propertyDetails",details)}/>
               </PropertyFormSection>
             </div>
 
