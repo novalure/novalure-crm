@@ -144,6 +144,21 @@ test("property direct creation validates, commits once and rechecks cookie autho
       loaded = await load(); draft = createPropertyCoreDraft(loaded.listing);
       assert.equal(draft.publicPrice, ""); assert.equal(draft.rentPrice, "");
       assert.deepEqual((await db.admin.query("select public_price_cents,rent_price_cents from seller_listings where id=$1", [createdId])).rows[0], { public_price_cents: null, rent_price_cents: null });
+      for (const supplied of ["2500", "0", ""]) {
+        const legacyUpdate = await POST(request({ operation: "update_property_core", propertyId: createdId, property: { fieldValues: { "costs.mietpreis_brutto": supplied } } }));
+        assert.equal(legacyUpdate.status, 400, await legacyUpdate.clone().text());
+        const rent = (await db.admin.query("select rent_price_cents,canonical_payload from seller_listings where id=$1", [createdId])).rows[0];
+        assert.equal(rent.rent_price_cents, null);
+        assert.equal(propertyOptionalPriceIsKnown(rent.canonical_payload, "rentPrice", rent.rent_price_cents), false);
+      }
+      loaded = await load(); draft = createPropertyCoreDraft(loaded.listing);
+      assert.equal(draft.rentPrice, "");
+      loaded.details.values["costs.mietpreis_brutto"] = "2500";
+      draft.propertyDetails = loaded.details; draft.coreEdit!.expectedFullSnapshot = loaded.snapshot; draft.rentPrice = "";
+      const clearLegacyRent = await POST(request(propertyCoreUpdatePayload(draft, fixture.workspaceId, createdId)));
+      assert.equal(clearLegacyRent.status, 200, await clearLegacyRent.clone().text());
+      const rentCleared = (await db.admin.query("select rent_price_cents,canonical_payload from seller_listings where id=$1", [createdId])).rows[0];
+      assert.equal(rentCleared.rent_price_cents, null); assert.equal(propertyOptionalPriceIsKnown(rentCleared.canonical_payload, "rentPrice", 0), false);
       assert.deepEqual(await counts(), { properties: 1, units: 1, receipts: 1 });
     });
     await t.test("existing cookie and receipt cannot bypass a newly restricted membership/project", async () => {
