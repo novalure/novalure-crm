@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-11-04T23:22:49.4752062Z",
+  "base": "88a2e71daa6fd13158b416d7de0c0a9547b46aff",
+  "branch": "codex/personal-mail-acl-replay-20261105",
+  "worktree": "C:/Projects/novalure-crm-personal-mail-acl-replay-20261105",
+  "status": "LOCAL_MAIL_ACL_M01_REPLAY_CORRECTION_EXACT_REVIEW_PENDING",
+  "finding": "MAIL-ACL-M01",
+  "sourceBinding": "ACTUAL_EXECUTED_WORKTREE_BYTES_SHA256_BEFORE_COMMIT",
+  "sourceAndArtifactHashes": {
+    "src/lib/db/crm-mailbox-reply-repository.ts": "4f4eb8227f18b7af0f6397408eb3d2c78d85c2109d45bee70de79efadb4748ef",
+    "src/lib/db/crm-mailbox-message-access.ts": "2ab6b1b0989ea5444516b8739d26abe84a4d2ef2cd377fe9cef669cb4e7816cf",
+    "scripts/personal-mail-reply-tests.ts": "def8589f0ea5444f9f23f9533bf3bc978b6297f5156de9403cf19c3df98b9fa8",
+    "docs/testing/personal-mail-acl-replay-2026-11-05.md": "f6e21fdd26e4b6f1f9109531560262e5400393f1a2651ca7ec4ef7cb440d918d",
+    "artifacts/personal-mail-acl-replay/after-fix.tap": "bbd3060a3f135ad336bb466e44c24ad6530021e08fd74c45577bdce5abd01327",
+    "artifacts/personal-mail-acl-replay/before-fix.transport.json": "a192a01ca69c629c7193b1811bf7aa408e15836d93d6bdba1f94638686a787e2",
+    "artifacts/personal-mail-acl-replay/typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "artifacts/personal-mail-acl-replay/lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "migrations/192_personal_mail_reply_and_attachments.sql": "c4c446ce73d27b7c983fd9ef26ece2383ad4eceae65e30cc9d487260d9ac500b",
+    "package.json": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d",
+    "package-lock.json": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea"
+  },
+  "beforeFix": {
+    "fail": 2,
+    "logRoundTrip": "PASS",
+    "pass": 22,
+    "actualFailingCases": 1,
+    "sourceRevision": "88a2e71daa6fd13158b416d7de0c0a9547b46aff",
+    "tests": 24,
+    "runtimeGitBlob": "890e82547207281c39aaa5bf29da10757a7147ea",
+    "reason": "Matching successful attachment-store receipt returned metadata after project grant revocation during synthetic provider I/O; expected PROJECT_FORBIDDEN missing",
+    "transport": "artifacts/personal-mail-acl-replay/before-fix.transport.json"
+  },
+  "afterFix": {
+    "initialNormalReplay": "SAME_COMMAND_RECEIPT_CONFIRMED",
+    "pass": 24,
+    "fail": 0,
+    "exitCode": 0,
+    "skipped": 0,
+    "directStateAndDownloadAfterRevocation": "PROJECT_FORBIDDEN",
+    "noHistoricalCountSummation": true,
+    "tests": 24,
+    "additionalStoreReceipts": 0,
+    "storedHashUnchanged": true,
+    "sendPosts": 0,
+    "newCaseProviders": [
+      "google",
+      "microsoft"
+    ],
+    "additionalFiles": 0,
+    "command": "node --conditions=react-server --import tsx --test --test-reporter=tap scripts/personal-mail-reply-tests.ts",
+    "duringReplayRevocation": "AFTER_INITIAL_TX_AT_SYNTHETIC_ATTACHMENT_RESPONSE_BEFORE_FINAL_SCOPE",
+    "cancelled": 0,
+    "finalResult": "PROJECT_FORBIDDEN_NO_RECEIPT_METADATA_RETURNED"
+  },
+  "implementation": {
+    "schemaChanged": false,
+    "runtimeFilesChanged": 1,
+    "providerIoInsideFinalTransaction": false,
+    "dependenciesChanged": false,
+    "testFilesChanged": 1,
+    "currentBindingAndReceiptInSameExistingTenantTransaction": true,
+    "routesChanged": false,
+    "newPrivileges": 0,
+    "currentBindingBeforeReplayLookup": true
+  },
+  "typecheck": {
+    "log": "artifacts/personal-mail-acl-replay/typecheck.log",
+    "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "exitCode": 0
+  },
+  "lint": {
+    "log": "artifacts/personal-mail-acl-replay/lint.log",
+    "command": "node node_modules/eslint/bin/eslint.js src/lib/db/crm-mailbox-reply-repository.ts scripts/personal-mail-reply-tests.ts --max-warnings=0",
+    "exitCode": 0,
+    "maxWarnings": 0
+  },
+  "fixture": "EXISTING_ACTUAL_LOOPBACK_POSTGRES_NONOWNER_ROLE_TWO_TENANT_PERSONAL_MAIL_MODULE_WITH_INJECTED_SYNTHETIC_PROVIDER_TRANSPORTS",
+  "fixtureLimits": "Historical sales schema through106 plus actual154/161/170/177/178/182/192; not a complete native restored schema rehearsal.",
+  "newRealEffects": {
+    "modelCalls": 0,
+    "externalProviderRequests": 0,
+    "deployments": 0,
+    "paidCalls": 0,
+    "pushes": 0,
+    "productionDatabaseConnections": 0,
+    "realMailSends": 0
+  },
+  "notRepeated": [
+    "43_IMPORT_SUITE",
+    "5_BROWSER_CASES",
+    "BUILD",
+    "FULL_GLOBAL_REGRESSION",
+    "CI",
+    "LIVE_APP_PROVIDER"
+  ],
+  "open": [
+    "EXACT_SHA_INDEPENDENT_REVIEW",
+    "COMMON_INTEGRATION_AND_REQUIRED_CHECKS",
+    "NATIVE_CI_LINUX",
+    "SCHEMA_UPGRADE_RESTORE",
+    "REAL_APP_PROVIDER_ACCEPTANCE"
+  ]
+}

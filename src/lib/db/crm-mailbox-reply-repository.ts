@@ -295,10 +295,14 @@ export async function savePersonalAttachment(s: AppSession, raw: Record<string, 
     if (!input.bytes.length || input.bytes.length > 2097152)
         throw new CrmCommandError('MAIL_ATTACHMENT_TOO_LARGE', 'Höchstens2 MiB je Datei.');
     const safe = inspected ?? { fileName: 'blocked-attachment', mimeType: 'application/octet-stream', sha256: personalSha256(input.bytes), sizeBytes: input.bytes.length, checkCode: 'QUARANTINED_CONTENT_NOT_RELEASED' };
-    return executeCrmCommand(s, { operation: 'mailbox.attachment.store', capability: 'workspace:operate', resourceId: messageId, payload: { messageId, source: raw.source, providerAttachmentId: raw.providerAttachmentId ?? null, sha256: safe.sha256, fileName: safe.fileName, mimeType: safe.mimeType, sizeBytes: safe.sizeBytes, status: inspected ? 'ready' : 'rejected' }, ...metadata }, async (tx, context) => {
-        const now = await binding(tx, context.session, messageId, false);
+    return withCrmRead(s, async (currentTx, fresh) => {
+        // Provider I/O released the first transaction. Recheck/lock the current
+        // association before even a matching receipt can return old metadata.
+        // The nested command reuses this transaction and its scope locks.
+        const now = await binding(currentTx, fresh, messageId, false);
         if (now.connectionId !== before.connectionId || now.connectionRevision !== before.connectionRevision || now.revision !== before.revision || now.contentHash !== before.contentHash)
             throw new CrmCommandError('MAIL_ATTACHMENT_SOURCE_CHANGED', 'Die Nachrichtenquelle wurde inzwischen geändert.', 409);
+        return executeCrmCommand(fresh, { operation: 'mailbox.attachment.store', capability: 'workspace:operate', resourceId: messageId, payload: { messageId, source: raw.source, providerAttachmentId: raw.providerAttachmentId ?? null, sha256: safe.sha256, fileName: safe.fileName, mimeType: safe.mimeType, sizeBytes: safe.sizeBytes, status: inspected ? 'ready' : 'rejected' }, ...metadata }, async (tx, context) => {
         await tx.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`mailbox-private-files:${s.workspaceId}:${s.userId}`]);
         const quota = await tx.queryOne<{
             files: number;
@@ -314,6 +318,7 @@ export async function savePersonalAttachment(s: AppSession, raw: Record<string, 
         const id = randomUUID();
         await tx.execute(`insert into crm_mailbox_attachment_files(id,workspace_id,user_id,connection_id,message_id,provider_attachment_id,source_kind,file_name,mime_type,content_sha256,size_bytes,content_encrypted,status,check_code) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [id, s.workspaceId, s.userId, now.connectionId, messageId, raw.source === 'received' ? raw.providerAttachmentId : null, raw.source, safe.fileName, safe.mimeType, safe.sha256, safe.sizeBytes, inspected ? encryptedFile(context.session, messageId, id, inspected.bytes) : null, inspected ? 'ready' : 'rejected', safe.checkCode]);
         return { id, fileName: safe.fileName, mimeType: safe.mimeType, sha256: safe.sha256, sizeBytes: safe.sizeBytes, status: inspected ? 'ready' : 'rejected', checkCode: safe.checkCode };
+        }, options);
     }, options);
 }
 export async function readPersonalAttachment(s: AppSession, messageId: string, id: string, options: Options = {}) {

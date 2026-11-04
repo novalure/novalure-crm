@@ -200,6 +200,34 @@ test('personal replies and attachments use actual two-tenant PostgreSQL auth, so
             assert.equal(replay.replayed, true);
             assert.equal((await personalReplyState(a.session, a.messageId, a.opts)).files[0].status, 'erased');await assert.rejects(a.run(tx=>tx.query("update crm_mailbox_attachment_files set status='ready',content_encrypted='synthetic-attempted-rehydrate' where id=$1::uuid",[stored.data.id])),{code:'23514'});
         });
+        await t.test('matching attachment receipt cannot expose metadata after project revocation during replay provider I/O', async () => {
+            for (const provider of ['google', 'microsoft'] as const) {
+                const f = await fixture(provider), meta = metadata();
+                if (provider === 'microsoft') await f.run(tx => tx.query("update crm_mailbox_messages set provider_id_format='immutable',revision=revision+1 where id=$1", [f.messageId]));
+                const input = { messageId: f.messageId, source: 'received', providerAttachmentId: 'file-one', reviewed: true };
+                const first = await savePersonalAttachment(f.session, input, meta, f.opts);
+                const replay = await savePersonalAttachment(f.session, input, meta, f.opts);
+                assert.equal(replay.replayed, true);
+                assert.equal(replay.commandId, first.commandId);
+                const unchanged = async () => (await db.admin.query("select (select count(*)::int from crm_mailbox_attachment_files where message_id=$1) as files,(select count(*)::int from crm_command_receipts where workspace_id=$2 and operation='mailbox.attachment.store') as receipts,(select content_sha256 from crm_mailbox_attachment_files where id=$3) as sha256", [f.messageId, f.workspaceId, first.data.id])).rows[0];
+                const before = await unchanged();
+                let revoked = false;
+                const transport: MailboxTransport = async (url, init) => {
+                    const response = await f.transport(url, init);
+                    if (new URL(url).pathname.endsWith('/attachments/file-one')) {
+                        await db.admin.query('update project_pipeline_permissions set can_read=false,can_edit_deals=false where project_id=$1 and user_id=$2', [f.projectId, f.userId]);
+                        revoked = true;
+                    }
+                    return response;
+                };
+                await assert.rejects(savePersonalAttachment(f.session, input, meta, { ...f.opts, transport }), { code: 'PROJECT_FORBIDDEN' });
+                assert.equal(revoked, true, 'Revocation must occur after the initial scope snapshot during replay I/O');
+                assert.deepEqual(await unchanged(), before);
+                assert.equal(f.posts(), 0);
+                await assert.rejects(personalReplyState(f.session, f.messageId, f.opts), { code: 'PROJECT_FORBIDDEN' });
+                await assert.rejects(readPersonalAttachment(f.session, f.messageId, first.data.id, f.opts), { code: 'PROJECT_FORBIDDEN' });
+            }
+        });
         await t.test('quarantined executable bytes never persist, download or enter a preview', async () => { const f = await fixture(), saved = await savePersonalAttachment(f.session, { messageId: f.messageId, source: 'upload', fileName: 'run.exe', mimeType: 'application/octet-stream', data: Buffer.from('MZ synthetic executable').toString('base64'), reviewed: true }, metadata(), f.opts); assert.equal(saved.data.status, 'rejected'); assert.equal((await db.admin.query('select content_encrypted from crm_mailbox_attachment_files where id=$1', [saved.data.id])).rows[0].content_encrypted, null); await assert.rejects(readPersonalAttachment(f.session, f.messageId, saved.data.id, f.opts), { code: 'NOT_FOUND' }); await assert.rejects(previewPersonalReply(f.session, { ...f.input, attachmentIds: [saved.data.id] }, f.opts), { code: 'MAIL_ATTACHMENT_UNAVAILABLE' }); assert.equal(f.posts(), 0); });
         await t.test('old read-only grant and missing identity/session cannot obtain send authority from the message', async () => { const f = await fixture(); await f.run(tx => tx.query('update crm_mailbox_connections set send_consent_id=null,send_consent_identity_id=null,send_consented_at=null,revision=revision+1 where id=$1', [f.connectionId])); await assert.rejects(previewPersonalReply(f.session, f.input, f.opts), { code: 'MAIL_SEND_CONSENT_REQUIRED' }); await assert.rejects(previewPersonalReply({ ...f.session, authSessionId: undefined }, f.input, f.opts), { code: 'VALIDATION_ERROR' }); assert.equal(f.calls.length, 0); });
         await t.test('explicit OAuth reply consent is identity bound; subsequent read-only OAuth removes it', async () => { const f = await fixture(); const oauth: MailboxTransport = async (url) => url.includes('/token') ? respond({ access_token: 'SYNTHETIC', expires_in: 3600, token_type: 'Bearer', scope: `${readScope} ${mailboxReplyScopes.google}` }) : respond({ sub: `account-${f.userId}`, email: `own-${f.userId}@example.invalid`, email_verified: true }); for (const enableReply of [true, false]) {
