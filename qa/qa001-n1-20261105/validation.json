@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_N1_TARGETED_PRODUCER_CHECKS_PASS",
+  "checkedAtUtc": "2026-11-04T23:53:41.827870+00:00",
+  "checkedAtEuropeVienna": "2026-11-05T00:53:41.827870+01:00",
+  "timeZone": "Europe/Vienna",
+  "baseCommit": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+  "branch": "codex/qa001-history-scope-20261105",
+  "headAtCapture": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+  "commitNote": "Local successor commit follows capture. Source LF hashes bind tested content; exact successor SHA and separate independent review are handed to central coordinator.",
+  "finding": "N1: stale foreign-workspace callback cancels shared current navigation",
+  "productionDeltaLines": 4,
+  "sourceHashes": [
+    {
+      "path": "scripts/qa001-stale-selection-tests.mjs",
+      "sha256WorktreeBytes": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+      "sha256LfNormalizedText": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15"
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "sha256WorktreeBytes": "bb825a038c2d483bfadf21dc2b0c6fce6d3e1a3686e44eaceb105203a3b58137",
+      "sha256LfNormalizedText": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7"
+    },
+    {
+      "path": "src/lib/crm-core-request-guard.ts",
+      "sha256WorktreeBytes": "902ca1f0846292ebcb51cd75c0a2e7cea587e16fb26018dda10782a3892a15aa",
+      "sha256LfNormalizedText": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452"
+    }
+  ],
+  "checks": [
+    {
+      "command": "CRM_QA_N1_BASELINE=1 node scripts/qa001-stale-selection-tests.mjs",
+      "expectedExitCode": 1,
+      "exitCode": 1,
+      "cases": 4,
+      "passed": 1,
+      "failed": 3,
+      "evidence": "baseline-results.json"
+    },
+    {
+      "command": "node scripts/qa001-stale-selection-tests.mjs",
+      "exitCode": 0,
+      "cases": 4,
+      "passed": 4,
+      "failed": 0,
+      "evidence": "results.json",
+      "freshBrowserContextPerCase": true
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "evidence": "typecheck.txt"
+    },
+    {
+      "command": "npx eslint src/components/crm-workspace.tsx src/lib/crm-core-request-guard.ts scripts/qa001-stale-selection-tests.mjs --max-warnings 0",
+      "exitCode": 0,
+      "evidence": "eslint.txt"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "reusedEvidence": {
+    "revision": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+    "protocol": "evidence-reuse.json",
+    "historicalRuntimeCases": {
+      "navigation": 107,
+      "refresh": 7
+    },
+    "qualifiedPriorContractChecks": 29,
+    "newBroadRuns": 0,
+    "currentWholeShellRuntimeIdentity": false,
+    "qualification": "Old evidence is preserved and verified, not relabeled as a new whole-shell run. Only the four affected N1 cases run on this delta."
+  },
+  "independentReview": {
+    "capturedInThisProducerCommit": false,
+    "plan": "After commit, independent reviewer checks exact commit and affected cases only; evidence outside the worktree keeps checked commit immutable."
+  },
+  "evidenceHashes": [
+    {
+      "path": "qa/qa001-n1-20261105/baseline-results.json",
+      "sha256WorktreeBytes": "90efc1ee67b52591922261e9e61a8680e6fa5b905f6db81e7c740e6200213b21",
+      "sha256LfNormalizedText": "90efc1ee67b52591922261e9e61a8680e6fa5b905f6db81e7c740e6200213b21"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/baseline-run.log",
+      "sha256WorktreeBytes": "8773ea7bf9325076765f0045235427319441d8bccf9e7a1918f1684aee0f24e2",
+      "sha256LfNormalizedText": "9b5b2589a9e3b9bfce1670ccc80a4ba666f1ea90cbf0118140cd7bc1639b7285"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/browser-validation.md",
+      "sha256WorktreeBytes": "c0867a427dd2c1e281a2685ad4e62ecefe48d98856dacd0aa4e1003e0284b264",
+      "sha256LfNormalizedText": "c0867a427dd2c1e281a2685ad4e62ecefe48d98856dacd0aa4e1003e0284b264"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/eslint.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/evidence-reuse.json",
+      "sha256WorktreeBytes": "2bdf2438c5c7dd85026c5d59343e489eea1422652ebf0dc48fb8e738f4aed4c6",
+      "sha256LfNormalizedText": "2bdf2438c5c7dd85026c5d59343e489eea1422652ebf0dc48fb8e738f4aed4c6"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/lint-product.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/results.json",
+      "sha256WorktreeBytes": "44cdf019027f011af56fe6b54da47e1fd13f35a3d61da60ee398c225cbccb36a",
+      "sha256LfNormalizedText": "44cdf019027f011af56fe6b54da47e1fd13f35a3d61da60ee398c225cbccb36a"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/run.log",
+      "sha256WorktreeBytes": "6bcda2da5f8c3a476fc94c0702bd70fb38a930403a973e4dee09cad870fcc596",
+      "sha256LfNormalizedText": "41ecf1fa95695486f376a270c8d314e41dac12561575bc8b73a5cff1862fab68"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/typecheck.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-n1-20261105/validation.md",
+      "sha256WorktreeBytes": "fa8a767e3c2bb002d7118071d1d718af439b3014c5e93a711d5f4c47c82b89a7",
+      "sha256LfNormalizedText": "fa8a767e3c2bb002d7118071d1d718af439b3014c5e93a711d5f4c47c82b89a7"
+    }
+  ],
+  "limits": [
+    "Actual React shell/handlers with synthetic workspaces/HTTP and replaced unrelated panels/Next primitives",
+    "Full project-form/POST/close sequence is source-established, not executed here",
+    "Not a general generation detector for old callbacks after A-to-B-to-A",
+    "No new overall107/7/29 run or live/API/DB/role acceptance claimed"
+  ],
+  "effects": {
+    "liveActions": 0,
+    "providerActions": 0,
+    "databaseMigrations": 0,
+    "costs": 0,
+    "pushes": 0,
+    "onlinePRs": 0,
+    "ciRuns": 0,
+    "deployments": 0,
+    "integrationMerges": 0
+  }
+}

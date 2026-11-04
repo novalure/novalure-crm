@@ -4100,6 +4100,7 @@ export function CrmWorkspace({
   }
 
   function handleProjectScopeChange(projectId: string, scopeProjects = allProjects) {
+    if (!coreRequestGuard.isActiveWorkspace(activeWorkspace.id)) return;
     coreRequestGuard.cancelSwitch();
     setWorkspaceSwitchState("idle");
     setCoreDataStatus("idle");
