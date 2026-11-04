@@ -6,6 +6,17 @@ import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { createCsrfToken } from "../src/lib/security/csrf-core";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import { parseAssistantRequest, readAssistantOutput } from "../src/lib/crm-ai-assistant/policy";
+import { buildAssistantPrompt } from "../src/lib/crm-ai-assistant/service";
+import type { AssistantContext } from "../src/lib/crm-ai-assistant/context";
+
+test("the model receives explicit local times rather than having to convert UTC timestamps", () => {
+  const context = { facts: { capturedAt: "2026-11-04T20:30:00Z", meeting: [{ startsAt: "2026-11-04T20:30:00+00:00" }], recentInteractions: [{ occurredAt: new Date("2026-11-04T20:30:00Z") }] } } as unknown as AssistantContext;
+  for (const [timeZone, expected] of [["Europe/Vienna", "21:30"], ["Europe/Dublin", "20:30"], ["Europe/Madrid", "21:30"]]) {
+    const result = buildAssistantPrompt({ mode: "daily_briefing", prompt: "", language: "de", timeZone }, context);
+    const facts = JSON.parse(result.prompt).crmSnapshot;
+    assert.ok(facts.capturedAt.includes(expected)); assert.ok(facts.meeting[0].startsAt.includes(expected)); assert.ok(facts.recentInteractions[0].occurredAt.includes(expected)); assert.ok(!result.prompt.includes("20:30:00Z"));
+  }
+});
 
 async function seedAssistantCustomer(db: Awaited<ReturnType<typeof startLocalSalesDb>>) {
   const workspaceId = randomUUID(), userId = randomUUID(), projectId = randomUUID(), developerContactId = randomUUID();
