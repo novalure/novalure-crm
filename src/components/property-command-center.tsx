@@ -70,6 +70,7 @@ import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput } from "@/
 import { confirmedPropertyCreation, propertyWorkspaceEndpoint } from "@/lib/property-interactions";
 import { PROPERTY_AREA_MAX_SQM } from "@/lib/property-area-input";
 import { propertyCoreNumberIsKnown } from "@/lib/property-core-numbers";
+import { DirectPropertyNumericDraftError, normalizeDirectPropertyNumericDraft } from "@/lib/property-direct-numeric";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -620,24 +621,27 @@ export function PropertyCommandCenter({
     let committed = false;
     let attempt = existingAttempt;
     try {
-      const completeDetails=propertyDetailsInput({...draft,costItems:toCostItems(draft)});
-      attempt ??= {
-        workspaceId: context.workspaceId,
-        projectId: draft.projectId,
-        endpoint: propertyWorkspaceEndpoint("/api/crm/properties", context.workspaceId),
-        body: JSON.stringify({
-          operation: "create_property",
-          ...draft,
-          ...completeDetails,
-          costItems: toCostItems(draft),
-          publicPrice: draft.publicPrice || draft.price,
-          textBlocks: toTextBlocks(draft),
-        }),
-        key: crypto.randomUUID(),
-        correlation: crypto.randomUUID(),
-        submittedDraft: draft,
-        phase: "in_flight",
-      };
+      if (!attempt) {
+        const requestDraft = normalizeDirectPropertyNumericDraft(draft);
+        const completeDetails = propertyDetailsInput({ ...requestDraft, costItems: toCostItems(requestDraft) });
+        attempt = {
+          workspaceId: context.workspaceId,
+          projectId: draft.projectId,
+          endpoint: propertyWorkspaceEndpoint("/api/crm/properties", context.workspaceId),
+          body: JSON.stringify({
+            operation: "create_property",
+            ...requestDraft,
+            ...completeDetails,
+            costItems: toCostItems(requestDraft),
+            publicPrice: requestDraft.publicPrice || requestDraft.price,
+            textBlocks: toTextBlocks(requestDraft),
+          }),
+          key: crypto.randomUUID(),
+          correlation: crypto.randomUUID(),
+          submittedDraft: draft,
+          phase: "in_flight",
+        };
+      }
       workflowDraftStore.setCreateAttempt(draftScopeKey, { ...attempt, phase: "in_flight" });
       const response = await csrfFetch(attempt.endpoint, {
         body: attempt.body,
@@ -663,7 +667,11 @@ export function PropertyCommandCenter({
         ? (language === "de" ? "Objekt gespeichert. Die Ansicht konnte noch nicht aktualisiert werden; bitte neu laden." : "Property saved. The view could not be refreshed; please reload it.")
         : stillPending
           ? uncertaintyMessage
-          : error instanceof Error ? error.message : copy.notices.propertySaveFailed });
+          : error instanceof DirectPropertyNumericDraftError
+            ? (language === "de"
+              ? "Bitte Zahleneingaben prüfen: keine Exponenten, keine negativen Werte und nur die unterstützten Nachkommastellen."
+              : "Check numeric inputs: use no exponents or negative values, and only the supported decimal places.")
+            : error instanceof Error ? error.message : copy.notices.propertySaveFailed });
     } finally {
       workflowDraftStore.releaseMutation(mutationToken);
     }

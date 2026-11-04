@@ -6,6 +6,7 @@ import path from "node:path";
 import { build } from "esbuild";
 import { chromium, expect } from "@playwright/test";
 import { getPropertyDepartmentCopy } from "../src/lib/i18n.ts";
+import { parsePropertyEuroCents } from "../src/lib/property-money.ts";
 
 // Local real-component/browser checks with synthetic HTTP only. Tenant/database
 // authorization and replay persistence are qualified by the server regression suite.
@@ -121,6 +122,28 @@ try {
     await form.getByRole("spinbutton", { name: copy.form.purchasePrice, exact: true }).fill("10.01");
     await form.getByRole("spinbutton", { name: copy.form.yearBuilt, exact: true }).fill("0"); await submit(); assert.equal(requests.length, 0);
     await form.getByRole("spinbutton", { name: copy.form.yearBuilt, exact: true }).fill("10000"); await submit(); assert.equal(requests.length, 0);
+  });
+  await step("native trailing zeros normalize before all request projections while the retry retains raw UI inputs", async () => {
+    await open();
+    await form.getByRole("spinbutton", { name: copy.form.purchasePrice, exact: true }).fill("1.000");
+    await form.getByRole("spinbutton", { name: copy.form.livingArea, exact: true }).fill("80.1000");
+    await form.getByRole("spinbutton", { name: copy.form.rooms, exact: true }).fill("2.500");
+    await form.getByRole("spinbutton", { name: copy.form.yearBuilt, exact: true }).fill("2000.000");
+    await form.getByRole("spinbutton", { name: `${copy.costTemplates.operating_costs} ${copy.form.net}`, exact: true }).fill("1.010");
+    assert.equal(await form.evaluate(node => node.checkValidity()), true);
+    behaviours = ["network"]; await submit(); await expect(form.getByRole("button", { name: "Speicherergebnis erneut prüfen" })).toBeVisible();
+    assert.equal(requests[0].body.price, "1"); assert.equal(requests[0].body.publicPrice, "1"); assert.equal(requests[0].body.fieldValues["costs.kaufpreis"], "1");
+    assert.equal(parsePropertyEuroCents(requests[0].body.price), 100); assert.equal(requests[0].body.areaSqm, "80.1"); assert.equal(requests[0].body.rooms, "2.5"); assert.equal(requests[0].body.yearBuilt, "2000");
+    const cost = requests[0].body.costItems.find(item => item.costKey === "operating_costs"); assert.equal(cost.monthlyNet, "1.01"); assert.equal(parsePropertyEuroCents(cost.monthlyNet), 101);
+    await expect(form.getByRole("spinbutton", { name: copy.form.purchasePrice, exact: true })).toHaveValue("1.000");
+    await leaveSection(); await returnToSection(); await form.getByRole("button", { name: "Speicherergebnis erneut prüfen" }).click();
+    await expect(form.getByLabel(copy.form.title, { exact: true })).toHaveValue(""); assert.deepEqual(requests[0], requests[1]);
+  });
+  await step("native exponent input is rejected before sending and keeps an editable draft", async () => {
+    await open(); await form.getByRole("spinbutton", { name: copy.form.purchasePrice, exact: true }).fill("1e3");
+    assert.equal(await form.evaluate(node => node.checkValidity()), true); await submit();
+    await expect(form.getByText("Bitte Zahleneingaben prüfen: keine Exponenten, keine negativen Werte und nur die unterstützten Nachkommastellen.", { exact: true })).toBeVisible();
+    await expect(form.getByRole("spinbutton", { name: copy.form.purchasePrice, exact: true })).toBeEnabled(); assert.equal(requests.length, 0);
   });
   await step("uncertain response freezes inputs and replays the exact request and identifiers", async () => {
     await open(); behaviours = ["network"]; await submit();
