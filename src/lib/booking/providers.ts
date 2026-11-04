@@ -5,7 +5,7 @@ import { getBookingCalendarAccess, invalidateBookingConnection } from "@/lib/boo
 import { assertBookingActivation } from "./activation";
 import { bookingRuntimeMode } from "./runtime";
 import { isBookingMessageRuntime } from "./message-runtime";
-import { BookingError, type BookingProvider, type BookingProviderName, type BusyInterval, type ProviderEvent, type ProviderWrite } from "@/lib/booking/types";
+import { BookingError, type BookingInvitation, type BookingProvider, type BookingProviderName, type BusyInterval, type ProviderEvent, type ProviderEventContent, type ProviderWrite } from "@/lib/booking/types";
 
 const graphRoot = "https://graph.microsoft.com/v1.0";
 const googleRoot = "https://www.googleapis.com/calendar/v3";
@@ -15,10 +15,15 @@ type JsonObject = Record<string, unknown>;
 type CalendarAccess = Awaited<ReturnType<typeof getBookingCalendarAccess>>;
 /** Only application code constructs these options; public request bodies never supply callbacks. */
 export type BookingInvitationEffect = { bookingId: string; operationId: string; email: string; name: string };
+export type StandaloneInvitationEffect = { bookingId: string; operationId: string; attendees: BookingInvitation[]; previousAttendees: BookingInvitation[] };
 export type BookingProviderOptions = TenantTransactionOptions & {
   beforeWrite?:()=>Promise<void>;
   /** Server-only: keep the booking lock and current recipient/message authority through the actual Graph write. */
   withInvitationWrite?:(effect:BookingInvitationEffect,write:()=>Promise<Response>)=>Promise<Response>;
+  /** Standalone journal authority must validate BOTH previous and desired recipients at transmission. */
+  withStandaloneInvitationWrite?:(effect:StandaloneInvitationEffect,write:()=>Promise<Response>)=>Promise<Response>;
+  /** Standalone writes without guests still hold their current journal/connection authority through fetch. */
+  withStandaloneWrite?:(write:()=>Promise<Response>)=>Promise<Response>;
 };
 
 /** A write may have reached the provider. Call lookup; never repeat a create blindly. */
@@ -80,7 +85,7 @@ function googleTime(value: unknown, calendarTimeZone: string): string {
   throw new BookingProviderError("provider_invalid_time", "rejected");
 }
 
-async function request(scope: TenantScope, access: CalendarAccess, url: URL, method = "GET", body?: unknown, etag?: string | null, options:BookingProviderOptions={}, invitation?:BookingInvitationEffect) {
+async function request(scope: TenantScope, access: CalendarAccess, url: URL, method = "GET", body?: unknown, etag?: string | null, options:BookingProviderOptions={}, invitation?:BookingInvitationEffect, standaloneInvitation?:StandaloneInvitationEffect) {
   const expected = access.provider === "microsoft" ? new URL(graphRoot) : new URL(googleRoot);
   if (url.origin !== expected.origin || !url.pathname.startsWith(`${expected.pathname}/`)) throw new BookingProviderError("provider_invalid_page", "rejected");
   const write = method !== "GET";
@@ -94,15 +99,28 @@ async function request(scope: TenantScope, access: CalendarAccess, url: URL, met
   let response: Response;
   if (invitation && (access.provider !== "microsoft" || !write || !isBookingMessageRuntime() || !options.withInvitationWrite))
     throw new BookingProviderError("booking_invitation_not_authorized", "rejected");
+  if (standaloneInvitation && (invitation || !write || !isBookingMessageRuntime() || !options.withStandaloneInvitationWrite))
+    throw new BookingProviderError("standalone_invitation_not_authorized", "rejected");
+  const standaloneWrapped = Boolean(standaloneInvitation || write && !invitation && options.withStandaloneWrite);
+  let transmitted = false;
   try {
-    const transmit = () => fetch(url, { method, headers: {
+    const transmit = () => { transmitted = true; return fetch(url, { method, headers: {
       Authorization: `Bearer ${access.accessToken}`,
       "Content-Type": "application/json",
       ...(access.provider === "microsoft" ? { Prefer: 'outlook.timezone="UTC"' } : {}),
       ...(etag ? { "If-Match": etag } : {}),
-    }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(12_000), redirect: "error", cache: "no-store" });
-    response = invitation ? await options.withInvitationWrite!(invitation, transmit) : await transmit();
-  } catch (error) { if (error instanceof BookingProviderError) throw error; throw new BookingProviderError("provider_transport_unavailable", write ? "unknown" : "rejected"); }
+    }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(12_000), redirect: "error", cache: "no-store" }); };
+    response = standaloneInvitation ? await options.withStandaloneInvitationWrite!(standaloneInvitation, transmit)
+      : invitation ? await options.withInvitationWrite!(invitation, transmit)
+      : write && options.withStandaloneWrite ? await options.withStandaloneWrite(transmit) : await transmit();
+  } catch (error) {
+    // A journal/authority wrapper may fail before fetch or after the provider
+    // already accepted a write. Never call the latter a proven non-mutation.
+    if (standaloneWrapped && transmitted) throw new BookingProviderError("provider_transport_unavailable", "unknown");
+    if (error instanceof BookingProviderError) throw error;
+    if (standaloneWrapped) throw new BookingProviderError(error instanceof BookingError ? error.code : "standalone_authorization_unavailable", "rejected");
+    throw new BookingProviderError("provider_transport_unavailable", write ? "unknown" : "rejected");
+  }
   if (response.status === 404 || response.status === 410) return { response, data: null };
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) await invalidateBookingConnection(scope, access.provider, access.revision, access.accessToken).catch(() => undefined);
@@ -149,7 +167,52 @@ function assertOwned(scope: TenantScope, bookingId: string, provider: BookingPro
   const ownMarker = provider === "microsoft" ? graphProperties(data)[ownershipProperty] : object(object(data.extendedProperties).private).novalureBooking;
   if (ownMarker !== marker(scope, bookingId)) throw new BookingProviderError("provider_event_not_owned", "rejected");
 }
-function eventResult(provider: BookingProviderName, data: JsonObject, fallbackTimeZone = "UTC", requestedVideo = false): ProviderEvent {
+function verifiedAttendees(value: unknown): BookingInvitation[] {
+  if (!Array.isArray(value) || value.length > 10) throw new BookingProviderError("provider_attendees_unverified", "rejected");
+  const emails = new Set<string>();
+  return value.map(entry => {
+    const attendee = object(entry);
+    if (Object.keys(attendee).some(key => key !== "email" && key !== "name") || typeof attendee.email !== "string" || typeof attendee.name !== "string") throw new BookingProviderError("provider_attendees_unverified", "rejected");
+    const email = attendee.email.trim().toLowerCase(), name = attendee.name.trim();
+    if (!email || email.length > 254 || /[\u0000-\u001f\u007f]/.test(attendee.email) || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) ||
+      name.length > 200 || /[\u0000-\u001f\u007f]/.test(attendee.name) || emails.has(email)) throw new BookingProviderError("provider_attendees_unverified", "rejected");
+    emails.add(email);
+    return { email, name };
+  });
+}
+function existingStandaloneAttendees(provider: BookingProviderName, data: JsonObject) {
+  // Google omits its optional attendees collection for an event without guests.
+  const entries = provider === "google" && data.attendees === undefined ? [] : data.attendees;
+  if (!Array.isArray(entries)) throw new BookingProviderError("provider_attendees_unverified", "rejected");
+  return verifiedAttendees(entries.map(entry => {
+    const attendee = object(entry);
+    if (provider === "microsoft") {
+      if (attendee.type !== "required") throw new BookingProviderError("provider_attendees_unverified", "rejected");
+      const address = object(attendee.emailAddress);
+      return { email: address.address, name: address.name ?? "" };
+    }
+    if (attendee.optional === true || attendee.resource === true || attendee.organizer === true) throw new BookingProviderError("provider_attendees_unverified", "rejected");
+    return { email: attendee.email, name: attendee.displayName ?? "" };
+  }));
+}
+function standaloneInput(input: Pick<ProviderWrite, "invitation" | "standaloneAttendees">): BookingInvitation[] | undefined {
+  if (!Object.hasOwn(input, "standaloneAttendees")) return undefined;
+  if (input.invitation) throw new BookingProviderError("standalone_invitation_mixed_contract", "rejected");
+  return verifiedAttendees(input.standaloneAttendees);
+}
+function standaloneEffect(input: Pick<ProviderWrite, "bookingId" | "operationId">, attendees: BookingInvitation[] | undefined, previousAttendees: BookingInvitation[] = []): StandaloneInvitationEffect | undefined {
+  return attendees && (attendees.length || previousAttendees.length)
+    ? { bookingId: input.bookingId, operationId: input.operationId, attendees, previousAttendees } : undefined;
+}
+function eventContent(provider: BookingProviderName, data: JsonObject, fallbackTimeZone: string): ProviderEventContent {
+  const title = data[provider === "microsoft" ? "subject" : "summary"];
+  const location = provider === "microsoft" ? object(data.location).displayName : data.location;
+  if (title !== undefined && typeof title !== "string" || location !== undefined && typeof location !== "string") throw new BookingProviderError("provider_event_content_unverified", "rejected");
+  return { title: typeof title === "string" ? title : "", location: typeof location === "string" ? location : "",
+    attendees: existingStandaloneAttendees(provider, data), timeZone: string(object(data.start).timeZone) || fallbackTimeZone,
+    operationId: provider === "microsoft" ? graphProperties(data)[operationProperty] || null : string(object(object(data.extendedProperties).private).novalureOperation) };
+}
+function eventResult(provider: BookingProviderName, data: JsonObject, fallbackTimeZone = "UTC", requestedVideo = false, strictContent = false): ProviderEvent {
   const eventId = string(data.id);
   if (!eventId) throw new BookingProviderError("provider_event_id_missing", "unknown");
   const cancelled = provider === "microsoft" ? data.isCancelled === true : data.status === "cancelled";
@@ -158,18 +221,24 @@ function eventResult(provider: BookingProviderName, data: JsonObject, fallbackTi
   const conferenceStatus = string(object(createRequest.status).statusCode);
   const link = provider === "microsoft" ? onlineUrl(object(data.onlineMeeting).joinUrl) : onlineUrl(data.hangoutLink) || onlineUrl(object(array(conference.entryPoints).find(value => object(value).entryPointType === "video")).uri);
   const videoExpected = requestedVideo || (provider === "microsoft" ? data.isOnlineMeeting === true : Boolean(data.conferenceData));
+  let content: ProviderEventContent | undefined;
+  if (!cancelled) {
+    try { content = eventContent(provider, data, fallbackTimeZone); }
+    catch (error) { if (strictContent) throw error; } // Existing Booking reads keep their original contract.
+  }
   return {
     eventId, etag: string(data["@odata.etag"]) || string(data.etag),
     startsAt: cancelled && !data.start ? "1970-01-01T00:00:00.000Z" : provider === "microsoft" ? graphTime(data.start) : googleTime(data.start, fallbackTimeZone),
     endsAt: cancelled && !data.end ? "1970-01-01T00:00:00.000Z" : provider === "microsoft" ? graphTime(data.end) : googleTime(data.end, fallbackTimeZone),
     onlineMeetingUrl: link, videoStatus: link ? "ready" : conferenceStatus === "failure" ? "unavailable" : videoExpected ? "pending" : "none", cancelled,
+    ...(content ? { content } : {}),
   };
 }
 
 // A successful write can already exist remotely even if its response is malformed.
 // Parsing failures must retain the operation for reconciliation and its resource lock.
-function writtenEventResult(provider: BookingProviderName, data: JsonObject, input: ProviderWrite): ProviderEvent {
-  try { return eventResult(provider, data, input.timeZone, input.kind === "teams" || input.kind === "meet"); }
+function writtenEventResult(provider: BookingProviderName, data: JsonObject, input: ProviderWrite, strictContent = false): ProviderEvent {
+  try { return eventResult(provider, data, input.timeZone, input.kind === "teams" || input.kind === "meet", strictContent); }
   catch { throw new BookingProviderError("provider_write_response_unknown", "unknown"); }
 }
 
@@ -181,7 +250,7 @@ function googleEventUrl(access: CalendarAccess, eventId?: string) {
 }
 async function graphOwnedEvent(access: CalendarAccess, scope: TenantScope, bookingId: string, eventId: string, options:BookingProviderOptions={}) {
   const url = graphEventUrl(access, eventId);
-  url.searchParams.set("$expand", `singleValueExtendedProperties($filter=id eq '${ownershipProperty}')`);
+  url.searchParams.set("$expand", `singleValueExtendedProperties($filter=id eq '${ownershipProperty}' or id eq '${operationProperty}')`);
   const { data } = await request(scope, access, url,"GET",undefined,undefined,options);
   if (data) assertOwned(scope, bookingId, "microsoft", data);
   return data;
@@ -193,7 +262,7 @@ async function googleOwnedEvent(access: CalendarAccess, scope: TenantScope, book
   return data;
 }
 
-function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolean, existing?: JsonObject) {
+function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolean, existing?: JsonObject, standaloneAttendees?: BookingInvitation[]) {
   const body: JsonObject = {
     subject: input.title,
     start: { dateTime: instant(input.startsAt).replace(/Z$/, ""), timeZone: "UTC" },
@@ -201,7 +270,9 @@ function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolea
     location: { displayName: input.location },
     singleValueExtendedProperties: [{ id: ownershipProperty, value: marker(scope, input.bookingId) }, { id: operationProperty, value: input.operationId }],
   };
-  if (input.invitation) {
+  if (standaloneAttendees !== undefined) {
+    body.attendees = standaloneAttendees.map(({ email, name }) => ({ emailAddress: { address: email, name }, type: "required" }));
+  } else if (input.invitation) {
     const { email, name } = input.invitation;
     if (typeof email !== "string" || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) ||
       typeof name !== "string" || name.length > 200 || /[\u0000-\u001f]/.test(name)) throw new BookingProviderError("booking_invitation_invalid", "rejected");
@@ -222,11 +293,12 @@ function graphWriteBody(scope: TenantScope, input: ProviderWrite, create: boolea
   }
   return body;
 }
-function googleWriteBody(scope: TenantScope, input: ProviderWrite, create: boolean) {
+function googleWriteBody(scope: TenantScope, input: ProviderWrite, create: boolean, standaloneAttendees?: BookingInvitation[]) {
   return {
     ...(create ? { id: googleBookingEventId(scope, input.operationId) } : {}), summary: input.title,
     start: { dateTime: instant(input.startsAt), timeZone: input.timeZone }, end: { dateTime: instant(input.endsAt), timeZone: input.timeZone }, location: input.location,
     extendedProperties: { private: { novalureBooking: marker(scope, input.bookingId), novalureOperation: input.operationId } },
+    ...(standaloneAttendees !== undefined ? { attendees: standaloneAttendees.map(({ email, name }) => ({ email, displayName: name })) } : {}),
     ...(create && input.kind === "meet" ? { conferenceData: { createRequest: { requestId: googleBookingEventId(scope, input.operationId), conferenceSolutionKey: { type: "hangoutsMeet" } } } } : {}),
   };
 }
@@ -243,7 +315,11 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
   const provider = access.provider;
   const eventUrl = (eventId?: string) => provider === "microsoft" ? graphEventUrl(access, eventId) : googleEventUrl(access, eventId);
   const ownedEvent = (bookingId: string, eventId: string) => provider === "microsoft" ? graphOwnedEvent(access, scope, bookingId, eventId,options) : googleOwnedEvent(access, scope, bookingId, eventId,options);
-  const send=(url:URL,method="GET",body?:unknown,etag?:string|null,invitation?:BookingInvitationEffect)=>request(scope,access,url,method,body,etag,options,invitation);
+  const send=(url:URL,method="GET",body?:unknown,etag?:string|null,invitation?:BookingInvitationEffect,standaloneInvitation?:StandaloneInvitationEffect)=>request(scope,access,url,method,body,etag,options,invitation,standaloneInvitation);
+  const strictContent = Boolean(options.withStandaloneInvitationWrite || options.withStandaloneWrite);
+  const assertStandaloneWrapper = (attendees: BookingInvitation[] | undefined, effect: StandaloneInvitationEffect | undefined) => {
+    if (attendees !== undefined && !effect && !options.withStandaloneWrite) throw new BookingProviderError("standalone_write_not_authorized", "rejected");
+  };
   const invitationEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">)=>provider==="microsoft"&&input.invitation?{bookingId:input.bookingId,operationId:input.operationId,...input.invitation}:undefined;
   const existingMeetingEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">,existing:JsonObject)=>{
     if(provider!=="microsoft")return undefined;
@@ -311,12 +387,14 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       return intervals;
     },
     async create(input) {
+      const attendees = standaloneInput(input), effect = standaloneEffect(input, attendees);
+      assertStandaloneWrapper(attendees, effect);
       await assertTestWritePolicy(scope, access,options); assertWrite(access, input.kind); assertTimes(input);
       const url = eventUrl();
-      if (provider === "google") { url.searchParams.set("sendUpdates", "none"); if (input.kind === "meet") url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await send(url, "POST", provider === "microsoft" ? graphWriteBody(scope, input, true) : googleWriteBody(scope, input, true), undefined, invitationEffect(input));
+      if (provider === "google") { url.searchParams.set("sendUpdates", effect ? "all" : "none"); if (input.kind === "meet") url.searchParams.set("conferenceDataVersion", "1"); }
+      const { data } = await send(url, "POST", provider === "microsoft" ? graphWriteBody(scope, input, true, undefined, attendees) : googleWriteBody(scope, input, true, attendees), undefined, invitationEffect(input), effect);
       if (!data) throw new BookingProviderError("provider_create_unknown", "unknown");
-      return writtenEventResult(provider, data, input);
+      return writtenEventResult(provider, data, input, strictContent || attendees !== undefined);
     },
     async lookup(input) {
       if (process.env.VERCEL_ENV === "production") await assertProductionPolicy(scope,access,options);
@@ -324,16 +402,16 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
         const data = await ownedEvent(input.bookingId, input.eventId);
         // Only a previously persisted owned-event mapping may resolve a 404/410 as
         // a deletion. A create without an event mapping remains unproven below.
-        return data ? eventResult(provider, data) : { eventId: input.eventId, etag: null, startsAt: "1970-01-01T00:00:00.000Z", endsAt: "1970-01-01T00:00:00.000Z", onlineMeetingUrl: null, videoStatus: "none", cancelled: true };
+        return data ? eventResult(provider, data, "UTC", false, strictContent) : { eventId: input.eventId, etag: null, startsAt: "1970-01-01T00:00:00.000Z", endsAt: "1970-01-01T00:00:00.000Z", onlineMeetingUrl: null, videoStatus: "none", cancelled: true };
       }
       if (provider === "google") {
         const data = await ownedEvent(input.bookingId, googleBookingEventId(scope, input.operationId));
-        return data ? eventResult(provider, data) : null;
+        return data ? eventResult(provider, data, "UTC", false, strictContent) : null;
       }
       const url = eventUrl();
       const escaped = input.operationId.replace(/'/g, "''");
       url.searchParams.set("$filter", `singleValueExtendedProperties/Any(ep: ep/id eq '${operationProperty}' and ep/value eq '${escaped}')`);
-      url.searchParams.set("$expand", `singleValueExtendedProperties($filter=id eq '${ownershipProperty}')`);
+      url.searchParams.set("$expand", `singleValueExtendedProperties($filter=id eq '${ownershipProperty}' or id eq '${operationProperty}')`);
       url.searchParams.set("$top", "2");
       const { data } = await send(url);
       if (!data) throw new BookingProviderError("calendar_unavailable", "rejected");
@@ -342,29 +420,37 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
       if (rows.length > 1 || data["@odata.nextLink"]) throw new BookingProviderError("provider_operation_ambiguous", "unknown");
       if (!rows.length) return null;
       const event = object(rows[0]); assertOwned(scope, input.bookingId, provider, event);
-      return eventResult(provider, event);
+      return eventResult(provider, event, "UTC", false, strictContent);
     },
     async update(input) {
+      const attendees = standaloneInput(input);
       await assertTestWritePolicy(scope, access,options); assertWrite(access, input.kind); assertTimes(input);
       const existing = await ownedEvent(input.bookingId, input.eventId);
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) throw new BookingProviderError("provider_event_missing", "rejected");
-      const current = eventResult(provider, existing);
+      const current = eventResult(provider, existing, "UTC", false, strictContent || attendees !== undefined);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
-      const meetingEffect=existingMeetingEffect(input,existing);
-      const url = eventUrl(input.eventId); if (provider === "google") { url.searchParams.set("sendUpdates", "none"); url.searchParams.set("conferenceDataVersion", "1"); }
-      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false, existing) : googleWriteBody(scope, input, false), current.etag, meetingEffect??invitationEffect(input));
+      const previous = attendees === undefined ? [] : existingStandaloneAttendees(provider, existing);
+      const effect = standaloneEffect(input, attendees, previous);
+      assertStandaloneWrapper(attendees, effect);
+      const meetingEffect = attendees === undefined ? existingMeetingEffect(input,existing) : undefined;
+      const url = eventUrl(input.eventId); if (provider === "google") { url.searchParams.set("sendUpdates", effect ? "all" : "none"); url.searchParams.set("conferenceDataVersion", "1"); }
+      const { data } = await send(url, "PATCH", provider === "microsoft" ? graphWriteBody(scope, input, false, existing, attendees) : googleWriteBody(scope, input, false, attendees), current.etag, meetingEffect??invitationEffect(input), effect);
       if (!data) throw new BookingProviderError("provider_update_unknown", "unknown");
-      return writtenEventResult(provider, data, input);
+      return writtenEventResult(provider, data, input, strictContent || attendees !== undefined);
     },
     async delete(input) {
+      const attendees = standaloneInput(input);
+      if (attendees?.length) throw new BookingProviderError("standalone_delete_attendees_not_empty", "rejected");
       await assertTestWritePolicy(scope, access,options); assertWrite(access);
       const existing = await ownedEvent(input.bookingId, input.eventId);
       if (!existing || existing.status === "cancelled" || existing.isCancelled === true) return;
-      const current = eventResult(provider, existing);
+      const current = eventResult(provider, existing, "UTC", false, strictContent || attendees !== undefined);
       if (!input.etag || !current.etag || input.etag !== current.etag) throw new BookingProviderError("provider_event_changed", "rejected");
-      const meetingEffect=existingMeetingEffect(input,existing);
-      const url = eventUrl(input.eventId); if (provider === "google") url.searchParams.set("sendUpdates", "none");
-      await send(url, "DELETE", undefined, current.etag,meetingEffect);
+      const effect = standaloneEffect(input, attendees, attendees === undefined ? [] : existingStandaloneAttendees(provider, existing));
+      assertStandaloneWrapper(attendees, effect);
+      const meetingEffect = attendees === undefined ? existingMeetingEffect(input,existing) : undefined;
+      const url = eventUrl(input.eventId); if (provider === "google") url.searchParams.set("sendUpdates", effect ? "all" : "none");
+      await send(url, "DELETE", undefined, current.etag,meetingEffect,effect);
     },
   };
 }

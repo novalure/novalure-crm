@@ -1,0 +1,81 @@
+{
+  "realComponents": true,
+  "syntheticHttp": true,
+  "providerCalls": 0,
+  "databaseIntegration": false,
+  "results": [
+    {
+      "name": "scoped personal connection selection excludes protected writers and states honest series scope",
+      "status": "PASS"
+    },
+    {
+      "name": "a location-only draft is protected on unload while a fully reverted form is clean",
+      "status": "PASS"
+    },
+    {
+      "name": "create sends explicit zone-correct UTC, provider, project and stable command ID; verified readback alone confirms",
+      "status": "PASS"
+    },
+    {
+      "name": "managed workspace uses the resolved member rather than the home login actor",
+      "status": "PASS"
+    },
+    {
+      "name": "lost or malformed response survives real section unmount with identical explicit replay",
+      "status": "PASS"
+    },
+    {
+      "name": "delayed double submission across remount sends one operation and late success clears only its scope",
+      "status": "PASS"
+    },
+    {
+      "name": "late success after same-scope section remount refreshes the active event list automatically",
+      "status": "PASS"
+    },
+    {
+      "name": "a stale project selection cannot be silently retargeted by a new project filter",
+      "status": "PASS"
+    },
+    {
+      "name": "processing journal result is not success and permits only status reconciliation",
+      "status": "PASS"
+    },
+    {
+      "name": "terminal validation keeps editable inputs but retires the failed intent",
+      "status": "PASS"
+    },
+    {
+      "name": "a permission denial after an unknown result cannot retire the original replay key",
+      "status": "PASS"
+    },
+    {
+      "name": "first permission denial without proof of non-start retains the exact command across remount",
+      "status": "PASS"
+    },
+    {
+      "name": "editing preserves original optimistic version and attendee names, explicit invitation and cancellation confirmation",
+      "status": "PASS"
+    },
+    {
+      "name": "removing every attendee retains confirmation of the previous recipient union",
+      "status": "PASS"
+    },
+    {
+      "name": "text-only edit preserves provider seconds and milliseconds including a DST fold and locks project binding",
+      "status": "PASS"
+    },
+    {
+      "name": "external conflict is compared and imported only explicitly with the reviewed ETag",
+      "status": "PASS"
+    },
+    {
+      "name": "a reviewed external cancellation can be imported with a null ETag without an outgoing write intent",
+      "status": "PASS"
+    },
+    {
+      "name": "definitively rejected local create can be discarded without a connection or cancellation invitation",
+      "status": "PASS"
+    }
+  ],
+  "browserErrors": []
+}

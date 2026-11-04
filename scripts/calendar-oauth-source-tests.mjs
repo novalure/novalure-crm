@@ -9,6 +9,7 @@ import { CalendarCommandCenter } from "../src/components/calendar-command-center
 import { getCalendarCommandCenterCopy } from "../src/lib/i18n.ts";
 
 const source = await readFile(new URL("../src/components/calendar-command-center.tsx", import.meta.url), "utf8");
+const personalSource = await readFile(new URL("../src/components/personal-calendar-workspace.tsx", import.meta.url), "utf8");
 const loaderSource = source.slice(source.indexOf("async function loadOAuthStatus()"), source.indexOf("    loadOAuthStatus();"));
 const compiledLoader = ts.transpileModule(loaderSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
@@ -46,7 +47,7 @@ test("calendar initially renders an unknown connection state in both languages",
   }
 });
 
-test("managed workspace reads use the selected workspace and expose read-only connections", async () => {
+test("managed workspace retains legacy read-only boundaries and uses the scoped personal calendar bridge", async () => {
   const result = await runLoader({ ok: true, json: async () => ({ source: "database", google: { connected: true }, microsoft: { connected: false } }) }, { workspaceId: "managed-workspace" });
   assert.equal(result.status, "ready");
   assert.equal(result.integrations.google.connected, true);
@@ -58,7 +59,12 @@ test("managed workspace reads use the selected workspace and expose read-only co
   assert.match(html, /Calendar connections are read-only here/);
   assert.doesNotMatch(html, /id="calendar-default-provider"/);
   assert.ok(!/<button[^>]*>Connect (?:Microsoft|Google)/.test(html), "managed context must hide OAuth start buttons");
-  assert.match(html, /<button[^>]*disabled=""[^>]*>Sync with Microsoft/);
+  // The always-create legacy sync action was intentionally retired. Its old
+  // disabled-button assertion would require retaining an unsafe, obsolete path.
+  assert.doesNotMatch(html, /Sync with Microsoft/);
+  assert.match(html, />Open personal calendar<\/button>/);
+  assert.match(html, /href="\/api\/crm\/personal-calendar\/connect\/microsoft\?workspaceId=managed-workspace"/);
+  assert.match(html, /href="\/api\/crm\/personal-calendar\/connect\/google\?workspaceId=managed-workspace"/);
   assert.match(html, /Bookings, notifications and sharing links are unavailable/);
   assert.doesNotMatch(html, /origin-public-key|id="calendar-share-output"/);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Create appointment/);
@@ -76,7 +82,12 @@ test("managed workspace reads use the selected workspace and expose read-only co
 
 test("managed workspace context cannot invoke origin-workspace connection or settings writers", async () => {
   const ast = ts.createSourceFile("calendar.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["connectCalendarProvider", "connectMeetingProvider", "disconnectCalendarProvider", "syncLiveTeamsMeeting", "saveMeetingSettings", "sendMeetingTestNotification", "createCalendarEvent", "copyShareArtifact", "confirmBooking", "retryNotification"]);
+  // All nine remaining legacy origin-workspace writers keep their home guard.
+  // The tenth, syncLiveTeamsMeeting, is absent rather than granted a bypass.
+  const names = new Set(["connectCalendarProvider", "connectMeetingProvider", "disconnectCalendarProvider", "saveMeetingSettings", "sendMeetingTestNotification", "createCalendarEvent", "copyShareArtifact", "confirmBooking", "retryNotification"]);
+  assert.doesNotMatch(source, /syncLiveTeamsMeeting|["']\/api\/calendar\/(?:google|microsoft)["']/);
+  assert.match(personalSource, /\/api\/crm\/personal-calendar\?workspaceId=\$\{encodeURIComponent\(workspaceId\)\}/);
+  assert.match(personalSource, /expectedActorId:\s*data\.actorId/);
   const functions = [];
   function visit(node) {
     if (ts.isVariableDeclaration(node) && names.has(node.name.getText(ast))) functions.push({ name: node.name.getText(ast), declaration: `const ${node.name.getText(ast)} = ${node.initializer.getText(ast)}` });

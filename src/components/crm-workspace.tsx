@@ -62,6 +62,7 @@ import { ProjectReportPicker } from "@/components/project-report-picker";
 import { CrmNotifications } from "@/components/crm-notifications";
 import { PropertyCommandCenter } from "@/components/property-command-center";
 import { usePropertyDraftSessionStore } from "@/lib/use-property-draft";
+import { usePersonalCalendarSessionStore } from "@/lib/personal-calendar-client-store";
 import { createCrmCoreRequestGuard } from "@/lib/crm-core-request-guard";
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
@@ -2907,6 +2908,7 @@ export function CrmWorkspace({
   sessionWorkspace,
 }: CrmWorkspaceProps) {
   const propertyDraftStore = usePropertyDraftSessionStore(sessionUserId);
+  const personalCalendarStore = usePersonalCalendarSessionStore(sessionUserId);
   const coreData = useMemo(() => selectAuthoritativeCrmPresentation(suppliedCoreData), [suppliedCoreData]);
   const workspace = { ...sessionWorkspace, plan: initialLanguage === "de" ? "Nicht verfügbar" : "Unavailable", activeProjects: coreData.projects.length, activeUsers: 1 };
   const sessionUsers: WorkspaceUser[] = [{ id: sessionUserId, workspaceId: sessionWorkspace.id, name: sessionUserName, email: "", role: sessionRole, productRole: sessionProductRole, status: "active" }];
@@ -5162,6 +5164,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "calendar" ? (
               <CalendarCommandCenter
+                personalCalendarStore={personalCalendarStore}
                 key={activeWorkspace.id}
                 workspaceId={activeWorkspace.id}
                 sessionWorkspaceId={sessionWorkspace.id}
