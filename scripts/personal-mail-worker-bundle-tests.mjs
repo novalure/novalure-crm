@@ -15,7 +15,8 @@ const exec = promisify(execFile);
 const thisScript = fileURLToPath(import.meta.url);
 
 // A separate process releases any native PDF libraries before the test removes
-// its private staging directory on Windows. Worker imports resolve there only.
+// its private staging directory on Windows. The copied files come from the
+// route trace. Node's standard module lookup still applies in the child.
 if (process.argv[2] === probeFlag) {
   const input = await readFile("sample.pdf");
   const worker = new Worker(path.resolve(workerPath), {
@@ -43,7 +44,7 @@ if (process.argv[2] === probeFlag) {
   const sample = await document.save();
 
   for (const route of ["attachments", "replies"]) {
-    test("built " + route + " handler can inspect a PDF using only its traced files", async () => {
+    test("built " + route + " handler traces both private files and its staged worker accepts a PDF", async () => {
       const routeDir = path.join(root, ".next/server/app/api/crm/mailbox", route);
       const trace = JSON.parse(await readFile(path.join(routeDir, "route.js.nft.json"), "utf8"));
       const selected = new Set();
