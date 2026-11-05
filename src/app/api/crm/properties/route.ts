@@ -2,7 +2,7 @@ import { CrmCommandError, withCrmRead, executeCrmCommand, crmRequestMetadata, cr
 import { assignPropertyInquiry, canAssignPropertyInquiry, parsePropertyInquiryAssignment, readPropertyInquiryAssignments } from "@/lib/db/property-inquiry-assignment-repository";
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
-import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
+import type { PropertyPriceVisibility, PropertyReservation, PropertyUnit } from "@/lib/crm-types";
 import { loadPaginatedPropertyAssets } from "@/lib/db/crm-loaders";
 import {
   attachPropertyDocument,
@@ -17,12 +17,15 @@ import {
   updateSellerListingRecord,
   loadFullPropertyRecord,
   updateFullPropertyRecord,
+  readPropertyChannelPriceState,
+  patchPropertyChannelPriceVisibility,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
 import { canReviewPropertyDocuments, reviewPropertyDocument } from "@/lib/db/property-document-review";
 import {
   routePropertyInquiry,
   runPropertyChannelPreflight,
+  PROPERTY_CHANNEL_PRICE_KEYS,
   type PropertyAssetSummary,
   type PropertyInquiryRouteInput,
 } from "@/lib/property-department";
@@ -111,6 +114,17 @@ export async function GET(request: Request) {
       canReviewDocuments: canReviewPropertyDocuments(auth.session),
       canAssignInquiry: canAssignPropertyInquiry(auth.session),
     } }, { headers: privateHeaders });
+  }
+  if (readOperation === "channel_price_visibility") {
+    const allowed = ["workspaceId", "operation", "propertyId"], id = url.searchParams.get("propertyId") ?? "";
+    if (!uuidPattern.test(id) || [...url.searchParams.keys()].some(key => !allowed.includes(key)) || allowed.some(key => url.searchParams.getAll(key).length !== 1)) {
+      return NextResponse.json({ error: "Invalid property price rule scope" }, { status: 400, headers: privateHeaders });
+    }
+    try {
+      return NextResponse.json({ data: await readPropertyChannelPriceState(auth.session, id.toLowerCase()), persisted: true }, { headers: privateHeaders });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof CrmCommandError ? error.message : "Property price rules are unavailable" }, { status: error instanceof CrmCommandError ? error.status : 503, headers: privateHeaders });
+    }
   }
   if(readOperation==="full"){
     const allowed=["workspaceId","operation","propertyId"],id=url.searchParams.get("propertyId")??"";
@@ -309,15 +323,17 @@ export async function POST(request: Request) {
     }
     if (operation === "update_property_core") {
       const propertyPayload = asObject(input.property);
-      const result = await updateSellerListingRecord({
-        property: Object.keys(propertyPayload).length ? propertyPayload : input,
-        propertyId: input.propertyId ?? propertyPayload.id,
-        session,
-      });
-      if (!result.persisted) {
-        return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+      try {
+        const result = await updateSellerListingRecord({
+          property: Object.keys(propertyPayload).length ? propertyPayload : input,
+          propertyId: input.propertyId ?? propertyPayload.id,
+          session,
+        });
+        if (!result.persisted) return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+        return NextResponse.json({ data: result.data, persisted: true });
+      } catch (error) {
+        return crmCommandErrorResponse(error);
       }
-      return NextResponse.json({ data: result.data, persisted: true });
     }
 
     if (operation === "save_text_blocks") {
@@ -390,19 +406,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: result.data, persisted: true });
     }
 
-    if (operation === "update_price_visibility") {
-      const result = await updatePropertyPriceVisibility({
-        channelPriceVisibility: input.channelPriceVisibility,
-        priceVisibility: input.priceVisibility,
-        projectId: input.projectId,
-        propertyId: input.propertyId,
-        publicPrice: input.publicPrice,
-        session,
-      });
-      if (!result.persisted) {
-        return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+    if (operation === "patch_channel_price_visibility") {
+      const allowed = ["operation", "propertyId", "expectedProjectId", "expectedPolicyRevision", "changes"];
+      const changes = asObject(input.changes);
+      const entries = Object.entries(changes);
+      if (Object.keys(input).some(key => !allowed.includes(key)) ||
+          typeof input.propertyId !== "string" || !uuidPattern.test(input.propertyId) ||
+          (input.expectedProjectId !== null && (typeof input.expectedProjectId !== "string" || !uuidPattern.test(input.expectedProjectId))) ||
+          typeof input.expectedPolicyRevision !== "string" || !/^[a-f0-9]{64}$/.test(input.expectedPolicyRevision) ||
+          !entries.length || entries.some(([key, value]) => !PROPERTY_CHANNEL_PRICE_KEYS.some(channel => channel === key) ||
+            (value !== "publish_price" && value !== "price_on_request" && value !== "hide_price"))) {
+        return NextResponse.json({ error: "Invalid property price rule changes" }, { status: 400 });
       }
-      return NextResponse.json({ data: result.data, persisted: true });
+      try {
+        const result = await patchPropertyChannelPriceVisibility({
+          session, propertyId: input.propertyId.toLowerCase(), expectedProjectId: input.expectedProjectId?.toLowerCase() ?? null,
+          expectedPolicyRevision: input.expectedPolicyRevision, changes: changes as Record<string, PropertyPriceVisibility>, metadata: crmRequestMetadata(request, input),
+        });
+        return NextResponse.json({ data: result.data, persisted: true, replayed: result.replayed }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
+      } catch (error) {
+        return crmCommandErrorResponse(error);
+      }
+    }
+
+    if (operation === "update_price_visibility") {
+      try {
+        const result = await updatePropertyPriceVisibility({
+          channelPriceVisibility: input.channelPriceVisibility, expectedPolicyRevision: input.expectedPolicyRevision,
+          priceVisibility: input.priceVisibility, projectId: input.projectId, propertyId: input.propertyId, publicPrice: input.publicPrice, session,
+        });
+        if (!result.persisted) return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+        return NextResponse.json({ data: result.data, persisted: true });
+      } catch (error) {
+        return crmCommandErrorResponse(error);
+      }
     }
 
     return NextResponse.json({ error: "Unsupported property operation" }, { status: 400 });
