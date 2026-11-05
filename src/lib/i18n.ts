@@ -145,13 +145,13 @@ export const loginPageCopy = {
     description:
       "Access is limited to approved teams. Please use the email address and access code assigned to your workspace.",
     overviewLink: "Back to overview",
-    auditLink: "Request a private lead audit",
+    demoLink: "Request a CRM demo",
     emailLabel: "Email",
     passcodeLabel: "Access code",
     passcodeHelp: "Use the access code for your approved workspace.",
     accessHelp: {
       prefix: "Need access?",
-      auditLabel: "Request a private lead audit",
+      demoLabel: "Request a CRM demo",
       connector: "or contact",
     },
     passcodeHideLabel: "Hide access code",
@@ -210,13 +210,13 @@ export const loginPageCopy = {
     description:
       "Zugang nur für freigegebene Teams. Bitte verwenden Sie die E-Mail-Adresse und den Zugangscode, die Ihrem Workspace zugeordnet sind.",
     overviewLink: "Zur Übersicht",
-    auditLink: "Pipeline-Audit anfragen",
+    demoLink: "CRM-Demo anfragen",
     emailLabel: "E-Mail",
     passcodeLabel: "Zugangscode",
     passcodeHelp: "Verwenden Sie den Zugangscode Ihres freigegebenen Workspace.",
     accessHelp: {
       prefix: "Noch keinen Zugang?",
-      auditLabel: "Pipeline-Audit anfragen",
+      demoLabel: "Fragen Sie eine CRM-Demo an",
       connector: "oder kontaktieren Sie",
     },
     passcodeHideLabel: "Zugangscode ausblenden",
