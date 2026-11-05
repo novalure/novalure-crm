@@ -1,4 +1,5 @@
 import type { BotLanguageMode, LanguageCode } from "@/lib/i18n";
+import type { ProjectWizardReceipt } from "@/lib/project-wizard";
 import type {
   CalendarProviderChoice,
   ProductRole,
@@ -215,6 +216,7 @@ export type CompanyProfileVersion = {
 };
 
 export type Project = {
+  wizard?: ProjectWizardReceipt;
   version?: number;
   id: ID;
   workspaceId: ID;

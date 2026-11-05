@@ -1,0 +1,10 @@
+PHASE owned local PostgreSQL and unchanged historical schema
+PHASE immutable app-byte capture and real local Next server
+PHASE actual password and rendered TOTP enrollment
+PASS actual password/TOTP flow issued opaque HttpOnly MFA session
+PHASE actual project wizard and single real create
+LOCAL_WIZARD_FAILURE TimeoutError: locator.selectOption: Timeout 30000ms exceeded.
+Call log:
+  - waiting for getByRole('dialog', { name: 'Projekt-Wizard', exact: true }).getByLabel('Projekttyp', { exact: true })
+
+{"output":"C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\qa\\project-wizard-fields-20261105\\fixed","totals":{"checks":1,"passed":1,"failed":0},"failure":{"name":"TimeoutError","message":"locator.selectOption: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Projekt-Wizard', exact: true }).getByLabel('Projekttyp', { exact: true })\u001b[22m\n"}}

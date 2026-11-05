@@ -52,6 +52,8 @@ import { LeadDetailDrawer } from "@/components/lead-detail-drawer";
 import { taskDueState } from "@/lib/task-due";
 import { useTaskClock } from "@/lib/use-task-clock";
 import { useCrmTeam } from "@/lib/use-crm-team";
+import { ProjectWizardSummary, projectWizardText, useProjectWizardOptions } from "@/components/project-wizard-fields";
+import type { ProjectWizardInput, ProjectWizardReceipt } from "@/lib/project-wizard";
 import { readPropertyGeography } from "@/lib/property-country";
 import { MobileDailyWork, type MobileDailyPanel } from "@/components/mobile-daily-work";
 import { ConnectedNewsletterCommandCenter } from "@/components/connected-newsletter-command-center";
@@ -184,7 +186,7 @@ type ProjectWizardDraft = {
   type: string;
 };
 
-function isProjectSaveReply(value: unknown, workspaceId: string, name: string): value is { persisted: true; project: Project } {
+function isProjectSaveReply(value: unknown, workspaceId: string, name: string, expectedWizard?: ProjectWizardReceipt): value is { persisted: true; project: Project } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const reply = value as { persisted?: unknown; project?: Record<string, unknown> };
   const project = reply.project;
@@ -195,7 +197,12 @@ function isProjectSaveReply(value: unknown, workspaceId: string, name: string): 
     typeof project.type === "string" && project.type.length > 0 &&
     ["Aktiv", "Skaliert", "Review", "Archiviert"].includes(String(project.status)) &&
     typeof project.leads === "number" && Number.isFinite(project.leads) && project.leads >= 0 &&
-    typeof project.revenue === "string" && typeof project.defaultPipelineId === "string";
+    typeof project.revenue === "string" && typeof project.defaultPipelineId === "string" &&
+    (!expectedWizard || (project.type === expectedWizard.typeKey &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(project.defaultPipelineId) &&
+      !!project.wizard && typeof project.wizard === "object" &&
+      Object.keys(expectedWizard).every(key => (project.wizard as Record<string, unknown>)[key] === expectedWizard[key as keyof ProjectWizardReceipt]) &&
+      Object.keys(project.wizard).every(key => Object.hasOwn(expectedWizard, key))));
 }
 
 type ManagedWorkspaceOption = {
@@ -3019,6 +3026,7 @@ export function CrmWorkspace({
   const pageTitleRef = useRef<HTMLHeadingElement | null>(null);
   const focusPageTitleAfterNavigationRef = useRef(false);
   const [actionModal, setActionModal] = useState<HeaderActionModal>(null);
+  const [projectWizardOptionsEpoch, setProjectWizardOptionsEpoch] = useState(0);
   const [customerSetupBusy, setCustomerSetupBusy] = useState(false);
   const [projectNotice, setProjectNotice] = useState("");
   const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
@@ -3041,12 +3049,11 @@ export function CrmWorkspace({
   const languageSavePending = useRef(false);
   const copy = getDashboardCopy(language);
   const projectTypeOptions = copy.dialogs.project.projectTypes;
-  const projectPipelineOptions = copy.dialogs.project.pipelines;
   const [projectDraft, setProjectDraftState] = useState<ProjectWizardDraft>(() => ({
     calendarProvider: workspaceSetup.activeCalendarProvider,
     customerType: workspaceSetup.customerType,
     division: "REAL_ESTATE_GROWTH",
-    funnelTemplateId: coreData.funnels[0]?.id ?? "",
+    funnelTemplateId: "",
     meetingProvider:
       workspaceSetup.activeCalendarProvider === "google"
         ? "google-meet"
@@ -3056,8 +3063,8 @@ export function CrmWorkspace({
     name: "",
     notes: "",
     operatingModel: workspaceSetup.operatingModel,
-    ownerUserId: sessionUsers[0]?.id ?? "",
-    pipelineId: projectPipelineOptions[0]?.id ?? "pipeline_standard_sales",
+    ownerUserId: "",
+    pipelineId: "",
     teamStructure: workspaceSetup.teamStructure,
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
@@ -3065,6 +3072,13 @@ export function CrmWorkspace({
     projectEditorRevisionRef.current++;
     setProjectDraftState(update);
   }
+  const projectWizardOptions = useProjectWizardOptions({
+    workspaceId: activeWorkspace.id,
+    identityId: `${sessionUserId}:${projectWizardOptionsEpoch}`,
+    customerType: projectDraft.customerType,
+    operatingModel: projectDraft.operatingModel,
+    enabled: actionModal === "project",
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
@@ -3594,7 +3608,7 @@ export function CrmWorkspace({
     projectTypeOptions.find((option) => option.id === projectDraft.type)?.label ??
     projectDraft.type;
   const selectedProjectPipelineLabel =
-    projectPipelineOptions.find((option) => option.id === projectDraft.pipelineId)?.label ?? "-";
+    projectWizardOptions.data?.pipelineTemplates.find((option) => option.key === projectDraft.pipelineId)?.name ?? "-";
   const projectWizardChecks = [
     {
       detail: projectDraft.name.trim() || copy.dialogs.project.missingName,
@@ -3622,8 +3636,11 @@ export function CrmWorkspace({
       status: "action" as const,
     },
   ];
-  const canPrepareProject =
-    projectDraft.name.trim().length >= 3 && Boolean(projectDraft.type && projectDraft.pipelineId);
+  const canPrepareProject = projectDraft.name.trim().length >= 3 && !!projectWizardOptions.data &&
+    projectWizardOptions.data.projectTypes.some(key => key === projectDraft.type) &&
+    projectWizardOptions.data.pipelineTemplates.some(row => row.key === projectDraft.pipelineId) &&
+    (!projectDraft.ownerUserId || projectWizardOptions.data.responsibleUsers.some(row => row.id === projectDraft.ownerUserId)) &&
+    (!projectDraft.funnelTemplateId || projectWizardOptions.data.funnelReferences.some(row => row.id === projectDraft.funnelTemplateId));
 
   function openImportReview() {
     setActionModal("import");
@@ -3632,6 +3649,7 @@ export function CrmWorkspace({
   function openProjectWizard() {
     if (!canCreateProject) return;
     retireProjectSave();
+    setProjectWizardOptionsEpoch(value => value + 1);
     setProjectNotice("");
     setProjectNoticeTone("success");
     setActionModal("project");
@@ -3651,11 +3669,23 @@ export function CrmWorkspace({
       return;
     }
 
-    const nextProject: Partial<Project> = {
+    const wizard: ProjectWizardInput = {
+      schemaVersion: 1,
+      expectedActorId: projectWizardOptions.data!.actorId,
+      typeKey: projectDraft.type as ProjectWizardInput["typeKey"],
+      responsibleUserId: projectDraft.ownerUserId || null,
+      funnelReferenceId: projectDraft.funnelTemplateId || null,
+      pipelineTemplateKey: projectDraft.pipelineId,
+      privateNotes: projectDraft.notes,
+    };
+    const expectedWizard: ProjectWizardReceipt = {
+      schemaVersion: wizard.schemaVersion, typeKey: wizard.typeKey, responsibleUserId: wizard.responsibleUserId,
+      funnelReferenceId: wizard.funnelReferenceId, pipelineTemplateKey: wizard.pipelineTemplateKey,
+    };
+    const nextProject: Partial<Project> & { wizard: ProjectWizardInput } = {
       customerType: projectDraft.customerType,
       division: projectDraft.division,
       defaultOperatingModel: projectDraft.operatingModel,
-      defaultPipelineId: projectDraft.pipelineId,
       name: projectDraft.name.trim(),
       setupDefaults: {
         calendarProvider: projectDraft.calendarProvider,
@@ -3663,8 +3693,9 @@ export function CrmWorkspace({
         teamStructure: projectDraft.teamStructure,
       },
       status: "Aktiv",
-      type: selectedProjectTypeLabel,
+      type: wizard.typeKey,
       workspaceId: activeWorkspace.id,
+      wizard,
     };
 
     const owner = {}, revision = projectEditorRevisionRef.current, submittedDraft = projectDraft;
@@ -3690,12 +3721,12 @@ export function CrmWorkspace({
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
-      }, async candidate => isProjectSaveReply(await candidate.json(), activeWorkspace.id, submittedDraft.name.trim()));
+      }, async candidate => isProjectSaveReply(await candidate.json(), activeWorkspace.id, submittedDraft.name.trim(), expectedWizard));
       if (!currentContext()) return;
       const payload = await response.json().catch(() => null) as { error?: string; project?: Project } | null;
       if (!currentContext()) return;
 
-      if (!response.ok || !isProjectSaveReply(payload, activeWorkspace.id, submittedDraft.name.trim())) {
+      if (!response.ok || !isProjectSaveReply(payload, activeWorkspace.id, submittedDraft.name.trim(), expectedWizard)) {
         throw new Error(payload?.error ?? copy.dialogs.project.saveError);
       }
 
@@ -4673,6 +4704,10 @@ export function CrmWorkspace({
               projectLabel={projectScopeLabel}
               workspaceName={workspaceContext.workspaceName}
             />
+            {scopeHydrated && !projectScopeInvalid && activeProject ? <ProjectWizardSummary
+              key={`${sessionUserId}:${activeWorkspace.id}:${activeProject.id}`}
+              workspaceId={activeWorkspace.id} projectId={activeProject.id} projectType={activeProject.type} language={language}
+            /> : null}
 
             {isStudioNavigation && !getAuthorizedStudioProjectId(activeWorkspace.id, allProjects) ? (
               <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
@@ -5434,6 +5469,8 @@ export function CrmWorkspace({
           onClose={closeProjectWizard}
           title={copy.dialogs.project.title}
         >
+          {projectWizardOptions.loading ? <p role="status" className="mb-4 text-sm">{projectWizardText(language, "Verfügbare Projektangaben werden geladen …", "Loading available project settings …", "Cargando las opciones del proyecto …")}</p> : null}
+          {projectWizardOptions.error ? <p role="alert" className="mb-4 text-sm text-red-800">{projectWizardText(language, "Die berechtigten Projektoptionen konnten nicht geladen werden. Bitte schließen und erneut öffnen.", "Authorized project options could not be loaded. Please close and reopen the dialog.", "No se pudieron cargar las opciones autorizadas. Cierra y vuelve a abrir el diálogo.")}</p> : null}
           <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-lg border border-stone-200 bg-white p-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -5557,14 +5594,17 @@ export function CrmWorkspace({
                     onChange={(event) =>
                       setProjectDraft((current) => ({ ...current, pipelineId: event.target.value }))
                     }
+                    aria-label={copy.dialogs.project.pipeline}
                     value={projectDraft.pipelineId}
                   >
-                    {projectPipelineOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
+                    <option value="">{copy.dialogs.project.selectPipeline}</option>
+                    {(projectWizardOptions.data?.pipelineTemplates ?? []).map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.name}
                       </option>
                     ))}
                   </select>
+                  <span className="font-normal normal-case text-stone-600">{projectWizardText(language, "Nur die für Kundentyp und Betriebsmodell definierten Vorlagen sind verfügbar. Weitere Käufer- und Investment-Vorlagen sind noch nicht definiert.", "Only templates defined for this customer type and operating model are available. Additional buyer and investment templates are not yet defined.", "Solo están disponibles las plantillas definidas para este tipo de cliente y modelo operativo. Las plantillas adicionales de compradores e inversión aún no están definidas.")}</span>
                 </label>
                 <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                   {copy.dialogs.project.owner}
@@ -5573,17 +5613,20 @@ export function CrmWorkspace({
                     onChange={(event) =>
                       setProjectDraft((current) => ({ ...current, ownerUserId: event.target.value }))
                     }
+                    aria-label={copy.dialogs.project.owner}
                     value={projectDraft.ownerUserId}
                   >
-                    {users.map((user) => (
+                    <option value="">{projectWizardText(language, "Keine Zuständigkeit", "No responsible person", "Sin responsable")}</option>
+                    {(projectWizardOptions.data?.responsibleUsers ?? []).map((user) => (
                       <option key={user.id} value={user.id}>
                         {user.name}
                       </option>
                     ))}
                   </select>
+                  <span className="font-normal normal-case text-stone-600">{projectWizardText(language, "Nur bereits berechtigte aktive Mitglieder. Die Auswahl vergibt keine zusätzlichen Projekt- oder Benutzerrechte.", "Only active members who already have access. This selection grants no additional project or user permissions.", "Solo miembros activos que ya tienen acceso. Esta selección no otorga permisos adicionales.")}</span>
                 </label>
                 <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  {copy.dialogs.project.funnelTemplate}
+                  {projectWizardText(language, "Funnel-Referenz (optional)", "Funnel reference (optional)", "Referencia de funnel (opcional)")}
                   <select
                     className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                     onChange={(event) =>
@@ -5593,13 +5636,16 @@ export function CrmWorkspace({
                       }))
                     }
                     value={projectDraft.funnelTemplateId}
+                    aria-label={projectWizardText(language, "Funnel-Referenz (optional)", "Funnel reference (optional)", "Referencia de funnel (opcional)")}
                   >
-                    {funnelRecords.map((funnel) => (
+                    <option value="">{projectWizardText(language, "Keine Referenz", "No reference", "Sin referencia")}</option>
+                    {(projectWizardOptions.data?.funnelReferences ?? []).map((funnel) => (
                       <option key={funnel.id} value={funnel.id}>
                         {funnel.name}
                       </option>
                     ))}
                   </select>
+                  <span className="font-normal normal-case text-stone-600">{projectWizardText(language, "Vermerkt nur den vorhandenen Funnel. Es wird kein Funnel kopiert, verschoben oder aktiviert.", "Records a reference to the existing funnel. No funnel is copied, moved or activated.", "Guarda solo una referencia al funnel existente. No se copia, mueve ni activa ningún funnel.")}</span>
                 </label>
                 <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                   {copy.dialogs.project.calendar}
@@ -5653,7 +5699,10 @@ export function CrmWorkspace({
                     }
                     placeholder={copy.dialogs.project.notesPlaceholder}
                     value={projectDraft.notes}
+                    maxLength={4000}
+                    aria-label={copy.dialogs.project.notes}
                   />
+                  <span className="font-normal normal-case text-stone-600">{projectWizardText(language, "Private Projektnotizen – nur für dich und außerhalb öffentlicher Projektangaben.", "Private project notes — visible only to you and kept outside public project data.", "Notas privadas del proyecto: solo para ti y fuera de los datos públicos.")}</span>
                 </label>
               </div>
             </div>

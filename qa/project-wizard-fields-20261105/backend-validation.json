@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-11-05T00:40:40.677Z",
+  "baseCommit": "3492729aa8cb48459bad650fca91c9095aa9534e",
+  "headAtCapture": "3492729aa8cb48459bad650fca91c9095aa9534e",
+  "commitNote": "Source hashes bind the shared uncommitted final candidate; root creates the coherent commit.",
+  "checks": [
+    {
+      "command": "node --conditions=react-server --import tsx --test scripts/project-wizard-persistence-tests.ts",
+      "exitCode": 0,
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "evidence": "backend-tests.txt",
+      "scope": "9 nested real local PostgreSQL subcases plus the parent; no browser/cookie/CSRF/provider/network acceptance inferred."
+    },
+    {
+      "command": "node node_modules/typescript/bin/tsc --project .npm-cache/qa/project-wizard-typecheck.json --noEmit --pretty false",
+      "exitCode": 0,
+      "evidence": "backend-typecheck.txt",
+      "scope": "The three backend TS files and the test, including imported library dependencies; final whole-app typecheck belongs to root."
+    },
+    {
+      "command": "node node_modules/eslint/bin/eslint.js src/lib/db/project-wizard-repository.ts src/lib/db/crm-write-repositories.ts src/lib/db/pipeline-default-repositories.ts scripts/project-wizard-persistence-tests.ts --max-warnings 0",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- <owned backend and test files>",
+      "exitCode": 0
+    }
+  ],
+  "postExecutionTypeOnlyQualification": {
+    "testFile": "scripts/project-wizard-persistence-tests.ts",
+    "change": "Explicit result-row type annotation after the final functional pipeline-lock run; no assertion or emitted JavaScript changed.",
+    "testRerunAfterAnnotation": false,
+    "actualRecordedPreAnnotationLfSha256": "196fdd20b9a5df327c5192da2f02125a04cfbb0481fb58c8380b4b23f1e8b3de",
+    "reconstructedPreAnnotationMatchesActualCapture": true,
+    "currentLfSha256": "d0c99a05ab869a9960d45ded948e90e57d98359f64fe910f3a6f27103e4a177f",
+    "generatedJavaScriptExactlyIdentical": true,
+    "generatedJavaScriptSha256": "fcb851d128cd81ecfed7b0eb41938351338ed145cad2d925dd4f609523459d19"
+  },
+  "sourceHashes": [
+    {
+      "path": "migrations/197_project_wizard_fields.sql",
+      "sha256WorktreeBytes": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1",
+      "sha256LfNormalizedText": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1"
+    },
+    {
+      "path": "src/lib/db/project-wizard-repository.ts",
+      "sha256WorktreeBytes": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd",
+      "sha256LfNormalizedText": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd"
+    },
+    {
+      "path": "src/lib/db/crm-write-repositories.ts",
+      "sha256WorktreeBytes": "007ffd6e1629fb417ac407ba675821c3394fbe75cbcfa142dd503c1a62e1ba48",
+      "sha256LfNormalizedText": "9aec1a517efd24125937a7dea70d57ccce3dda1cbe4ebc1fd99a11148ee90b1a"
+    },
+    {
+      "path": "src/lib/db/pipeline-default-repositories.ts",
+      "sha256WorktreeBytes": "7a687b4f1937795820851a991d9e12278460a4563fcc2803df2e940a116c94a3",
+      "sha256LfNormalizedText": "a04a0aae55b18f5cc56bc25b2d2b2031a0b3636675f979163b51610e13554784"
+    },
+    {
+      "path": "src/lib/project-wizard.ts",
+      "sha256WorktreeBytes": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689",
+      "sha256LfNormalizedText": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689"
+    },
+    {
+      "path": "src/lib/crm-types.ts",
+      "sha256WorktreeBytes": "609e55243122c986fc8616d29f1d7590aaf45575ea2e65e0ca8a6b2ce36ff268",
+      "sha256LfNormalizedText": "15820ce8b6417e0bb7292d980ac6af869a7db9c615103b2d799fa2469b68c646"
+    },
+    {
+      "path": "scripts/project-wizard-persistence-tests.ts",
+      "sha256WorktreeBytes": "d0c99a05ab869a9960d45ded948e90e57d98359f64fe910f3a6f27103e4a177f",
+      "sha256LfNormalizedText": "d0c99a05ab869a9960d45ded948e90e57d98359f64fe910f3a6f27103e4a177f"
+    }
+  ],
+  "evidenceHashes": [
+    {
+      "path": "backend-tests.txt",
+      "sha256": "49595508f8f703acf4df6a42a0b5a51b584941d89a3ac8854d4b86af59cb8928"
+    },
+    {
+      "path": "backend-tests-before-pipeline-lock.txt",
+      "sha256": "c10e16b7aba0d3fc8e3fa758c8d03211585c4cf8a5da21ddf0b2b854d45ea2cd"
+    },
+    {
+      "path": "backend-typecheck.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "coverage": [
+    "Options: all four real server catalogs, active eligible same-tenant responsible users, foreign source hidden, invalid context rejected.",
+    "Before INSERT: stale expectedActorId, foreign/inactive/non-manager/external-partner/internal-ineligible responsible user, foreign funnel and unsupported pipeline rejected; no project row created.",
+    "Create command: one effect and exact replay/lookup; final version plus actual own pipeline/stages; receipt/audit/Core/setupDefaults/pipeline metadata exclude private note content and source title.",
+    "Private notes: author reads exact Unicode/newline text; another manager sees no private row; forged actor and foreign tenant rejected; both new tables FORCE RLS.",
+    "Current read path: source title absent without source project access, responsible name absent after suspension, revoked project reader denied.",
+    "Injected note INSERT failure: project/pipelines/stages/settings/notes/audit/receipt all roll back.",
+    "PATCH rejects another project pipeline; legacy free type remains; null optional selections do not pick a first user/source.",
+    "All five stable project type keys persist, all four actual catalog pipeline keys persist exact ordered stage keys.",
+    "Concurrency: selected responsible row blocks concurrent suspension; reverse ordering waits on the real row then rejects the committed suspension.",
+    "Final pipeline-binding delta: an actual successful PATCH holds the selected row until commit; concurrent DELETE and same-tenant project retarget both receive 55P03. Reverse ordering waits on that row, then rejects the committed DELETE/retarget with PROJECT_PIPELINE_FORBIDDEN; project default and version remain unchanged. No legacy pipeline status/template reevaluation added."
+  ],
+  "limits": [
+    "Generic disposable sales schema fixture omits its documented unrelated/manual predecessors and optional RAG vector; no production upgrade rehearsal claimed.",
+    "Migration 197 runs unchanged after maxMigrationNumber195; no migration196 is used.",
+    "Fake AppSession for repository/command tests; genuine cookie/CSRF/Next UI qualification is separate.",
+    "No source funnel copy/move/activation, no project grant creation, no provider/live/cloud/spending/deploy.",
+    "Independent bounded source review and final shared whole-app checks are coordinated by root."
+  ],
+  "finalSourceBinding": {
+    "sourceBeforeAndAfterRunIdentical": true,
+    "currentProductSourcesExactlyMatchFinalRunCapture": true,
+    "testOnlyDiffQualifiedAbove": true,
+    "finalFunctionalDelta": "FOR SHARE on the exact validated pipeline row, held inside the existing tenant write transaction."
+  },
+  "boundedPeerReview": {
+    "status": "Other instructed backend findings closed by read-only peer; final FOR SHARE delta requested by root and verified by this targeted PG follow-up.",
+    "independentTestExecution": false
+  }
+}

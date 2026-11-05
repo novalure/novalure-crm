@@ -1,0 +1,22 @@
+PHASE owned local PostgreSQL and unchanged historical schema
+PHASE immutable app-byte capture and real local Next server
+PHASE actual password and rendered TOTP enrollment
+PASS actual password/TOTP flow issued opaque HttpOnly MFA session
+PHASE actual project wizard and single real create
+PASS real project POST passed server authorization and CSRF
+PASS one create with real browser CSRF and command identity
+PASS real reload/Core and RLS-scoped runtime SQL agree on the created project
+PASS wizard POST uses resolved actor, stable type and server-listed references/template
+LOCAL_WIZARD_FAILURE AssertionError: Expected values to be strictly deep-equal:
++ actual - expected
+
++ undefined
+- {
+-   funnelReferenceId: 'ac358d48-a208-43c1-be65-e5eae96756b5',
+-   pipelineTemplateKey: 'novalure_sales_pipeline',
+-   responsibleUserId: '1dd43350-ca6b-4130-9f79-2c0f6322762f',
+-   schemaVersion: 1,
+-   typeKey: 'b2b_workspace'
+- }
+
+{"output":"C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\qa\\project-wizard-fields-20261105\\fixed","totals":{"checks":5,"passed":5,"failed":0},"failure":{"name":"AssertionError","message":"Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ undefined\n- {\n-   funnelReferenceId: 'ac358d48-a208-43c1-be65-e5eae96756b5',\n-   pipelineTemplateKey: 'novalure_sales_pipeline',\n-   responsibleUserId: '1dd43350-ca6b-4130-9f79-2c0f6322762f',\n-   schemaVersion: 1,\n-   typeKey: 'b2b_workspace'\n- }\n"}}

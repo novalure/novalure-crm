@@ -34,6 +34,9 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { queueDealStageChangeGoogleNotification } from "@/lib/db/google-notification-repositories";
 import { ensureProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
+import { persistProjectWizard, validateProjectDefaultPipeline, validateProjectWizardCreate } from "@/lib/db/project-wizard-repository";
+import type { ProjectWizardInput } from "@/lib/project-wizard";
+import { currentTenantTransaction } from "@/lib/db/transaction-context";
 import { queueDealStageChangeTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import { isCrmDivision } from "@/lib/crm-division";
@@ -3149,7 +3152,7 @@ async function getLatestBotPublishEvaluation(input: {
 }
 
 async function createProjectRecordInTransaction(input: {
-  project: Partial<Project>;
+  project: Partial<Project> & { wizard?: ProjectWizardInput };
   session: AppSession;
 }): Promise<RepositoryWriteResult<Project>> {
   if (input.project.workspaceId !== undefined && input.project.workspaceId !== input.session.workspaceId) {
@@ -3172,6 +3175,21 @@ async function createProjectRecordInTransaction(input: {
     ? input.project.defaultOperatingModel
     : input.session.workspaceOperatingModel ?? null;
   const rawSetupDefaults = asObject(input.project.setupDefaults);
+  const wizard = input.project.wizard === undefined ? null : await validateProjectWizardCreate(input.session, input.project.wizard, {
+    customerType: input.project.customerType ?? customerType,
+    operatingModel: input.project.defaultOperatingModel ?? defaultOperatingModel,
+  });
+  if (wizard) {
+    if (input.project.type !== wizard.typeKey) throw new CrmCommandError("INVALID_PROJECT_TYPE", "Der Projekttyp muss dem gewählten stabilen Typ entsprechen.");
+    if (input.project.defaultPipelineId !== undefined && input.project.defaultPipelineId !== "") throw new CrmCommandError("INVALID_PIPELINE_TEMPLATE", "Die neue Projektpipeline wird aus der gewählten Vorlage erstellt.");
+    if (Object.keys(rawSetupDefaults).some(key => !["calendarProvider", "meetingProvider", "teamStructure"].includes(key))) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Nur Kalender-, Meeting- und Teameinstellungen sind als Projektvorgaben zulässig.");
+    if (input.project.setupDefaults !== undefined && (!input.project.setupDefaults || typeof input.project.setupDefaults !== "object" || Array.isArray(input.project.setupDefaults))) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Projektvorgaben als Objekt angeben.");
+    if (rawSetupDefaults.calendarProvider !== undefined && !isCalendarProviderChoice(rawSetupDefaults.calendarProvider)) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Kalenderanbieter prüfen.");
+    if (rawSetupDefaults.teamStructure !== undefined && !isWorkspaceTeamStructure(rawSetupDefaults.teamStructure)) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Teamstruktur prüfen.");
+    if (typeof rawSetupDefaults.meetingProvider !== "undefined" && !["microsoft-teams", "google-meet", "manual-link"].includes(String(rawSetupDefaults.meetingProvider))) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Meetinganbieter prüfen.");
+  } else if (isUuid(input.project.defaultPipelineId)) {
+    throw new CrmCommandError("PROJECT_PIPELINE_FORBIDDEN", "Ein neues Projekt kann keine bestehende Projektpipeline übernehmen.", 403);
+  }
   const setupDefaults = {
     ...createModeSetupDefaults(customerType, defaultOperatingModel),
     ...rawSetupDefaults,
@@ -3231,9 +3249,20 @@ async function createProjectRecordInTransaction(input: {
       projectId: row.id,
       session: input.session,
       setupDefaults: row.setupDefaults,
+      pipelineTemplateKey: wizard?.pipelineTemplateKey,
     });
-  } catch {
+  } catch (error) {
+    if (wizard) throw error;
     pipelineSetup = { defaultPipelineId: row.defaultPipelineId, pipelineIds: [], stageCount: 0 };
+  }
+
+  let wizardReceipt: Project["wizard"];
+  if (wizard) {
+    const actualPipeline = await queryOne<{ id: string }>(`select cp.id from projects p join crm_pipelines cp on cp.workspace_id=p.workspace_id and cp.project_id=p.id and cp.id=p.default_pipeline_id where p.workspace_id=$1::uuid and p.id=$2::uuid and cp.id=$3::uuid and cp.key=$4 and exists(select 1 from crm_pipeline_stages s where s.workspace_id=cp.workspace_id and s.project_id=cp.project_id and s.pipeline_id=cp.id)`, [input.session.workspaceId, row.id, pipelineSetup.defaultPipelineId, wizard.pipelineTemplateKey]);
+    if (!actualPipeline) throw new CrmCommandError("PROJECT_PIPELINE_UNCONFIRMED", "Die gewählte Projektpipeline wurde nicht vollständig erstellt.", 503);
+    const transaction = currentTenantTransaction();
+    if (!transaction) throw new CrmCommandError("PROJECT_WIZARD_TRANSACTION_REQUIRED", "Projektkonfiguration erfordert eine gemeinsame Transaktion.", 503);
+    wizardReceipt = await persistProjectWizard(transaction.transaction, input.session, row.id, wizard);
   }
 
   // Default-pipeline initialization can update the project; return its final version.
@@ -3248,7 +3277,7 @@ async function createProjectRecordInTransaction(input: {
   });
 
   return {
-    data: toProjectWriteResult(row, pipelineSetup.defaultPipelineId),
+    data: { ...toProjectWriteResult(row, pipelineSetup.defaultPipelineId), ...(wizardReceipt ? { wizard: wizardReceipt } : {}) },
     persisted: true,
   };
 }
@@ -3317,7 +3346,9 @@ async function updateProjectRecordInTransaction(input: {
       ? rawSetupDefaults.teamStructure
       : existing.setupDefaults?.teamStructure ?? input.session.workspaceTeamStructure ?? undefined,
   };
-  const defaultPipelineId = normalizeWriteProjectId(input.project.defaultPipelineId) ?? existing.defaultPipelineId;
+  const defaultPipelineId = input.project.defaultPipelineId === undefined
+    ? existing.defaultPipelineId
+    : await validateProjectDefaultPipeline(input.session, existing.id, input.project.defaultPipelineId);
 
   const row = await queryOne<ProjectWriteRow>(
     `
