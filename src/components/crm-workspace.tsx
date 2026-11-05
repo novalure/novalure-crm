@@ -184,6 +184,20 @@ type ProjectWizardDraft = {
   type: string;
 };
 
+function isProjectSaveReply(value: unknown, workspaceId: string, name: string): value is { persisted: true; project: Project } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const reply = value as { persisted?: unknown; project?: Record<string, unknown> };
+  const project = reply.project;
+  return reply.persisted === true && !!project && typeof project.id === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(project.id) &&
+    project.workspaceId === workspaceId && project.name === name &&
+    typeof project.version === "number" && Number.isSafeInteger(project.version) && project.version > 0 &&
+    typeof project.type === "string" && project.type.length > 0 &&
+    ["Aktiv", "Skaliert", "Review", "Archiviert"].includes(String(project.status)) &&
+    typeof project.leads === "number" && Number.isFinite(project.leads) && project.leads >= 0 &&
+    typeof project.revenue === "string" && typeof project.defaultPipelineId === "string";
+}
+
 type ManagedWorkspaceOption = {
   activeCalendarProvider?: CalendarProviderChoice | null;
   activeProjects?: number;
@@ -3008,7 +3022,19 @@ export function CrmWorkspace({
   const [customerSetupBusy, setCustomerSetupBusy] = useState(false);
   const [projectNotice, setProjectNotice] = useState("");
   const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
-  const [isProjectSaving, setIsProjectSaving] = useState(false);
+  const [projectSaveStatus, setProjectSaveStatus] = useState<{ guard: typeof coreRequestGuard; busy: boolean } | null>(null);
+  const isProjectSaving = projectSaveStatus?.guard === coreRequestGuard && projectSaveStatus.busy;
+  const projectEditorRevisionRef = useRef(0);
+  const projectSaveOwnerRef = useRef<object | null>(null);
+  const expireProjectEditor = useCallback(() => {
+    projectEditorRevisionRef.current++;
+    projectSaveOwnerRef.current = null;
+  }, []);
+  const retireProjectSave = useCallback(() => {
+    expireProjectEditor();
+    setProjectSaveStatus({ guard: coreRequestGuard, busy: false });
+  }, [coreRequestGuard, expireProjectEditor]);
+  useLayoutEffect(() => expireProjectEditor, [coreRequestGuard, expireProjectEditor]);
   const [language, setLanguage] = useState<LanguageCode>(initialLanguage);
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguagePreference);
   const [languageSaveState, setLanguageSaveState] = useState<LanguagePreferenceSaveState>(languagePreferenceAvailable ? "idle" : "unavailable");
@@ -3016,7 +3042,7 @@ export function CrmWorkspace({
   const copy = getDashboardCopy(language);
   const projectTypeOptions = copy.dialogs.project.projectTypes;
   const projectPipelineOptions = copy.dialogs.project.pipelines;
-  const [projectDraft, setProjectDraft] = useState<ProjectWizardDraft>(() => ({
+  const [projectDraft, setProjectDraftState] = useState<ProjectWizardDraft>(() => ({
     calendarProvider: workspaceSetup.activeCalendarProvider,
     customerType: workspaceSetup.customerType,
     division: "REAL_ESTATE_GROWTH",
@@ -3035,6 +3061,10 @@ export function CrmWorkspace({
     teamStructure: workspaceSetup.teamStructure,
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
+  function setProjectDraft(update: ProjectWizardDraft | ((current: ProjectWizardDraft) => ProjectWizardDraft)) {
+    projectEditorRevisionRef.current++;
+    setProjectDraftState(update);
+  }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
@@ -3100,6 +3130,7 @@ export function CrmWorkspace({
 
     const ticket = coreRequestGuard.beginSwitch(nextWorkspace.id);
     if (!ticket) return false;
+    retireProjectSave();
     workspaceUrlRestoredRef.current = true;
 
     setWorkspaceSwitchState("loading");
@@ -3169,7 +3200,7 @@ export function CrmWorkspace({
       setWorkspaceSwitchState("error");
       return false;
     }
-  }, [coreRequestGuard, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
+  }, [coreRequestGuard, retireProjectSave, sessionWorkspace.id, sessionUserId, setUnitBoardFocusScope, setPropertyFocusAssetId]);
 
   useEffect(() => {
     if (!canUseWorkspaceSwitch) return;
@@ -3600,13 +3631,19 @@ export function CrmWorkspace({
 
   function openProjectWizard() {
     if (!canCreateProject) return;
+    retireProjectSave();
     setProjectNotice("");
     setProjectNoticeTone("success");
     setActionModal("project");
   }
 
+  function closeProjectWizard() {
+    retireProjectSave();
+    setActionModal(null);
+  }
+
   async function handlePrepareProject() {
-    if (isProjectSaving) return;
+    if (projectSaveOwnerRef.current || !coreRequestGuard.isActiveWorkspace(activeWorkspace.id) || workspaceSwitchState === "loading") return;
 
     if (!canPrepareProject) {
       setProjectNoticeTone("error");
@@ -3630,9 +3667,13 @@ export function CrmWorkspace({
       workspaceId: activeWorkspace.id,
     };
 
-    setIsProjectSaving(true);
+    const owner = {}, revision = projectEditorRevisionRef.current, submittedDraft = projectDraft;
+    let expectedUrl = window.location.href;
+    const sameEditor = () => projectEditorRevisionRef.current === revision && coreRequestGuard.isActiveWorkspace(activeWorkspace.id);
+    const currentContext = () => sameEditor() && window.location.href === expectedUrl;
+    projectSaveOwnerRef.current = owner;
+    setProjectSaveStatus({ guard: coreRequestGuard, busy: true });
     setProjectNotice("");
-    let saved = false;
     try {
       const response = await csrfFetch(`/api/crm/projects?workspaceId=${encodeURIComponent(activeWorkspace.id)}`, {
         body: JSON.stringify({
@@ -3649,42 +3690,50 @@ export function CrmWorkspace({
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
-      });
+      }, async candidate => isProjectSaveReply(await candidate.json(), activeWorkspace.id, submittedDraft.name.trim()));
+      if (!currentContext()) return;
       const payload = await response.json().catch(() => null) as { error?: string; project?: Project } | null;
+      if (!currentContext()) return;
 
-      if (!response.ok || !payload?.project) {
+      if (!response.ok || !isProjectSaveReply(payload, activeWorkspace.id, submittedDraft.name.trim())) {
         throw new Error(payload?.error ?? copy.dialogs.project.saveError);
       }
 
       const persistedProject = payload.project;
 
-      setLiveCoreData((current) => ({
+      setLiveCoreData((current) => sameEditor() ? ({
         ...current,
         projects: [
           persistedProject,
           ...current.projects.filter((project) => project.id !== persistedProject.id),
         ],
-      }));
-      setActiveWorkspace((current) => ({
+      }) : current);
+      setActiveWorkspace((current) => sameEditor() && current.id === activeWorkspace.id ? ({
         ...current,
         activeProjects: Math.max(current.activeProjects ?? 0, projectRecords.length + 1),
-      }));
+      }) : current);
       handleProjectScopeChange(persistedProject.id, [
         persistedProject,
         ...projectRecords.filter((project) => project.id !== persistedProject.id),
       ]);
+      expectedUrl = window.location.href;
       setProjectNoticeTone("success");
       setProjectNotice(copy.dialogs.project.preparedNotice(persistedProject.name));
-      setProjectDraft((current) => ({ ...current, name: "", notes: "" }));
+      setProjectDraftState((current) => sameEditor() && current === submittedDraft ? ({ ...current, name: "", notes: "" }) : current);
+      if (!currentContext()) return;
       await refreshCoreData();
-      saved = true;
+      if (currentContext()) handleSectionChange("dashboard");
     } catch (error) {
-      setProjectNoticeTone("error");
-      setProjectNotice(error instanceof Error ? error.message : copy.dialogs.project.saveError);
+      if (currentContext()) {
+        setProjectNoticeTone("error");
+        setProjectNotice(error instanceof Error ? error.message : copy.dialogs.project.saveError);
+      }
     } finally {
-      setIsProjectSaving(false);
+      if (projectSaveOwnerRef.current === owner) {
+        projectSaveOwnerRef.current = null;
+        setProjectSaveStatus({ guard: coreRequestGuard, busy: false });
+      }
     }
-    if (saved) handleSectionChange("dashboard");
   }
 
   useEffect(() => {
@@ -3731,6 +3780,7 @@ export function CrmWorkspace({
       // A newer URL also retires a pending switch back to this same workspace
       // or to an unavailable target. Its late response must not win navigation.
       coreRequestGuard.cancelSwitch();
+      retireProjectSave();
       const current = coreNavigationRef.current;
       const restoreTarget = canUseWorkspaceSwitch ? getCrmWorkspaceRestoreTarget({
         availableWorkspaces,
@@ -3759,7 +3809,7 @@ export function CrmWorkspace({
 
     window.addEventListener("popstate", syncScopeFromHistory);
     return () => window.removeEventListener("popstate", syncScopeFromHistory);
-  }, [activeWorkspace.id, allProjects, availableWorkspaces, canUseWorkspaceSwitch, coreRequestGuard, handleWorkspaceSwitch, sessionUserId]);
+  }, [activeWorkspace.id, allProjects, availableWorkspaces, canUseWorkspaceSwitch, coreRequestGuard, handleWorkspaceSwitch, retireProjectSave, sessionUserId]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -5359,7 +5409,7 @@ export function CrmWorkspace({
             <>
               <button
                 className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
-                onClick={() => setActionModal(null)}
+                onClick={closeProjectWizard}
                 type="button"
               >
                 {copy.dialogs.cancel}
@@ -5381,7 +5431,7 @@ export function CrmWorkspace({
               </button>
             </>
           }
-          onClose={() => setActionModal(null)}
+          onClose={closeProjectWizard}
           title={copy.dialogs.project.title}
         >
           <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">

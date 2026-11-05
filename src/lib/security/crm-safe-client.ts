@@ -1,8 +1,9 @@
 type Pending = { body: string; method: string; key: string; correlation: string; unknown: boolean; inFlight: boolean };
 const pending = new Map<string, Pending>();
 const unknownMessage = "CRM_RESULT_UNKNOWN: Ergebnis noch ungeklärt. Ursprünglichen Vorgang abgleichen; keine neue Aktion auslösen.";
+export type SalesResponseValidator = (response: Response) => Promise<boolean>;
 /** Memory-only transport state; never a business store, cross-tab lock or production delivery claim. */
-export async function safeSalesFetch(target: string, init: RequestInit, perform: (target: string, init: RequestInit) => Promise<Response>) {
+export async function safeSalesFetch(target: string, init: RequestInit, perform: (target: string, init: RequestInit) => Promise<Response>, validate?: SalesResponseValidator) {
   const method = (init.method ?? "GET").toUpperCase();
   const path = target.split("?")[0];
   if (!/^(?:\/api\/crm\/(?:contacts|tasks|projects|leads|deals)(?:\/[0-9a-f-]+\/stage)?|\/api\/crm\/offers)$/.test(path) || !["POST", "PATCH", "DELETE"].includes(method)) return perform(target, init);
@@ -20,8 +21,10 @@ export async function safeSalesFetch(target: string, init: RequestInit, perform:
     if (!response.ok) throw new Error(unknownMessage);
     const result = await response.json() as { status: string; response?: { body: unknown; status: number } };
     if (result.status !== "COMMITTED" || !result.response) throw new Error(unknownMessage);
+    const recovered = Response.json(result.response.body, { status: result.response.status });
+    if (validate && !await validate(recovered.clone())) throw new Error(unknownMessage);
     pending.delete(target);
-    return Response.json(result.response.body, { status: result.response.status });
+    return recovered;
   };
   pending.set(target, attempt); attempt.inFlight = true;
   try {
@@ -31,7 +34,10 @@ export async function safeSalesFetch(target: string, init: RequestInit, perform:
     try {
       response = await perform(target, { ...init, body: attempt.body, method, headers });
       if (response.status >= 500) attempt.unknown = true;
-      else if (response.ok) await response.clone().json();
+      else if (response.ok) {
+        await response.clone().json();
+        if (validate && !await validate(response.clone())) attempt.unknown = true;
+      }
     } catch { attempt.unknown = true; }
     if (attempt.unknown) return await reconcile();
     pending.delete(target);

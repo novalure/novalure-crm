@@ -1,0 +1,9 @@
+FAIL late project success after A-to-B cannot overwrite current dialog/navigation/data: Old save completion must not alter the current form, scope, URL, projects, counters or notices
+FAIL late project error after A-to-B cannot overwrite current dialog/navigation/data: Old save completion must not alter the current form, scope, URL, projects, counters or notices
+FAIL late project success after A-to-B-to-A cannot overwrite current dialog/navigation/data: Old save completion must not alter the current form, scope, URL, projects, counters or notices
+FAIL late project error after A-to-B-to-A cannot overwrite current dialog/navigation/data: Old save completion must not alter the current form, scope, URL, projects, counters or notices
+FAIL late project success after identity-change cannot overwrite current dialog/navigation/data: Old save completion must not alter the current form, scope, URL, projects, counters or notices
+PASS late project error after identity-change cannot overwrite current dialog/navigation/data
+PASS current project success remains functional
+PASS current project error remains functional
+{"cases":8,"passed":3,"failed":5}
