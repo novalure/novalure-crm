@@ -1,7 +1,8 @@
 import { bindPropertyDetails, readPropertyDetails, propertyDetailsLegacyFields, propertyDetailCostBindings, propertyDetailsInput } from "@/lib/property-details";
 import { fullPropertyInputKeys,propertyFullSnapshot,samePropertySnapshot } from "@/lib/property-full-editing";
 import { validatePropertyCreationInput } from "@/lib/property-create-validation";
-import { withCrmRead, CrmCommandError,assertProjectGrant } from "@/lib/crm-command";
+import { websitePriceVisibilityReadValues } from "@/lib/property-website-price-visibility";
+import { withCrmRead, CrmCommandError, assertProjectGrant, crmPayloadDigest, executeCrmCommand, type CrmCommandInput, type TenantTransaction } from "@/lib/crm-command";
 import type { AppSession } from "@/lib/auth/session";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
 import type {
@@ -9,7 +10,7 @@ import type {
   PropertyInquiryRouteResult,
   PropertyPreflightResult,
 } from "@/lib/property-department";
-import { executeQuery, queryOne } from "@/lib/db/client";
+import { executeQuery, queryOne, queryRows } from "@/lib/db/client";
 import { queryPropertyMediaMutation } from "@/lib/db/property-media-mutation";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
@@ -18,6 +19,8 @@ import { resolvePropertyAreaSqm } from "@/lib/property-area-input";
 import { isEmptyMoneyInput, parsePropertyEuroCents, parsePropertyIntegerCents } from "@/lib/property-money";
 import { normalizePurchaseAncillaryCalculation } from "@/lib/property-purchase-costs";
 import { austriaPropertyRegions, normalizePropertyEnergyCertificate, normalizePropertyGeography, normalizePropertyRegion, propertyGeographyFromInput, readPropertyGeography } from "@/lib/property-country";
+import type { PropertyChannelPriceEdits, PropertyChannelPriceState } from "@/lib/property-channel-price-draft";
+import { hasProductCapability } from "@/lib/product-model";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -556,14 +559,30 @@ async function updateSellerListingRecordInTransaction(input: {
   const regionInvalidatesInference = `(not($49::jsonb ? 'geography') and nullif($12,'') is not null and canonical_payload->'geography'->>'source'='legacy_at_region' and $12<>all(array[${austriaPropertyRegions.map((region) => `'${region}'`).join(",")}]))`;
   const areaSqm = area.value;
   const priceCents = toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]);
+  const publicPriceCents = toNullablePriceCents(input.property.publicPrice);
   const coreNumericStatePatch = {
     version: 1,
     ...(area.value !== null || completeNumbers && Object.hasOwn(input.property, "areaSqm") ? { areaSqm: area.value === null ? "unknown" : "known" } : {}),
     ...(priceCents !== null || completeNumbers && Object.hasOwn(input.property, "price") ? { price: priceCents === null ? "unknown" : "known" } : {}),
-    ...(toNullablePriceCents(input.property.publicPrice) !== null || completeNumbers && Object.hasOwn(input.property, "publicPrice") ? { publicPrice: toNullablePriceCents(input.property.publicPrice) === null ? "unknown" : "known" } : {}),
+    ...(publicPriceCents !== null || completeNumbers && Object.hasOwn(input.property, "publicPrice") ? { publicPrice: publicPriceCents === null ? "unknown" : "known" } : {}),
     ...(toNullablePriceCents(input.property.rentPrice) !== null || completeNumbers && Object.hasOwn(input.property, "rentPrice") ? { rentPrice: toNullablePriceCents(input.property.rentPrice) === null ? "unknown" : "known" } : {}),
   };
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
+  const updatesGlobalVisibility = Object.hasOwn(input.property, "priceVisibility");
+  const updatesChannelVisibility = Object.hasOwn(input.property, "channelPriceVisibility");
+  const requestedVisibility = updatesGlobalVisibility ? normalizePriceVisibility(input.property.priceVisibility) : null;
+  const comparesPublicPrice = publicPriceCents !== null && !hasExpectedCore && !completeNumbers;
+  if (updatesGlobalVisibility || updatesChannelVisibility || comparesPublicPrice) {
+    const current = await withCrmRead(input.session, (tx, fresh) => loadPropertyPricePolicyRow(tx, fresh, propertyId, true));
+    const changesPolicy = (requestedVisibility !== null && requestedVisibility !== current.priceVisibility) ||
+      (updatesChannelVisibility && !samePropertySnapshot(channelPriceVisibility, current.channelPriceVisibility)) ||
+      (comparesPublicPrice && String(publicPriceCents) !== current.publicPriceCents);
+    // Full editing already checked its locked snapshot (including global policy
+    // and public price), and its field allowlist excludes channel-map writes.
+    if (changesPolicy && !completeNumbers && input.property.expectedPolicyRevision !== propertyPricePolicyRevision(input.session, propertyId, current)) {
+      return { persisted: false, reason: "Conflict: price policy changed or a fresh comparison is missing. Reload before saving." };
+    }
+  }
   const row = await queryOne<SellerListingRow>(
     `
       update seller_listings
@@ -817,9 +836,9 @@ async function updateSellerListingRecordInTransaction(input: {
       dateOnly(input.property.availableFrom ?? fields["construction.beziehbar_ab"]),
       cleanString(input.property.availableFromText),
       cleanString(input.property.availabilityNote),
-      Object.hasOwn(input.property, "priceVisibility") ? normalizePriceVisibility(input.property.priceVisibility) : null,
-      Object.hasOwn(input.property, "channelPriceVisibility") ? JSON.stringify(channelPriceVisibility) : null,
-      toNullablePriceCents(input.property.publicPrice),
+      requestedVisibility,
+      updatesChannelVisibility ? JSON.stringify(channelPriceVisibility) : null,
+      publicPriceCents,
       toNullablePriceCents(input.property.rentPrice ?? fields["costs.mietpreis_brutto"]),
       toNullablePriceCents(input.property.rentNet),
       toNullablePriceCents(input.property.monthlyCostsGross),
@@ -1391,8 +1410,95 @@ async function updatePropertyMediaOrderInTransaction(input: {
   return { data: { count: Number(row.count) }, persisted: true };
 }
 
+type PropertyPricePolicyRow = {
+  projectId: string | null;
+  priceVisibility: PropertyPriceVisibility;
+  channelPriceVisibility: unknown;
+  publicPriceCents: string | null;
+};
+
+async function loadPropertyPricePolicyRow(tx: TenantTransaction, session: AppSession, propertyId: string, lock: boolean): Promise<PropertyPricePolicyRow> {
+  const row = await tx.queryOne<PropertyPricePolicyRow>(`
+    select project_id as "projectId", price_visibility as "priceVisibility",
+      channel_price_visibility as "channelPriceVisibility", public_price_cents::text as "publicPriceCents"
+    from seller_listings where workspace_id=$1::uuid and id=$2::uuid ${lock ? "for update" : ""}
+  `, [session.workspaceId, propertyId]);
+  if (!row) throw new CrmCommandError("PROPERTY_NOT_FOUND", "Property not found", 404);
+  if (row.projectId) await assertProjectGrant(tx, session, row.projectId, true);
+  return row;
+}
+
+function propertyPricePolicyRevision(session: AppSession, propertyId: string, row: PropertyPricePolicyRow): string {
+  return crmPayloadDigest({ workspaceId: session.workspaceId, propertyId, ...row });
+}
+
+function propertyChannelPriceState(session: AppSession, propertyId: string, row: PropertyPricePolicyRow): PropertyChannelPriceState {
+  return {
+    propertyId, workspaceId: session.workspaceId, projectId: row.projectId, priceVisibility: row.priceVisibility,
+    revision: propertyPricePolicyRevision(session, propertyId, row),
+    channelPriceVisibility: { ...normalizePriceVisibilityMap(asPlainObject(row.channelPriceVisibility)), ...websitePriceVisibilityReadValues(row.channelPriceVisibility) },
+  };
+}
+
+function propertyChannelWriteCapability(session: AppSession): CrmCommandInput["capability"] {
+  const capabilities = ["workspace:operate", "pipeline:write", "settings:manage", "workspace:admin"] as const;
+  const capability = capabilities.find(value => hasProductCapability(session.productRole, value));
+  if (!session.permissions.includes("crm:write") || (!capability && session.role !== "owner" && session.role !== "admin")) {
+    throw new CrmCommandError("FORBIDDEN", "Property operating rights are required", 403);
+  }
+  return capability ?? "workspace:read";
+}
+
+export async function readPropertyChannelPriceState(session: AppSession, propertyId: string): Promise<PropertyChannelPriceState> {
+  return withCrmRead(session, async (tx, fresh) => {
+    propertyChannelWriteCapability(fresh);
+    return propertyChannelPriceState(fresh, propertyId, await loadPropertyPricePolicyRow(tx, fresh, propertyId, false));
+  });
+}
+
+export async function patchPropertyChannelPriceVisibility(input: {
+  session: AppSession;
+  propertyId: string;
+  expectedProjectId: string | null;
+  expectedPolicyRevision: string;
+  changes: PropertyChannelPriceEdits;
+  metadata: Pick<CrmCommandInput, "idempotencyKey" | "correlationId">;
+}) {
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const capability = propertyChannelWriteCapability(fresh);
+    // Check the actual locked scope before looking up any historical receipt.
+    const row = await loadPropertyPricePolicyRow(tx, fresh, input.propertyId, true);
+    if (row.projectId !== input.expectedProjectId) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Property project changed. Reload the price rules before saving.", 409);
+    return executeCrmCommand(fresh, {
+      ...input.metadata, operation: "property.channel_price_visibility.patch", capability,
+      projectId: row.projectId ?? undefined, resourceId: input.propertyId,
+      payload: { expectedPolicyRevision: input.expectedPolicyRevision, changes: input.changes },
+    }, async commandTx => {
+      if (propertyPricePolicyRevision(fresh, input.propertyId, row) !== input.expectedPolicyRevision) {
+        throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Price rules changed. Reload before saving.", 409);
+      }
+      const stored = row.channelPriceVisibility;
+      if (stored !== null && (typeof stored !== "object" || Array.isArray(stored))) {
+        throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Saved channel rules require review before saving.", 409);
+      }
+      const channels = { ...asPlainObject(stored), ...input.changes };
+      if (Object.hasOwn(input.changes, "Eigene Website")) delete channels.Website;
+      if (!samePropertySnapshot(channels, stored)) {
+        const saved = await commandTx.queryOne<IdRow>(`
+          update seller_listings set channel_price_visibility=$4::jsonb, updated_at=now()
+          where workspace_id=$1::uuid and id=$2::uuid and project_id is not distinct from $3::uuid returning id
+        `, [fresh.workspaceId, input.propertyId, row.projectId, JSON.stringify(channels)]);
+        if (!saved) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Price rules could not be confirmed.", 409);
+      }
+      await persistChannelPriceOverrides({ channelPriceVisibility: input.changes, projectId: row.projectId, propertyId: input.propertyId, session: fresh });
+      return propertyChannelPriceState(fresh, input.propertyId, { ...row, channelPriceVisibility: channels });
+    });
+  });
+}
+
 async function updatePropertyPriceVisibilityInTransaction(input: {
   channelPriceVisibility?: unknown;
+  expectedPolicyRevision?: unknown;
   priceVisibility?: unknown;
   projectId?: unknown;
   propertyId: unknown;
@@ -1406,9 +1512,23 @@ async function updatePropertyPriceVisibilityInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const current = await withCrmRead(input.session, (tx, fresh) => loadPropertyPricePolicyRow(tx, fresh, propertyId, true));
+  if (typeof input.projectId === "string" && input.projectId && nullableUuid(input.projectId) !== current.projectId) {
+    return { persisted: false, reason: "Conflict: property project changed. Reload before saving." };
+  }
+  const projectId = current.projectId;
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.channelPriceVisibility));
   const priceVisibility = normalizePriceVisibility(input.priceVisibility);
+  const publicPriceCents = toNullablePriceCents(input.publicPrice);
+  const changes = priceVisibility !== current.priceVisibility || !samePropertySnapshot(channelPriceVisibility, current.channelPriceVisibility) ||
+    (publicPriceCents !== null && String(publicPriceCents) !== current.publicPriceCents);
+  if (!changes) {
+    await persistChannelPriceOverrides({ channelPriceVisibility, projectId, propertyId, session: input.session });
+    return { persisted: true, data: { id: propertyId } };
+  }
+  if (input.expectedPolicyRevision !== propertyPricePolicyRevision(input.session, propertyId, current)) {
+    return { persisted: false, reason: "Conflict: price policy changed or a fresh comparison is missing. Reload before saving." };
+  }
   const row = await queryOne<IdRow>(
     `
       update seller_listings
@@ -1426,7 +1546,7 @@ async function updatePropertyPriceVisibilityInTransaction(input: {
       input.session.workspaceId,
       priceVisibility,
       JSON.stringify(channelPriceVisibility),
-      toNullablePriceCents(input.publicPrice),
+      publicPriceCents,
     ],
   );
 
@@ -1693,26 +1813,33 @@ async function savePropertyFragments(input: {
 }
 
 async function persistChannelPriceOverrides(input: {
-  channelPriceVisibility: Record<string, PropertyPriceVisibility>;
+  channelPriceVisibility: Readonly<Record<string, PropertyPriceVisibility>>;
   projectId?: string | null;
   propertyId: string;
   session: AppSession;
 }) {
+  const projectId = nullableUuid(input.projectId);
   for (const [channel, priceVisibility] of Object.entries(input.channelPriceVisibility)) {
-    const existing = await queryOne<IdRow>(
+    const rows = await queryRows<{ id: string; name: string; visibility: string | null }>(
       `
-        select id
+        select id, channel_name as name, price_visibility_override as visibility
         from property_channels
-        where workspace_id = $1
+        where workspace_id = $1::uuid
           and property_id = $2::uuid
           and channel_type = $3
-        limit 1
+          and project_id is not distinct from $4::uuid
+          and unit_id is null
+          and metadata->>'kind' is distinct from 'openimmo_offline_profile'
+        limit 2 for update
       `,
-      [input.session.workspaceId, input.propertyId, channel],
+      [input.session.workspaceId, input.propertyId, channel, projectId],
     );
+    if (rows.length > 1) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Duplicate property channel rules require review before saving.", 409);
+    const existing = rows[0];
 
     if (existing) {
-      await queryOne<IdRow>(
+      if (existing.name && existing.visibility === priceVisibility) continue;
+      const saved = await queryOne<IdRow>(
         `
           update property_channels
           set
@@ -1720,15 +1847,18 @@ async function persistChannelPriceOverrides(input: {
             channel_name = coalesce(nullif(channel_name, ''), $3),
             updated_at = now()
           where id = $1::uuid
-            and workspace_id = $2
+            and workspace_id = $2::uuid
+            and property_id = $5::uuid
+            and project_id is not distinct from $6::uuid
           returning id
         `,
-        [existing.id, input.session.workspaceId, channel, priceVisibility],
+        [existing.id, input.session.workspaceId, channel, priceVisibility, input.propertyId, projectId],
       );
+      if (!saved) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Property channel rules could not be confirmed.", 409);
       continue;
     }
 
-    await queryOne<IdRow>(
+    const saved = await queryOne<IdRow>(
       `
         insert into property_channels (
           workspace_id,
@@ -1745,13 +1875,14 @@ async function persistChannelPriceOverrides(input: {
       `,
       [
         input.session.workspaceId,
-        nullableUuid(input.projectId),
+        projectId,
         input.propertyId,
         channel,
         priceVisibility,
         JSON.stringify({ source: "property_department_price_visibility" }),
       ],
     );
+    if (!saved) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Property channel rules could not be confirmed.", 409);
   }
 }
 
@@ -1958,7 +2089,7 @@ function toSellerListing(row: SellerListingRow): SellerListing {
     availableFrom: toOptionalIso(row.availableFrom),
     availableFromText: row.availableFromText ?? undefined,
     availabilityNote: row.availabilityNote ?? undefined,
-    channelPriceVisibility: normalizePriceVisibilityMap(row.channelPriceVisibility ?? {}),
+    channelPriceVisibility: { ...normalizePriceVisibilityMap(row.channelPriceVisibility ?? {}), ...websitePriceVisibilityReadValues(row.channelPriceVisibility) },
     contactEmail: row.contactEmail ?? undefined,
     contactName: row.contactName ?? undefined,
     contactPhone: row.contactPhone ?? undefined,

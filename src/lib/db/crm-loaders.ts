@@ -1,4 +1,5 @@
 import { UNIT_DETAIL_SELECT, mapUnitDetails } from "@/lib/property-unit-details";
+import { websitePriceVisibilityReadValues } from "@/lib/property-website-price-visibility";
 import type {
   AppSession,
 } from "@/lib/auth/session";
@@ -3202,7 +3203,7 @@ function normalizePriceVisibility(value: unknown): PropertyPriceVisibility {
 
 function normalizePriceVisibilityMap(value: Record<string, unknown> | null | undefined) {
   const entries = Object.entries(asRecord(value)).map(([key, item]) => [key, normalizePriceVisibility(item)] as const);
-  return Object.fromEntries(entries);
+  return { ...Object.fromEntries(entries), ...websitePriceVisibilityReadValues(value) };
 }
 
 function normalizeContractMilestone(value: string): PropertyReservation["contractMilestone"] {

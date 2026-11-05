@@ -71,6 +71,7 @@ import { confirmedPropertyCreation, propertyWorkspaceEndpoint } from "@/lib/prop
 import { PROPERTY_AREA_MAX_SQM } from "@/lib/property-area-input";
 import { propertyCoreNumberIsKnown } from "@/lib/property-core-numbers";
 import { DirectPropertyNumericDraftError, normalizeDirectPropertyNumericDraft } from "@/lib/property-direct-numeric";
+import { applyPropertyChannelPriceEdits, propertyChannelPriceValue, type PropertyChannelPriceEdits, type PropertyChannelPriceState } from "@/lib/property-channel-price-draft";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -319,6 +320,9 @@ export function PropertyCommandCenter({
   const [query, setQuery] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState(() => assets[0]?.id ?? "");
   const [selectedChannel, setSelectedChannel] = useState<(typeof PROPERTY_CHANNEL_TYPES)[number]>("Immobilienportal");
+  const [channelPriceDrafts, setChannelPriceDrafts] = useState<Record<string, { revision: string; edits: PropertyChannelPriceEdits }>>({});
+  const [channelPriceReload, setChannelPriceReload] = useState(0);
+  const [storedChannelPrices, setStoredChannelPrices] = useState<Record<string, { state?: PropertyChannelPriceState; error?: string }>>({});
   const [storedNotice, setStoredNotice] = useState<{ scopeKey: string; value: { kind: "success" | "error"; message: string } | null } | null>(null);
   const [savingOther, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -410,6 +414,34 @@ export function PropertyCommandCenter({
   const selectedUnitBoardScope = createUnitBoardScope(selectedAsset);
   const selectedListingId = listingIdFromAssetId(selectedAsset?.id);
   const selectedListing = sellerListings.find((listing) => listing.id === selectedListingId && listing.workspaceId === context.workspaceId);
+  const channelPropertyId = selectedAsset?.sellerListingId ?? null;
+  const channelProjectId = selectedAsset?.projectId ?? null;
+  const channelPriceScopeKey = channelPropertyId ? JSON.stringify([draftUserId, context.workspaceId, channelProjectId, channelPropertyId]) : null;
+  const channelReadKey = JSON.stringify([channelPriceScopeKey, channelPriceReload]);
+  const channelPolicy = storedChannelPrices[channelReadKey]?.state;
+  const channelDraft = channelPriceScopeKey ? channelPriceDrafts[channelPriceScopeKey] : undefined;
+  const staleChannelDraft = Boolean(channelDraft && channelPolicy && channelDraft.revision !== channelPolicy.revision);
+  const channelPolicyError = storedChannelPrices[channelReadKey]?.error ?? (staleChannelDraft
+    ? (language === "de" ? "Preisregeln wurden geändert. Aktuellen Stand laden und Änderungen erneut auswählen." : "Price rules changed. Reload and select your changes again.")
+    : undefined);
+  const selectedChannelPrices = applyPropertyChannelPriceEdits(channelPolicy?.channelPriceVisibility ?? selectedAsset?.channelPriceVisibility, channelDraft?.edits);
+  useEffect(() => {
+    if (activeTab !== "channels" || !channelPropertyId || !actions.changePrice.enabled) return;
+    const controller = new AbortController();
+    const search = new URLSearchParams({ workspaceId: context.workspaceId, operation: "channel_price_visibility", propertyId: channelPropertyId });
+    void fetch(`/api/crm/properties?${search}`, { cache: "no-store", signal: controller.signal }).then(async response => {
+      const result = await response.json() as { persisted?: boolean; data?: PropertyChannelPriceState; error?: string };
+      const data = result.data;
+      if (!response.ok || result.persisted !== true || !data || data.propertyId !== channelPropertyId ||
+          data.workspaceId !== context.workspaceId || data.projectId !== channelProjectId || !/^[a-f0-9]{64}$/.test(data.revision)) {
+        throw new Error(result.error || (language === "de" ? "Preisregeln konnten nicht geladen werden." : "Could not load price rules."));
+      }
+      if (!controller.signal.aborted) setStoredChannelPrices(current => ({ ...current, [channelReadKey]: { state: data } }));
+    }).catch(error => {
+      if (!controller.signal.aborted) setStoredChannelPrices(current => ({ ...current, [channelReadKey]: { error: error instanceof Error ? error.message : "Price rules unavailable" } }));
+    });
+    return () => controller.abort();
+  }, [activeTab, actions.changePrice.enabled, channelPropertyId, channelProjectId, channelReadKey, context.workspaceId, language]);
   function propertyAreaLabel(asset: PropertyAssetSummary) {
     const listing = sellerListings.find((item) => item.id === asset.sellerListingId && item.workspaceId === asset.workspaceId);
     const knownZero = asset.areaSqm === 0 && listing?.areaSqm === 0 &&
@@ -492,10 +524,11 @@ export function PropertyCommandCenter({
   }
 
   function updateChannelPrice(channel: string, value: PropertyPriceVisibility) {
-    setDraft((current) => ({
-      ...current,
-      channelPriceVisibility: { ...current.channelPriceVisibility, [channel]: value },
-    }));
+    if (!channelPriceScopeKey || !channelPolicy || saving || staleChannelDraft) return;
+    setChannelPriceDrafts(current => ({ ...current, [channelPriceScopeKey]: {
+      revision: current[channelPriceScopeKey]?.revision ?? channelPolicy.revision,
+      edits: { ...current[channelPriceScopeKey]?.edits, [channel]: value },
+    } }));
   }
 
   function updateCostItem(index: number, key: keyof PropertyCostDraft, value: string | boolean) {
@@ -507,10 +540,10 @@ export function PropertyCommandCenter({
     }));
   }
 
-  async function postPropertyOperation(body: Record<string, unknown>) {
+  async function postPropertyOperation(body: Record<string, unknown>, headers: Record<string, string> = {}) {
     const response = await csrfFetch(`/api/crm/properties?${new URLSearchParams({ workspaceId: context.workspaceId })}`, {
       body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...headers },
       method: "POST",
     });
     const payload = await response.json().catch(() => ({ error: copy.notices.actionSaveFailed }));
@@ -526,25 +559,41 @@ export function PropertyCommandCenter({
   }
 
   async function saveSelectedPriceVisibility() {
-    if (!selectedAsset?.sellerListingId || saving) return;
+    if (!channelPolicy || !channelPriceScopeKey || !channelDraft || saving || staleChannelDraft) return;
+    const scopeKey = channelPriceScopeKey;
+    const submittedDraft = channelDraft;
     setSaving(true);
     setNotice(null);
     try {
-      await postPropertyOperation({
-        channelPriceVisibility: draft.channelPriceVisibility,
-        operation: "update_price_visibility",
-        priceVisibility: selectedAsset.priceVisibility,
-        projectId: selectedAsset.projectId,
-        propertyId: selectedAsset.sellerListingId,
-        publicPrice: selectedAsset.publicPrice ?? selectedAsset.price,
-      });
+      const result = await postPropertyOperation({
+        operation: "patch_channel_price_visibility", propertyId: channelPolicy.propertyId,
+        expectedProjectId: channelPolicy.projectId, expectedPolicyRevision: submittedDraft.revision, changes: submittedDraft.edits,
+      }, { "Idempotency-Key": crypto.randomUUID(), "X-Correlation-Id": crypto.randomUUID() });
+      if (result.persisted !== true) throw new Error(copy.notices.priceVisibilitySaveFailed);
       setNotice({ kind: "success", message: copy.notices.priceVisibilitySaved });
-      await onPropertyChanged?.();
+      setChannelPriceDrafts(current => {
+        if (current[scopeKey] !== submittedDraft) return current;
+        const next = { ...current }; delete next[scopeKey]; return next;
+      });
+      // Reload the live policy even if a successful response came from a receipt.
+      setChannelPriceReload(value => value + 1);
+      try { await onPropertyChanged?.(); } catch {
+        setNotice({ kind: "success", message: language === "de" ? "Preisregeln gespeichert. Die Objektübersicht konnte nicht neu geladen werden." : "Price rules saved. The property overview could not be refreshed." });
+      }
     } catch (error) {
       setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.priceVisibilitySaveFailed });
+      setStoredChannelPrices(current => ({ ...current, [channelReadKey]: { error: language === "de" ? "Aktuellen Stand laden und Änderungen erneut auswählen." : "Reload the current rules and select your changes again." } }));
     } finally {
       setSaving(false);
     }
+  }
+
+  function reloadSelectedPriceRules() {
+    if (!channelPriceScopeKey || saving) return;
+    setChannelPriceDrafts(current => {
+      const next = { ...current }; delete next[channelPriceScopeKey]; return next;
+    });
+    setChannelPriceReload(value => value + 1);
   }
 
   async function uploadAndAttachFile(file: File, kind: "media" | "document") {
@@ -1358,8 +1407,9 @@ export function PropertyCommandCenter({
                   {copy.channels[channel] ?? channel}
                   <select
                     className="rounded-md border border-stone-300 bg-white px-2 py-2 text-xs font-semibold normal-case tracking-normal text-slate-900"
+                    disabled={!channelPolicy || staleChannelDraft || saving || !actions.changePrice.enabled}
                     onChange={(event) => updateChannelPrice(channel, event.target.value as PropertyPriceVisibility)}
-                    value={draft.channelPriceVisibility[channel] ?? "publish_price"}
+                    value={propertyChannelPriceValue(selectedChannelPrices, channel, channelPolicy?.priceVisibility ?? selectedAsset?.priceVisibility ?? "hide_price")}
                   >
                     {PROPERTY_PRICE_VISIBILITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{copy.priceVisibility[option.value] ?? option.label}</option>)}
                   </select>
@@ -1367,9 +1417,10 @@ export function PropertyCommandCenter({
               ))}
             </div>
             <div className="grid gap-2">
-              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selectedAsset?.sellerListingId || saving || !actions.changePrice.enabled} onClick={saveSelectedPriceVisibility} type="button">
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!channelPolicy || !channelDraft || staleChannelDraft || saving || !actions.changePrice.enabled} onClick={saveSelectedPriceVisibility} type="button">
                 {copy.form.savePriceLogic}
               </button>
+              {channelPolicyError ? <div role="alert" className="text-xs text-rose-800"><p>{channelPolicyError}</p><button type="button" className="underline" disabled={saving} onClick={reloadSelectedPriceRules}>{language === "de" ? "Preisregeln neu laden" : "Reload price rules"}</button></div> : null}
               {!actions.changePrice.enabled && actions.changePrice.reason ? <p className="text-xs text-stone-600">{actions.changePrice.reason}</p> : null}
             </div>
           </div>
