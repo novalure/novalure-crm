@@ -192,7 +192,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     requireValue(Number.isInteger(config.pitrBranchLimit) && config.pitrBranchLimit >= 1 && config.pitrBranchLimit <= 35 &&
       managedChildren.length < config.pitrBranchLimit, 'PITR_CHILD_CAPACITY_UNAVAILABLE');
     await assertRealtimeDisabled(config.sourceBranchId);
-    return { pointInTime, historyRetentionSeconds, branches };
+    return { pointInTime, historyRetentionSeconds, branches, managedChildCount: managedChildren.length };
   }
   async function assertRealtimeDisabled(id) {
     const realtime = await neon(`${projectPath}/branches/${segment(id)}/realtime`);
@@ -323,6 +323,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     requireValue(!branches.some(row => row.name === name), 'ISOLATED_BRANCH_NAME_ALREADY_EXISTS');
     requireValue(!pointCopyAttempted, 'PITR_COPY_ALREADY_ATTEMPTED');
     pointCopyAttempted = true;
+    await requirePointCapacityPolicy();
     pointCapacityReservation = await reservePointCapacity(pointClaimOwner);
     const { branches: before } = await readPointInTimeState();
     requireValue(!before.some(row => row.name === name), 'ISOLATED_BRANCH_NAME_ALREADY_EXISTS');
@@ -440,6 +441,27 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       return { storeId, pathname, access: 'private', body: result.stream };
     } catch (error) { throw safeFailure(error); }
   }
+  async function putPointCapacityObject(pathname, bytes) {
+    const result = await (await sdk()).put(pathname, bytes, { ...await blobOptions(config.targetStoreId), access: 'private',
+      allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' });
+    assertBlobObject(result, config.targetStoreId, pathname);
+  }
+  async function requirePointCapacityPolicy() {
+    const pathname = `${config.prefix}/pitr-capacity/policy.json`;
+    const bytes = Buffer.from(JSON.stringify({ format: 'crm-full-backup-pitr-capacity-policy-v1', projectId: config.neonProjectId,
+      sourceBranchId: config.sourceBranchId, targetStoreId: config.targetStoreId, branchLimit: config.pitrBranchLimit }));
+    const existing = await readBlob(config.targetStoreId, pathname);
+    if (existing) {
+      await assertExactCapacityBytes(existing, bytes, 'PITR_CAPACITY_POLICY_MISMATCH');
+      return;
+    }
+    const { managedChildCount } = await readPointInTimeState();
+    requireValue(managedChildCount === 0, 'PITR_CAPACITY_POLICY_RECONCILIATION_REQUIRED');
+    try {
+      await putPointCapacityObject(pathname, bytes);
+      await assertExactCapacityBytes(await readBlob(config.targetStoreId, pathname), bytes, 'PITR_CAPACITY_POLICY_UNCONFIRMED');
+    } catch { throw new CrmBackupError('PITR_CAPACITY_POLICY_UNCONFIRMED'); }
+  }
   async function reservePointCapacity(backupId) {
     // All opted-in executions share the fixed project prefix and numbered
     // capacity objects, even when their individual PITR points differ.
@@ -454,9 +476,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
         const bytes = Buffer.from(JSON.stringify({ format: 'crm-full-backup-pitr-capacity-v1', slot, backupId,
           pointInTime: config.pointInTime, projectId: config.neonProjectId, sourceBranchId: config.sourceBranchId,
           targetStoreId: config.targetStoreId }));
-        const result = await (await sdk()).put(pathname, bytes, { ...await blobOptions(config.targetStoreId), access: 'private',
-          allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' });
-        assertBlobObject(result, config.targetStoreId, pathname);
+        await putPointCapacityObject(pathname, bytes);
         const reservation = { pathname, bytes };
         await assertPointCapacityReservation(reservation);
         return reservation;
@@ -469,15 +489,17 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     throw new CrmBackupError('PITR_CHILD_CAPACITY_UNAVAILABLE');
   }
   async function assertPointCapacityReservation({ pathname, bytes }) {
-    const readback = await readBlob(config.targetStoreId, pathname);
-    requireValue(readback, 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+    await assertExactCapacityBytes(await readBlob(config.targetStoreId, pathname), bytes, 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+  }
+  async function assertExactCapacityBytes(readback, bytes, errorCode) {
+    requireValue(readback, errorCode);
     let offset = 0;
     for await (const chunk of readback.body) {
       const actual = Buffer.from(chunk);
-      requireValue(actual.equals(bytes.subarray(offset, offset + actual.length)), 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+      requireValue(actual.equals(bytes.subarray(offset, offset + actual.length)), errorCode);
       offset += actual.length;
     }
-    requireValue(offset === bytes.length, 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+    requireValue(offset === bytes.length, errorCode);
   }
   async function writeTarget(pathname, bytes, settings) {
     assertPathname(pathname);

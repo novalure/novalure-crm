@@ -13,6 +13,9 @@ const pathname = '11111111-1111-4111-8111-111111111111/private.pdf';
 const restoreArgs = { snapshotId: config.snapshotId, name: 'crm-backup-backup-synthetic-proof', finalize: false };
 const code = value => error => error?.code === value;
 const claimSettings = { access: 'private', allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' };
+const capacityPolicyPath = `${config.prefix}/pitr-capacity/policy.json`;
+const capacityPolicy = branchLimit => ({ format: 'crm-full-backup-pitr-capacity-policy-v1', projectId: config.neonProjectId,
+  sourceBranchId: config.sourceBranchId, targetStoreId: config.targetStoreId, branchLimit });
 function claimPoint(ports, point = pointInTime, backupId = restoreArgs.name.slice('crm-backup-'.length)) {
   const record = { backupId, pointInTime: point, sourceBranchId: config.sourceBranchId,
     sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId };
@@ -99,12 +102,13 @@ function fixture(overrides = {}) {
       const bytes = options.storeId === config.sourceStoreId ? Buffer.from('abc') : stored.get(path);
       if (path.includes('/pitr-capacity/')) await overrides.onCapacityRead?.(path, bytes);
       if (!bytes) return null;
-      const readBytes = overrides.tamperCapacityReadback && path.includes('/pitr-capacity/') ? Buffer.from('unexpected reservation') : bytes;
+      const readBytes = overrides.tamperCapacityReadback && path.includes('/pitr-capacity/slot-') ? Buffer.from('unexpected reservation') : bytes;
       return { statusCode: 200, blob: { pathname: path, url: url(options.storeId, path) }, stream: new ReadableStream({ start(controller) { controller.enqueue(readBytes); controller.close(); } }) }; },
     put: async (path, bytes, options) => { blobs.push({ method: 'put', storeId: options.storeId, path, access: options.access,
       allowOverwrite: options.allowOverwrite, addRandomSuffix: options.addRandomSuffix });
       assert.equal(stored.has(path), false); stored.set(path, Buffer.from(bytes));
-      if (overrides.lostCapacityAck && path.includes('/pitr-capacity/')) throw new Error('SYNTHETIC capacity acknowledgement lost');
+      if ((overrides.lostCapacityAck && path.includes('/pitr-capacity/slot-')) || (overrides.lostPolicyAck && path === capacityPolicyPath))
+        throw new Error('SYNTHETIC capacity acknowledgement lost');
       if (overrides.productionDriftAfterFullPut && path.endsWith('/FULL.json')) production.branch_id = 'br-unexpected-production-binding';
       return { pathname: path, url: url(options.storeId, path) }; },
   };
@@ -282,7 +286,8 @@ test('PITR capacity counts archived managed children both before claim and immed
 });
 
 test('two distinct point claims racing on the last durable capacity slot send one child POST', { timeout: 3000 }, async () => {
-  const stored = new Map(), slotPath = `${config.prefix}/pitr-capacity/slot-1.json`;
+  const stored = new Map([[capacityPolicyPath, Buffer.from(JSON.stringify(capacityPolicy(1)))]]);
+  const slotPath = `${config.prefix}/pitr-capacity/slot-1.json`;
   let reads = 0, release;
   const bothObservedFree = new Promise(resolve => { release = resolve; });
   const onCapacityRead = async (path, bytes) => {
@@ -309,6 +314,39 @@ test('two distinct point claims racing on the last durable capacity slot send on
     .every(call => call.storeId === config.targetStoreId && call.access === 'private' && call.allowOverwrite === false && call.addRandomSuffix === false));
 });
 
+test('the first capacity policy pins the cap across later processes using a different limit', async () => {
+  const first = fixture({ config: { ...pointConfig, pitrBranchLimit: 1 } }), firstPorts = await first.make();
+  await claimPoint(firstPorts);
+  await firstPorts.copyPointInTime({ name: restoreArgs.name });
+  assert.deepEqual(JSON.parse(first.stored.get(capacityPolicyPath)), capacityPolicy(1));
+  const otherPoint = '2026-11-01T19:31:00Z', otherBackup = 'backup-synthetic-point-other';
+  const second = fixture({ stored: first.stored, config: { ...pointConfig, pointInTime: otherPoint } }), secondPorts = await second.make();
+  await claimPoint(secondPorts, otherPoint, otherBackup);
+  await assert.rejects(secondPorts.copyPointInTime({ name: `crm-backup-${otherBackup}` }), code('PITR_CAPACITY_POLICY_MISMATCH'));
+  assert.equal(second.blobs.some(call => call.path.includes('/pitr-capacity/slot-')), false);
+  assert.equal(second.blobs.some(call => call.path === capacityPolicyPath && call.method === 'put'), false);
+  assert.ok(second.calls.every(call => call.method === 'GET'));
+});
+
+test('initial capacity policy requires zero managed children and a confirmed no-overwrite write', async () => {
+  const occupied = fixture({ config: pointConfig }), occupiedPorts = await occupied.make();
+  occupied.extraBranches.push({ id: 'br-archived-synthetic-child', project_id: config.neonProjectId, name: 'crm-backup-previous-proof',
+    parent_id: config.sourceBranchId, default: false, primary: false, current_state: 'archived' });
+  await claimPoint(occupiedPorts);
+  await assert.rejects(occupiedPorts.copyPointInTime({ name: restoreArgs.name }), code('PITR_CAPACITY_POLICY_RECONCILIATION_REQUIRED'));
+  assert.equal(occupied.stored.has(capacityPolicyPath), false);
+  assert.ok(occupied.calls.every(call => call.method === 'GET'));
+
+  const lost = fixture({ config: pointConfig, lostPolicyAck: true }), lostPorts = await lost.make();
+  await claimPoint(lostPorts);
+  await assert.rejects(lostPorts.copyPointInTime({ name: restoreArgs.name }), code('PITR_CAPACITY_POLICY_UNCONFIRMED'));
+  await assert.rejects(lostPorts.copyPointInTime({ name: restoreArgs.name }), code('PITR_COPY_ALREADY_ATTEMPTED'));
+  assert.equal(lost.stored.has(capacityPolicyPath), true);
+  assert.equal(lost.blobs.filter(call => call.path === capacityPolicyPath && call.method === 'put').length, 1);
+  assert.equal(lost.blobs.some(call => call.path.includes('/pitr-capacity/slot-')), false);
+  assert.ok(lost.calls.every(call => call.method === 'GET'));
+});
+
 test('a lost capacity write response or mismatched readback neither tries a second slot nor creates a branch', async () => {
   const slotPath = `${config.prefix}/pitr-capacity/slot-1.json`;
   for (const overrides of [{ lostCapacityAck: true }, { tamperCapacityReadback: true }]) {
@@ -332,6 +370,7 @@ test('PITR claims require the exact point namespace and fixed private target bin
   await assert.rejects(write(`${config.prefix}/pitr/20261101193001/claim.json`), code('TARGET_BACKUP_PREFIX_REQUIRED'));
   await assert.rejects(write(`${config.prefix}/snapshots/${config.snapshotId}/claim.json`), code('TARGET_BACKUP_PREFIX_REQUIRED'));
   await assert.rejects(write(`${config.prefix}/pitr-capacity/slot-1.json`), code('TARGET_BACKUP_PREFIX_REQUIRED'));
+  await assert.rejects(write(capacityPolicyPath), code('TARGET_BACKUP_PREFIX_REQUIRED'));
   await assert.rejects(write(path, { ...record, targetStoreId: config.sourceStoreId }), code('PITR_CLAIM_SCOPE_MISMATCH'));
   assert.equal(f.blobs.length, 0);
   await write(path);
