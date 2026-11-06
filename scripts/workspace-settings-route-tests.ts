@@ -5,6 +5,8 @@ import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 import { seedSalesBrowser } from "./lib/sales-browser-fixture.mjs";
 import { createCsrfToken } from "../src/lib/security/csrf-core";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
+import { countActiveWorkspaceProjects } from "../src/lib/crm-presentation-data";
+import { GET as getCrmCore } from "../src/app/api/crm/core/route";
 import { GET, POST, PATCH } from "../src/app/api/workspaces/route";
 
 // Uses a new disposable loopback PostgreSQL database, real cookie/CSRF routes,
@@ -44,13 +46,14 @@ test("workspace settings commit with their audit and fail atomically", { timeout
     }));
     assert.equal(provision.status, 201, await provision.clone().text());
     const created = await provision.json(), workspaceId: string = created.workspace.id;
+    const archivedProjectId = randomUUID();
     const path = `/api/workspaces?workspaceId=${workspaceId}`;
     const membership = (await db.admin.query("select id from workspace_users where workspace_id=$1 and auth_identity_id=$2", [workspaceId, fixture.authIdentityId])).rows[0].id;
     const saved = () => db.admin.query("select setup_state,operating_model,customer_type,team_structure,active_calendar_provider from workspaces where id=$1", [workspaceId]).then(result => result.rows[0]);
     const originBefore = (await db.admin.query("select setup_state from workspaces where id=$1", [fixture.workspaceId])).rows[0];
 
     await t.test("workspace summaries count active projects in each membership scope", async () => {
-      await db.admin.query("insert into projects(workspace_id,name,type,status) values($1,'SYNTHETIC archived','Bauträger','Archiviert')", [workspaceId]);
+      await db.admin.query("insert into projects(id,workspace_id,name,type,status) values($1,$2,'SYNTHETIC archived','Bauträger','Archiviert')", [archivedProjectId, workspaceId]);
       const hiddenWorkspace = randomUUID();
       await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC unrelated','managed_by_novalure')", [hiddenWorkspace]);
       await db.admin.query("insert into projects(workspace_id,name,type,status) values($1,'SYNTHETIC hidden','Bauträger','Aktiv')", [hiddenWorkspace]);
@@ -74,9 +77,10 @@ test("workspace settings commit with their audit and fail atomically", { timeout
       assert.equal(state.setup_state.updatedByUserId, membership);
       assert.equal(state.operating_model, "managed_by_novalure");
       assert.equal(state.active_calendar_provider, "none");
-      const audits = (await db.admin.query("select actor_user_id,after from audit_logs where workspace_id=$1 and action='workspace.setup_updated'", [workspaceId])).rows;
+      const audits = (await db.admin.query("select actor_user_id,before,after from audit_logs where workspace_id=$1 and action='workspace.setup_updated'", [workspaceId])).rows;
       assert.equal(audits.length, 1);
       assert.equal(audits[0].actor_user_id, membership);
+      assert.equal(audits[0].before.setupState.syntheticMarker, undefined);
       assert.equal(audits[0].after.setupState.syntheticMarker, "persisted");
       assert.deepEqual((await db.admin.query("select setup_state from workspaces where id=$1", [fixture.workspaceId])).rows[0], originBefore);
     });
@@ -86,14 +90,62 @@ test("workspace settings commit with their audit and fail atomically", { timeout
       // Synthetic fault injection adds a rejection; it never disables audit/RLS.
       await db.admin.query("create function synthetic_reject_workspace_settings_audit() returns trigger language plpgsql as $$ begin if new.action='workspace.setup_updated' then raise exception 'SYNTHETIC audit unavailable'; end if; return new; end $$; create trigger synthetic_workspace_settings_audit before insert on audit_logs for each row execute function synthetic_reject_workspace_settings_audit()");
       try {
-        const response = await PATCH(request(path, "PATCH", { setupState: { syntheticMarker: "must roll back" } }));
-        assert.equal(response.status, 503);
-        assert.doesNotMatch(await response.text(), /SYNTHETIC audit unavailable|audit_logs/);
-        assert.deepEqual(await saved(), before);
-        assert.equal(Number((await db.admin.query("select count(*) from audit_logs where workspace_id=$1 and action='workspace.setup_updated'", [workspaceId])).rows[0].count), 1);
+        for (const input of [
+          { setupState: { syntheticMarker: "must roll back" } },
+          { activeCalendarProvider: "google", workspaceSetupChange: { field: "activeCalendarProvider", expectedValue: before.active_calendar_provider } },
+        ]) {
+          const response = await PATCH(request(path, "PATCH", input));
+          assert.equal(response.status, 503);
+          assert.doesNotMatch(await response.text(), /SYNTHETIC audit unavailable|audit_logs/);
+          assert.deepEqual(await saved(), before);
+          assert.equal(Number((await db.admin.query("select count(*) from audit_logs where workspace_id=$1 and action='workspace.setup_updated'", [workspaceId])).rows[0].count), 1);
+        }
       } finally {
         await db.admin.query("drop trigger synthetic_workspace_settings_audit on audit_logs; drop function synthetic_reject_workspace_settings_audit()");
       }
+    });
+
+    await t.test("concurrent field changes preserve each other and stale or invalid changes do not write", async () => {
+      const before = await saved();
+      const [calendar, team] = await Promise.all([
+        PATCH(request(path, "PATCH", {
+          activeCalendarProvider: "google",
+          teamStructure: "no_sales_team",
+          setupState: { syntheticMarker: "must not change" },
+          workspaceSetupChange: { field: "activeCalendarProvider", expectedValue: before.active_calendar_provider },
+        })),
+        PATCH(request(path, "PATCH", {
+          teamStructure: "project_sales_available",
+          workspaceSetupChange: { field: "teamStructure", expectedValue: before.team_structure },
+        })),
+      ]);
+      assert.equal(calendar.status, 200, await calendar.clone().text());
+      assert.equal(team.status, 200, await team.clone().text());
+      const state = await saved();
+      assert.equal(state.active_calendar_provider, "google");
+      assert.equal(state.team_structure, "project_sales_available");
+      assert.equal(state.setup_state.syntheticMarker, "persisted");
+      const stale = await PATCH(request(path, "PATCH", {
+        activeCalendarProvider: "microsoft",
+        workspaceSetupChange: { field: "activeCalendarProvider", expectedValue: before.active_calendar_provider },
+      }));
+      assert.equal(stale.status, 409);
+      assert.equal((await stale.json()).code, "WORKSPACE_SETUP_CONFLICT");
+      const invalid = await PATCH(request(path, "PATCH", {
+        activeCalendarProvider: "microsoft",
+        workspaceSetupChange: { field: "activeCalendarProvider" },
+      }));
+      assert.equal(invalid.status, 400);
+      assert.deepEqual(await saved(), state);
+      const audits = (await db.admin.query("select before,after from audit_logs where workspace_id=$1 and action='workspace.setup_updated'", [workspaceId])).rows;
+      assert.equal(audits.length, 3);
+      const calendarAudit = audits.find(audit => audit.before.activeCalendarProvider !== audit.after.activeCalendarProvider);
+      const teamAudit = audits.find(audit => audit.before.teamStructure !== audit.after.teamStructure);
+      assert.equal(calendarAudit.before.activeCalendarProvider, before.active_calendar_provider);
+      assert.equal(calendarAudit.after.activeCalendarProvider, "google");
+      assert.equal(teamAudit.before.teamStructure, before.team_structure);
+      assert.equal(teamAudit.after.teamStructure, "project_sales_available");
+      assert.deepEqual((await db.admin.query("select setup_state from workspaces where id=$1", [fixture.workspaceId])).rows[0], originBefore);
     });
 
     await t.test("current viewer membership cannot change settings through an existing internal cookie", async () => {
@@ -106,12 +158,19 @@ test("workspace settings commit with their audit and fail atomically", { timeout
 
     await t.test("project-restricted membership summaries count only readable projects", async () => {
       await db.admin.query("insert into projects(workspace_id,name,type,status) values($1,'SYNTHETIC unauthorized active project','Bauträger','Aktiv')", [workspaceId]);
-      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false)", [workspaceId, created.project.id, membership]);
+      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$4,true,false),($1,$3,$4,true,false)", [workspaceId, created.project.id, archivedProjectId, membership]);
       assert.equal(Number((await db.admin.query("select count(*) from projects where workspace_id=$1 and status<>'Archiviert'", [workspaceId])).rows[0].count), 2);
       const response = await GET(new Request(origin + "/api/workspaces", { headers: { cookie: "novalure_session=" + cookie } }));
       assert.equal(response.status, 200, await response.clone().text());
       const payload = await response.json();
       assert.equal(payload.workspaces.find((item: { id: string }) => item.id === workspaceId).activeProjects, 1);
+
+      const coreResponse = await getCrmCore(new Request(`${origin}/api/crm/core?workspaceId=${workspaceId}`, { headers: { cookie: "novalure_session=" + cookie } }));
+      assert.equal(coreResponse.status, 200, await coreResponse.clone().text());
+      const core = await coreResponse.json();
+      assert.equal(core.moduleSources.projects, "database");
+      assert.deepEqual(core.data.projects.map((project: { id: string }) => project.id).sort(), [archivedProjectId, created.project.id].sort());
+      assert.equal(countActiveWorkspaceProjects(core.data.projects, workspaceId), 1);
     });
   } finally {
     await closeLocalTestPool();

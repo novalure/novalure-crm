@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
+import { countActiveWorkspaceProjects, selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
 import { Notice as CommandNotice } from "../../design-c/components/ui";
 import { canAccessCrmBilling, getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
 import { CrmCommandSearch } from "@/components/crm-command-search";
@@ -113,6 +113,10 @@ import {
   createWorkspaceProductContext,
   isWorkspaceModuleEnabled,
   hasProductCapability,
+  isCalendarProviderChoice,
+  isWorkspaceCustomerType,
+  isWorkspaceOperatingModel,
+  isWorkspaceTeamStructure,
   type CalendarProviderChoice,
   type ProductRole,
   type WorkspaceModuleKey,
@@ -1398,7 +1402,18 @@ type WorkspaceSetupState = Pick<
   WorkspaceProductContext,
   "activeCalendarProvider" | "customerType" | "operatingModel" | "teamStructure"
 >;
-type WorkspaceSetupSaveState = "idle" | "saving" | "saved" | "error";
+type WorkspaceSetupSaveState = "idle" | "saving" | "saved" | "reloaded" | "error";
+
+function readWorkspaceSetup(
+  workspace: Partial<ManagedWorkspaceOption> | undefined,
+  workspaceId: string,
+): WorkspaceSetupState | null {
+  if (!workspace || workspace.id !== workspaceId) return null;
+  const { activeCalendarProvider, customerType, operatingModel, teamStructure } = workspace;
+  if (!isCalendarProviderChoice(activeCalendarProvider) || !isWorkspaceCustomerType(customerType) ||
+      !isWorkspaceOperatingModel(operatingModel) || !isWorkspaceTeamStructure(teamStructure)) return null;
+  return { activeCalendarProvider, customerType, operatingModel, teamStructure };
+}
 
 type ProjectCommandCenterCopy = {
   title: string;
@@ -2343,18 +2358,14 @@ function WorkspaceModePanel({
           {saveState !== "idle" ? (
             <p
               className={`mt-3 text-sm font-semibold ${
-                saveState === "error" ? "text-rose-700" : "text-emerald-700"
+                saveState === "error" || saveState === "reloaded" ? "text-rose-700" : "text-emerald-700"
               }`}
             >
-              {saveState === "saving"
-                ? modeCopy.saveState.saving
-                : saveState === "saved"
-                  ? modeCopy.saveState.saved
-                  : modeCopy.saveState.error}
+              {modeCopy.saveState[saveState]}
             </p>
           ) : null}
         </div>
-        <div className="grid w-full min-w-0 gap-3 md:grid-cols-2 xl:max-w-3xl">
+        <fieldset disabled={saveState === "saving" || saveState === "error"} className="grid w-full min-w-0 gap-3 md:grid-cols-2 xl:max-w-3xl">
           <label className="grid min-w-0 gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
             {modeCopy.customerType}
             <select
@@ -2419,7 +2430,7 @@ function WorkspaceModePanel({
               ))}
             </select>
           </label>
-        </div>
+        </fieldset>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         {generatedDefaults.map((item) => (
@@ -2933,7 +2944,7 @@ export function CrmWorkspace({
   const propertyDraftStore = usePropertyDraftSessionStore(sessionUserId);
   const personalCalendarStore = usePersonalCalendarSessionStore(sessionUserId);
   const coreData = useMemo(() => selectAuthoritativeCrmPresentation(suppliedCoreData), [suppliedCoreData]);
-  const workspace = { ...sessionWorkspace, plan: initialLanguage === "de" ? "Nicht verfügbar" : "Unavailable", activeProjects: coreData.projects.length, activeUsers: 1 };
+  const workspace = { ...sessionWorkspace, plan: initialLanguage === "de" ? "Nicht verfügbar" : "Unavailable", activeProjects: countActiveWorkspaceProjects(coreData.projects, sessionWorkspace.id), activeUsers: 1 };
   const sessionUsers: WorkspaceUser[] = [{ id: sessionUserId, workspaceId: sessionWorkspace.id, name: sessionUserName, email: "", role: sessionRole, productRole: sessionProductRole, status: "active" }];
   const router = useRouter();
   useEffect(() => {
@@ -2994,7 +3005,7 @@ export function CrmWorkspace({
   const [liveCoreData, setLiveCoreData] = useState(coreData);
   const [activeWorkspace, setActiveWorkspace] = useState<ManagedWorkspaceOption>(() => ({
     activeCalendarProvider: sessionWorkspace.activeCalendarProvider ?? workspace.activeCalendarProvider ?? "none",
-    activeProjects: coreData.projects.length,
+    activeProjects: workspace.activeProjects,
     activeUsers: sessionUsers.length,
     customerType: sessionWorkspace.customerType ?? workspace.customerType ?? "real_estate_broker",
     id: sessionWorkspace.id,
@@ -3012,6 +3023,7 @@ export function CrmWorkspace({
     guard: createCrmCoreRequestGuard(sessionWorkspace.id),
   }), [sessionUserId, sessionWorkspace.id]);
   const coreRequestGuard = coreRequestSession.guard;
+  const workspaceSetupWrites = useRef(new Map<string, { guard: typeof coreRequestGuard; write: Promise<void> }>());
   const coreNavigationRef = useRef({ workspaceId: activeWorkspace.id, projects: liveCoreData.projects });
   useLayoutEffect(() => {
     coreNavigationRef.current = { workspaceId: activeWorkspace.id, projects: liveCoreData.projects };
@@ -3151,13 +3163,20 @@ export function CrmWorkspace({
     setScopeHydrated(false);
 
     try {
+      // Returning to a workspace must read its settings after any local save settles.
+      const pendingSetup = workspaceSetupWrites.current.get(nextWorkspace.id);
+      if (pendingSetup?.guard === coreRequestGuard) await pendingSetup.write;
       const query = nextWorkspace.id !== sessionWorkspace.id
         ? `?workspaceId=${encodeURIComponent(nextWorkspace.id)}`
         : "";
       const response = await fetch(`/api/crm/core${query}`, { cache: "no-store" });
       if (!response.ok) throw new Error("CRM data refresh failed");
 
-      const payload = (await response.json()) as { activeWorkspaceId?: string; data?: CoreCrmDataResult };
+      const payload = (await response.json()) as {
+        activeWorkspaceId?: string;
+        data?: CoreCrmDataResult;
+        workspaceSetup?: Partial<ManagedWorkspaceOption>;
+      };
       if (!payload.data || payload.activeWorkspaceId !== nextWorkspace.id) throw new Error("CRM data refresh failed");
       const presentation = selectAuthoritativeCrmPresentation(payload.data);
 
@@ -3182,8 +3201,10 @@ export function CrmWorkspace({
       setCrmScope(nextScope);
       setUnitBoardFocusScope(null);
       setPropertyFocusAssetId(undefined);
-      setActiveWorkspace(nextWorkspace);
-      setWorkspaceSetup({
+      const storedSetup = readWorkspaceSetup(payload.workspaceSetup, nextWorkspace.id);
+      setActiveWorkspace({ ...nextWorkspace, ...storedSetup });
+      setWorkspaceSetupSaveState("idle");
+      setWorkspaceSetup(storedSetup ?? {
         activeCalendarProvider: nextWorkspace.activeCalendarProvider ?? "none",
         customerType: nextWorkspace.customerType ?? "real_estate_broker",
         operatingModel: nextWorkspace.operatingModel ?? "self_service_customer",
@@ -3497,7 +3518,9 @@ export function CrmWorkspace({
   const isBillingSection = ["billing", "aiBillingAdmin", "aiAssistant"].includes(visibleActiveNavigationEntry.id);
   const unavailableSectionCollections = isBillingSection ? [] : unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
   const sectionScopeUnavailable = (isBillingSection || visibleActiveSection !== "dashboard") && (!scopeHydrated || projectScopeInvalid);
-  const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects ? allProjects.length : "—";
+  const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects
+    ? countActiveWorkspaceProjects(projectRecords, activeWorkspace.id)
+    : "—";
   const relatedSectionUnavailable = ["analysis", "dataHygiene"].includes(visibleActiveSection);
   const sessionOnlySectionUnavailable = activeWorkspace.id !== sessionWorkspace.id && ["forms", "customerAccess"].includes(visibleActiveSection);
 
@@ -3731,6 +3754,7 @@ export function CrmWorkspace({
       }
 
       const persistedProject = payload.project;
+      const updatedProjects = [persistedProject, ...projectRecords.filter((project) => project.id !== persistedProject.id)];
 
       setLiveCoreData((current) => sameEditor() ? ({
         ...current,
@@ -3741,12 +3765,9 @@ export function CrmWorkspace({
       }) : current);
       setActiveWorkspace((current) => sameEditor() && current.id === activeWorkspace.id ? ({
         ...current,
-        activeProjects: Math.max(current.activeProjects ?? 0, projectRecords.length + 1),
+        activeProjects: Math.max(current.activeProjects ?? 0, countActiveWorkspaceProjects(updatedProjects, current.id)),
       }) : current);
-      handleProjectScopeChange(persistedProject.id, [
-        persistedProject,
-        ...projectRecords.filter((project) => project.id !== persistedProject.id),
-      ]);
+      handleProjectScopeChange(persistedProject.id, updatedProjects);
       expectedUrl = window.location.href;
       setProjectNoticeTone("success");
       setProjectNotice(copy.dialogs.project.preparedNotice(persistedProject.name));
@@ -4021,67 +4042,82 @@ export function CrmWorkspace({
     key: Key,
     value: WorkspaceSetupState[Key],
   ) {
-    const nextSetup = { ...workspaceSetup, [key]: value };
-    setWorkspaceSetup(nextSetup);
-    void persistWorkspaceSetup(nextSetup);
-    if (key === "activeCalendarProvider") {
-      setProjectDraft((current) => ({
-        ...current,
-        calendarProvider: value as CalendarProviderChoice,
-        meetingProvider:
-          value === "google"
-            ? "google-meet"
-            : value === "microsoft"
-              ? "microsoft-teams"
-              : "manual-link",
-      }));
-    }
+    const workspaceId = activeWorkspace.id;
+    const pending = workspaceSetupWrites.current.get(workspaceId);
+    if (pending?.guard === coreRequestGuard || workspaceSwitchState === "loading" || workspaceSetupSaveState === "error") return;
+
+    const write = persistWorkspaceSetup(workspaceId, key, value);
+    const attempt = { guard: coreRequestGuard, write };
+    workspaceSetupWrites.current.set(workspaceId, attempt);
+    void write.finally(() => {
+      if (workspaceSetupWrites.current.get(workspaceId) === attempt) workspaceSetupWrites.current.delete(workspaceId);
+    });
   }
 
-  async function persistWorkspaceSetup(nextSetup: WorkspaceSetupState) {
+  async function persistWorkspaceSetup<Key extends keyof WorkspaceSetupState>(
+    workspaceId: string,
+    field: Key,
+    value: WorkspaceSetupState[Key],
+  ) {
     setWorkspaceSetupSaveState("saving");
 
+    const editorRevision = projectEditorRevisionRef.current;
+    const isCurrent = () => coreRequestGuard.isActiveWorkspace(workspaceId);
+    const applyStoredSetup = (setup: WorkspaceSetupState) => {
+      setWorkspaceSetup(setup);
+      setAvailableWorkspaces((current) => current.map((workspace) =>
+        workspace.id === workspaceId ? { ...workspace, ...setup } : workspace,
+      ));
+      const provider = setup.activeCalendarProvider;
+      if (provider !== workspaceSetup.activeCalendarProvider && projectEditorRevisionRef.current === editorRevision) {
+        setProjectDraft((current) => ({
+          ...current,
+          calendarProvider: provider,
+          meetingProvider: provider === "google" ? "google-meet" : provider === "microsoft" ? "microsoft-teams" : "manual-link",
+        }));
+      }
+    };
+    const query = workspaceId !== sessionWorkspace.id
+      ? `?workspaceId=${encodeURIComponent(workspaceId)}`
+      : "";
+
     try {
-      const query = activeWorkspace.id !== sessionWorkspace.id
-        ? `?workspaceId=${encodeURIComponent(activeWorkspace.id)}`
-        : "";
       const response = await csrfFetch(`/api/workspaces${query}`, {
         body: JSON.stringify({
-          ...nextSetup,
-          setupState: {
-            generatedDefaults: {
-              calendarProvider: nextSetup.activeCalendarProvider,
-              customerType: nextSetup.customerType,
-              navigationPreset: getDefaultNavigationPresetId({
-                ...workspaceContext,
-                ...nextSetup,
-              }),
-              operatingModel: nextSetup.operatingModel,
-              teamStructure: nextSetup.teamStructure,
-            },
-          },
+          [field]: value,
+          workspaceSetupChange: { field, expectedValue: workspaceSetup[field] },
         }),
         headers: { "Content-Type": "application/json" },
         method: "PATCH",
+        signal: AbortSignal.timeout(15_000),
       });
+      if (!isCurrent()) return;
       const payload = response.ok
-        ? await response.json() as { workspace?: Partial<WorkspaceSetupState> }
+        ? await response.json() as { persisted?: boolean; workspace?: Partial<ManagedWorkspaceOption> }
         : null;
+      const stored = readWorkspaceSetup(payload?.workspace, workspaceId);
+      if (payload?.persisted !== true || !stored) throw new Error("workspace_setup_save_unconfirmed");
 
-      if (!response.ok || !payload?.workspace) {
-        throw new Error("workspace_setup_save_failed");
-      }
-
-      setWorkspaceSetup((current) => ({
-        activeCalendarProvider:
-          payload.workspace?.activeCalendarProvider ?? current.activeCalendarProvider,
-        customerType: payload.workspace?.customerType ?? current.customerType,
-        operatingModel: payload.workspace?.operatingModel ?? current.operatingModel,
-        teamStructure: payload.workspace?.teamStructure ?? current.teamStructure,
-      }));
+      if (!isCurrent()) return;
+      applyStoredSetup(stored);
       setWorkspaceSetupSaveState("saved");
     } catch {
-      setWorkspaceSetupSaveState("error");
+      if (!isCurrent()) return;
+      try {
+        const response = await fetch("/api/workspaces", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+        if (!response.ok) throw new Error("workspace_setup_readback_failed");
+        const payload = await response.json() as { source?: string; workspaces?: Partial<ManagedWorkspaceOption>[] };
+        const workspace = payload.source === "database" && Array.isArray(payload.workspaces)
+          ? payload.workspaces.find((item) => item.id === workspaceId)
+          : undefined;
+        const stored = readWorkspaceSetup(workspace, workspaceId);
+        if (!stored) throw new Error("workspace_setup_readback_unconfirmed");
+        if (!isCurrent()) return;
+        applyStoredSetup(stored);
+        setWorkspaceSetupSaveState("reloaded");
+      } catch {
+        if (isCurrent()) setWorkspaceSetupSaveState("error");
+      }
     }
   }
 

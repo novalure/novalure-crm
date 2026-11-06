@@ -16,6 +16,7 @@ import { KnowledgeCenterError } from "../src/lib/knowledge-center/policy";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
 import { createNearLimitDocx, createNearLimitPdf, DOCX_MIME } from "./lib/knowledge-document-fixtures";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { applyMediaProjectRuntimeFunctions } from "./lib/media-project-runtime-fixture.mjs";
 
 const applicationMaximumBytes = 10 * 1024 * 1024;
 
@@ -42,6 +43,7 @@ test("durable private upload reservations serialize capacity, tenant isolation a
   const code = (expected: string) => (error: unknown) => error instanceof KnowledgeCenterError && error.code === expected;
   try {
     await applySalesSchema(db, { maxMigrationNumber: 108 });
+    await applyMediaProjectRuntimeFunctions(db);
     for (const key of keys) delete process.env[key];
     Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, CRM_LOCAL_TEST_DATABASE: "1", NODE_ENV: "test", NOVALURE_MEDIA_ROOT: mediaRoot });
     const repository = await import("../src/lib/knowledge-center/repository");

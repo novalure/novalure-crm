@@ -1571,7 +1571,8 @@ export const dashboardCopy = {
         novalure: "Novalure internal dashboard",
       },
       saveState: {
-        error: "Workspace setup could not be saved.",
+        error: "The stored workspace settings could not be verified. Reload the page before changing them again.",
+        reloaded: "The save was not confirmed. The stored workspace settings were reloaded.",
         saved: "Workspace setup saved.",
         saving: "Saving workspace setup.",
       },
@@ -2384,7 +2385,8 @@ export const dashboardCopy = {
         novalure: "Novalure internes Dashboard",
       },
       saveState: {
-        error: "Workspace-Setup konnte nicht gespeichert werden.",
+        error: "Die gespeicherten Workspace-Einstellungen konnten nicht geprüft werden. Lade die Seite vor weiteren Änderungen neu.",
+        reloaded: "Die Speicherung wurde nicht bestätigt. Die gespeicherten Workspace-Einstellungen wurden neu geladen.",
         saved: "Workspace-Setup gespeichert.",
         saving: "Workspace-Setup wird gespeichert.",
       },

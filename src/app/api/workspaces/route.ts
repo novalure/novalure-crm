@@ -5,8 +5,9 @@ import {
   resolveWorkspaceScopedSession,
 } from "@/lib/auth/session";
 import type { AppRole } from "@/lib/auth/permissions";
-import { queryOne, queryRows } from "@/lib/db/client";
+import { queryRows } from "@/lib/db/client";
 import { withTenantTransaction } from "@/lib/db/tenant-client";
+import { runWithTenantTransaction } from "@/lib/db/transaction-context";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import {
   hasProductCapability,
@@ -38,6 +39,25 @@ type WorkspaceRow = {
   setupState: Record<string, unknown> | null;
   teamStructure: WorkspaceTeamStructure | null;
 };
+
+type WorkspaceSetupRow = Pick<WorkspaceRow, "activeCalendarProvider" | "customerType" | "operatingModel" | "setupState" | "teamStructure">;
+const workspaceSetupValidators = {
+  activeCalendarProvider: isCalendarProviderChoice,
+  customerType: isWorkspaceCustomerType,
+  operatingModel: isWorkspaceOperatingModel,
+  teamStructure: isWorkspaceTeamStructure,
+};
+type WorkspaceSetupField = keyof typeof workspaceSetupValidators;
+
+function parseWorkspaceSetupChange(input: Record<string, unknown>) {
+  const change = input.workspaceSetupChange;
+  if (!change || typeof change !== "object" || !("field" in change) || !("expectedValue" in change) ||
+      typeof change.field !== "string" || !Object.hasOwn(workspaceSetupValidators, change.field)) return null;
+  const field = change.field as WorkspaceSetupField;
+  const valid = workspaceSetupValidators[field];
+  if (!valid(change.expectedValue) || !valid(input[field])) return null;
+  return { field, expectedValue: change.expectedValue };
+}
 
 async function readJson(request: Request) {
   try {
@@ -173,103 +193,110 @@ export async function PATCH(request: Request) {
   }
 
   const input = body as Record<string, unknown>;
-  const operatingModel = isWorkspaceOperatingModel(input.operatingModel)
-    ? input.operatingModel
-    : auth.session.workspaceOperatingModel ?? "self_service_customer";
-  const customerType = isWorkspaceCustomerType(input.customerType)
-    ? input.customerType
-    : auth.session.workspaceCustomerType ?? "real_estate_broker";
-  const teamStructure = isWorkspaceTeamStructure(input.teamStructure)
-    ? input.teamStructure
-    : auth.session.workspaceTeamStructure ?? "small_team";
-  const activeCalendarProvider = isCalendarProviderChoice(input.activeCalendarProvider)
-    ? input.activeCalendarProvider
-    : auth.session.workspaceActiveCalendarProvider ?? "none";
+  const change = parseWorkspaceSetupChange(input);
+  if (Object.hasOwn(input, "workspaceSetupChange") && !change) {
+    return Response.json({ error: "Invalid workspace settings change" }, { status: 400 });
+  }
+  const requested = change ? { [change.field]: input[change.field] } : input;
   const setupState =
-    input.setupState && typeof input.setupState === "object" && !Array.isArray(input.setupState)
+    !change && input.setupState && typeof input.setupState === "object" && !Array.isArray(input.setupState)
       ? input.setupState
       : {};
 
-  if (
-    (operatingModel === "novalure_internal" || customerType === "novalure_internal")
-    && !hasProductCapability(auth.session.productRole, "novalure:internal")
-  ) {
-    return Response.json({ error: "Novalure internal setup requires an internal product role" }, { status: 403 });
-  }
-
+  const scope = { actorId: auth.session.userId, workspaceId: auth.session.workspaceId };
   try {
-    return await withCrmRead(auth.session, async (_tx, session) => {
-      const row = await queryOne<WorkspaceRow>(
-        `
-          update workspaces
-          set
-            operating_model = $2,
-            customer_type = $3,
-            team_structure = $4,
-            active_calendar_provider = $5,
-            setup_state = coalesce(setup_state, '{}'::jsonb) || $6::jsonb,
-            updated_at = now()
-          where id = $1
-          returning
-            id,
-            name,
-            plan,
-            $7::text as role,
-            0 as "activeUsers",
-            0 as "activeProjects",
-            active_calendar_provider as "activeCalendarProvider",
-            customer_type as "customerType",
-            operating_model as "operatingModel",
-            $8::text as "productRole",
-            setup_state as "setupState",
-            team_structure as "teamStructure"
-        `,
-        [
-          session.workspaceId,
-          operatingModel,
-          customerType,
-          teamStructure,
-          activeCalendarProvider,
-          JSON.stringify({
-            ...setupState,
-            lastConfiguredAt: new Date().toISOString(),
-            updatedByUserId: session.userId,
-          }),
-          session.role,
-          session.productRole,
-        ],
-      );
+    return await withTenantTransaction(scope, async (transaction) => {
+      // Lock the workspace before withCrmRead shares that row for its membership
+      // check. Taking the write lock second would deadlock concurrent settings saves.
+      const before = await transaction.queryOne<WorkspaceSetupRow>(`
+        select active_calendar_provider as "activeCalendarProvider",
+          customer_type as "customerType", operating_model as "operatingModel",
+          setup_state as "setupState", team_structure as "teamStructure"
+        from workspaces where id = $1 for no key update
+      `, [scope.workspaceId]);
 
-      if (!row) {
-        return Response.json({ error: "Workspace could not be updated" }, { status: 404 });
-      }
+      return runWithTenantTransaction(scope, transaction, () => withCrmRead(auth.session, async (tx, session) => {
+        if (!session.permissions.includes("crm:write") || !hasProductCapability(session.productRole, "settings:manage")) {
+          return Response.json({ error: "Forbidden" }, { status: 403 });
+        }
+        if (!before) return Response.json({ error: "Workspace could not be updated" }, { status: 404 });
+        if (change && before[change.field] !== change.expectedValue) {
+          return Response.json({ error: "Workspace settings changed", code: "WORKSPACE_SETUP_CONFLICT" }, { status: 409 });
+        }
 
-      await writeAuditLog({
-        action: "workspace.setup_updated",
-        after: {
-          activeCalendarProvider: row.activeCalendarProvider,
-          customerType: row.customerType,
-          operatingModel: row.operatingModel,
-          setupState: row.setupState,
-          teamStructure: row.teamStructure,
-        },
-        entityId: row.id,
-        entityType: "workspace",
-        session,
-      });
+        const operatingModel = isWorkspaceOperatingModel(requested.operatingModel)
+          ? requested.operatingModel : before.operatingModel ?? "self_service_customer";
+        const customerType = isWorkspaceCustomerType(requested.customerType)
+          ? requested.customerType : before.customerType ?? "real_estate_broker";
+        const teamStructure = isWorkspaceTeamStructure(requested.teamStructure)
+          ? requested.teamStructure : before.teamStructure ?? "small_team";
+        const activeCalendarProvider = isCalendarProviderChoice(requested.activeCalendarProvider)
+          ? requested.activeCalendarProvider : before.activeCalendarProvider ?? "none";
+        if ((operatingModel === "novalure_internal" || customerType === "novalure_internal") &&
+            !hasProductCapability(session.productRole, "novalure:internal")) {
+          return Response.json({ error: "Novalure internal setup requires an internal product role" }, { status: 403 });
+        }
 
-      return Response.json({
-        persisted: true,
-        workspace: {
-          activeCalendarProvider: row.activeCalendarProvider,
-          customerType: row.customerType,
-          id: row.id,
-          name: row.name,
-          operatingModel: row.operatingModel,
-          setupState: row.setupState,
-          teamStructure: row.teamStructure,
-        },
-      });
+        const row = await tx.queryOne<WorkspaceSetupRow & { id: string; name: string }>(
+          `
+            update workspaces
+            set
+              operating_model = $2,
+              customer_type = $3,
+              team_structure = $4,
+              active_calendar_provider = $5,
+              setup_state = coalesce(setup_state, '{}'::jsonb) || $6::jsonb,
+              updated_at = now()
+            where id = $1
+            returning id, name,
+              active_calendar_provider as "activeCalendarProvider",
+              customer_type as "customerType", operating_model as "operatingModel",
+              setup_state as "setupState", team_structure as "teamStructure"
+          `,
+          [
+            session.workspaceId,
+            operatingModel,
+            customerType,
+            teamStructure,
+            activeCalendarProvider,
+            JSON.stringify({
+              ...setupState,
+              lastConfiguredAt: new Date().toISOString(),
+              updatedByUserId: session.userId,
+            }),
+          ],
+        );
+
+        if (!row) return Response.json({ error: "Workspace could not be updated" }, { status: 404 });
+
+        await writeAuditLog({
+          action: "workspace.setup_updated",
+          before,
+          after: {
+            activeCalendarProvider: row.activeCalendarProvider,
+            customerType: row.customerType,
+            operatingModel: row.operatingModel,
+            setupState: row.setupState,
+            teamStructure: row.teamStructure,
+          },
+          entityId: row.id,
+          entityType: "workspace",
+          session,
+        });
+
+        return Response.json({
+          persisted: true,
+          workspace: {
+            activeCalendarProvider: row.activeCalendarProvider,
+            customerType: row.customerType,
+            id: row.id,
+            name: row.name,
+            operatingModel: row.operatingModel,
+            setupState: row.setupState,
+            teamStructure: row.teamStructure,
+          },
+        });
+      }));
     });
   } catch (error) {
     return crmCommandErrorResponse(error);
