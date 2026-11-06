@@ -9,10 +9,25 @@ import { buildPropertyExposeDocument } from "../src/lib/property-expose-service"
 import { renderPropertyExposePdf } from "../src/lib/property-expose-pdf";
 import { createPropertyGeography } from "../src/lib/property-country";
 
-test("developer known zero needs the matching current unit confirmation before actual PDF generation", { timeout: 120000 }, async () => {
+async function renderedText(document: ReturnType<typeof buildPropertyExposeDocument>) {
+  const task = getDocument({ data: Uint8Array.from(await renderPropertyExposePdf(document)), useSystemFonts: false, disableFontFace: true, standardFontDataUrl: path.resolve("node_modules/pdfjs-dist/standard_fonts").replaceAll("\\", "/") + "/" });
+  try {
+    const pdf = await task.promise;
+    const pages: string[] = [];
+    for (let page = 1; page <= pdf.numPages; page++) {
+      const content = await (await pdf.getPage(page)).getTextContent();
+      pages.push(content.items.map(item => "str" in item ? item.str : "").join(" "));
+    }
+    return pages.join(" ");
+  } finally {
+    await task.destroy();
+  }
+}
+
+test("developer PDF sale and zero prices require the matching current unit confirmation", { timeout: 120000 }, async () => {
   const db = await startLocalSalesDb();
   try {
-    await applySalesSchema(db, { maxMigrationNumber: 106 });
+    await applySalesSchema(db, { maxMigrationNumber: 186 });
     const workspaceId = randomUUID(), projectId = randomUUID(), propertyId = randomUUID(), unitId = randomUUID();
     await db.admin.query("insert into workspaces(id,name,customer_type) values($1,'SYNTHETIC zero price','real_estate_broker')", [workspaceId]);
     await db.admin.query("insert into projects(id,workspace_id,name,type,customer_type) values($1,$2,'SYNTHETIC developer','Bautraeger','property_developer')", [projectId, workspaceId]);
@@ -30,15 +45,56 @@ test("developer known zero needs the matching current unit confirmation before a
       assert.equal(build(unconfirmed, false).price, undefined, "hiding price remains valid");
       await db.admin.query("update property_units set metadata=jsonb_build_object('priceConfirmation',jsonb_build_object('sourceReference','SYNTHETIC approved zero','priceCents','0')) where id=$1", [unitId]);
       const confirmed = await source(); assert.equal(confirmed.listing.confirmedCurrentPrice, true);
-      const task = getDocument({ data: Uint8Array.from(await renderPropertyExposePdf(build(confirmed))), useSystemFonts: false, disableFontFace: true, standardFontDataUrl: path.resolve("node_modules/pdfjs-dist/standard_fonts").replaceAll("\\", "/") + "/" });
-      const pdf = await task.promise; let text = "";
-      for (let n = 1; n <= pdf.numPages; n++) text += (await (await pdf.getPage(n)).getTextContent()).items.map(item => "str" in item ? item.str : "").join(" ");
-      await task.destroy(); assert.ok(text.includes("0,00"), "authorized zero survives actual PDF bytes");
+      assert.match(await renderedText(build(confirmed)), /0,00/, "authorized zero survives actual PDF bytes");
       await db.admin.query("update property_units set metadata=jsonb_set(metadata,'{priceConfirmation,priceCents}','\"1\"') where id=$1", [unitId]);
       const mismatched = await source(); assert.throws(() => build(mismatched), { code: "EXPOSE_PRICE_UNCONFIRMED" });
       await db.admin.query("update projects set type='Service',customer_type='real_estate_broker' where id=$1", [projectId]);
       const nonDeveloper = await source(); assert.equal(nonDeveloper.listing.developer, false); assert.ok(build(nonDeveloper).price?.includes("0,00"));
       await db.admin.query("update projects set type='Bautraeger',customer_type='property_developer' where id=$1", [projectId]);
     }
+
+    const sale = 38765432, investor = 49876543, rent = 198765;
+    const foreignWorkspaceId = randomUUID(), foreignProjectId = randomUUID(), foreignUnitId = randomUUID();
+    const saleConfirmation = { sourceReference: "SYNTHETIC confirmed sale", priceCents: sale };
+    await db.admin.query("insert into workspaces(id,name) values($1,'SYNTHETIC foreign workspace')", [foreignWorkspaceId]);
+    await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC foreign project','Service')", [foreignProjectId, foreignWorkspaceId]);
+    await db.admin.query("insert into property_units(id,workspace_id,project_id,unit_number,area_sqm,price_cents,status,metadata) values($1,$2,$3,'SYNTHETIC FOREIGN',75,$4,'available',$5)", [foreignUnitId, foreignWorkspaceId, foreignProjectId, sale, { priceConfirmation: saleConfirmation }]);
+    await db.admin.query("update property_units set price_cents=$2,investor_price_cents=$3,metadata='{}' where id=$1", [unitId, sale, investor]);
+    // Mirror the supported product transition: save as a broker, then assign the developer.
+    await db.admin.query("update projects set type='Service',customer_type='real_estate_broker' where id=$1", [projectId]);
+    await db.admin.query("update seller_listings set marketing_type='sale',target_price_cents=$2,public_price_cents=$2,rent_price_cents=null where id=$1", [propertyId, sale]);
+    await db.admin.query("update projects set type='Bautraeger',customer_type='property_developer' where id=$1", [projectId]);
+    const unconfirmedSale = await source();
+    assert.equal(unconfirmedSale.listing.confirmedCurrentPrice, false, "the foreign workspace confirmation cannot satisfy the current property scope");
+    assert.throws(() => build(unconfirmedSale), { code: "EXPOSE_PRICE_UNCONFIRMED" });
+    assert.doesNotMatch(await renderedText(build(unconfirmedSale, false)), /387[.\s]654|498[.\s]765/);
+
+    const investorConfirmation = { sourceReference: "SYNTHETIC confirmed investor price", investorPriceCents: investor };
+    await db.admin.query("update property_units set metadata=$2 where id=$1", [unitId, { investorPriceConfirmation: investorConfirmation }]);
+    const investorOnly = await source();
+    assert.throws(() => build(investorOnly), { code: "EXPOSE_PRICE_UNCONFIRMED" });
+    await db.admin.query("update property_units set metadata=$2 where id=$1", [unitId, { priceConfirmation: { ...saleConfirmation, priceCents: sale - 1 }, investorPriceConfirmation: investorConfirmation }]);
+    const mismatchedSale = await source();
+    assert.throws(() => build(mismatchedSale), { code: "EXPOSE_PRICE_UNCONFIRMED" });
+    await db.admin.query("update property_units set metadata=$2 where id=$1", [unitId, { priceConfirmation: saleConfirmation, investorPriceConfirmation: investorConfirmation }]);
+    const confirmedSale = await source();
+    assert.equal(confirmedSale.listing.confirmedCurrentPrice, true);
+    const saleText = await renderedText(build(confirmedSale));
+    assert.match(saleText, /387[.\s]654,32/);
+    assert.doesNotMatch(saleText, /498[.\s]765/);
+
+    await db.admin.query("update seller_listings set marketing_type='sale_or_rent' where id=$1", [propertyId]);
+    assert.match(await renderedText(build(await source())), /387[.\s]654,32/);
+    await db.admin.query("update property_units set metadata=$2 where id=$1", [unitId, { investorPriceConfirmation: investorConfirmation }]);
+    const unconfirmedMixed = await source();
+    assert.throws(() => build(unconfirmedMixed), { code: "EXPOSE_PRICE_UNCONFIRMED" });
+    await db.admin.query("update property_units set metadata=$2 where id=$1", [unitId, { priceConfirmation: saleConfirmation, investorPriceConfirmation: investorConfirmation }]);
+
+    await db.admin.query("update seller_listings set marketing_type='rent',rent_price_cents=$2 where id=$1", [propertyId, rent]);
+    const rental = await source();
+    assert.equal(rental.listing.confirmedCurrentPrice, false);
+    const rentText = await renderedText(build(rental));
+    assert.match(rentText, /1[.\s]987,65/);
+    assert.doesNotMatch(rentText, /387[.\s]654|498[.\s]765/);
   } finally { await db.stop(); }
 });
