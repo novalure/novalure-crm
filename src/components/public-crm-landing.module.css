@@ -8,8 +8,6 @@
   --nl-blue: #2d68f0;
   --nl-blue-dark: #1e4fc2;
   --nl-blue-tint: #e9f0fe;
-  --nl-amber: #e9a23b;
-  --nl-amber-tint: #fbf1df;
   --nl-divider: #ede9e2;
   --nl-border: #e3ded5;
   --nl-edge: clamp(20px, 5vw, 64px);
@@ -202,6 +200,15 @@
   min-width: 0;
 }
 
+.heroEyebrow {
+  margin: 0 0 14px;
+  color: var(--nl-blue);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .hero h1 {
   max-width: 19ch;
   margin: 0;
@@ -272,57 +279,16 @@
   color: var(--nl-tertiary);
 }
 
-.regionPills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.regionPills span {
-  border-radius: 999px;
-  background: #f1eee9;
-  color: var(--nl-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 5px 13px;
-}
-
-.leadCardFigure {
+.unitCardFigure {
   position: relative;
   width: 100%;
   max-width: 460px;
   min-width: 0;
   margin: 0;
-  animation: lead-rise 700ms ease 100ms backwards;
+  animation: unit-rise 700ms ease 100ms backwards;
 }
 
-.reminderBadge {
-  position: absolute;
-  top: -16px;
-  right: 2px;
-  z-index: 2;
-  display: flex;
-  max-width: calc(100% - 24px);
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--nl-divider);
-  border-radius: 999px;
-  background: var(--nl-surface);
-  box-shadow: 0 8px 24px rgb(51 48 43 / 10%);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 15px;
-  transform: rotate(2deg);
-  white-space: nowrap;
-}
-
-.reminderBadge svg {
-  flex: none;
-  color: var(--nl-amber);
-}
-
-.leadCard {
+.unitCard {
   border: 1px solid var(--nl-divider);
   border-radius: 16px;
   background: var(--nl-surface);
@@ -330,7 +296,7 @@
   padding: 24px;
 }
 
-.leadCardTop {
+.unitCardTop {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -338,7 +304,7 @@
   gap: 12px;
 }
 
-.leadCardTop > span {
+.unitCardTop > span {
   color: var(--nl-blue);
   font-size: 11px;
   font-weight: 700;
@@ -346,7 +312,7 @@
   text-transform: uppercase;
 }
 
-.leadCardTop strong {
+.unitCardTop strong {
   border-radius: 999px;
   background: var(--nl-blue-tint);
   color: var(--nl-blue-dark);
@@ -355,7 +321,7 @@
   padding: 4px 12px;
 }
 
-.leadCard h2 {
+.unitCardTitle {
   margin: 10px 0 0;
   color: var(--nl-ink);
   font-size: 20px;
@@ -363,17 +329,17 @@
   line-height: 1.3;
 }
 
-.leadReceived {
+.unitName {
   margin: 2px 0 0;
   color: var(--nl-tertiary);
   font-size: 13px;
 }
 
-.leadRows {
+.unitRows {
   margin: 14px 0 0;
 }
 
-.leadRows > div {
+.unitRows > div {
   display: grid;
   grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
   align-items: baseline;
@@ -383,57 +349,22 @@
   padding: 10px 0;
 }
 
-.leadRows > div:last-child {
+.unitRows > div:last-child {
   border-bottom: 0;
 }
 
-.leadRows dt {
+.unitRows dt {
   color: var(--nl-tertiary);
 }
 
-.leadRows dd {
+.unitRows dd {
   min-width: 0;
   margin: 0;
   font-weight: 600;
   text-align: right;
 }
 
-.leadRows .nextAction {
-  display: inline-flex;
-  align-items: center;
-  justify-self: end;
-  gap: 6px;
-  color: var(--nl-blue-dark);
-  font-weight: 700;
-}
-
-.progressSegments {
-  display: flex;
-  gap: 5px;
-  margin: 8px 0 4px;
-}
-
-.progressSegments span {
-  height: 6px;
-  flex: 1;
-  border-radius: 999px;
-  background: #eae6de;
-}
-
-.progressSegments .progressActive {
-  background: var(--nl-blue);
-}
-
-.progressLabels {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--nl-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.leadCard figcaption {
+.unitCard figcaption {
   border-top: 1px solid #f0ede7;
   margin-top: 14px;
   color: var(--nl-tertiary);
@@ -485,14 +416,14 @@
   text-align: center;
 }
 
-.problemGrid {
+.featureGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
   margin-top: 44px;
 }
 
-.problemCard,
+.featureCard,
 .audienceCard {
   border: 1px solid var(--nl-divider);
   border-radius: 14px;
@@ -502,7 +433,7 @@
   transition: box-shadow 220ms ease, transform 220ms ease;
 }
 
-.problemCard:hover,
+.featureCard:hover,
 .audienceCard:hover {
   box-shadow: 0 2px 4px rgb(51 48 43 / 5%), 0 16px 36px rgb(51 48 43 / 10%);
   transform: translateY(-3px);
@@ -519,10 +450,9 @@
   color: var(--nl-blue);
 }
 
-.problemCard h3,
+.featureCard h3,
 .audienceCard h3,
-.auditSteps h3,
-.privacyGrid h3 {
+.projectSteps h3 {
   margin: 16px 0 0;
   color: var(--nl-ink);
   font-size: 17.5px;
@@ -530,79 +460,13 @@
   line-height: 1.3;
 }
 
-.problemCard p,
+.featureCard p,
 .audienceCard > p,
-.auditSteps p,
-.privacyGrid p {
+.projectSteps p {
   margin: 9px 0 0;
   color: var(--nl-muted);
   font-size: 15px;
   line-height: 1.6;
-}
-
-.funnelFigure {
-  max-width: 660px;
-  margin: 56px auto 0;
-}
-
-.funnelFigure figcaption,
-.pipelineFigure figcaption,
-.inboxFigure figcaption {
-  color: var(--nl-tertiary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-
-.funnelFigure figcaption {
-  margin-bottom: 22px;
-  text-align: center;
-}
-
-.funnelRows {
-  display: grid;
-  gap: 14px;
-}
-
-.funnelRow {
-  display: grid;
-  grid-template-columns: minmax(155px, 205px) minmax(80px, 1fr) 52px;
-  align-items: center;
-  gap: 16px;
-  font-size: 14.5px;
-}
-
-.funnelRow > span {
-  font-weight: 500;
-}
-
-.funnelRow > div {
-  height: 12px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #f1eee9;
-}
-
-.funnelRow i {
-  display: block;
-  width: var(--bar-width);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--nl-blue);
-  opacity: var(--bar-opacity);
-}
-
-.funnelRow strong {
-  font-size: 15px;
-  text-align: right;
-}
-
-.funnelFigure > p {
-  margin: 16px 0 0;
-  color: var(--nl-tertiary);
-  font-size: 12px;
-  text-align: center;
 }
 
 .previewShell {
@@ -612,164 +476,119 @@
   padding: clamp(18px, 3vw, 30px);
 }
 
-.previewLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(245px, 0.75fr);
-  align-items: start;
-  gap: 32px clamp(24px, 3vw, 44px);
-}
-
-.pipelineFigure,
-.inboxFigure {
-  min-width: 0;
-  margin: 0;
-}
-
-.pipelineFigure figcaption,
-.inboxFigure figcaption {
-  margin-bottom: 14px;
-}
-
-.pipelineGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.pipelineColumn {
-  min-width: 0;
-}
-
-.pipelineColumnHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--nl-tertiary);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  padding: 0 2px 9px;
-  text-transform: uppercase;
-}
-
-.pipelineColumnHeader strong {
-  border-radius: 999px;
-  background: var(--nl-surface);
+.inventoryTitle {
+  margin: 0 0 14px;
   color: var(--nl-muted);
-  font-size: 11.5px;
-  padding: 1px 8px;
-}
-
-.pipelineCards {
-  display: grid;
-  gap: 10px;
-}
-
-.pipelineCard {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-  border-radius: 11px;
-  background: var(--nl-surface);
-  box-shadow: 0 1px 3px rgb(51 48 43 / 8%);
-  padding: 11px 12px;
-}
-
-.pipelineCard > span {
-  color: var(--nl-blue);
-  font-size: 9.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
-.pipelineCard strong {
-  color: var(--nl-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.35;
-  overflow-wrap: normal;
+.inventoryStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
 }
 
-.pipelineCard small {
-  color: var(--nl-tertiary);
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.inboxList {
-  overflow: hidden;
+.inventoryStats > div {
+  display: flex;
+  flex-direction: column-reverse;
+  border: 1px solid var(--nl-divider);
   border-radius: 12px;
   background: var(--nl-surface);
-  box-shadow: 0 1px 3px rgb(51 48 43 / 8%);
+  padding: 12px 16px;
 }
 
-.inboxRow {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #f0ede7;
-  padding: 11px 12px;
+.inventoryStats > div:first-child {
+  background: var(--nl-blue-tint);
+  color: var(--nl-blue-dark);
 }
 
-.inboxRow:last-child {
-  border-bottom: 0;
-}
-
-.inboxRow time {
-  color: var(--nl-tertiary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.inboxRow > div {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.inboxRow strong {
-  color: var(--nl-ink);
-  font-size: 11.5px;
+.inventoryStats dt {
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.35;
 }
 
-.inboxRow span {
-  color: var(--nl-tertiary);
-  font-size: 10.5px;
+.inventoryStats dd {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
-.inboxRow b {
-  display: inline-flex;
-  width: 27px;
-  height: 27px;
-  align-items: center;
-  justify-content: center;
+.projectSteps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.projectSteps li {
+  border-top: 1px solid var(--nl-border);
+  padding-top: 16px;
+}
+
+.projectSteps li > span {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
   border-radius: 50%;
   background: var(--nl-blue-tint);
   color: var(--nl-blue-dark);
-  font-size: 9.5px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
-.privacyLists {
+.sectionAction {
+  margin-top: 28px;
+  text-align: center;
+}
+
+.legacyAnchor {
+  display: block;
+  scroll-margin-top: 86px;
+}
+
+.analyticsFigure {
+  max-width: 760px;
+  margin: 30px auto 0;
+}
+
+.analyticsFigure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--nl-divider);
+  border-radius: 14px;
+}
+
+.analyticsFigure figcaption {
+  margin-top: 8px;
+  color: var(--nl-muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.analyticsLists {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-  margin-top: 28px;
+  margin-top: 32px;
 }
 
-.privacyLists > div {
+.analyticsLists > div {
   border: 1px solid var(--nl-divider);
   border-radius: 14px;
   background: var(--nl-surface);
   padding: 22px;
 }
 
-.privacyLists h3 {
+.analyticsLists h3 {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -779,17 +598,13 @@
   font-weight: 700;
 }
 
-.privacyLists h3 svg {
+.analyticsLists h3 svg {
   flex: none;
   color: var(--nl-blue);
 }
 
-.privacyLists .protectedList {
-  background: var(--nl-amber-tint);
-}
-
-.protectedList h3 svg {
-  color: #9a6a1b;
+.analyticsLists .analyticsContext {
+  background: var(--nl-blue-tint);
 }
 
 .checkList {
@@ -817,7 +632,7 @@
 
 .audienceGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
   gap: 18px;
   margin-top: 44px;
 }
@@ -836,99 +651,19 @@
   font-size: 15.5px;
 }
 
-.audienceCard > div {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  margin-top: 16px;
-}
-
-.audienceCard > div span {
-  flex: none;
-  border-radius: 999px;
-  background: var(--nl-amber-tint);
-  color: #9a6a1b;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 3px 10px;
-  text-transform: uppercase;
-}
-
-.audienceCard > div strong {
-  font-size: 14.5px;
-  font-weight: 600;
-  line-height: 1.55;
-}
-
-.auditSteps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 34px clamp(20px, 3vw, 44px);
-  margin-top: 48px;
-}
-
-.auditSteps article > span {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--nl-blue-tint);
+.audienceCard > a {
+  display: inline-block;
+  margin-top: 18px;
   color: var(--nl-blue-dark);
-  font-size: 16px;
   font-weight: 700;
 }
 
-.auditOutcome {
-  max-width: 640px;
-  margin: 52px auto 0;
-  border: 1px solid var(--nl-divider);
-  border-radius: 16px;
-  background: var(--nl-surface);
-  box-shadow: 0 1px 2px rgb(51 48 43 / 4%), 0 8px 24px rgb(51 48 43 / 5%);
-  padding: 30px;
+.audienceCard > a:hover {
+  text-decoration: underline;
 }
 
-.auditOutcome h3 {
-  margin: 0 0 16px;
-  color: var(--nl-ink);
-  font-size: 17.5px;
-  font-weight: 700;
-}
-
-.auditOutcome .primaryButton {
-  min-height: 46px;
-  margin-top: 24px;
-  font-size: 15px;
-  padding: 11px 22px;
-}
-
-.privacyGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 36px clamp(24px, 3.5vw, 56px);
-  margin-top: 48px;
-}
-
-.privacyGrid article > span {
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #f1eee9;
-  color: var(--nl-muted);
-}
-
-.privacyGrid h3 {
-  font-size: 18px;
-}
-
-.privacyGrid p {
-  font-size: 15.5px;
+.developerCard {
+  border-color: #b8d2f2;
 }
 
 .faqList {
@@ -1158,7 +893,7 @@
   padding: 10px 14px;
 }
 
-@keyframes lead-rise {
+@keyframes unit-rise {
   from {
     opacity: 0;
     transform: translateY(14px);
@@ -1182,26 +917,9 @@
     padding-inline: 13px;
   }
 
-  .problemGrid,
-  .auditSteps {
+  .featureGrid,
+  .projectSteps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .previewLayout {
-    grid-template-columns: 1fr;
-  }
-
-  .inboxList {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .inboxRow:nth-child(2) {
-    border-right: 0;
-  }
-
-  .inboxRow {
-    border-right: 1px solid #f0ede7;
   }
 }
 
@@ -1259,22 +977,12 @@
     grid-template-columns: 1fr;
   }
 
-  .leadCardFigure {
+  .unitCardFigure {
     justify-self: center;
   }
 
-  .pipelineGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .audienceGrid,
-  .privacyGrid {
+  .audienceGrid {
     grid-template-columns: 1fr;
-  }
-
-  .privacyGrid {
-    max-width: 720px;
-    margin-inline: auto;
   }
 
   .footerInner {
@@ -1314,22 +1022,6 @@
     font-size: 12px;
   }
 
-  .regionPills span,
-  .privacyGrid article > span,
-  .audienceCard > div span {
-    background: var(--nl-blue-tint);
-    color: var(--nl-blue-dark);
-  }
-
-  .reminderBadge svg,
-  .protectedList h3 svg {
-    color: var(--nl-blue);
-  }
-
-  .privacyLists .protectedList {
-    background: #f6f9ff;
-  }
-
   .hero {
     gap: 48px;
     padding: 54px 0 78px;
@@ -1351,19 +1043,14 @@
     width: 100%;
   }
 
-  .leadCard {
+  .unitCard {
     padding: 21px 18px;
   }
 
-  .leadRows > div {
+  .unitRows > div {
     grid-template-columns: minmax(82px, auto) minmax(0, 1fr);
     gap: 10px;
     font-size: 13.5px;
-  }
-
-  .reminderBadge {
-    right: 8px;
-    font-size: 12px;
   }
 
   .section {
@@ -1371,53 +1058,25 @@
     scroll-margin-top: 76px;
   }
 
-  .problemGrid,
-  .auditSteps,
-  .privacyLists {
+  .featureGrid,
+  .projectSteps,
+  .analyticsLists {
     grid-template-columns: 1fr;
   }
 
-  .problemCard,
+  .featureCard,
   .audienceCard {
     padding: 22px;
-  }
-
-  .funnelRow {
-    grid-template-columns: minmax(0, 1fr) 50px;
-    gap: 7px 12px;
-  }
-
-  .funnelRow > div {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .funnelRow strong {
-    grid-column: 2;
-    grid-row: 1;
   }
 
   .previewShell {
     margin-inline: calc(var(--nl-edge) * -0.25);
   }
 
-  .pipelineGrid {
-    grid-template-columns: 1fr;
+  .inventoryStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .inboxList {
-    grid-template-columns: 1fr;
-  }
-
-  .inboxRow {
-    border-right: 0;
-  }
-
-  .auditOutcome {
-    padding: 24px 20px;
-  }
-
-  .auditOutcome .primaryButton,
   .finalCta .primaryButton {
     width: 100%;
   }
@@ -1447,16 +1106,8 @@
     gap: 5px;
   }
 
-  .leadRows dd {
+  .unitRows dd {
     font-size: 13px;
-  }
-
-  .leadRows .nextAction {
-    align-items: flex-end;
-  }
-
-  .progressLabels {
-    font-size: 10px;
   }
 
   .mobileMenuActions {
@@ -1469,7 +1120,7 @@
     scroll-behavior: auto;
   }
 
-  .leadCardFigure {
+  .unitCardFigure {
     animation: none;
   }
 

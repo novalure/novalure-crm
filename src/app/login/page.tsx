@@ -24,7 +24,6 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
-import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
 import { buildPublicPageMetadata } from "@/lib/page-metadata";
 import { type LanguagePreference } from "@/lib/crm-language";
@@ -156,7 +155,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const requestHeaders = await headers();
   const session = await getSessionFromHeaders(requestHeaders);
   const query = searchParams ? await searchParams : {};
-  const country = getRequestCountry(requestHeaders);
   const language = resolveLanguage(requestHeaders.get(languageRequestHeaderName), "en");
   const returnTo = resolveSafeLocalRedirect(getQueryValue(query.returnTo, "/"), {
     blockedPathPrefixes: ["/api", "/login"],
@@ -175,7 +173,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const errorText = getErrorText(getQueryValue(query.error), loginCopy);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
   const hasLoginNotice = !configured || Boolean(errorText) || Boolean(statusText);
-  const auditHref = resolveAuditHref(country, language);
+  const demoHref = `/demo?lang=${language}`;
   const publicHomeHref = getCanonicalPublicHref("/", language);
   const cookieHref = getCanonicalPublicHref("/cookies", language);
   const privacyHref = getCanonicalPublicHref("/privacy", language);
@@ -416,18 +414,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               >
                 {loginCopy.overviewLink}
               </Link>
-              <a
+              <Link
                 className={subpageStyles.textLink}
-                href={auditHref}
+                href={demoHref}
               >
-                {loginCopy.auditLink}
-              </a>
+                {loginCopy.demoLink}
+              </Link>
             </div>
             <p className={subpageStyles.authHelp}>
               {loginCopy.accessHelp.prefix}{" "}
-              <a className={subpageStyles.textLink} href={auditHref}>
-                {loginCopy.accessHelp.auditLabel}
-              </a>{" "}
+              <Link className={subpageStyles.textLink} href={demoHref}>
+                {loginCopy.accessHelp.demoLabel}
+              </Link>{" "}
               {loginCopy.accessHelp.connector}{" "}
               <a className={subpageStyles.textLink} href={`mailto:${companyLegalDetails.email}`}>
                 {companyLegalDetails.email}
