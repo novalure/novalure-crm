@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
-import path from 'node:path';
 const base = '80de72a4fb92befa73128aaa7d801adc35c7fd1d';
 const source = '19af886e81362b6acd3cbd463e428b2c678f2236';
 const serverStart = 'b58071ace04e2bca2bf8b9bec5a71cdc7f3779ce';

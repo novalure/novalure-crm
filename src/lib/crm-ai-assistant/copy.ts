@@ -66,4 +66,3 @@ export const assistantCopy = {
     sourceTypes: { lead: "Lead", contact: "Contacto", task: "Tarea", meeting: "Cita", deal: "Oportunidad", property: "Inmueble", project: "Proyecto" },
   },
 };
-
