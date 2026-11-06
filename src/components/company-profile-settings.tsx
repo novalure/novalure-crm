@@ -556,10 +556,17 @@ function WorkspaceCompanyProfileSettings({
   }
 
   async function refreshAccessFromResponse(response: Response) {
-    const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload & { lastAction?: { setupUrl?: string } }>(response) : null;
+    const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload & { lastAction?: { setupUrl?: string }; refreshRequired?: boolean; sessionRevoked?: boolean }>(response) : null;
     if (!nextPayload) {
       const failure = await readJsonResponse<{ error?: string }>(response);
       setAccessMessage(failure?.error ?? "access_failed");
+      return;
+    }
+    if (nextPayload.refreshRequired) {
+      setAccessPayload(null);
+      setAccessMessage(nextPayload.sessionRevoked
+        ? language === "de" ? "Berechtigung gespeichert. Bitte melde dich erneut an." : "Access saved. Please sign in again."
+        : language === "de" ? "Berechtigung gespeichert. Die Liste konnte nicht neu geladen werden." : "Access saved. The list could not be refreshed.");
       return;
     }
     setAccessPayload(nextPayload);

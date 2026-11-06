@@ -392,8 +392,15 @@ function PersistedCustomerAccessCockpit({
           user?: { email?: string };
         };
         payload?: CustomerAccessCockpitPayload;
+        persisted?: boolean;
+        sessionRevoked?: boolean;
       };
 
+      if (response.ok && result.persisted && result.sessionRevoked) {
+        setLoadState("error");
+        setSaveState("saved");
+        return;
+      }
       if (!response.ok || !result.payload) throw new Error("save_failed");
       applyPayload(result.payload);
       if (input.operation === "invite_user") {

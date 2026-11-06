@@ -19,7 +19,9 @@ import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isProductRole, mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
 import { changeCustomerProjectGrant } from "./customer-project-grant-repository";
-import type { TenantTransactionOptions } from "../crm-command";
+import { CrmCommandError, withCrmRead, type TenantTransactionOptions } from "../crm-command";
+import { withTenantTransaction } from "./tenant-client";
+import { runWithTenantTransaction } from "./transaction-context";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
 export type CustomerAccessProjectRole = WorkspaceRole;
@@ -542,7 +544,7 @@ export async function inviteWorkspaceUser(input: {
               status = 'invited',
               password_hash = null,
               updated_at = now()
-          where id = $1 and workspace_id = $2
+          where id = $1 and workspace_id = $2 and status <> 'active'
           returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
         `,
         [existing.id, input.session.workspaceId, displayName, role, productRole],
@@ -666,17 +668,55 @@ export async function inviteWorkspaceUser(input: {
   };
 }
 
-export async function updateWorkspaceUserAccess(input: {
+type WorkspaceUserAccessUpdate = {
+  capability: "settings:manage" | "customer-access:manage";
   productRole?: unknown;
   role?: unknown;
   session: AppSession;
   status?: unknown;
   userId: string;
-}) {
+};
+
+export async function updateWorkspaceUserAccess(input: WorkspaceUserAccessUpdate) {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.userId)) {
     return { ok: false as const, reason: "User input is incomplete" };
   }
 
+  const scope = { actorId: input.session.userId, workspaceId: input.session.workspaceId };
+  let result: Awaited<ReturnType<typeof persistWorkspaceUserAccess>>;
+  try {
+    result = await withTenantTransaction(scope, async (tx) => {
+      // Serialize membership changes before taking actor locks and counting owners.
+      await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", ["workspace-membership:" + scope.workspaceId]);
+      return runWithTenantTransaction(scope, tx, () => withCrmRead(input.session, (_tx, session) => {
+        if (!session.productPermissions.includes(input.capability) ||
+            (input.capability === "settings:manage" && !session.permissions.includes("crm:write"))) {
+          throw new CrmCommandError("FORBIDDEN", "Workspace access management is not granted", 403);
+        }
+        return persistWorkspaceUserAccess({ ...input, session });
+      }));
+    });
+  } catch (error) {
+    if (error instanceof CrmCommandError) return { ok: false as const, reason: error.message, status: error.status };
+    return { ok: false as const, reason: "Workspace user could not be saved", status: 503 };
+  }
+  if (result.ok) {
+    const { id, role, productRole, status } = result.data;
+    await writeCrmAnalyticsEvent({
+      entityId: id,
+      entityType: "workspace_user",
+      eventType: "workspace_user_access_updated",
+      metadata: { role, productRole, status, targetUserId: id },
+      module: "dashboard",
+      source: "customer_access_cockpit",
+      userId: input.session.userId,
+      workspaceId: input.session.workspaceId,
+    });
+  }
+  return result;
+}
+
+async function persistWorkspaceUserAccess(input: WorkspaceUserAccessUpdate) {
   const existing = await queryOne<WorkspaceUserRow>(
     `
       select id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
@@ -702,6 +742,19 @@ export async function updateWorkspaceUserAccess(input: {
   });
   if (!roleGrant.ok) return { ok: false as const, reason: roleGrant.reason, status: roleGrant.status };
 
+  if ((existing.role === "owner" || role === "owner") && input.session.role !== "owner" && input.session.productRole !== "platform_admin") {
+    return { ok: false as const, reason: "Only owners can manage owner membership", status: 403 };
+  }
+
+  if (isProductRole(existing.productRole)) {
+    const existingGrant = validateWorkspaceUserRoleGrant({
+      session: input.session,
+      targetProductRole: existing.productRole,
+      targetRole: mapProductRoleToTechnicalRole(existing.productRole),
+    });
+    if (!existingGrant.ok) return { ok: false as const, reason: existingGrant.reason, status: existingGrant.status };
+  }
+
   if (existing.role === "owner" && existing.status === "active" && (role !== "owner" || status !== "active")) {
     const owners = await queryRows<IdRow>(
       "select id from workspace_users where workspace_id = $1 and role = 'owner' and status = 'active' limit 2",
@@ -712,6 +765,14 @@ export async function updateWorkspaceUserAccess(input: {
 
   if (input.userId === input.session.userId && status !== "active") {
     return { ok: false as const, reason: "Current user cannot be deactivated" };
+  }
+
+  if (existing.status !== status) {
+    // Memberships in other workspaces share the same login identity.
+    await queryOne(
+      "select id from auth_identities where id = (select auth_identity_id from workspace_users where id=$1 and workspace_id=$2) for no key update",
+      [input.userId, input.session.workspaceId],
+    );
   }
 
   const accessChanged =
@@ -727,7 +788,8 @@ export async function updateWorkspaceUserAccess(input: {
             status = $4,
             product_role = $5,
             updated_at = now()
-        where id = $1 and workspace_id = $2
+        where id = $1 and workspace_id = $2 and role = $8 and status = $9
+          and product_role is not distinct from $10
         returning id, workspace_id, name, email, role, product_role, status
       ), revoked_sessions as (
         update auth_sessions session
@@ -781,10 +843,24 @@ export async function updateWorkspaceUserAccess(input: {
       productRole,
       accessChanged,
       sessionRevocationReason,
+      existing.role,
+      existing.status,
+      existing.productRole,
     ],
   );
 
-  if (!row) return { ok: false as const, reason: "Workspace user could not be saved" };
+  if (!row) return { ok: false as const, reason: "Workspace user changed. Reload and try again.", status: 409 };
+
+  if (existing.status !== status && (existing.status === "suspended" || status === "suspended")) {
+    await queryRows(
+      "update auth_password_reset_tokens set used_at=now() where user_id=$1 and workspace_id=$2 and used_at is null",
+      [row.id, input.session.workspaceId],
+    );
+    await queryRows(
+      "update auth_password_reset_exchanges set used_at=now() where workspace_user_id=$1 and used_at is null",
+      [row.id],
+    );
+  }
 
   if (existing.status !== "suspended" && status === "suspended") {
     await queryOne<{ id: string }>(
@@ -819,45 +895,28 @@ export async function updateWorkspaceUserAccess(input: {
     );
   }
 
-  await Promise.all([
-    writeAuditLog({
-      action: "customer_access.workspace_user_updated",
-      after: row,
-      before: existing,
-      entityId: row.id,
-      entityType: "workspace_user",
-      session: input.session,
-    }),
-    writeCrmAnalyticsEvent({
-      entityId: row.id,
-      entityType: "workspace_user",
-      eventType: "workspace_user_access_updated",
-      metadata: {
-        role,
-        productRole,
-        status,
-        targetUserId: row.id,
-      },
-      module: "dashboard",
-      source: "customer_access_cockpit",
-      userId: input.session.userId,
-      workspaceId: input.session.workspaceId,
-    }),
-    writeAuthAuditEvent({
-      eventType: "auth.membership.access_updated",
-      metadata: {
-        actorUserId: input.session.userId,
-        productRole,
-        role,
-        status,
-      },
-      outcome: "success",
-      workspaceId: input.session.workspaceId,
-      workspaceUserId: row.id,
-    }),
-  ]);
+  await writeAuditLog({
+    action: "customer_access.workspace_user_updated",
+    after: row,
+    before: existing,
+    entityId: row.id,
+    entityType: "workspace_user",
+    session: input.session,
+  });
+  await writeAuthAuditEvent({
+    eventType: "auth.membership.access_updated",
+    metadata: {
+      actorUserId: input.session.userId,
+      productRole,
+      role,
+      status,
+    },
+    outcome: "success",
+    workspaceId: input.session.workspaceId,
+    workspaceUserId: row.id,
+  });
 
-  return { data: row, ok: true as const };
+  return { accessChanged, data: row, ok: true as const };
 }
 
 const customerAccessSelectSql = `

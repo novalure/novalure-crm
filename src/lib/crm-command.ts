@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AppSession } from "./auth/session";
 import { getRolePermissions, isAppRole } from "./auth/permissions";
-import { getProductRoleCapabilities, hasProductCapability, isProductRole, type ProductCapability } from "./product-model";
+import { getProductRoleCapabilities, hasProductCapability, isProductRole, NOVALURE_GROWTH_WORKSPACE_ID, type ProductCapability } from "./product-model";
 import { withTenantTransaction, type TenantTransaction, type TenantTransactionOptions } from "./db/tenant-client";
 import { currentTenantTransaction, runWithTenantTransaction } from "./db/transaction-context";
 
@@ -112,7 +112,11 @@ async function currentMember(tx: TenantTransaction, session: AppSession) {
   if (!["novalure_internal", "self_service_customer", "managed_by_novalure", "hybrid"].includes(member.operatingModel)) throw new CrmCommandError("DATA_CONTEXT_REQUIRED", "Workspace data classification is unresolved", 403);
   const resolved: AppSession = { ...session, role: member.role, productRole: member.productRole, permissions: getRolePermissions(member.role), productPermissions: getProductRoleCapabilities(member.productRole) };
   if (!resolved.permissions.includes("crm:read")) throw new CrmCommandError("FORBIDDEN", "CRM read permission is required", 403);
-  if (dataClassification === "NOVALURE_INTERNAL" && !hasProductCapability(resolved.productRole, "novalure:internal")) throw new CrmCommandError("DATA_SCOPE_DENIED", "Internal data requires an internal membership", 403);
+  const scopedGrowth = resolved.workspaceId === NOVALURE_GROWTH_WORKSPACE_ID &&
+    hasProductCapability(resolved.productRole, "growth-workspace:operate");
+  if (dataClassification === "NOVALURE_INTERNAL" && !hasProductCapability(resolved.productRole, "novalure:internal") && !scopedGrowth) {
+    throw new CrmCommandError("DATA_SCOPE_DENIED", "Internal data requires an internal membership", 403);
+  }
   return { session: resolved, dataClassification };
 }
 

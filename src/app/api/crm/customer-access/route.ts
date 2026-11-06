@@ -84,6 +84,7 @@ export async function PATCH(request: Request) {
   const result =
     operation === "workspace_user"
         ? await updateWorkspaceUserAccess({
+            capability: "customer-access:manage",
             productRole: input.productRole,
             role: input.role,
             session: auth.session,
@@ -119,6 +120,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: result.reason }, { status: getFailureStatus(result) });
   }
 
+  if (operation === "workspace_user" && "accessChanged" in result &&
+      result.accessChanged && result.data.id === auth.session.userId) {
+    return NextResponse.json({ data: result.data, payload: null, persisted: true, sessionRevoked: true });
+  }
   const payload = await listCustomerAccessCockpit({
     projectId: getProjectId(request),
     session: auth.session,
