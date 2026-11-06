@@ -138,13 +138,12 @@ export function planBackupRetention(index, { now = new Date(), keepDays = 7, sou
 
 
 /** A candidate index row is not proof. Verify the private final marker and its
- * canonical manifest before exposing it to the plan-only retention reader. */
-export async function readCrmBackupIndex({ config: input, ports }) {
+ * canonical manifest before yielding either marker or snapshot metadata. */
+async function* readVerifiedBackupSets({ config: input, ports }, { confirmNoIncomplete = false } = {}) {
   const config = validateBackupConfig(input);
   requireValue(typeof ports?.listTargetRecords === 'function' && typeof ports.readTarget === 'function', 'BACKUP_INDEX_READ_PORTS_REQUIRED');
   const entries = await ports.listTargetRecords(config.prefix + '/index/');
   requireValue(Array.isArray(entries), 'INVALID_BACKUP_INDEX_INVENTORY');
-  const index = [];
   const readJson = async pathname => {
     const receipt = await ports.readTarget(pathname);
     if (!receipt) return null;
@@ -158,15 +157,55 @@ export async function readCrmBackupIndex({ config: input, ports }) {
     const candidate = (await readJson(entry.pathname))?.value;
     requireValue(candidate && /^[a-z0-9][a-z0-9-]{5,100}$/.test(candidate.backupId ?? ''), 'INVALID_BACKUP_INDEX_RECORD');
     const root = `${config.prefix}/sets/${candidate.backupId}`;
-    if (await ports.readTarget(root + '/INCOMPLETE.json')) continue;
+    const incompletePath = root + '/INCOMPLETE.json';
+    if (await ports.readTarget(incompletePath)) continue;
     const full = (await readJson(root + '/FULL.json'))?.value;
     if (!full) continue;
     requireValue(full.status === 'FULL' && full.scope === BACKUP_SCOPE && full.projectId === config.neonProjectId && full.sourceBranchId === config.sourceBranchId && full.productionEndpointId === config.productionEndpointId && full.sourceStoreId === config.sourceStoreId && full.targetStoreId === config.targetStoreId && full.backupId === candidate.backupId && full.snapshotId === candidate.snapshotId && full.manifestSha256 === candidate.manifestSha256 && full.manifestPath === root + '/manifest.json' && full.cleanup?.status === 'OBSERVED_DISABLED_AND_IDLE' && Array.isArray(full.cleanup.endpoints) && full.cleanup.endpoints.length > 0 && full.cleanup.endpoints.every(ep => ep.disabled === true && ep.currentState === 'idle'), 'INVALID_BACKUP_FULL_MARKER');
     const manifest = await readJson(full.manifestPath);
     requireValue(manifest && sha256(manifest.bytes) === full.manifestSha256 && manifest.value.snapshot?.id === full.snapshotId && manifest.value.snapshot.sourceBranchId === config.sourceBranchId && manifest.value.backupId === full.backupId && manifest.value.scope === BACKUP_SCOPE && manifest.value.files?.length === full.fileCount && manifest.value.historicalReferences?.length === full.historicalReferenceCount, 'BACKUP_MANIFEST_HASH_MISMATCH');
-    index.push(full);
+    // The writer can append INCOMPLETE if the post-FULL production guard fails.
+    if (confirmNoIncomplete && await ports.readTarget(incompletePath)) continue;
+    yield { full, snapshotCreatedAt: manifest.value.snapshot.createdAt };
   }
+}
+
+export async function readCrmBackupIndex(options) {
+  const index = [];
+  for await (const { full } of readVerifiedBackupSets(options)) index.push(full);
   return index;
+}
+
+function parseBackupInstant(value) {
+  if (typeof value !== 'string') return NaN;
+  const date = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.exec(value)?.[1];
+  if (!date) return NaN;
+  const midnight = Date.parse(date);
+  if (!Number.isFinite(midnight) || new Date(midnight).toISOString().slice(0, 10) !== date) return NaN;
+  return Date.parse(value);
+}
+
+/** Read only the private backup index, markers and manifests. The age check
+ * uses the recorded snapshot time, regardless of when its export finished. */
+export async function readCrmBackupFreshness({ config, ports, now = new Date() } = {}) {
+  const rpoHours = 24;
+  const unverified = { status: 'unverified', rpoHours };
+  try {
+    const checkedAt = now instanceof Date ? now.getTime() : parseBackupInstant(now);
+    if (!Number.isFinite(checkedAt)) return unverified;
+    let latestSnapshot = -Infinity;
+    for await (const { snapshotCreatedAt } of readVerifiedBackupSets({ config, ports }, { confirmNoIncomplete: true })) {
+      const snapshotAt = parseBackupInstant(snapshotCreatedAt);
+      if (!Number.isFinite(snapshotAt) || snapshotAt > checkedAt) return unverified;
+      latestSnapshot = Math.max(latestSnapshot, snapshotAt);
+    }
+    if (latestSnapshot === -Infinity) return { status: 'no-full', rpoHours };
+    const ageMs = checkedAt - latestSnapshot;
+    return { status: ageMs <= rpoHours * 60 * 60 * 1000 ? 'fresh' : 'stale', rpoHours,
+      snapshotCreatedAt: new Date(latestSnapshot).toISOString(), ageMs };
+  } catch {
+    return unverified;
+  }
 }
 
 /** No truthy callback result can replace the individual evidence gates. */
