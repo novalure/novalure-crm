@@ -80,7 +80,7 @@ async function stateFromSnapshot(snapshot: ExposeSnapshot, session: AppSession):
       return { id: version.id, source: version.source, fileName: version.fileName, createdAt: version.createdAt,
         sizeBytes: version.sizeBytes, pageCount: version.pageCount, versionLabel: version.versionLabel,
         sourceFingerprint: version.sourceFingerprint, stale: version.sourceFingerprint !== snapshot.sourceFingerprint,
-        available, options: version.options, previewUrl: exposeUrl(snapshot, version.id), downloadUrl: exposeUrl(snapshot, version.id, true) };
+        available, options: version.options ?? version.privateOptions, previewUrl: exposeUrl(snapshot, version.id), downloadUrl: exposeUrl(snapshot, version.id, true) };
     })));
   }
   const media = snapshot.source.media.map(m => ({ id: String(m.id), title: text(m.title), kind: m.kind as "image" | "floorplan",
@@ -99,6 +99,11 @@ async function stateFromSnapshot(snapshot: ExposeSnapshot, session: AppSession):
 export async function getPropertyExposeState(session: AppSession, propertyId: string) {
   return stateFromSnapshot(await loadPropertyExposeSnapshot(session.workspaceId, propertyId), session);
 }
+function propertyExposePriceVisibility(listing: ExposeSnapshot["source"]["listing"]) {
+  const channel = listing.channelPriceVisibility && typeof listing.channelPriceVisibility === "object" ? listing.channelPriceVisibility as Record<string, unknown> : {};
+  return ["publish_price", "price_on_request", "hide_price"].includes(String(channel.Exposé)) ? channel.Exposé : listing.priceVisibility;
+}
+
 export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: PropertyExposeOptions, images: PropertyExposeImage[]): PropertyExposeDocument {
   const p = snapshot.source.listing;
   const t = (de: string, en: string, es: string) => options.language === "de" ? de : options.language === "es" ? es : en;
@@ -115,8 +120,7 @@ export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: P
   };
   const sanitizeAddress = (value: unknown) => sanitizePropertyExposeAddress(value, p.address, options.address === "full", options.language, p.street);
   const numericState = { coreNumericState: p.coreNumericState };
-  const channel = p.channelPriceVisibility && typeof p.channelPriceVisibility === "object" ? p.channelPriceVisibility as Record<string, unknown> : {};
-  const visibility = ["publish_price", "price_on_request", "hide_price"].includes(String(channel.Exposé)) ? channel.Exposé : p.priceVisibility;
+  const visibility = propertyExposePriceVisibility(p);
   const visibleMoney = options.showPrice && visibility === "publish_price";
   const rental = p.marketingType === "rent";
   const supportedMarketing = ["sale", "rent", "sale_or_rent"].includes(String(p.marketingType));
@@ -238,10 +242,17 @@ export async function mutatePropertyExpose(session: AppSession, input: Record<st
     if (snapshot.registry.versions.length >= 100) throw new PropertyExposeError("EXPOSE_VERSION_LIMIT", 409, "The 100-version limit has been reached.");
     let bytes: Uint8Array, options: PropertyExposeOptions | undefined;
     let sourceMediaHashes: Record<string, string> | undefined;
+    let privatePriceHidden = false;
     let name: string;
     if (operation === "generate") {
       if (input.confirmed !== true) throw new PropertyExposeError("EXPOSE_CONFIRMATION_REQUIRED", 400, "Confirm the selected saved information for this private PDF.");
       options = parsePropertyExposeOptions(input.options);
+      const visibility = propertyExposePriceVisibility(snapshot.source.listing);
+      privatePriceHidden = snapshot.source.listing.developer === true && snapshot.unconfirmedPositivePublicationPrice === true
+        && (!options.showPrice || visibility === "hide_price" || visibility === "price_on_request");
+      if (privatePriceHidden && options.floorPlanIds.length > 0) {
+        throw new PropertyExposeError("EXPOSE_FLOORPLAN_PRICE_REVIEW", 409, "Remove the floor plans before generating a private PDF without a confirmed price.");
+      }
       const selected = await selectedImages(snapshot, options);
       sourceMediaHashes = selected.sourceMediaHashes;
       bytes = await renderPropertyExposePdf({ ...buildPropertyExposeDocument(snapshot, options, selected.images), floorPlanPdfs: selected.floorPlanPdfs });
@@ -258,7 +269,7 @@ export async function mutatePropertyExpose(session: AppSession, input: Record<st
       workspaceId: session.workspaceId, folder: `properties/${snapshot.propertyId}` });
     const version: ExposeStoredVersion = { id: randomUUID(), assetId: asset.id, source: operation === "generate" ? "generated" : "uploaded",
       fileName: name, createdAt: iso(), sizeBytes: bytes.byteLength, pageCount, versionLabel: `v${snapshot.registry.versions.length + 1}`,
-      sourceFingerprint: snapshot.sourceFingerprint, sha256: createHash("sha256").update(bytes).digest("hex"), ...(options ? { options, sourceMediaHashes } : {}) };
+      sourceFingerprint: snapshot.sourceFingerprint, sha256: createHash("sha256").update(bytes).digest("hex"), ...(options ? { ...(privatePriceHidden ? { privateOptions: options } : { options }), sourceMediaHashes } : {}) };
     // Storage and SQL cannot commit atomically. An uncertain write never deletes
     // the new private asset automatically (it may already have a committed reference).
     await persistPropertyExposeChange({ snapshot, session, expectedRevision: input.expectedRevision, operation: "version", version });
@@ -266,6 +277,10 @@ export async function mutatePropertyExpose(session: AppSession, input: Record<st
   }
   if (operation === "activate") {
     if (input.confirmed !== true || !exposeUuid(input.documentId)) throw new PropertyExposeError("EXPOSE_CONFIRMATION_REQUIRED", 400, "Review and confirm the exact PDF before activation.");
+    if (snapshot.source.listing.developer === true && snapshot.unconfirmedPositivePublicationPrice === true
+        && snapshot.registry.versions.some(version => version.id === input.documentId && version.privateOptions)) {
+      throw new PropertyExposeError("EXPOSE_ACTIVATION_PRICE_REVIEW", 409, "Confirm the current authorized unit price before activating this private PDF.");
+    }
     await readPropertyExposePdf(session, snapshot.propertyId, input.documentId);
     await persistPropertyExposeChange({ snapshot, session, expectedRevision: input.expectedRevision, operation, documentId: input.documentId });
   } else if (operation === "deactivate") {

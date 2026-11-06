@@ -21,6 +21,7 @@ export type ExposeStoredVersion = {
   id: string; assetId: string; source: PropertyExposeSource; fileName: string; createdAt: string;
   sizeBytes: number; pageCount: number; versionLabel: string; sourceFingerprint: string; sha256: string;
   options?: PropertyExposeOptions;
+  privateOptions?: PropertyExposeOptions;
   sourceMediaHashes?: Record<string, string>;
 };
 export type ExposeRegistry = { schemaVersion: 1; revision: string; preferredSource: PropertyExposeSource;
@@ -28,7 +29,8 @@ export type ExposeRegistry = { schemaVersion: 1; revision: string; preferredSour
 export type ExposeSource = { listing: Record<string, unknown>; media: Record<string, unknown>[];
   texts: Record<string, unknown>[]; costs: Record<string, unknown>[]; company: Record<string, unknown> | null };
 export type ExposeSnapshot = { propertyId: string; workspaceId: string; projectId: string | null;
-  source: ExposeSource; registryRaw: unknown; registry: ExposeRegistry; sourceFingerprint: string };
+  source: ExposeSource; registryRaw: unknown; registry: ExposeRegistry; sourceFingerprint: string;
+  unconfirmedPositivePublicationPrice?: boolean };
 export function stableExposeJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableExposeJson).join(",")}]`;
   if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
@@ -119,8 +121,17 @@ const scopedPropertySql = `p.id=$1::uuid and p.workspace_id=$2::uuid and
   (p.project_id is null or exists(select 1 from projects project where project.id=p.project_id and project.workspace_id=p.workspace_id))`;
 export async function loadPropertyExposeSnapshot(workspaceId: string, propertyId: string): Promise<ExposeSnapshot> {
   if (!exposeUuid(workspaceId) || !exposeUuid(propertyId)) throw new PropertyExposeError("EXPOSE_INVALID_SCOPE", 400, "Invalid property scope.");
-  const row = await queryOne<{ projectId: string | null; source: ExposeSource; registryRaw: unknown }>(
-    `select p.project_id as "projectId",p.canonical_payload->'expose' as "registryRaw",${exposeSourceSql} as source
+  const row = await queryOne<{ projectId: string | null; source: ExposeSource; registryRaw: unknown; unconfirmedPositivePublicationPrice: boolean }>(
+    `select p.project_id as "projectId",p.canonical_payload->'expose' as "registryRaw",${exposeSourceSql} as source,
+      (p.project_id is not null and coalesce(p.public_price_cents,p.target_price_cents,0)>0
+        and (p.price_visibility='publish_price' or exists(select 1
+          from jsonb_each_text(case when jsonb_typeof(p.channel_price_visibility)='object' then p.channel_price_visibility else '{}'::jsonb end)
+          where value='publish_price'))
+        and not exists(select 1 from property_units u where u.workspace_id=p.workspace_id and u.project_id=p.project_id and u.id=p.unit_id
+          and u.price_cents=coalesce(p.public_price_cents,p.target_price_cents,0)
+          and u.metadata->'priceConfirmation'->>'sourceReference' is not null
+          and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text)
+      ) as "unconfirmedPositivePublicationPrice"
       from seller_listings p where ${scopedPropertySql}`, [propertyId, workspaceId]);
   if (!row) throw new PropertyExposeError("EXPOSE_NOT_FOUND", 404, "Property not found in this workspace.");
   return { propertyId, workspaceId, ...row, registry: readExposeRegistry(row.registryRaw), sourceFingerprint: exposeFingerprint(row.source) };

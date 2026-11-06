@@ -688,6 +688,21 @@ test("connected-assistant quota requires the checksummed Knowledge Center predec
   assert.deepEqual(createMigrationPlan({ ledgerRows: [...ledgerRows, ledgerRow(migrations[1].version, "sha-108")], migrations, only: "" }), []);
 });
 
+test("private Exposé draft migration requires the exact checksummed public price guard", () => {
+  const predecessor = migration("198_property_website_price_visibility", "sha-198");
+  const draft = migration("199_private_expose_price_hidden_draft", "sha-199");
+  const migrations = [predecessor, draft];
+  const only = draft.version;
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [], migrations, only: "" }), [predecessor, draft]);
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only }), /required predecessor 198_property_website_price_visibility/);
+  const missing = [ledgerRow(predecessor.version, null)];
+  assert.throws(() => createMigrationPlan({ ledgerRows: missing, migrations, only }), /Missing checksum for 198_property_website_price_visibility/);
+  assert.throws(() => createMigrationPlan({ ledgerRows: missing, migrations, only: "" }), /Missing checksum for 198_property_website_price_visibility/);
+  assert.throws(() => createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, "wrong")], migrations, only }), /Checksum mismatch for 198_property_website_price_visibility/);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only }), [draft]);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow("198", predecessor.checksum)], migrations, only }), [draft]);
+});
+
 test("customer provisioning stays manual and requires the checksummed assistant quota predecessor", () => {
   const knowledge = migration("101_knowledge_center", "sha-101");
   const quota = migration("108_knowledge_connected_assistant_quota", "sha-108");

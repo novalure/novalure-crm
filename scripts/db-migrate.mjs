@@ -72,6 +72,7 @@ const manualCutoverVersions = new Set([
   "113_meeting_reminder_admission",
   "114_customer_workspace_provisioning",
 ]);
+const privateExposeDraftMigration = "199_private_expose_price_hidden_draft";
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
   ["057_bot_webhook_legacy_index_cutover", "048_bot_webhook_integrity"],
@@ -102,6 +103,7 @@ const migrationDependencies = new Map([
   ["112_booking_production_activation", "111_booking_public_channels"],
   ["113_meeting_reminder_admission", "112_booking_production_activation"],
   ["114_customer_workspace_provisioning", "108_knowledge_connected_assistant_quota"],
+  [privateExposeDraftMigration, "198_property_website_price_visibility"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
@@ -544,6 +546,10 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
 
     const canonicalRow = canonicalRows[0];
     if (!canonicalRow) continue;
+    if (!canonicalRow.checksum && migration.version === migrationDependencies.get(privateExposeDraftMigration)
+        && runnable.some(candidate => candidate.version === privateExposeDraftMigration)) {
+      throw new Error(`Missing checksum for ${migration.version}, required by ${privateExposeDraftMigration}`);
+    }
     if (canonicalRow.checksum && canonicalRow.checksum !== migration.checksum) {
       throw new Error(
         `Checksum mismatch for ${migration.version}: ledger ${canonicalRow.checksum}, file ${migration.checksum}`,
