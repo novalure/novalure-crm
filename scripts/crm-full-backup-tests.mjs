@@ -391,7 +391,21 @@ test('a separately claimed PITR child yields a combined backup with exact lineag
   const child = { id: f.endpoint.branchId, projectId: config.neonProjectId, default: false, primary: false,
     parentId: config.sourceBranchId, parentTimestamp: pointInTime, parentLsn: '0/A176B330' };
   const claim = 'crm-full-backups/pitr/20261101194500/claim.json';
+  const indexPath = `crm-full-backups/index/${backupId}-FULL.json`;
+  const fullPath = `crm-full-backups/sets/${backupId}/FULL.json`;
   let copyAttempts = 0, computeCreated = false;
+  let terminalGuardSeen = false;
+  const readProduction = f.ports.readProductionBinding;
+  f.ports.readProductionBinding = async () => {
+    assert.equal(f.target.has(fullPath), false, 'No final source guard can occur after terminal FULL is visible');
+    if (f.target.has(indexPath)) terminalGuardSeen = true;
+    return readProduction();
+  };
+  const writeTarget = f.ports.writeTarget;
+  f.ports.writeTarget = async (pathname, bytes, options) => {
+    if (pathname === fullPath) assert.equal(terminalGuardSeen, true, 'Terminal FULL follows the final source guard');
+    return writeTarget(pathname, bytes, options);
+  };
   const listEndpoints = f.ports.getIsolatedEndpoints;
   const prepareEndpoint = f.ports.prepareIsolatedEndpoint;
   f.ports.getIsolatedEndpoints = branch => computeCreated ? listEndpoints(branch) : [];
@@ -418,6 +432,10 @@ test('a separately claimed PITR child yields a combined backup with exact lineag
   assert.deepEqual(await readCrmBackupIndex({ config, ports: f.ports }), [full]);
   assert.deepEqual(await readCrmBackupFreshness({ config, ports: f.ports, now: '2026-11-02T19:45:01Z' }),
     { status: 'stale', rpoHours: 24, latestPossibleDataAt: '2026-11-01T19:45:00.000Z', minimumAgeMs: 86_401_000 });
+  const { pitrCompletion: _pitrCompletion, ...withoutTerminalProof } = full;
+  f.target.set(fullPath, Buffer.from(JSON.stringify(withoutTerminalProof)));
+  await assert.rejects(readCrmBackupIndex({ config, ports: f.ports }), { code: 'BACKUP_MANIFEST_PITR_MISMATCH' });
+  f.ports.readProductionBinding = readProduction;
   await assert.rejects(runCrmFullBackup({ ...args, backupId: 'backup-duplicate-pitr' }), { code: 'BACKUP_SNAPSHOT_ALREADY_CLAIMED' });
   assert.equal(copyAttempts, 1);
 });

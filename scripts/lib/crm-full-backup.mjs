@@ -7,6 +7,7 @@ import { posix as path } from 'node:path';
 import { canonical, catalogQueries, captureDatabaseMetadata } from './studio-stage3-qa-fingerprint.mjs';
 
 export const BACKUP_SCOPE = 'FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES';
+export const PITR_COMPLETION = 'PRODUCTION_GUARD_BEFORE_FULL';
 export const backupProviderStages = Object.freeze(['PRODUCTION_BINDING_READ', 'SNAPSHOT_READ', 'SNAPSHOT_RESTORE',
   'PITR_CHILD_CREATE',
   'ISOLATED_RESOURCE_READ', 'ISOLATED_ENDPOINT_CREATE', 'ISOLATED_ENDPOINT_UPDATE', 'ISOLATED_CONNECTION_READ',
@@ -200,13 +201,14 @@ async function* readVerifiedBackupSets({ config: input, ports }, { confirmNoInco
       requireValue(full.snapshotId === undefined && !snapshot && recoveryPoint?.kind === 'NEON_PITR' &&
         recoveryPoint.sourceBranchId === config.sourceBranchId && validPointInTime(recoveryPoint.requestedAt) &&
         digest(candidate.recoveryPoint ?? null) === digest(recoveryPoint) && digest(full.recoveryPoint ?? null) === digest(recoveryPoint) &&
+        candidate.pitrCompletion === PITR_COMPLETION && full.pitrCompletion === PITR_COMPLETION &&
         isolatedBranch?.id === full.isolatedBranchId, 'BACKUP_MANIFEST_PITR_MISMATCH');
       validateCopy({ finalize: false, branch: isolatedBranch }, { ...config, pointInTime: recoveryPoint.requestedAt }, null, `crm-backup-${full.backupId}`);
     } else {
       requireValue(typeof full.snapshotId === 'string' && snapshot?.id === full.snapshotId && snapshot.sourceBranchId === config.sourceBranchId, 'BACKUP_MANIFEST_HASH_MISMATCH');
     }
     // The writer can append INCOMPLETE if the post-FULL production guard fails.
-    if (confirmNoIncomplete && await ports.readTarget(incompletePath)) continue;
+    if ((confirmNoIncomplete || full.recoveryPoint) && await ports.readTarget(incompletePath)) continue;
     yield { full, pointAgeUpperBound: recoveryPoint?.requestedAt ?? snapshot.createdAt };
   }
 }
@@ -406,14 +408,17 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
       cleanup, expiresAt: new Date(Date.parse(createdAt) + config.retentionDays * 86400000).toISOString() };
     const manifestReceipt = await save(root + '/manifest.json', manifest);
     await checkProduction();
-    const full = { ...evidence, status: 'FULL', ...(snapshot ? { snapshotId: snapshot.id } : {}), isolatedBranchId: branch.id,
+    const full = { ...evidence, status: 'FULL', ...(snapshot ? { snapshotId: snapshot.id } : { pitrCompletion: PITR_COMPLETION }), isolatedBranchId: branch.id,
       completedAt: timestamp(), manifestPath: manifestReceipt.pathname, manifestSha256: manifestReceipt.sha256,
       fileCount: files.length, fileBytes: files.reduce((sum, file) => sum + file.bytes, 0), historicalReferenceCount: inventory.references.length, cleanup };
     // Index first, commit marker last. Readers must verify FULL.json AND its hash.
     await save(`${config.prefix}/index/${backupId}-FULL.json`, { ...full, status: 'COMMIT_CANDIDATE', requiresVerifiedFullMarker: true });
+    // The PITR marker is a terminal target-only write. It is visible only
+    // after the last source guard. Preserve the original snapshot sequence.
+    if (config.pointInTime) await checkProduction();
     fullMarkerAttempted = true;
     await save(root + '/FULL.json', full);
-    await checkProduction();
+    if (!config.pointInTime) await checkProduction();
     return full;
   } catch (error) {
     let cleanupCode = null, cleanupFailure = null, productionVerification = { status: 'NOT_YET_CAPTURED' };

@@ -7,7 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { BACKUP_SCOPE, CrmBackupError, captureCrmBackupDatabase, defaultCrmBackupConfig, pitrParentAtOrBefore,
+import { BACKUP_SCOPE, PITR_COMPLETION, CrmBackupError, captureCrmBackupDatabase, defaultCrmBackupConfig, pitrParentAtOrBefore,
   validateBackupConfig } from './crm-full-backup.mjs';
 
 const API = 'https://console.neon.tech/api/v2';
@@ -77,6 +77,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   for (const key of ['neonProjectId', 'sourceBranchId', 'productionEndpointId', 'databaseName', 'sourceStoreId', 'targetStoreId', 'backupProjectId', 'teamId', 'teamSlug']) {
     requireValue(config[key] === defaultCrmBackupConfig[key], 'BACKUP_AUTHORIZED_SCOPE_REQUIRED');
   }
+  requireValue(!config.pointInTime || config.prefix === defaultCrmBackupConfig.prefix, 'PITR_CAPACITY_PREFIX_MISMATCH');
   const env = options.env ?? process.env;
   const request = options.fetch ?? globalThis.fetch;
   const now = options.now ?? Date.now;
@@ -84,7 +85,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   const pollLimit = options.pollLimit ?? 60;
   requireValue(typeof request === 'function' && Number.isSafeInteger(pollLimit) && pollLimit >= 1 && pollLimit <= 120, 'BACKUP_PROVIDER_OPTIONS_INVALID');
   let blob, verifier, verifiedTokenDigest = null, originalProduction = null;
-  let pointCopyAttempted = false, pointClaimOwner;
+  let pointCopyAttempted = false, pointClaimOwner, pointCapacityReservation;
   const owned = new Map(), ownRuns = new Set();
   const sdk = async () => blob ??= options.blob ?? await import('@vercel/blob');
   const oidcVerifier = async () => verifier ??= options.verifyOidc ?? (await import('@vercel/oidc')).verifyVercelOidcToken;
@@ -190,7 +191,12 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       row.parent_id === config.sourceBranchId && !row.restore_status && !row.restored_from && !row.restored_as);
     requireValue(Number.isInteger(config.pitrBranchLimit) && config.pitrBranchLimit >= 1 && config.pitrBranchLimit <= 35 &&
       managedChildren.length < config.pitrBranchLimit, 'PITR_CHILD_CAPACITY_UNAVAILABLE');
+    await assertRealtimeDisabled(config.sourceBranchId);
     return { pointInTime, historyRetentionSeconds, branches };
+  }
+  async function assertRealtimeDisabled(id) {
+    const realtime = await neon(`${projectPath}/branches/${segment(id)}/realtime`);
+    requireValue(realtime?.enabled === false && realtime.pending === false, 'PITR_REALTIME_STATE_NOT_DISABLED');
   }
   async function validatePointInTime() {
     const { pointInTime, historyRetentionSeconds } = await readPointInTimeState();
@@ -201,7 +207,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     requireValue(branchId.test(id ?? '') && id !== config.sourceBranchId && branch.id === id && branch.projectId === config.neonProjectId &&
       branch.name === name && branch.default === false && branch.primary === false && branch.currentState === 'ready' &&
       raw.parent_id === config.sourceBranchId && pitrParentAtOrBefore(raw.parent_timestamp, config.pointInTime) && parentLsn &&
-      raw.archived !== true && !raw.restored_from && !raw.restored_as && !raw.restore_status,
+      raw.init_source === 'parent-data' && raw.archived !== true && !raw.restored_from && !raw.restored_as && !raw.restore_status,
     'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
     return { ...branch, parentId: raw.parent_id, parentTimestamp: raw.parent_timestamp, parentLsn };
   }
@@ -315,9 +321,12 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     requireValue(pointClaimOwner && args.name === `crm-backup-${pointClaimOwner}`, 'PITR_COPY_CLAIM_REQUIRED');
     const { name } = args, { branches } = await readPointInTimeState();
     requireValue(!branches.some(row => row.name === name), 'ISOLATED_BRANCH_NAME_ALREADY_EXISTS');
-    const beforeIds = new Set(branches.map(row => row.id));
     requireValue(!pointCopyAttempted, 'PITR_COPY_ALREADY_ATTEMPTED');
     pointCopyAttempted = true;
+    pointCapacityReservation = await reservePointCapacity(pointClaimOwner);
+    const { branches: before } = await readPointInTimeState();
+    requireValue(!before.some(row => row.name === name), 'ISOLATED_BRANCH_NAME_ALREADY_EXISTS');
+    const beforeIds = new Set(before.map(row => row.id));
     let createdBranchId, createdParentLsn, observedParentTimestamp;
     try {
       let result;
@@ -330,7 +339,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
           created.name === name && created.projectId === config.neonProjectId && created.default === false && created.primary === false &&
           result.branch.parent_id === config.sourceBranchId && (result.branch.parent_timestamp == null ||
             pitrParentAtOrBefore(result.branch.parent_timestamp, config.pointInTime)) &&
-          !result.branch.restored_from && !result.branch.restored_as && !result.branch.restore_status,
+          result.branch.init_source === 'parent-data' && !result.branch.restored_from && !result.branch.restored_as && !result.branch.restore_status,
         'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
         createdParentLsn = normalizeLsn(result.branch.parent_lsn);
         requireValue(createdParentLsn, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
@@ -341,6 +350,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       requireValue(branch.parentLsn === createdParentLsn, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
       observedParentTimestamp = branch.parentTimestamp;
       await readProductionBinding();
+      await assertRealtimeDisabled(createdBranchId);
       owned.set(createdBranchId, { name, parentLsn: branch.parentLsn, parentTimestamp: branch.parentTimestamp });
       return { finalize: false, branch, operations: result.operations, endpoints: [] };
     } catch (error) {
@@ -352,6 +362,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
         const branch = validatePointInTimeBranch((await neon(`${projectPath}/branches/${segment(createdBranchId)}`)).branch, createdBranchId, name);
         requireValue(branch.parentLsn === createdParentLsn && (!observedParentTimestamp || branch.parentTimestamp === observedParentTimestamp),
           'PITR_COPY_CLEANUP_UNCONFIRMED');
+        await assertRealtimeDisabled(createdBranchId);
         owned.set(createdBranchId, { name, parentLsn: branch.parentLsn, parentTimestamp: branch.parentTimestamp });
         try {
           for (const endpoint of await getIsolatedEndpoints(branch)) await setEndpointDisabled(endpoint, true);
@@ -362,6 +373,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   }
   async function prepareIsolatedEndpoint(branch, endpoints) {
     await assertOwned(branch);
+    if (config.pointInTime) await assertRealtimeDisabled(branch.id);
     const actual = await getIsolatedEndpoints(branch);
     requireValue(Array.isArray(endpoints) && endpoints.length === actual.length && endpoints.every(ep => actual.some(row => row.id === ep.id)), 'ISOLATED_ENDPOINT_INVENTORY_CHANGED');
     let selected = actual.find(ep => ep.type === 'read_write') ?? actual[0];
@@ -378,6 +390,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   }
   async function captureDatabase({ branch, endpoint }) {
     await assertOwned(branch); const live = await liveEndpoint(endpoint); await readProductionBinding();
+    if (config.pointInTime) await assertRealtimeDisabled(branch.id);
     requireValue(live.disabled === false && live.branchId === branch.id, 'ISOLATED_ENDPOINT_SCOPE_MISMATCH');
     const query = new URLSearchParams({ branch_id: branch.id, endpoint_id: live.id, database_name: config.databaseName, role_name: 'neondb_owner', pooled: 'false' });
     const response = await neon(`${projectPath}/connection_uri?${query}`);
@@ -427,6 +440,45 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       return { storeId, pathname, access: 'private', body: result.stream };
     } catch (error) { throw safeFailure(error); }
   }
+  async function reservePointCapacity(backupId) {
+    // All opted-in executions share the fixed project prefix and numbered
+    // capacity objects, even when their individual PITR points differ.
+    for (let slot = 1; slot <= config.pitrBranchLimit; slot++) {
+      const pathname = `${config.prefix}/pitr-capacity/slot-${slot}.json`;
+      try {
+        const existing = await readBlob(config.targetStoreId, pathname);
+        if (existing) {
+          await existing.body.cancel?.().catch(() => {});
+          continue;
+        }
+        const bytes = Buffer.from(JSON.stringify({ format: 'crm-full-backup-pitr-capacity-v1', slot, backupId,
+          pointInTime: config.pointInTime, projectId: config.neonProjectId, sourceBranchId: config.sourceBranchId,
+          targetStoreId: config.targetStoreId }));
+        const result = await (await sdk()).put(pathname, bytes, { ...await blobOptions(config.targetStoreId), access: 'private',
+          allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' });
+        assertBlobObject(result, config.targetStoreId, pathname);
+        const reservation = { pathname, bytes };
+        await assertPointCapacityReservation(reservation);
+        return reservation;
+      } catch {
+        // A failed PUT can have committed. No subsequent slot or Neon effect
+        // is allowed after any uncertain reservation outcome.
+        throw new CrmBackupError('PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+      }
+    }
+    throw new CrmBackupError('PITR_CHILD_CAPACITY_UNAVAILABLE');
+  }
+  async function assertPointCapacityReservation({ pathname, bytes }) {
+    const readback = await readBlob(config.targetStoreId, pathname);
+    requireValue(readback, 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+    let offset = 0;
+    for await (const chunk of readback.body) {
+      const actual = Buffer.from(chunk);
+      requireValue(actual.equals(bytes.subarray(offset, offset + actual.length)), 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+      offset += actual.length;
+    }
+    requireValue(offset === bytes.length, 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+  }
   async function writeTarget(pathname, bytes, settings) {
     assertPathname(pathname);
     const claim = !config.pointInTime && pathname.startsWith(config.prefix + '/snapshots/') ? pathname.slice((config.prefix + '/snapshots/').length).split('/') : [];
@@ -442,11 +494,28 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     }
     if (pointClaim) requireValue(!pointClaimOwner && record?.pointInTime === config.pointInTime && record.sourceBranchId === config.sourceBranchId &&
       record.sourceStoreId === config.sourceStoreId && record.targetStoreId === config.targetStoreId &&
-      /^[a-z0-9][a-z0-9-]{5,100}$/u.test(record.backupId ?? ''), 'PITR_CLAIM_SCOPE_MISMATCH');
+      typeof record.backupId === 'string' && /^[a-z0-9][a-z0-9-]{5,100}$/u.test(record.backupId), 'PITR_CLAIM_SCOPE_MISMATCH');
     const boundRecord = value => value?.format === 'crm-full-backup-v1' && value.scope === BACKUP_SCOPE &&
       value.projectId === config.neonProjectId && value.sourceBranchId === config.sourceBranchId &&
       value.productionEndpointId === config.productionEndpointId && value.sourceStoreId === config.sourceStoreId && value.targetStoreId === config.targetStoreId;
     const setParts = pathname.startsWith(config.prefix + '/sets/') ? pathname.slice((config.prefix + '/sets/').length).split('/') : [];
+    const terminalPoint = config.pointInTime && setParts.length === 2 && setParts[1] === 'FULL.json';
+    if (terminalPoint) {
+      const saved = owned.get(record?.isolatedBranchId), endpoints = record?.cleanup?.endpoints;
+      requireValue(pointClaimOwner === setParts[0] && ownRuns.has(pointClaimOwner) && pointCapacityReservation &&
+        boundRecord(record) && record.backupId === pointClaimOwner && record.status === 'FULL' &&
+        record.pitrCompletion === PITR_COMPLETION && record.snapshotId === undefined && record.snapshot === undefined &&
+        record.recoveryPoint?.kind === 'NEON_PITR' && record.recoveryPoint.sourceBranchId === config.sourceBranchId &&
+        record.recoveryPoint.requestedAt === config.pointInTime && saved?.name === `crm-backup-${pointClaimOwner}` && saved.parentLsn &&
+        record.manifestPath === `${config.prefix}/sets/${pointClaimOwner}/manifest.json` && /^[a-f0-9]{64}$/u.test(record.manifestSha256 ?? '') &&
+        Number.isFinite(Date.parse(record.completedAt)) && record.cleanup?.status === 'OBSERVED_DISABLED_AND_IDLE' &&
+        Array.isArray(endpoints) && endpoints.length > 0 && endpoints.every(ep => ep?.branchId === record.isolatedBranchId &&
+          endpointId.test(ep.id ?? '') && ep.disabled === true && ep.currentState === 'idle'), 'PITR_FULL_MARKER_SCOPE_MISMATCH');
+      await assertPointCapacityReservation(pointCapacityReservation);
+      const observed = await getIsolatedEndpoints({ id: record.isolatedBranchId, name: saved.name });
+      requireValue(observed.length === endpoints.length && observed.every(ep => ep.disabled === true && ep.currentState === 'idle' &&
+        endpoints.some(receipt => receipt.id === ep.id)), 'PITR_FULL_MARKER_SCOPE_MISMATCH');
+    }
     const indexFailure = pathname.startsWith(config.prefix + '/index/') ? pathname.slice((config.prefix + '/index/').length).match(/^([a-z0-9][a-z0-9-]{5,100})-INCOMPLETE\.json$/u) : null;
     const failureRun = setParts.length === 2 && /^[a-z0-9][a-z0-9-]{5,100}$/u.test(setParts[0]) && setParts[1] === 'INCOMPLETE.json'
       ? setParts[0] : indexFailure?.[1];
@@ -464,7 +533,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
         record.sourceBranchId === config.sourceBranchId && record.sourceStoreId === config.sourceStoreId && record.targetStoreId === config.targetStoreId &&
         /^[a-z0-9][a-z0-9-]{5,100}$/u.test(record.backupId ?? '')) ||
         (!config.pointInTime && setParts.length === 2 && setParts[1] === 'RUNNING.json' && boundRecord(record) && record.status === 'RUNNING' && record.backupId === setParts[0])) ownRuns.add(record.backupId);
-      if (!failureRun) await readProductionBinding();
+      if (!failureRun && !terminalPoint) await readProductionBinding();
       if (pointClaim) {
         pointClaimOwner = record.backupId;
         ownRuns.add(record.backupId);

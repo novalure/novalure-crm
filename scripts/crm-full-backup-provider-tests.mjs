@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createCrmBackupProviderPorts } from './lib/crm-full-backup-providers.mjs';
-import { BACKUP_SCOPE, defaultCrmBackupConfig, runCrmFullBackup } from './lib/crm-full-backup.mjs';
+import { BACKUP_SCOPE, PITR_COMPLETION, defaultCrmBackupConfig, runCrmFullBackup } from './lib/crm-full-backup.mjs';
 
 const clock = Date.parse('2026-11-01T20:00:00Z');
 const config = { ...defaultCrmBackupConfig, snapshotId: 'snap-synthetic-backup-proof' };
@@ -13,8 +13,7 @@ const pathname = '11111111-1111-4111-8111-111111111111/private.pdf';
 const restoreArgs = { snapshotId: config.snapshotId, name: 'crm-backup-backup-synthetic-proof', finalize: false };
 const code = value => error => error?.code === value;
 const claimSettings = { access: 'private', allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' };
-function claimPoint(ports, point = pointInTime) {
-  const backupId = restoreArgs.name.slice('crm-backup-'.length);
+function claimPoint(ports, point = pointInTime, backupId = restoreArgs.name.slice('crm-backup-'.length)) {
   const record = { backupId, pointInTime: point, sourceBranchId: config.sourceBranchId,
     sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId };
   return ports.writeTarget(`${config.prefix}/pitr/${point.replace(/\D/gu, '')}/claim.json`, Buffer.from(JSON.stringify(record)), claimSettings);
@@ -28,7 +27,7 @@ function environment(patch = {}) {
   return { NEON_API_KEY: ['SYNTHETIC', 'UNUSABLE', 'KEY'].join('_'), VERCEL_ENV: 'production', VERCEL_OIDC_TOKEN: jwt, ...patch };
 }
 function fixture(overrides = {}) {
-  const calls = [], blobs = [], copied = [], stored = new Map(), extraBranches = [];
+  const calls = [], blobs = [], copied = [], stored = overrides.stored ?? new Map(), extraBranches = [];
   const source = { id: config.sourceBranchId, project_id: config.neonProjectId, name: 'main', default: true, primary: true,
     current_state: 'ready', created_at: '2026-10-31T00:00:00Z', ...overrides.source };
   const production = { id: config.productionEndpointId, project_id: config.neonProjectId, branch_id: config.sourceBranchId,
@@ -53,7 +52,8 @@ function fixture(overrides = {}) {
     else if (u.pathname === `${root}/branches` && method === 'GET') value = { branches: [source, ...extraBranches, ...(restored ? [restored] : [])] };
     else if (u.pathname === `${root}/branches` && method === 'POST') {
       restored = { id: copiedId, project_id: config.neonProjectId, name: body.branch.name, default: false, primary: false,
-        parent_id: source.id, parent_timestamp: pointInTime, parent_lsn: '00/0000abba', current_state: 'ready', ...overrides.child };
+        parent_id: source.id, parent_timestamp: body.branch.parent_timestamp, parent_lsn: '00/0000abba', init_source: body.branch.init_source,
+        current_state: 'ready', ...overrides.child };
       if (overrides.lostPointAck) {
         copied.push({ id: copiedEndpointId, project_id: config.neonProjectId, branch_id: copiedId,
           host: `${copiedEndpointId}.c-3.eu-central-1.aws.neon.tech`, type: 'read_only', disabled: false, current_state: 'active' });
@@ -64,6 +64,8 @@ function fixture(overrides = {}) {
     }
     else if (u.pathname === `${root}/snapshots` && method === 'GET') value = { snapshots: [{ id: config.snapshotId, source_branch_id: source.id, created_at: new Date(clock).toISOString() }] };
     else if (u.pathname === `${root}/endpoints/${config.productionEndpointId}` && method === 'GET') value = { endpoint: production };
+    else if (u.pathname === `${root}/branches/${source.id}/realtime` && method === 'GET') value = overrides.sourceRealtime ?? { enabled: false, pending: false };
+    else if (u.pathname === `${root}/branches/${copiedId}/realtime` && method === 'GET') value = overrides.childRealtime ?? { enabled: false, pending: false };
     else if (u.pathname === `${root}/snapshots/${config.snapshotId}/restore` && method === 'POST') {
       restored = { id: copiedId, project_id: config.neonProjectId, name: body.name, default: false, primary: false,
         restored_from: config.snapshotId, restore_status: 'restored', current_state: 'ready' };
@@ -95,11 +97,14 @@ function fixture(overrides = {}) {
       return { blobs: [{ pathname, size: 3, url: url(options.storeId, pathname, overrides.publicBlob ? 'public' : 'private') }], hasMore: false }; },
     get: async (path, options) => { blobs.push({ method: 'get', storeId: options.storeId, path, access: options.access, useCache: options.useCache });
       const bytes = options.storeId === config.sourceStoreId ? Buffer.from('abc') : stored.get(path);
+      if (path.includes('/pitr-capacity/')) await overrides.onCapacityRead?.(path, bytes);
       if (!bytes) return null;
-      return { statusCode: 200, blob: { pathname: path, url: url(options.storeId, path) }, stream: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) }; },
+      const readBytes = overrides.tamperCapacityReadback && path.includes('/pitr-capacity/') ? Buffer.from('unexpected reservation') : bytes;
+      return { statusCode: 200, blob: { pathname: path, url: url(options.storeId, path) }, stream: new ReadableStream({ start(controller) { controller.enqueue(readBytes); controller.close(); } }) }; },
     put: async (path, bytes, options) => { blobs.push({ method: 'put', storeId: options.storeId, path, access: options.access,
       allowOverwrite: options.allowOverwrite, addRandomSuffix: options.addRandomSuffix });
       assert.equal(stored.has(path), false); stored.set(path, Buffer.from(bytes));
+      if (overrides.lostCapacityAck && path.includes('/pitr-capacity/')) throw new Error('SYNTHETIC capacity acknowledgement lost');
       if (overrides.productionDriftAfterFullPut && path.endsWith('/FULL.json')) production.branch_id = 'br-unexpected-production-binding';
       return { pathname: path, url: url(options.storeId, path) }; },
   };
@@ -214,6 +219,7 @@ test('PITR readback rejects a future or absent point, mismatched LSN and restore
     [{ child: { parent_timestamp: undefined } }, 'PITR_COPY_CLEANUP_UNCONFIRMED'],
     [{ child: { parent_lsn: 'not-a-lsn' } }, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH'],
     [{ initialParentLsn: '0/AAAA' }, 'PITR_COPY_CLEANUP_UNCONFIRMED'],
+    [{ child: { init_source: 'parent-schema' } }, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH'],
     [{ child: { restore_status: 'restored' } }, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH'],
     [{ child: { current_state: 'archived' } }, 'PITR_COPY_CLEANUP_UNCONFIRMED'],
   ]) {
@@ -223,6 +229,25 @@ test('PITR readback rejects a future or absent point, mismatched LSN and restore
     assert.equal(f.calls.filter(call => call.method !== 'GET').length, 1);
     assert.equal(f.copied.length, 0);
   }
+});
+
+test('PITR source and owned child must prove Realtime disabled with no pending activation', async () => {
+  const sourceRealtime = { enabled: true, pending: false };
+  const f = fixture({ config: pointConfig, sourceRealtime }), ports = await f.make();
+  await assert.rejects(ports.validatePointInTime(), code('PITR_REALTIME_STATE_NOT_DISABLED'));
+  await assert.rejects(claimPoint(ports), code('PITR_REALTIME_STATE_NOT_DISABLED'));
+  assert.equal(f.blobs.length, 0);
+  sourceRealtime.enabled = false;
+  await claimPoint(ports);
+  sourceRealtime.pending = true;
+  await assert.rejects(ports.copyPointInTime({ name: restoreArgs.name }), code('PITR_REALTIME_STATE_NOT_DISABLED'));
+  assert.ok(f.calls.every(call => call.method === 'GET'));
+  const inherited = fixture({ config: pointConfig, childRealtime: { enabled: true, pending: false } }), inheritedPorts = await inherited.make();
+  await claimPoint(inheritedPorts);
+  await assert.rejects(inheritedPorts.copyPointInTime({ name: restoreArgs.name }), code('PITR_COPY_CLEANUP_UNCONFIRMED'));
+  await assert.rejects(inheritedPorts.getIsolatedEndpoints({ id: copiedId, name: restoreArgs.name }), code('ISOLATED_BRANCH_NOT_OWNED'));
+  assert.deepEqual(inherited.calls.filter(call => call.method !== 'GET').map(call => [call.method, call.pathname.split('/').at(-1)]),
+    [['POST', 'branches']]);
 });
 
 test('PITR denial preserves its safe status and a lost acknowledgement never adopts the visible child', async () => {
@@ -256,6 +281,47 @@ test('PITR capacity counts archived managed children both before claim and immed
   assert.ok(f.calls.every(call => call.method === 'GET'));
 });
 
+test('two distinct point claims racing on the last durable capacity slot send one child POST', { timeout: 3000 }, async () => {
+  const stored = new Map(), slotPath = `${config.prefix}/pitr-capacity/slot-1.json`;
+  let reads = 0, release;
+  const bothObservedFree = new Promise(resolve => { release = resolve; });
+  const onCapacityRead = async (path, bytes) => {
+    if (path === slotPath && !bytes) {
+      if (++reads === 2) release();
+      await bothObservedFree;
+    }
+  };
+  const backupIds = ['backup-synthetic-point-one', 'backup-synthetic-point-two'];
+  const points = [pointInTime, '2026-11-01T19:31:00Z'];
+  const instances = points.map(point => fixture({ stored, onCapacityRead, config: { ...pointConfig, pointInTime: point, pitrBranchLimit: 1 } }));
+  const ports = await Promise.all(instances.map(instance => instance.make()));
+  await Promise.all(ports.map((port, index) => claimPoint(port, points[index], backupIds[index])));
+  const outcomes = await Promise.allSettled(ports.map((port, index) => port.copyPointInTime({ name: `crm-backup-${backupIds[index]}` })));
+  const winner = outcomes.findIndex(result => result.status === 'fulfilled');
+  assert.ok(winner >= 0);
+  assert.equal(outcomes[1 - winner].reason?.code, 'PITR_CAPACITY_RESERVATION_UNCONFIRMED');
+  assert.equal(reads, 2);
+  assert.equal(instances.flatMap(instance => instance.calls).filter(call => call.method === 'POST').length, 1);
+  assert.deepEqual(JSON.parse(stored.get(slotPath)), { format: 'crm-full-backup-pitr-capacity-v1', slot: 1,
+    backupId: backupIds[winner], pointInTime: points[winner], projectId: config.neonProjectId,
+    sourceBranchId: config.sourceBranchId, targetStoreId: config.targetStoreId });
+  assert.ok(instances.flatMap(instance => instance.blobs).filter(call => call.method === 'put' && call.path === slotPath)
+    .every(call => call.storeId === config.targetStoreId && call.access === 'private' && call.allowOverwrite === false && call.addRandomSuffix === false));
+});
+
+test('a lost capacity write response or mismatched readback neither tries a second slot nor creates a branch', async () => {
+  const slotPath = `${config.prefix}/pitr-capacity/slot-1.json`;
+  for (const overrides of [{ lostCapacityAck: true }, { tamperCapacityReadback: true }]) {
+    const f = fixture({ config: pointConfig, ...overrides }), ports = await f.make();
+    await claimPoint(ports);
+    await assert.rejects(ports.copyPointInTime({ name: restoreArgs.name }), code('PITR_CAPACITY_RESERVATION_UNCONFIRMED'));
+    await assert.rejects(ports.copyPointInTime({ name: restoreArgs.name }), code('PITR_COPY_ALREADY_ATTEMPTED'));
+    assert.equal(f.stored.has(slotPath), true);
+    assert.equal(f.blobs.some(call => call.path === `${config.prefix}/pitr-capacity/slot-2.json`), false);
+    assert.equal(f.calls.some(call => call.method === 'POST'), false);
+  }
+});
+
 test('PITR claims require the exact point namespace and fixed private target binding', async () => {
   const f = fixture({ config: pointConfig }), ports = await f.make();
   const path = `${config.prefix}/pitr/20261101193000/claim.json`;
@@ -265,12 +331,46 @@ test('PITR claims require the exact point namespace and fixed private target bin
   const write = (claimPath, claim = record) => ports.writeTarget(claimPath, Buffer.from(JSON.stringify(claim)), settings);
   await assert.rejects(write(`${config.prefix}/pitr/20261101193001/claim.json`), code('TARGET_BACKUP_PREFIX_REQUIRED'));
   await assert.rejects(write(`${config.prefix}/snapshots/${config.snapshotId}/claim.json`), code('TARGET_BACKUP_PREFIX_REQUIRED'));
+  await assert.rejects(write(`${config.prefix}/pitr-capacity/slot-1.json`), code('TARGET_BACKUP_PREFIX_REQUIRED'));
   await assert.rejects(write(path, { ...record, targetStoreId: config.sourceStoreId }), code('PITR_CLAIM_SCOPE_MISMATCH'));
   assert.equal(f.blobs.length, 0);
   await write(path);
   assert.equal(f.stored.has(path), true);
   assert.equal(f.blobs[0].storeId, config.targetStoreId);
   assert.ok(f.calls.every(call => call.method === 'GET'));
+  const wrongPrefix = fixture({ config: { ...pointConfig, prefix: 'arbitrary-pitr-prefix' } });
+  await assert.rejects(wrongPrefix.make(), code('PITR_CAPACITY_PREFIX_MISMATCH'));
+  assert.deepEqual(wrongPrefix.calls, []);
+});
+
+test('only the exact checked PITR FULL marker can make the terminal target-only write', async () => {
+  const f = fixture({ config: pointConfig, productionDriftAfterFullPut: true }), ports = await f.make();
+  await claimPoint(ports);
+  const { branch } = await ports.copyPointInTime({ name: restoreArgs.name });
+  const endpoint = await ports.prepareIsolatedEndpoint(branch, []);
+  const disabled = await ports.disableIsolatedEndpoint(endpoint);
+  const backupId = restoreArgs.name.slice('crm-backup-'.length), root = `${config.prefix}/sets/${backupId}`;
+  const marker = { format: 'crm-full-backup-v1', backupId, status: 'FULL', scope: BACKUP_SCOPE,
+    projectId: config.neonProjectId, sourceBranchId: config.sourceBranchId, productionEndpointId: config.productionEndpointId,
+    sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId, isolatedBranchId: branch.id,
+    recoveryPoint: { kind: 'NEON_PITR', requestedAt: pointInTime, sourceBranchId: config.sourceBranchId },
+    pitrCompletion: PITR_COMPLETION, manifestPath: `${root}/manifest.json`, manifestSha256: 'a'.repeat(64),
+    completedAt: new Date(clock).toISOString(), cleanup: { status: 'OBSERVED_DISABLED_AND_IDLE', endpoints: [disabled] } };
+  const write = value => ports.writeTarget(`${root}/FULL.json`, Buffer.from(JSON.stringify(value)), claimSettings);
+  await assert.rejects(write({ ...marker, pitrCompletion: undefined }), code('PITR_FULL_MARKER_SCOPE_MISMATCH'));
+  await assert.rejects(write({ ...marker, recoveryPoint: { ...marker.recoveryPoint, requestedAt: '2026-11-01T19:31:00Z' } }), code('PITR_FULL_MARKER_SCOPE_MISMATCH'));
+  const slot = `${config.prefix}/pitr-capacity/slot-1.json`, reservation = f.stored.get(slot);
+  f.stored.delete(slot);
+  await assert.rejects(write(marker), code('PITR_CAPACITY_RESERVATION_UNCONFIRMED'));
+  assert.equal(f.stored.has(`${root}/FULL.json`), false);
+  f.stored.set(slot, reservation);
+  f.production.branch_id = 'br-unexpected-production-binding';
+  await assert.rejects(write(marker), code('PRODUCTION_ENDPOINT_BINDING_CHANGED'));
+  assert.equal(f.stored.has(`${root}/FULL.json`), false);
+  f.production.branch_id = config.sourceBranchId;
+  await write(marker);
+  assert.equal(f.stored.has(`${root}/FULL.json`), true);
+  assert.equal(f.production.branch_id, 'br-unexpected-production-binding');
 });
 
 test('the exact REST restore flag is hardcoded and target/finalizer inputs are rejected', async () => {
