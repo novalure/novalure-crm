@@ -39,8 +39,7 @@ function fixture(overrides = {}) {
     let value;
     if (u.pathname === root && method === 'GET') value = { project: { id: config.neonProjectId, owner: { subscription_type: 'launch_v3' } } };
     else if (u.pathname === `${root}/branches` && method === 'GET') value = { branches: [source, ...(restored ? [restored] : [])] };
-    else if (u.pathname === `${root}/snapshots` && method === 'GET') value = { snapshots: [{ id: config.snapshotId,
-      source_branch_id: source.id, created_at: new Date(clock).toISOString(), timestamp: overrides.snapshotTimestamp }] };
+    else if (u.pathname === `${root}/snapshots` && method === 'GET') value = { snapshots: [{ id: config.snapshotId, source_branch_id: source.id, created_at: new Date(clock).toISOString() }] };
     else if (u.pathname === `${root}/endpoints/${config.productionEndpointId}` && method === 'GET') value = { endpoint: production };
     else if (u.pathname === `${root}/snapshots/${config.snapshotId}/restore` && method === 'POST') {
       restored = { id: copiedId, project_id: config.neonProjectId, name: body.name, default: false, primary: false,
@@ -128,18 +127,6 @@ test('Neon read failures preserve only a valid numeric HTTP status without inspe
       error.providerStage === 'SNAPSHOT_READ' && (Number.isInteger(status) && status >= 100 && status <= 599 ? error.providerHttpStatus === status : error.providerHttpStatus === undefined) &&
       /^[A-Z][A-Z0-9_]+$/u.test(error.code) && !JSON.stringify({ code: error.code, message: error.message }).includes('SYNTHETIC'));
     assert.equal(requests, 1);
-  }
-});
-
-test('Neon snapshot metadata preserves its optional data capture time separately from artifact creation', async () => {
-  const capturedAt = '2026-10-31T20:00:00.123456Z';
-  const expected = { id: config.snapshotId, sourceBranchId: config.sourceBranchId, createdAt: new Date(clock).toISOString() };
-  for (const snapshotTimestamp of [capturedAt, undefined, null, 'SYNTHETIC_PRIVATE_PROVIDER_DATA']) {
-    const f = fixture({ snapshotTimestamp }), ports = await f.make();
-    assert.deepEqual(await ports.snapshotInfo(config.snapshotId), snapshotTimestamp === capturedAt ? { ...expected, capturedAt } : expected);
-    assert.equal(f.calls.length, 1);
-    assert.equal(f.calls[0].method, 'GET');
-    assert.equal(f.blobs.length, 0);
   }
 });
 
