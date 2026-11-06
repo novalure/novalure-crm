@@ -7,6 +7,7 @@ import { posix as path } from 'node:path';
 import { canonical, catalogQueries, captureDatabaseMetadata } from './studio-stage3-qa-fingerprint.mjs';
 
 export const BACKUP_SCOPE = 'FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES';
+const backupVerificationFormat = 'crm-full-backup-verification-v1';
 export const backupProviderStages = Object.freeze(['PRODUCTION_BINDING_READ', 'SNAPSHOT_READ', 'SNAPSHOT_RESTORE',
   'ISOLATED_RESOURCE_READ', 'ISOLATED_ENDPOINT_CREATE', 'ISOLATED_ENDPOINT_UPDATE', 'ISOLATED_CONNECTION_READ',
   'OPERATION_READ', 'NEON_REQUEST']);
@@ -139,7 +140,7 @@ export function planBackupRetention(index, { now = new Date(), keepDays = 7, sou
 
 /** A candidate index row is not proof. Verify the private final marker and its
  * canonical manifest before yielding either marker or snapshot metadata. */
-async function* readVerifiedBackupSets({ config: input, ports }, { confirmNoIncomplete = false } = {}) {
+async function* readVerifiedBackupSets({ config: input, ports }, { readVerification = false } = {}) {
   const config = validateBackupConfig(input);
   requireValue(typeof ports?.listTargetRecords === 'function' && typeof ports.readTarget === 'function', 'BACKUP_INDEX_READ_PORTS_REQUIRED');
   const entries = await ports.listTargetRecords(config.prefix + '/index/');
@@ -159,14 +160,26 @@ async function* readVerifiedBackupSets({ config: input, ports }, { confirmNoInco
     const root = `${config.prefix}/sets/${candidate.backupId}`;
     const incompletePath = root + '/INCOMPLETE.json';
     if (await ports.readTarget(incompletePath)) continue;
-    const full = (await readJson(root + '/FULL.json'))?.value;
+    const fullRecord = await readJson(root + '/FULL.json');
+    const full = fullRecord?.value;
     if (!full) continue;
     requireValue(full.status === 'FULL' && full.scope === BACKUP_SCOPE && full.projectId === config.neonProjectId && full.sourceBranchId === config.sourceBranchId && full.productionEndpointId === config.productionEndpointId && full.sourceStoreId === config.sourceStoreId && full.targetStoreId === config.targetStoreId && full.backupId === candidate.backupId && full.snapshotId === candidate.snapshotId && full.manifestSha256 === candidate.manifestSha256 && full.manifestPath === root + '/manifest.json' && full.cleanup?.status === 'OBSERVED_DISABLED_AND_IDLE' && Array.isArray(full.cleanup.endpoints) && full.cleanup.endpoints.length > 0 && full.cleanup.endpoints.every(ep => ep.disabled === true && ep.currentState === 'idle'), 'INVALID_BACKUP_FULL_MARKER');
     const manifest = await readJson(full.manifestPath);
     requireValue(manifest && sha256(manifest.bytes) === full.manifestSha256 && manifest.value.snapshot?.id === full.snapshotId && manifest.value.snapshot.sourceBranchId === config.sourceBranchId && manifest.value.backupId === full.backupId && manifest.value.scope === BACKUP_SCOPE && manifest.value.files?.length === full.fileCount && manifest.value.historicalReferences?.length === full.historicalReferenceCount, 'BACKUP_MANIFEST_HASH_MISMATCH');
-    // The writer can append INCOMPLETE if the post-FULL production guard fails.
-    if (confirmNoIncomplete && await ports.readTarget(incompletePath)) continue;
-    yield { full, snapshotCreatedAt: manifest.value.snapshot.createdAt };
+    let postFullVerified = false;
+    if (readVerification) {
+      const receipt = await readJson(root + '/VERIFIED.json');
+      // The writer can append INCOMPLETE if the post-FULL production guard fails.
+      if (await ports.readTarget(incompletePath)) continue;
+      if (receipt) {
+        const value = receipt.value;
+        requireValue(value?.format === backupVerificationFormat && value.backupId === full.backupId &&
+          value.snapshotId === full.snapshotId && value.manifestSha256 === full.manifestSha256 &&
+          value.fullMarkerSha256 === sha256(fullRecord.bytes), 'BACKUP_VERIFICATION_RECEIPT_MISMATCH');
+        postFullVerified = true;
+      }
+    }
+    yield { full, snapshot: manifest.value.snapshot, postFullVerified };
   }
 }
 
@@ -185,24 +198,29 @@ function parseBackupInstant(value) {
   return Date.parse(value);
 }
 
-/** Read only the private backup index, markers and manifests. The age check
- * uses the recorded snapshot time, regardless of when its export finished. */
+/** Read only the private backup index and evidence. A backup is fresh only
+ * when its data capture time and post-FULL production check are both proven. */
 export async function readCrmBackupFreshness({ config, ports, now = new Date() } = {}) {
   const rpoHours = 24;
+  const rpoMs = rpoHours * 60 * 60 * 1000;
   const unverified = { status: 'unverified', rpoHours };
   try {
     const checkedAt = now instanceof Date ? now.getTime() : parseBackupInstant(now);
     if (!Number.isFinite(checkedAt)) return unverified;
-    let latestSnapshot = -Infinity;
-    for await (const { snapshotCreatedAt } of readVerifiedBackupSets({ config, ports }, { confirmNoIncomplete: true })) {
-      const snapshotAt = parseBackupInstant(snapshotCreatedAt);
-      if (!Number.isFinite(snapshotAt) || snapshotAt > checkedAt) return unverified;
-      latestSnapshot = Math.max(latestSnapshot, snapshotAt);
+    let latestVerifiedCapture = -Infinity, latestPossibleCapture = -Infinity;
+    for await (const { snapshot, postFullVerified } of readVerifiedBackupSets({ config, ports }, { readVerification: true })) {
+      const createdAt = parseBackupInstant(snapshot.createdAt);
+      const capturedAt = snapshot.capturedAt == null ? null : parseBackupInstant(snapshot.capturedAt);
+      if (!Number.isFinite(createdAt) || createdAt > checkedAt ||
+        (capturedAt !== null && (!Number.isFinite(capturedAt) || capturedAt > createdAt))) return unverified;
+      latestPossibleCapture = Math.max(latestPossibleCapture, capturedAt ?? createdAt);
+      if (capturedAt !== null && postFullVerified) latestVerifiedCapture = Math.max(latestVerifiedCapture, capturedAt);
     }
-    if (latestSnapshot === -Infinity) return { status: 'no-full', rpoHours };
-    const ageMs = checkedAt - latestSnapshot;
-    return { status: ageMs <= rpoHours * 60 * 60 * 1000 ? 'fresh' : 'stale', rpoHours,
-      snapshotCreatedAt: new Date(latestSnapshot).toISOString(), ageMs };
+    if (latestPossibleCapture === -Infinity) return { status: 'no-full', rpoHours };
+    const ageMs = checkedAt - latestVerifiedCapture;
+    if (ageMs <= rpoMs) return { status: 'fresh', rpoHours, capturedAt: new Date(latestVerifiedCapture).toISOString(), ageMs };
+    const minimumAgeMs = checkedAt - latestPossibleCapture;
+    return minimumAgeMs > rpoMs ? { status: 'stale', rpoHours, minimumAgeMs } : unverified;
   } catch {
     return unverified;
   }
@@ -354,8 +372,10 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     // Index first, commit marker last. Readers must verify FULL.json AND its hash.
     await save(`${config.prefix}/index/${backupId}-FULL.json`, { ...full, status: 'COMMIT_CANDIDATE', requiresVerifiedFullMarker: true });
     fullMarkerAttempted = true;
-    await save(root + '/FULL.json', full);
+    const fullReceipt = await save(root + '/FULL.json', full);
     await checkProduction();
+    await save(root + '/VERIFIED.json', { format: backupVerificationFormat, backupId, snapshotId: snapshot.id,
+      manifestSha256: manifestReceipt.sha256, fullMarkerSha256: fullReceipt.sha256 });
     return full;
   } catch (error) {
     let cleanupCode = null, cleanupFailure = null, productionVerification = { status: 'NOT_YET_CAPTURED' };

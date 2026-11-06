@@ -50,7 +50,7 @@ function fixture(overrides = {}, snapshotId = config.snapshotId) {
   const ports = {
     credentialsReady: async () => ({ neonApiKey: true, productionOidc: true, projectId: config.backupProjectId, teamId: config.teamId, environment: 'production' }),
     readProductionBinding: async () => { events.push('readProductionBinding'); return structuredClone(production); },
-    snapshotInfo: async id => { events.push('snapshotInfo'); return { id, sourceBranchId: config.sourceBranchId, createdAt: NOW }; },
+    snapshotInfo: async id => { events.push('snapshotInfo'); return { id, sourceBranchId: config.sourceBranchId, createdAt: NOW, capturedAt: NOW }; },
     listSourceObjects: async () => { events.push('listSourceObjects'); return [...assets.map(a => ({ storeId: config.sourceStoreId, pathname: a.pathname, size: a.bytes, access: 'private' })), { storeId: config.sourceStoreId, pathname: `${workspaceId}/orphan-private.pdf`, size: 4, access: 'private' }]; },
     restoreSnapshot: async args => {
       events.push('restoreSnapshot');
@@ -354,18 +354,66 @@ test('freshness uses the newest verified snapshot and the inclusive 24-hour RPO'
   const newest = fixture();
   await newest.run();
   const older = fixture({ snapshotInfo: async id => ({ id, sourceBranchId: config.sourceBranchId,
-    createdAt: '2026-10-31T21:00:00.000001+01:00' }) }, 'snap-older-backup-proof');
+    createdAt: '2026-11-02T19:00:00.000Z', capturedAt: '2026-10-31T21:00:00.000001+01:00' }) }, 'snap-older-backup-proof');
   await runCrmFullBackup({ config: older.config, ports: older.ports, now: '2026-11-02T19:00:00.000Z', backupId: 'backup-late-export-proof' });
   for (const [pathname, bytes] of older.target) newest.target.set(pathname, bytes);
   const writeCount = newest.writes.length;
   newest.events.length = 0;
   const ports = Object.freeze({ listTargetRecords: newest.ports.listTargetRecords, readTarget: newest.ports.readTarget });
   assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T20:00:00.000Z' }),
-    { status: 'fresh', rpoHours: 24, snapshotCreatedAt: NOW, ageMs: 86_400_000 });
+    { status: 'fresh', rpoHours: 24, capturedAt: NOW, ageMs: 86_400_000 });
   assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T20:00:00.001Z' }),
-    { status: 'stale', rpoHours: 24, snapshotCreatedAt: NOW, ageMs: 86_400_001 });
+    { status: 'stale', rpoHours: 24, minimumAgeMs: 86_400_001 });
   assert.equal(newest.writes.length, writeCount);
   assert.ok(newest.events.every(event => event.startsWith('readTarget:')));
+});
+
+test('legacy FULL sets without a data capture time only bound the age of the newest possible backup', async () => {
+  const legacy = fixture({ snapshotInfo: async id => ({ id, sourceBranchId: config.sourceBranchId, createdAt: NOW }) });
+  await legacy.run();
+  const ports = Object.freeze({ listTargetRecords: legacy.ports.listTargetRecords, readTarget: legacy.ports.readTarget });
+  const legacyReceiptPath = `crm-full-backups/sets/${backupId}/VERIFIED.json`;
+  for (const legacyReceiptPresent of [true, false]) {
+    if (!legacyReceiptPresent) legacy.target.delete(legacyReceiptPath);
+    assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T20:00:00.000Z' }),
+      { status: 'unverified', rpoHours: 24 });
+    assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T20:00:00.001Z' }),
+      { status: 'stale', rpoHours: 24, minimumAgeMs: 86_400_001 });
+  }
+  const known = fixture({ snapshotInfo: async id => ({ id, sourceBranchId: config.sourceBranchId,
+    createdAt: NOW, capturedAt: '2026-11-01T19:00:00.000Z' }) }, 'snap-known-backup-proof');
+  await runCrmFullBackup({ config: known.config, ports: known.ports, now: NOW, backupId: 'backup-known-capture-proof' });
+  for (const [pathname, bytes] of known.target) legacy.target.set(pathname, bytes);
+  assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: NOW }),
+    { status: 'fresh', rpoHours: 24, capturedAt: '2026-11-01T19:00:00.000Z', ageMs: 3_600_000 });
+  assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T19:00:00.001Z' }),
+    { status: 'unverified', rpoHours: 24 });
+});
+
+test('a recent FULL is unverifiable until its exact post-FULL receipt exists', async () => {
+  const f = fixture();
+  const root = `crm-full-backups/sets/${backupId}`;
+  const receiptPath = root + '/VERIFIED.json';
+  const ports = Object.freeze({ listTargetRecords: f.ports.listTargetRecords, readTarget: f.ports.readTarget });
+  const unverified = { status: 'unverified', rpoHours: 24 };
+  const readBinding = f.ports.readProductionBinding;
+  let observedPostFullCheck = false;
+  f.ports.readProductionBinding = async () => {
+    if (f.target.has(root + '/FULL.json')) {
+      assert.equal(f.target.has(receiptPath), false);
+      assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: NOW }), unverified);
+      observedPostFullCheck = true;
+    }
+    return readBinding();
+  };
+  await f.run();
+  assert.equal(observedPostFullCheck, true);
+  assert.equal((await readCrmBackupFreshness({ config, ports, now: NOW })).status, 'fresh');
+  const verified = JSON.parse(f.target.get(receiptPath).toString('utf8'));
+  assert.equal(verified.fullMarkerSha256, sha256(f.target.get(root + '/FULL.json')));
+  f.target.set(receiptPath, Buffer.from(JSON.stringify({ ...verified, fullMarkerSha256: '0'.repeat(64) })));
+  assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: NOW }), unverified);
+  assert.equal((await readCrmBackupIndex({ config, ports })).length, 1);
 });
 
 test('freshness distinguishes missing completion from unverifiable private evidence', async () => {
@@ -399,7 +447,7 @@ test('freshness suppresses a FULL when the writer records INCOMPLETE during veri
   const root = `crm-full-backups/sets/${backupId}`;
   const ports = Object.freeze({ listTargetRecords: f.ports.listTargetRecords, readTarget: async pathname => {
     const receipt = await f.ports.readTarget(pathname);
-    if (pathname === root + '/manifest.json') f.target.set(root + '/INCOMPLETE.json', Buffer.from('{"status":"INCOMPLETE"}'));
+    if (pathname === root + '/VERIFIED.json') f.target.set(root + '/INCOMPLETE.json', Buffer.from('{"status":"INCOMPLETE"}'));
     return receipt;
   } });
   assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: NOW }), { status: 'no-full', rpoHours: 24 });
@@ -427,6 +475,7 @@ test('a failed production guard after an uncertain FULL write remains INCOMPLETE
   };
   await assert.rejects(f.run(), hasSafeCode);
   assert.equal(f.target.has(`crm-full-backups/sets/${backupId}/FULL.json`), true, 'The uncertain write physically completed before its guard rejected it');
+  assert.equal(f.target.has(`crm-full-backups/sets/${backupId}/VERIFIED.json`), false);
   const incomplete = JSON.parse(f.target.get(`crm-full-backups/sets/${backupId}/INCOMPLETE.json`).toString('utf8'));
   assert.equal(incomplete.status, 'INCOMPLETE');
   assert.equal(incomplete.failureCode, 'PRODUCTION_BINDING_CHANGED');

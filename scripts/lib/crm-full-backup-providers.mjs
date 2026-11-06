@@ -367,7 +367,8 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       const selected = result.snapshots.filter(row => row.source_branch_id === config.sourceBranchId && (!requested || row.id === requested))
         .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
       requireValue(selected && snapshotId.test(selected.id) && Number.isFinite(Date.parse(selected.created_at)), 'SOURCE_SNAPSHOT_REQUIRED');
-      return { id: selected.id, sourceBranchId: selected.source_branch_id, createdAt: selected.created_at };
+      return { id: selected.id, sourceBranchId: selected.source_branch_id, createdAt: selected.created_at,
+        ...(typeof selected.timestamp === 'string' && Number.isFinite(Date.parse(selected.timestamp)) ? { capturedAt: selected.timestamp } : {}) };
     },
     listSourceObjects: () => listObjects(config.sourceStoreId),
     listTargetRecords: prefix => { requireValue(typeof prefix === 'string' && prefix.startsWith(config.prefix + '/'), 'TARGET_BACKUP_PREFIX_REQUIRED'); return listObjects(config.targetStoreId, prefix); },
