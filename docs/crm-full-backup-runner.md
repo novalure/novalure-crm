@@ -21,7 +21,7 @@ node scripts/crm-full-backup.mjs
 node scripts/crm-full-backup.mjs --plan
 ```
 
-Eine optionale JSON-Konfiguration darf nur die in `defaultCrmBackupConfig` definierten nicht geheimen Bindungen und `snapshotId` enthalten. Credentials in einer solchen Datei werden abgewiesen. Aktuelle Standardbindungen:
+Eine optionale JSON-Konfiguration darf nur die in `defaultCrmBackupConfig` definierten nicht geheimen Bindungen sowie entweder `snapshotId` oder `pointInTime` mit `pitrBranchLimit` enthalten. Credentials in einer solchen Datei werden abgewiesen. Aktuelle Standardbindungen:
 
 | Ressource | Bindung |
 | --- | --- |
@@ -42,6 +42,18 @@ node scripts/crm-full-backup.mjs --execute --snapshot snap-EXACT-ID --backup-id 
 ```
 
 Ohne `--snapshot` wird der jüngste verfügbare Snapshot des exakt konfigurierten Quellbranches ausgewählt. Der Runner erstellt keine Snapshots und ändert keine nativen Snapshot-Zeitpläne. Ein unveränderlicher Claim im privaten Zielstore verhindert einen zweiten Restore für denselben Snapshot. Ein unterbrochener Claim wird nicht automatisch übergangen oder durch eine weitere Restore-Anfrage ersetzt; er bleibt ausdrücklich zu prüfen.
+
+### Isolierter Zweig aus der Datenhistorie
+
+Der optionale PITR-Modus kopiert einen ausdrücklich gewählten UTC-Zeitpunkt aus der Historie des gebundenen Quellbranches. Er führt einen eigenen Claim pro Zeitpunkt und schreibt die angefragte Zeit, die von Neon gemeldete tatsächliche WAL-Zeit und den zugehörigen LSN ins private Manifest. Der Quellendpunkt bleibt gebunden. Der neue Child-Branch startet ohne Compute und bleibt nach der Sicherung mit bestätigtem deaktiviertem Compute als Wiederherstellungskopie erhalten. [Neon Branch API](https://neon.com/docs/reference/api/branches/create-project-branch)
+
+```sh
+node scripts/crm-full-backup.mjs --plan --point-in-time 2026-11-06T03:00:00Z --pitr-branch-limit 1
+```
+
+Nach Freigabe des exakten Stands aktiviert `CRM_FULL_BACKUP_COPY_MODE=point-in-time` im bestehenden dedizierten Backup-Aufrufer den Zeitpunkt 03:00 UTC des jeweiligen Tages. Der Zeitplan bleibt bei 03:15 UTC. `CRM_FULL_BACKUP_PITR_BRANCH_LIMIT` muss die genehmigte Zahl aufbewahrter PITR-Zweige setzen. Der Provider muss den Zeitpunkt in der tatsächlich verfügbaren Historie des Quellbranches bestätigen. Ein bereits beanspruchter Punkt, abgelaufene Historie, das Zweiglimit und unklare Providerantworten sperren den Versuch. Der Runner startet pro Claim höchstens einen Branch-Aufruf. Vor Aktivierung sind die tatsächliche Kapazität und Kostendeckung, die Aufbewahrung der Datenkopie, die zugelassene Release-Revision und der Rückweg zu prüfen.
+
+Für das Projekt ist genau ein aktiver Sicherungs-Writer zugelassen. Manuelle Läufe und Veröffentlichungswechsel werden mit dem Zeitplan koordiniert, damit verschiedene Zeitpunkte die gemeinsame Branch-Kapazität nicht gleichzeitig beanspruchen.
 
 ## Erforderliche normale Berechtigungen
 

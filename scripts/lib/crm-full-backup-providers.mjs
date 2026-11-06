@@ -2,11 +2,13 @@
  * Neon REST contract: https://neon.com/api_spec/release/v2.json (2026-11-01).
  * restoreSnapshot: POST /projects/{project_id}/snapshots/{snapshot_id}/restore
  * JSON {name, finalize_restore:false}; target_branch_id MUST be absent.
+ * copyPointInTime: POST /projects/{project_id}/branches, pinned parent and time.
  * No finalize, source database connection, source Blob write or delete port.
  */
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { BACKUP_SCOPE, CrmBackupError, captureCrmBackupDatabase, defaultCrmBackupConfig, validateBackupConfig } from './crm-full-backup.mjs';
+import { BACKUP_SCOPE, CrmBackupError, captureCrmBackupDatabase, defaultCrmBackupConfig, pitrParentAtOrBefore,
+  validateBackupConfig } from './crm-full-backup.mjs';
 
 const API = 'https://console.neon.tech/api/v2';
 const requireValue = (condition, code) => { if (!condition) throw new CrmBackupError(code); };
@@ -16,6 +18,12 @@ const endpointId = /^ep-[a-z0-9-]{8,100}$/u;
 const branchId = /^br-[a-z0-9-]{8,100}$/u;
 const snapshotId = /^snap-[a-z0-9-]{5,100}$/u;
 const segment = value => encodeURIComponent(value);
+
+function normalizeLsn(value) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{1,8}\/[0-9a-f]{1,8}$/iu.test(value)) return null;
+  const normalized = value.toUpperCase().split('/').map(part => part.replace(/^0+(?=.)/u, '')).join('/');
+  return normalized === '0/0' ? null : normalized;
+}
 
 function localOidcClaims(env, config, now) {
   if (env.VERCEL_ENV !== 'production' || typeof env.VERCEL_OIDC_TOKEN !== 'string') return null;
@@ -76,6 +84,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   const pollLimit = options.pollLimit ?? 60;
   requireValue(typeof request === 'function' && Number.isSafeInteger(pollLimit) && pollLimit >= 1 && pollLimit <= 120, 'BACKUP_PROVIDER_OPTIONS_INVALID');
   let blob, verifier, verifiedTokenDigest = null, originalProduction = null;
+  let pointCopyAttempted = false, pointClaimOwner;
   const owned = new Map(), ownRuns = new Set();
   const sdk = async () => blob ??= options.blob ?? await import('@vercel/blob');
   const oidcVerifier = async () => verifier ??= options.verifyOidc ?? (await import('@vercel/oidc')).verifyVercelOidcToken;
@@ -107,6 +116,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       path === root + '/endpoints/' + segment(config.productionEndpointId))) return 'PRODUCTION_BINDING_READ';
     if (method === 'GET' && path === root + '/snapshots') return 'SNAPSHOT_READ';
     if (method === 'POST' && path.startsWith(root + '/snapshots/') && path.endsWith('/restore')) return 'SNAPSHOT_RESTORE';
+    if (method === 'POST' && path === root + '/branches') return 'PITR_CHILD_CREATE';
     if (method === 'POST' && path === root + '/endpoints') return 'ISOLATED_ENDPOINT_CREATE';
     if (method === 'PATCH' && path.startsWith(root + '/endpoints/')) return 'ISOLATED_ENDPOINT_UPDATE';
     if (method === 'GET' && path.startsWith(root + '/connection_uri?')) return 'ISOLATED_CONNECTION_READ';
@@ -144,7 +154,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     }
     throw new CrmBackupError('NEON_INVENTORY_LIMIT_EXCEEDED');
   }
-  async function readProductionBinding() {
+  async function readProductionState() {
     const [project, branches, result] = await Promise.all([neon(projectPath), listBranches(), neon(`${projectPath}/endpoints/${segment(config.productionEndpointId)}`)]);
     const defaults = branches.filter(row => row.default === true), source = branches.find(row => row.id === config.sourceBranchId);
     requireValue(project.project?.id === config.neonProjectId && source && defaults.length === 1, 'PRODUCTION_BRANCH_BINDING_CHANGED');
@@ -160,12 +170,52 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       endpoint: { id: receipt.endpoint.id, projectId: receipt.endpoint.projectId, branchId: receipt.endpoint.branchId,
         host: receipt.endpoint.host, type: receipt.endpoint.type, disabled: receipt.endpoint.disabled } });
     requireValue(!originalProduction || stable === originalProduction, 'PRODUCTION_BINDING_CHANGED'); originalProduction ??= stable;
-    return receipt;
+    return { receipt, project: project.project, branches, source };
+  }
+  async function readProductionBinding() {
+    return (await readProductionState()).receipt;
+  }
+  async function readPointInTimeState() {
+    const pointInTime = config.pointInTime, requestedAt = Date.parse(pointInTime);
+    requireValue(typeof pointInTime === 'string' && Number.isFinite(requestedAt), 'PITR_POINT_REQUIRED');
+    const { project, branches, source } = await readProductionState();
+    const historyRetentionSeconds = project.history_retention_seconds;
+    const checkedAt = now();
+    const sourceCreatedAt = Date.parse(source.created_at);
+    requireValue(Number.isSafeInteger(historyRetentionSeconds) && historyRetentionSeconds > 0 && historyRetentionSeconds <= 2_147_483_647 &&
+      Number.isSafeInteger(checkedAt) && Number.isFinite(sourceCreatedAt) && requestedAt >= sourceCreatedAt &&
+      requestedAt < checkedAt && checkedAt - requestedAt <= historyRetentionSeconds * 1000,
+    'PITR_POINT_OUTSIDE_VERIFIED_HISTORY');
+    const managedChildren = branches.filter(row => typeof row.name === 'string' && row.name.startsWith('crm-backup-') &&
+      row.parent_id === config.sourceBranchId && !row.restore_status && !row.restored_from && !row.restored_as);
+    requireValue(Number.isInteger(config.pitrBranchLimit) && config.pitrBranchLimit >= 1 && config.pitrBranchLimit <= 35 &&
+      managedChildren.length < config.pitrBranchLimit, 'PITR_CHILD_CAPACITY_UNAVAILABLE');
+    return { pointInTime, historyRetentionSeconds, branches };
+  }
+  async function validatePointInTime() {
+    const { pointInTime, historyRetentionSeconds } = await readPointInTimeState();
+    return { pointInTime, historyRetentionSeconds };
+  }
+  function validatePointInTimeBranch(raw, id, name) {
+    const branch = normalizeBranch(raw), parentLsn = normalizeLsn(raw?.parent_lsn);
+    requireValue(branchId.test(id ?? '') && id !== config.sourceBranchId && branch.id === id && branch.projectId === config.neonProjectId &&
+      branch.name === name && branch.default === false && branch.primary === false && branch.currentState === 'ready' &&
+      raw.parent_id === config.sourceBranchId && pitrParentAtOrBefore(raw.parent_timestamp, config.pointInTime) && parentLsn &&
+      raw.archived !== true && !raw.restored_from && !raw.restored_as && !raw.restore_status,
+    'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
+    return { ...branch, parentId: raw.parent_id, parentTimestamp: raw.parent_timestamp, parentLsn };
   }
   async function assertOwned(branch) {
     const saved = owned.get(branch?.id);
     requireValue(saved && branch.id !== config.sourceBranchId && branchId.test(branch.id) && saved.name === branch.name, 'ISOLATED_BRANCH_NOT_OWNED');
-    const live = normalizeBranch((await neon(`${projectPath}/branches/${segment(branch.id)}`)).branch);
+    const raw = (await neon(`${projectPath}/branches/${segment(branch.id)}`)).branch;
+    if (saved.parentLsn) {
+      const live = validatePointInTimeBranch(raw, branch.id, saved.name);
+      requireValue(live.parentLsn === saved.parentLsn && live.parentTimestamp === saved.parentTimestamp,
+        'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
+      return live;
+    }
+    const live = normalizeBranch(raw);
     requireValue(live.projectId === config.neonProjectId && live.id === branch.id && live.name === saved.name && live.default === false && live.primary === false &&
       live.restoreStatus === 'restored' && live.restoredFrom === saved.snapshotId, 'ISOLATED_BRANCH_SCOPE_MISMATCH');
     return live;
@@ -235,7 +285,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     for (const endpoint of await getIsolatedEndpoints(branch)) await setEndpointDisabled(endpoint, true);
   }
   async function restoreSnapshot(args) {
-    requireValue(args && Object.keys(args).every(key => ['snapshotId', 'name', 'finalize'].includes(key)) && args.finalize === false &&
+    requireValue(!config.pointInTime && args && Object.keys(args).every(key => ['snapshotId', 'name', 'finalize'].includes(key)) && args.finalize === false &&
       snapshotId.test(args.snapshotId) && /^crm-backup-[a-z0-9-]{6,110}$/u.test(args.name), 'UNSAFE_RESTORE_REQUEST');
     const snapshots = await neon(`${projectPath}/snapshots`);
     requireValue(snapshots.snapshots?.some(row => row.id === args.snapshotId && row.source_branch_id === config.sourceBranchId), 'SNAPSHOT_SOURCE_BINDING_MISMATCH');
@@ -255,6 +305,58 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     } catch (error) {
       try { await reconcileRestoreFailure(args.name, args.snapshotId, new Set(before.map(row => row.id))); }
       catch { throw new CrmBackupError('RESTORE_CLEANUP_UNCONFIRMED'); }
+      throw safeFailure(error);
+    }
+  }
+  async function copyPointInTime(args) {
+    requireValue(config.pointInTime && args && Object.keys(args).length === 1 && Object.hasOwn(args, 'name') && typeof args.name === 'string' &&
+      /^crm-backup-[a-z0-9-]{6,110}$/u.test(args.name), 'UNSAFE_PITR_COPY_REQUEST');
+    requireValue(!pointCopyAttempted, 'PITR_COPY_ALREADY_ATTEMPTED');
+    requireValue(pointClaimOwner && args.name === `crm-backup-${pointClaimOwner}`, 'PITR_COPY_CLAIM_REQUIRED');
+    const { name } = args, { branches } = await readPointInTimeState();
+    requireValue(!branches.some(row => row.name === name), 'ISOLATED_BRANCH_NAME_ALREADY_EXISTS');
+    const beforeIds = new Set(branches.map(row => row.id));
+    requireValue(!pointCopyAttempted, 'PITR_COPY_ALREADY_ATTEMPTED');
+    pointCopyAttempted = true;
+    let createdBranchId, createdParentLsn, observedParentTimestamp;
+    try {
+      let result;
+      try {
+        result = await neon(`${projectPath}/branches`, { method: 'POST', body: { branch: {
+          name, parent_id: config.sourceBranchId, parent_timestamp: config.pointInTime, init_source: 'parent-data',
+        } } });
+        const created = normalizeBranch(result?.branch);
+        requireValue(branchId.test(created.id ?? '') && created.id !== config.sourceBranchId && !beforeIds.has(created.id) &&
+          created.name === name && created.projectId === config.neonProjectId && created.default === false && created.primary === false &&
+          result.branch.parent_id === config.sourceBranchId && (result.branch.parent_timestamp == null ||
+            pitrParentAtOrBefore(result.branch.parent_timestamp, config.pointInTime)) &&
+          !result.branch.restored_from && !result.branch.restored_as && !result.branch.restore_status,
+        'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
+        createdParentLsn = normalizeLsn(result.branch.parent_lsn);
+        requireValue(createdParentLsn, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
+        createdBranchId = created.id;
+      } finally { await readProductionBinding(); }
+      await waitOperations(result.operations);
+      const branch = validatePointInTimeBranch((await neon(`${projectPath}/branches/${segment(createdBranchId)}`)).branch, createdBranchId, name);
+      requireValue(branch.parentLsn === createdParentLsn, 'ISOLATED_PITR_BRANCH_SCOPE_MISMATCH');
+      observedParentTimestamp = branch.parentTimestamp;
+      await readProductionBinding();
+      owned.set(createdBranchId, { name, parentLsn: branch.parentLsn, parentTimestamp: branch.parentTimestamp });
+      return { finalize: false, branch, operations: result.operations, endpoints: [] };
+    } catch (error) {
+      // An unacknowledged child create may have happened, but a name match or
+      // an earlier timestamp alone cannot establish ownership for a mutation.
+      if (!createdBranchId) throw safeFailure(error);
+      try {
+        await readProductionBinding();
+        const branch = validatePointInTimeBranch((await neon(`${projectPath}/branches/${segment(createdBranchId)}`)).branch, createdBranchId, name);
+        requireValue(branch.parentLsn === createdParentLsn && (!observedParentTimestamp || branch.parentTimestamp === observedParentTimestamp),
+          'PITR_COPY_CLEANUP_UNCONFIRMED');
+        owned.set(createdBranchId, { name, parentLsn: branch.parentLsn, parentTimestamp: branch.parentTimestamp });
+        try {
+          for (const endpoint of await getIsolatedEndpoints(branch)) await setEndpointDisabled(endpoint, true);
+        } finally { owned.delete(createdBranchId); }
+      } catch { throw new CrmBackupError('PITR_COPY_CLEANUP_UNCONFIRMED'); }
       throw safeFailure(error);
     }
   }
@@ -327,15 +429,20 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   }
   async function writeTarget(pathname, bytes, settings) {
     assertPathname(pathname);
-    const claim = pathname.startsWith(config.prefix + '/snapshots/') ? pathname.slice((config.prefix + '/snapshots/').length).split('/') : [];
+    const claim = !config.pointInTime && pathname.startsWith(config.prefix + '/snapshots/') ? pathname.slice((config.prefix + '/snapshots/').length).split('/') : [];
+    const snapshotClaim = claim.length === 2 && snapshotId.test(claim[0]) && claim[1] === 'claim.json';
+    const pointClaim = config.pointInTime && pathname === `${config.prefix}/pitr/${config.pointInTime.replace(/\D/gu, '')}/claim.json`;
     requireValue(pathname.startsWith(config.prefix + '/sets/') || pathname.startsWith(config.prefix + '/index/') ||
-      (claim.length === 2 && snapshotId.test(claim[0]) && claim[1] === 'claim.json'), 'TARGET_BACKUP_PREFIX_REQUIRED');
+      snapshotClaim || pointClaim, 'TARGET_BACKUP_PREFIX_REQUIRED');
     requireValue(settings?.access === 'private' && settings.allowOverwrite === false && settings.addRandomSuffix === false &&
       Buffer.isBuffer(bytes) && typeof settings.contentType === 'string' && settings.contentType.length <= 200, 'UNSAFE_BLOB_WRITE_OPTIONS');
     let record;
     if (settings.contentType === 'application/json' && bytes.length <= 10 * 1024 * 1024) {
       try { record = JSON.parse(bytes.toString('utf8')); } catch { /* Normal opaque archive bytes are not evidence records. */ }
     }
+    if (pointClaim) requireValue(!pointClaimOwner && record?.pointInTime === config.pointInTime && record.sourceBranchId === config.sourceBranchId &&
+      record.sourceStoreId === config.sourceStoreId && record.targetStoreId === config.targetStoreId &&
+      /^[a-z0-9][a-z0-9-]{5,100}$/u.test(record.backupId ?? ''), 'PITR_CLAIM_SCOPE_MISMATCH');
     const boundRecord = value => value?.format === 'crm-full-backup-v1' && value.scope === BACKUP_SCOPE &&
       value.projectId === config.neonProjectId && value.sourceBranchId === config.sourceBranchId &&
       value.productionEndpointId === config.productionEndpointId && value.sourceStoreId === config.sourceStoreId && value.targetStoreId === config.targetStoreId;
@@ -345,22 +452,28 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       ? setParts[0] : indexFailure?.[1];
     if (failureRun) requireValue(ownRuns.has(failureRun) && boundRecord(record) && record.status === 'INCOMPLETE' && record.backupId === failureRun, 'FAILURE_EVIDENCE_SCOPE_MISMATCH');
     try {
-      if (!failureRun) await readProductionBinding();
+      if (pointClaim) await readPointInTimeState();
+      else if (!failureRun) await readProductionBinding();
       // A previously claimed run may append only its bound failure record after
       // source drift. This target-only suppressor never grants a Neon mutation
       // or exempts a FULL marker; the current signed Production OIDC is required.
       const result = await (await sdk()).put(pathname, bytes, { ...await blobOptions(config.targetStoreId, { requireNeon: !failureRun }), access: 'private', allowOverwrite: false,
         addRandomSuffix: false, contentType: settings.contentType });
       assertBlobObject(result, config.targetStoreId, pathname);
-      if ((claim.length === 2 && snapshotId.test(claim[0]) && claim[1] === 'claim.json' && record?.snapshotId === claim[0] &&
+      if ((snapshotClaim && record?.snapshotId === claim[0] &&
         record.sourceBranchId === config.sourceBranchId && record.sourceStoreId === config.sourceStoreId && record.targetStoreId === config.targetStoreId &&
         /^[a-z0-9][a-z0-9-]{5,100}$/u.test(record.backupId ?? '')) ||
-        (setParts.length === 2 && setParts[1] === 'RUNNING.json' && boundRecord(record) && record.status === 'RUNNING' && record.backupId === setParts[0])) ownRuns.add(record.backupId);
+        (!config.pointInTime && setParts.length === 2 && setParts[1] === 'RUNNING.json' && boundRecord(record) && record.status === 'RUNNING' && record.backupId === setParts[0])) ownRuns.add(record.backupId);
       if (!failureRun) await readProductionBinding();
+      if (pointClaim) {
+        pointClaimOwner = record.backupId;
+        ownRuns.add(record.backupId);
+      }
       return { storeId: config.targetStoreId, pathname, access: 'private' };
     } catch (error) { throw safeFailure(error); }
   }
-  return Object.freeze({ credentialsReady, readProductionBinding, restoreSnapshot, waitForRestore, getIsolatedEndpoints, prepareIsolatedEndpoint, captureDatabase,
+  return Object.freeze({ credentialsReady, readProductionBinding, restoreSnapshot, validatePointInTime, copyPointInTime,
+    waitForRestore, getIsolatedEndpoints, prepareIsolatedEndpoint, captureDatabase,
     snapshotInfo: async requested => {
       const result = await neon(`${projectPath}/snapshots`);
       requireValue(Array.isArray(result.snapshots), 'SNAPSHOT_INVENTORY_INVALID');

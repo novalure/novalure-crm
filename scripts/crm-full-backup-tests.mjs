@@ -363,7 +363,7 @@ test('freshness uses the newest snapshot creation as a lower bound on age', asyn
   assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T20:00:00.000Z' }),
     { status: 'unverified', rpoHours: 24 });
   assert.deepEqual(await readCrmBackupFreshness({ config, ports, now: '2026-11-02T20:00:00.001Z' }),
-    { status: 'stale', rpoHours: 24, snapshotCreatedAt: NOW, minimumAgeMs: 86_400_001 });
+    { status: 'stale', rpoHours: 24, latestPossibleDataAt: NOW, minimumAgeMs: 86_400_001 });
   assert.equal(newest.writes.length, writeCount);
   assert.ok(newest.events.every(event => event.startsWith('readTarget:')));
 });
@@ -381,6 +381,78 @@ test('a FULL marker visible during the final writer guard cannot prove freshness
   };
   await f.run();
   assert.deepEqual(observed, { status: 'unverified', rpoHours: 24 });
+});
+
+test('a separately claimed PITR child yields a combined backup with exact lineage', async () => {
+  const pointInTime = '2026-11-01T19:45:00Z';
+  const f = fixture();
+  const { snapshotId: _snapshotId, ...base } = f.config;
+  const pointConfig = { ...base, pointInTime, pitrBranchLimit: 1 };
+  const child = { id: f.endpoint.branchId, projectId: config.neonProjectId, default: false, primary: false,
+    parentId: config.sourceBranchId, parentTimestamp: pointInTime, parentLsn: '0/A176B330' };
+  const claim = 'crm-full-backups/pitr/20261101194500/claim.json';
+  let copyAttempts = 0, computeCreated = false;
+  const listEndpoints = f.ports.getIsolatedEndpoints;
+  const prepareEndpoint = f.ports.prepareIsolatedEndpoint;
+  f.ports.getIsolatedEndpoints = branch => computeCreated ? listEndpoints(branch) : [];
+  f.ports.prepareIsolatedEndpoint = async (branch, endpoints) => {
+    assert.deepEqual(endpoints, []);
+    computeCreated = true;
+    return prepareEndpoint(branch, endpoints);
+  };
+  f.ports.snapshotInfo = f.ports.restoreSnapshot = undefined;
+  f.ports.validatePointInTime = async () => ({ pointInTime, historyRetentionSeconds: 21600 });
+  f.ports.copyPointInTime = async ({ name }) => {
+    copyAttempts++;
+    assert.ok(f.target.has(claim), 'The recovery point is claimed before branch creation');
+    return { finalize: false, branch: { ...child, name } };
+  };
+  const args = { config: pointConfig, ports: f.ports, now: NOW, backupId };
+  const full = await runCrmFullBackup(args);
+  assert.equal(full.status, 'FULL');
+  assert.equal(full.snapshotId, undefined);
+  assert.deepEqual(full.recoveryPoint, { kind: 'NEON_PITR', sourceBranchId: config.sourceBranchId, requestedAt: pointInTime });
+  assert.equal(full.fileCount, 2);
+  assert.equal(full.cleanup.status, 'OBSERVED_DISABLED_AND_IDLE');
+  assert.equal(JSON.parse(f.target.get(claim)).pointInTime, pointInTime);
+  assert.deepEqual(await readCrmBackupIndex({ config, ports: f.ports }), [full]);
+  assert.deepEqual(await readCrmBackupFreshness({ config, ports: f.ports, now: '2026-11-02T19:45:01Z' }),
+    { status: 'stale', rpoHours: 24, latestPossibleDataAt: '2026-11-01T19:45:00.000Z', minimumAgeMs: 86_401_000 });
+  await assert.rejects(runCrmFullBackup({ ...args, backupId: 'backup-duplicate-pitr' }), { code: 'BACKUP_SNAPSHOT_ALREADY_CLAIMED' });
+  assert.equal(copyAttempts, 1);
+});
+
+test('PITR preflight and child lineage failures leave no FULL and never use the snapshot path', async () => {
+  const pointInTime = '2026-11-01T19:45:00Z';
+  const f = fixture();
+  const { snapshotId: _snapshotId, ...base } = f.config;
+  const args = { config: { ...base, pointInTime, pitrBranchLimit: 1 }, ports: f.ports, now: NOW, backupId };
+  f.ports.validatePointInTime = async () => ({ pointInTime: '2026-11-01T19:44:00Z' });
+  f.ports.copyPointInTime = async () => { assert.fail('Unverified history must stop before a claim or copy'); };
+  await assert.rejects(runCrmFullBackup(args), { code: 'PITR_POINT_NOT_VERIFIED' });
+  assert.deepEqual(f.writes, []);
+  f.ports.validatePointInTime = async () => ({ pointInTime });
+  f.ports.copyPointInTime = async ({ name }) => ({ finalize: false,
+    branch: { id: f.endpoint.branchId, projectId: config.neonProjectId, name, default: false, primary: false,
+      parentId: 'br-unexpected-parent', parentTimestamp: pointInTime, parentLsn: '0/A176B330' } });
+  await assert.rejects(runCrmFullBackup(args), { code: 'PITR_COPY_POINT_MISMATCH' });
+  assertNoFull(f);
+  assert.ok(!f.events.includes('restoreSnapshot') && !f.events.includes('captureDatabase'));
+});
+
+test('a PITR child with unexpected compute is contained before database capture', async () => {
+  const pointInTime = '2026-11-01T19:45:00Z';
+  const f = fixture();
+  const { snapshotId: _snapshotId, ...base } = f.config;
+  f.ports.validatePointInTime = async () => ({ pointInTime });
+  f.ports.copyPointInTime = async ({ name }) => ({ finalize: false,
+    branch: { id: f.endpoint.branchId, projectId: config.neonProjectId, name, default: false, primary: false,
+      parentId: config.sourceBranchId, parentTimestamp: '2026-11-01T19:44:55Z', parentLsn: '0/A176B330' } });
+  await assert.rejects(runCrmFullBackup({ config: { ...base, pointInTime, pitrBranchLimit: 1 }, ports: f.ports, now: NOW, backupId }),
+    { code: 'PITR_COPY_UNEXPECTED_COMPUTE' });
+  assertNoFull(f);
+  assert.ok(!f.events.includes('prepareIsolatedEndpoint') && !f.events.includes('captureDatabase'));
+  assert.ok(f.events.includes('disableIsolatedEndpoint'));
 });
 
 test('freshness distinguishes missing completion from unverifiable private evidence', async () => {
