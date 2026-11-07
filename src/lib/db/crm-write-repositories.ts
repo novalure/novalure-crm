@@ -330,7 +330,7 @@ async function hasProjectEditPermission(input: { projectId: string | null | unde
   }
 }
 
-async function assertRecordWriteAccess(input: {
+export async function assertRecordWriteAccess(input: {
   entityLabel: string;
   existingOwnerUserId?: string | null;
   ownerUserId?: string | null;
