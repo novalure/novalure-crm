@@ -386,7 +386,8 @@ test('a FULL marker visible during the final writer guard cannot prove freshness
 test('a separately claimed PITR child yields a combined backup with exact lineage', async () => {
   const pointInTime = '2026-11-01T19:45:00Z';
   const f = fixture();
-  const { snapshotId: _snapshotId, ...base } = f.config;
+  const base = { ...f.config };
+  delete base.snapshotId;
   const pointConfig = { ...base, pointInTime, pitrBranchLimit: 1 };
   const child = { id: f.endpoint.branchId, projectId: config.neonProjectId, default: false, primary: false,
     parentId: config.sourceBranchId, parentTimestamp: pointInTime, parentLsn: '0/A176B330' };
@@ -432,7 +433,8 @@ test('a separately claimed PITR child yields a combined backup with exact lineag
   assert.deepEqual(await readCrmBackupIndex({ config, ports: f.ports }), [full]);
   assert.deepEqual(await readCrmBackupFreshness({ config, ports: f.ports, now: '2026-11-02T19:45:01Z' }),
     { status: 'stale', rpoHours: 24, latestPossibleDataAt: '2026-11-01T19:45:00.000Z', minimumAgeMs: 86_401_000 });
-  const { pitrCompletion: _pitrCompletion, ...withoutTerminalProof } = full;
+  const withoutTerminalProof = { ...full };
+  delete withoutTerminalProof.pitrCompletion;
   f.target.set(fullPath, Buffer.from(JSON.stringify(withoutTerminalProof)));
   await assert.rejects(readCrmBackupIndex({ config, ports: f.ports }), { code: 'BACKUP_MANIFEST_PITR_MISMATCH' });
   f.ports.readProductionBinding = readProduction;
@@ -443,7 +445,8 @@ test('a separately claimed PITR child yields a combined backup with exact lineag
 test('PITR preflight and child lineage failures leave no FULL and never use the snapshot path', async () => {
   const pointInTime = '2026-11-01T19:45:00Z';
   const f = fixture();
-  const { snapshotId: _snapshotId, ...base } = f.config;
+  const base = { ...f.config };
+  delete base.snapshotId;
   const args = { config: { ...base, pointInTime, pitrBranchLimit: 1 }, ports: f.ports, now: NOW, backupId };
   f.ports.validatePointInTime = async () => ({ pointInTime: '2026-11-01T19:44:00Z' });
   f.ports.copyPointInTime = async () => { assert.fail('Unverified history must stop before a claim or copy'); };
@@ -461,7 +464,8 @@ test('PITR preflight and child lineage failures leave no FULL and never use the 
 test('a PITR child with unexpected compute is contained before database capture', async () => {
   const pointInTime = '2026-11-01T19:45:00Z';
   const f = fixture();
-  const { snapshotId: _snapshotId, ...base } = f.config;
+  const base = { ...f.config };
+  delete base.snapshotId;
   f.ports.validatePointInTime = async () => ({ pointInTime });
   f.ports.copyPointInTime = async ({ name }) => ({ finalize: false,
     branch: { id: f.endpoint.branchId, projectId: config.neonProjectId, name, default: false, primary: false,
