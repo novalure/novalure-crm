@@ -2,6 +2,7 @@
   "git": {
     "deploymentEnabled": {
       "main": false,
+      "codex/crm-backup-pitr-20261106": false,
       "codex/universal-booking": false,
       "codex/studio-preview-crm-handoff": false,
       "codex/knowledge-center-package2-20261019": false,
