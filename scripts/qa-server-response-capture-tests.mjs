@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import { once, EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
@@ -172,4 +173,34 @@ test("private snapshot correlation fails closed and persistent projection contai
   assert.doesNotMatch(raw, new RegExp([body.key, body.bodySha256, "d".repeat(64)].join("|")));
   assert.equal(projection.events[1].bodyHashPresent, true); assert.equal(projection.events[0].key, projection.events[1].key);
   assert.equal(parent.listenerCount("message"), 0); relay.clear();
+});
+
+test("passive real ServerResponse error monitoring preserves native throws, original handlers and rejects EOF after errors", async () => {
+  for (const observed of [false, true]) {
+    const socket = new Socket(), request = new IncomingMessage(socket);
+    request.method = "GET"; request.url = "/api/crm/team";
+    const response = new ServerResponse(request), failure = Error("SYNTHETIC_ORIGINAL_ERROR");
+    try {
+      if (observed) observeQaServerResponse(request, response, { origin: "http://127.0.0.1:12345", secret, runId, id: 1, emit() {} });
+      assert.equal(response.listenerCount("error"), 0);
+      assert.throws(() => response.emit("error", failure), error => error === failure, "The exact original unhandled error must still throw");
+      let calls = 0;
+      const originalHandler = error => { calls++; assert.equal(error, failure); };
+      response.once("error", originalHandler);
+      assert.equal(response.emit("error", failure), true); assert.equal(calls, 1); assert.equal(response.listenerCount("error"), 0);
+    } finally { response.destroy(); socket.destroy(); }
+  }
+  let originalCalls = 0;
+  const failure = Error("SYNTHETIC_HANDLED_ERROR");
+  const f = await fixture((_request, response) => {
+    response.once("error", error => { originalCalls++; assert.equal(error, failure); });
+    response.emit("error", failure);
+    response.writeHead(200, { "content-type": "application/json" }); response.end('{"actual":true}');
+  });
+  try {
+    const response = await fetch(f.origin + "/api/crm/team", { redirect: "error" });
+    assert.equal(await response.text(), '{"actual":true}'); assert.equal(originalCalls, 1);
+    const terminal = f.records.find(row => row.kind === "terminal");
+    assert.equal(terminal.terminal, "finish"); assert.equal(terminal.complete, false); assert.equal(terminal.bodySha256, null);
+  } finally { await f.stop(); }
 });

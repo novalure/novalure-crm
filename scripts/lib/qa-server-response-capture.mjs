@@ -1,6 +1,7 @@
 // Test-harness evidence only. Never changes request/response headers or payloads.
 import assert from "node:assert/strict";
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { errorMonitor } from "node:events";
 import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
 
 export const QA_CAPTURE_LIMIT = 2 * 1024 * 1024;
@@ -120,7 +121,7 @@ export function observeQaServerResponse(request, response, { origin, secret, run
     emit({ kind: "terminal", ...identity, status, json, complete,
       terminal, encodedBytes: bytes, bodySha256, foreign, inspectionError });
   };
-  response.once("error", () => { error = true; });
+  response.once(errorMonitor, () => { error = true; });
   response.once("finish", () => finish("finish"));
   response.once("close", () => finish("close"));
 }
