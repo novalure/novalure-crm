@@ -71,3 +71,48 @@ No browser, application build, cloud service, provider, deployment, PR mutation
 or workflow rerun was started for this preparation. Native CI must run the actual
 browser sequence on the final adopted SHA. Interactive acceptance remains with
 the designated CRM App Browser chat.
+
+
+## Follow-up to the actual 7f native result
+
+Native run42380836353/job128427908703 passed steps1–44, then step45 failed
+(DesignC7 passed/43 failed; later two suites did not run). The first failure
+expected Dashboard but observed the Management/workspaces target. Seven
+successful `/api/auth/session` responses timed out in passive body inspection;
+server/page error arrays were empty. These failures are retained, not relabelled
+as successful acceptance or established product defects.
+
+The fixture now recreates its document on identical/fragment-only URLs, then
+requires the actual selected profile to survive that reload before checking the
+same original navigation target. Profile persistence uses the product's real
+Studio/non-Studio storage-key function. It does not seed preferences or substitute
+a different destination. This addresses the source-proven same-document/profile-
+listener hazard; native confirmation is still required.
+
+A terminal response-body inspection now also settles the matching request wait.
+Failed body inspections remain in the final failure evidence. Timeout diagnostics
+retain at most ten pathname/method/status/finish records, without query strings
+or payloads. The original caller-owned HTTP500, private sentinel, role/tenant,
+search, actual business data, body-error and browser-error assertions remain.
+
+The page's test-only observer additionally reads a clone of the real successful
+JSON session-heartbeat POST response. It returns the identical native fetch
+promise and original Response to the application. It neither supplies nor changes
+any response, header, cookie, CSRF token, authentication state, request or endpoint.
+This gives the existing passive inspector a second reader for the heartbeat that
+the application intentionally does not consume. It is an observer transport
+correction, not a claim that the actual Chromium timeout's cause has been proven.
+The native failure did not retain enough request-finished metadata for that claim.
+
+Five new targeted nonbrowser checks pass: actual loopback HTTP verifies exactly
+one POST, identical promise/response and original status/cookie/body; a real200
+stream without EOF still times out and cannot become successful; a foreign
+sentinel remains detected; a failed body inspection remains failure evidence; the
+previous unbound wait reproduces its timeout; URL cases distinguish fragment-only
+from changed scope. Syntax, focused lint and whitespace checks pass. Existing
+unchanged schema/Core/SSR evidence is reused. No browser/build/DB/provider/cloud
+execution or CI rerun was performed for this follow-up. No final native PASS is
+claimed.
+
+The documented lifecycle is [request, headers, then completed body](https://playwright.dev/docs/api/class-request),
+and [Response.finished waits for completion](https://playwright.dev/docs/api/class-response#response-finished).

@@ -6,9 +6,10 @@ import { createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createResponseInspectionBarrier } from "./lib/qa-response-inspection.mjs";
+import { createResponseInspectionBarrier, observeQaHeartbeatBodies, requiresCrmDocumentReload } from "./lib/qa-response-inspection.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
+import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
 import { createTextPdf } from "./lib/knowledge-document-fixtures.ts";
 import {
   seedDesignCIntegration,
@@ -68,8 +69,29 @@ const results = [],
   authenticationProofs = [];
 const contexts = [];
 const responseBarriers = new WeakMap();
+async function heartbeatEvidence(page) {
+  let timer;
+  try {
+    return await Promise.race([
+      page.evaluate(() => {
+        const s = globalThis.__crmQaHeartbeatBodies;
+        return s ? { pending: s.pending, completed: s.completed, foreign: s.foreign, errors: s.errors.slice(0, 5) } : null;
+      }),
+      new Promise(resolve => { timer = setTimeout(() => resolve({ observationUnavailable: true }), 1000); }),
+    ]);
+  } catch { return { observationUnavailable: true }; }
+  finally { clearTimeout(timer); }
+}
 async function drainResponseInspections(page) {
-  await responseBarriers.get(page)?.drain();
+  const barrier = responseBarriers.get(page);
+  try { await barrier?.drain(); }
+  catch { throw new Error("Pending API/body inspection before navigation timed out: " + JSON.stringify({ pending: barrier?.pendingInfo(), heartbeatBody: await heartbeatEvidence(page) })); }
+  const observed = await page.evaluate(() => {
+    const state = globalThis.__crmQaHeartbeatBodies;
+    return state ? { pending: state.pending, completed: state.completed, foreign: state.foreign, errors: state.errors.splice(0) } : null;
+  });
+  if (observed?.foreign) privateLeaks.push({ path: "/api/auth/session", observation: "original-browser-body-clone" });
+  for (const error of observed?.errors ?? []) responseInspectionErrors.push({ path: "/api/auth/session", error });
 }
 async function gotoAfterInspection(page, ...args) {
   await drainResponseInspections(page);
@@ -160,16 +182,7 @@ async function readerPanel(
   reader,
   workspaceId = accounts.operator.workspaceId,
 ) {
-  const previousUrl = page.url();
   await open(page, workspaceId, reader.id === "calendar" ? "calendar" : "bots");
-  // An identical URL containing a fragment can be a same-document navigation.
-  // Repeated checks need a fresh request after their interceptor is installed.
-  if (previousUrl === page.url()) {
-    await reloadAfterInspection(page, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("[data-crm-content]")).toBeVisible();
-    await waitForCrmSection(page, reader.id === "calendar" ? "calendar" : "bots");
-    await page.evaluate(() => document.fonts.ready);
-  }
   if (reader.tab)
     await page
       .getByRole("navigation", { name: "Bot-Arbeitsbereich", exact: true })
@@ -759,6 +772,7 @@ async function newPage(label) {
     });
     return route.abort("blockedbyclient");
   });
+  await context.addInitScript(observeQaHeartbeatBodies, { origin: base.origin });
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(90000);
@@ -780,15 +794,21 @@ async function newPage(label) {
       consoleErrors.push({ role: label, message: message.text() });
   });
   const barrier = createResponseInspectionBarrier();
+  const requestInfo = new WeakMap();
   responseBarriers.set(page, barrier);
   page.on("request", request => {
     const url = new URL(request.url());
-    if (url.origin === base.origin && url.pathname.startsWith("/api/")) barrier.started(request);
+    if (url.origin === base.origin && url.pathname.startsWith("/api/")) {
+      const metadata = { path: url.pathname, method: request.method(), resourceType: request.resourceType(), responseReceived: false, finished: false };
+      requestInfo.set(request, metadata); barrier.started(request, metadata);
+    }
   });
-  page.on("requestfinished", request => barrier.finished(request));
+  page.on("requestfinished", request => { if (requestInfo.has(request)) requestInfo.get(request).finished = true; barrier.finished(request); });
   page.on("requestfailed", request => barrier.finished(request));
   page.on("response", (response) => {
     const url = new URL(response.url());
+    const metadata = requestInfo.get(response.request());
+    if (metadata) { metadata.responseReceived = true; metadata.status = response.status(); }
     if (url.origin === base.origin && response.status() >= 500)
       serverErrors.push({
         role: label,
@@ -812,10 +832,12 @@ async function newPage(label) {
           if (/SYNTHETIC FOREIGN PRIVATE SENTINEL|FOREIGN-PRIVATE-UNIT/.test(body))
             privateLeaks.push({ role: label, path: url.pathname });
         })
-        .catch(error => responseInspectionErrors.push({ role: label, path: url.pathname, error: error.message }))
+        .catch(async error => responseInspectionErrors.push({ role: label, path: url.pathname, method: response.request().method(), status: response.status(), requestFinished: metadata?.finished ?? false, error: error.message,
+          ...(url.pathname === "/api/auth/session" ? { heartbeatBody: await heartbeatEvidence(page) } : {}),
+        }))
         .finally(() => clearTimeout(timer));
       responseChecks.push(check);
-      barrier.inspect(check);
+      barrier.inspect(check, response.request());
     }
   });
   return page;
@@ -997,7 +1019,16 @@ async function open(
   url.hash = section;
   // The real CRM can poll live modules; readiness is its rendered shell and
   // scoped content, rather than the absence of background network activity.
+  const needsDocument = requiresCrmDocumentReload(page.url(), url.href);
+  const profileSelect = page.locator("[data-crm-sidebar] [data-crm-profile-select]");
+  const selectedProfile = needsDocument && await profileSelect.count() ? await profileSelect.inputValue() : null;
   await gotoAfterInspection(page, url.href, { waitUntil: "domcontentloaded" });
+  // An identical/fragment URL can dispatch into the preceding profile's hash
+  // listener. Recreate the document so its stored current profile is restored.
+  if (needsDocument) {
+    await reloadAfterInspection(page, { waitUntil: "domcontentloaded" });
+    if (selectedProfile) await expect(profileSelect).toHaveValue(selectedProfile);
+  }
   await expect(page.locator(".crm-app")).toBeVisible();
   await expect(page.locator("[data-crm-content]")).toBeVisible();
   await waitForCrmSection(page, section, projectId);
@@ -1036,6 +1067,10 @@ async function chooseProfile(page, profile) {
     const select = page.locator("[data-crm-sidebar] [data-crm-profile-select]");
     await select.selectOption(profile, { timeout: 1500 });
     await expect(select).toHaveValue(profile, { timeout: 1500 });
+    const account = page === operatorPage ? accounts.operator : page === customerPage ? accounts.customer : accounts.viewer;
+    const workspaceId = new URL(page.url()).searchParams.get("workspaceId") ?? account.workspaceId;
+    const key = getStudioNavigationPreferenceKey("novalure-crm-navigation-preset-v1", account.userId, workspaceId);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), key), profile, "Actual profile handler must persist the selected profile at its real key");
   }).toPass({ timeout: 15000, intervals: [100, 250, 500] });
 }
 
