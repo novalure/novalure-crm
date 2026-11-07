@@ -48,21 +48,21 @@ import { webcrypto } from "node:crypto";
 import { createServer } from 'node:http';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics } from './lib/qa-response-inspection.mjs';
+import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, parseQaFetchBindingMessage } from './lib/qa-response-inspection.mjs';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 async function bounded(condition) {
   const deadline = Date.now() + 1000;
   while (!condition()) { assert.ok(Date.now() < deadline, 'bounded synthetic observation'); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
-function observedFetch(perform, origin, { report, observerSource } = {}) {
+function observedFetch(perform, origin, { report, observerSource, bindingTransport = 'playwright' } = {}) {
   const reports = [], listeners = {};
   const world = { fetch: perform, URL, Request, AbortSignal, DOMException, Reflect, TextEncoder, crypto: webcrypto, setTimeout,
     __crmQaFetchReport: report ? event => report(event, reports) : async event => { reports.push(event); },
     addEventListener: (name, callback) => { listeners[name] = callback; } };
   // Keep the actual global object used by the serialized browser init function.
-  const context = { ...world, origin };
-  runInNewContext(`(${observerSource ?? observeQaFetchBodies.toString()})({origin})`, context);
+  const context = { ...world, origin, bindingTransport };
+  runInNewContext(`(${observerSource ?? observeQaFetchBodies.toString()})({origin,bindingTransport})`, context);
   context.reports = reports; context.listeners = listeners;
   return context;
 }
@@ -383,10 +383,33 @@ test('synchronous lifecycle bridge failures and complete bounded diagnostics can
   const rows = [first, next, { ...next, kind: 'terminal', bodyInspected: false }], audit = [{ observations: rows }];
   const diagnostic = collectFetchLifecycleDiagnostics(audit);
   assert.equal(diagnostic.complete, true); assert.equal(diagnostic.total, 3); assert.equal(diagnostic.events.length, 3);
-  assert.equal(diagnostic.missingTerminalCount, 1); assert.deepEqual(diagnostic.missingTerminalExamples[0], { documentId: first.documentId, id: 3, key: first.key, path: first.path, method: 'GET' });
+  assert.equal(diagnostic.missingTerminalCount, 1); assert.deepEqual({ ...diagnostic.missingTerminalExamples[0], key: null }, { documentId: first.documentId, id: 3, key: null, path: first.path, method: 'GET' });
+  assert.match(diagnostic.missingTerminalExamples[0].key, /^[a-f0-9]{64}$/); assert.notEqual(diagnostic.missingTerminalExamples[0].key, first.key);
   assert.doesNotMatch(JSON.stringify(diagnostic), /SYNTHETIC_PRIVATE_/);
   assert.throws(() => assertObservedFetchCoverage([], rows), error => error.message === 'UNSETTLED_ORIGINAL_FETCH_LIFECYCLE' && error.coverage.missingTerminalExamples[0].documentId === first.documentId);
   const overflow = collectFetchLifecycleDiagnostics([{ observations: Array.from({ length: 4001 }, (_, id) => ({ ...first, id })) }]);
   assert.equal(overflow.complete, false); assert.equal(overflow.total, 4001); assert.equal(overflow.events.length, 4000); assert.equal(overflow.missingTerminalExamples.length, 10);
   assert.equal(rows.length, 3); assert.equal(audit[0].observations, rows);
+});
+
+test('actual serialized observer emits four synchronous native-CDP terminals without changing the original calls', async () => {
+  const originals = [], calls = [], raw = [];
+  const world = observedFetch((...args) => { calls.push(args); const result = new Promise(() => {}); originals.push(result); return result; }, 'http://127.0.0.1', {
+    bindingTransport: 'cdp', report(payload, reports) {
+      assert.equal(typeof payload, 'string'); raw.push(payload);
+      reports.push(parseQaFetchBindingMessage({ name: '__crmQaFetchReport', executionContextId: 17, payload }));
+    },
+  });
+  const init = { method: 'GET', headers: { 'x-synthetic': 'UNCHANGED' }, signal: new AbortController().signal };
+  for (const name of ['notifications', 'onboarding', 'csrf', 'team']) {
+    const input = 'http://127.0.0.1/api/' + name + '?private=SYNTHETIC_QUERY';
+    assert.equal(world.fetch(input, init), originals.at(-1)); assert.equal(calls.at(-1)[0], input); assert.equal(calls.at(-1)[1], init);
+  }
+  await bounded(() => world.reports.length === 4);
+  world.listeners.pagehide({ persisted: false });
+  assert.equal(world.reports.length, 8, 'The native string calls occur inside the real pagehide callback');
+  assert.equal(world.reports.filter(row => row.kind === 'terminal').length, 4); assert.doesNotMatch(JSON.stringify(raw), /SYNTHETIC_QUERY|UNCHANGED/);
+  const native = world.reports.filter(row => row.kind === 'start').map(row => ({ kind: 'request', key: row.key }));
+  assert.doesNotThrow(() => assertObservedFetchCoverage(native, world.reports));
+  assert.equal(originals.length, 4); assert.equal(init.signal.aborted, false);
 });

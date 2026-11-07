@@ -1,3 +1,18 @@
+import { randomBytes } from "node:crypto";
+const opaqueReferences = new Map();
+const opaqueReference = value => {
+  if (typeof value !== "string") return null;
+  if (!opaqueReferences.has(value)) opaqueReferences.set(value, randomBytes(32).toString("hex"));
+  return opaqueReferences.get(value);
+};
+export function safeQaFetchDiagnostic(value) {
+  if (Array.isArray(value)) return value.map(safeQaFetchDiagnostic);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) =>
+    key === "bodySha256" || key === "captureKey" ? [key + "Present", typeof item === "string"] :
+    key === "key" ? [key, opaqueReference(item)] : [key, safeQaFetchDiagnostic(item)]));
+}
+
 /** Finish observed API traffic and its body inspection before destroying a document. */
 export function createResponseInspectionBarrier() {
   const requests = new Map();
@@ -48,7 +63,7 @@ export function createResponseInspectionBarrier() {
  * consumption are unchanged. A server body that never ends still never resolves.
  * Serialized by Playwright addInitScript; deliberately has no module closure.
  */
-export function observeQaFetchBodies({ origin }) {
+export function observeQaFetchBodies({ origin, bindingTransport = "playwright" }) {
   const active = new Map(), bridges = new Set();
   const readAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted").get;
   const readAbortReason = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "reason").get;
@@ -65,7 +80,8 @@ export function observeQaFetchBodies({ origin }) {
   const report = (kind, e) => {
     const deliver = key => {
       e.key = key;
-      return globalThis.__crmQaFetchReport({ kind, ...metadata(e) });
+      const event = { kind, ...metadata(e) };
+      return globalThis.__crmQaFetchReport(bindingTransport === "cdp" ? JSON.stringify(event) : event);
     };
     let task;
     try {
@@ -159,7 +175,8 @@ export function observeQaFetchBodies({ origin }) {
   });
 }
 
-const requestTrace = row => Object.fromEntries(["documentId", "id", "key", "path", "method"].map(field => [field, row[field] ?? null]));
+const requestTrace = row => ({ documentId: row.documentId ?? null, id: row.id ?? null,
+  key: opaqueReference(row.key), path: row.path ?? null, method: row.method ?? null });
 
 /** Complete bounded metadata only; overflow is a caller-owned failure, never a
  * silent partial coverage claim. The internal full audit is not modified. */
@@ -168,14 +185,37 @@ export function collectFetchLifecycleDiagnostics(audits) {
   const ids = row => `${row.documentId}/${row.id}`;
   const terminalIds = new Set(rows.filter(row => row.kind === "terminal").map(ids));
   const missing = rows.filter(row => row.kind === "start" && !terminalIds.has(ids(row)));
-  const terminalFields = ["phase", "status", "json", "bodyInspected", "signalAborted", "signalAbortedAtStart", "preAbortedNoDispatch", "rejectedWithOriginalAbortReason", "keepalive", "foreign", "bodyError", "failedBeforeHeaders", "retiredReadBeforeHeaders", "bodySha256"];
+  const terminalFields = ["phase", "status", "json", "bodyInspected", "signalAborted", "signalAbortedAtStart", "preAbortedNoDispatch", "rejectedWithOriginalAbortReason", "keepalive", "foreign", "bodyError", "failedBeforeHeaders", "retiredReadBeforeHeaders"];
   return { complete: rows.length <= limit, limit, total: rows.length,
     missingTerminalCount: missing.length, missingTerminalExamples: missing.slice(0, 10).map(requestTrace),
     events: rows.slice(0, limit).map(row => ({ kind: row.kind, role: row.role ?? null, ...requestTrace(row),
-      ...Object.fromEntries((row.kind === "terminal" ? terminalFields : ["signalAbortedAtStart", "keepalive"]).map(field => [field, row[field] ?? null])) })) };
+      ...Object.fromEntries((row.kind === "terminal" ? terminalFields : ["signalAbortedAtStart", "keepalive"]).map(field => [field, row[field] ?? null])),
+      ...(row.kind === "terminal" ? { bodyHashPresent: typeof row.bodySha256 === "string" } : {}) })) };
 }
 
-export function assertObservedFetchCoverage(network, observations) {
+/** Native CDP already copied this string out of the document. Parsing never
+ * evaluates a destroyed execution context or acknowledges through that context. */
+export function parseQaFetchBindingMessage(message) {
+  if (message.name !== "__crmQaFetchReport") return null;
+  if (typeof message.payload !== "string" || message.payload.length >= 8192 || !Number.isSafeInteger(message.executionContextId))
+    throw new Error("INVALID_NATIVE_FETCH_BINDING");
+  const row = JSON.parse(message.payload);
+  const fields = ["kind", "id", "documentId", "key", "path", "method", "phase", "status", "json", "bodyInspected", "signalAborted", "keepalive", "foreign", "signalAbortedAtStart", "preAbortedNoDispatch", "rejectedWithOriginalAbortReason", "bodyError", "failedBeforeHeaders", "retiredReadBeforeHeaders", "bodySha256"];
+  if (Object.keys(row).some(key => !fields.includes(key)) || !["start", "terminal"].includes(row.kind) || !/^[a-f0-9]{64}$/.test(row.key) ||
+    !Number.isSafeInteger(row.id) || row.id <= 0 || typeof row.documentId !== "string" || !/^[0-9]+-[0-9.e+-]+$/.test(row.documentId) || row.documentId.length >= 100 ||
+    !/^\/api\/[A-Za-z0-9._~%/-]{1,450}$/.test(row.path) || !/^[A-Z]{3,8}$/.test(row.method) ||
+    !["request", "body", "body-eof", "response-not-json-success", "fetch-aborted-before-headers", "fetch-rejected-before-headers", "fetch-aborted-before-dispatch", "document-retired-before-headers"].includes(row.phase) ||
+    (row.status !== null && (!Number.isInteger(row.status) || row.status < 0 || row.status > 599)) ||
+    ![null, "clone_failed", "body_read_failed", "body_observation_failed", "unsafe_fetch_outcome_without_headers", "document_retired_with_uninspected_response_or_write"].includes(row.bodyError) ||
+    (row.bodySha256 !== null && !/^[a-f0-9]{64}$/.test(row.bodySha256))) throw new Error("INVALID_NATIVE_FETCH_BINDING");
+  for (const key of ["json", "bodyInspected", "signalAborted", "keepalive", "foreign", "signalAbortedAtStart", "preAbortedNoDispatch", "rejectedWithOriginalAbortReason", "failedBeforeHeaders", "retiredReadBeforeHeaders"])
+    if (typeof row[key] !== "boolean") throw new Error("INVALID_NATIVE_FETCH_BINDING");
+  if (row.bodyInspected && (!row.json || row.status < 200 || row.status >= 300 || !/^[a-f0-9]{64}$/.test(row.bodySha256))) throw new Error("INVALID_NATIVE_FETCH_BINDING");
+  if (row.retiredReadBeforeHeaders && (row.method !== "GET" || row.status !== null || row.keepalive || row.bodyInspected)) throw new Error("INVALID_NATIVE_FETCH_BINDING");
+  return row;
+}
+
+export function assertObservedFetchCoverage(network, observations, serverBodyProofs = new Map()) {
   const startsById = new Map(), terminalIds = new Set(), undispatchedIds = new Set();
   for (const row of observations) {
     const id = `${row.documentId}/${row.id}`;
@@ -207,17 +247,35 @@ export function assertObservedFetchCoverage(network, observations) {
     throw new Error("INVALID_ORIGINAL_BODY_PROOF");
   const count = (rows, key) => rows.reduce((m, r) => m.set(key(r), (m.get(key(r)) ?? 0) + 1), new Map());
   const countFailure = (code, key, nativeCount, originalCount) => {
-    const error = new Error(code); error.coverage = { key, nativeCount, originalCount }; throw error;
+    const error = new Error(code); error.coverage = { key: opaqueReference(key), nativeCount, originalCount }; throw error;
   };
   const starts = count([...startsById].filter(([id]) => !undispatchedIds.has(id)).map(([, row]) => row), r => r.key);
   const actual = count(network.filter(r => r.kind === "request"), r => r.key);
   for (const [key, n] of actual) if ((starts.get(key) ?? 0) < n) countFailure("UNOBSERVED_NATIVE_FETCH_REQUEST", key, n, starts.get(key) ?? 0);
   for (const [key, n] of starts) if ((actual.get(key) ?? 0) < n) countFailure("UNMATCHED_ORIGINAL_FETCH_START", key, actual.get(key) ?? 0, n);
   const expectedBodies = count(network.filter(r => r.kind === "response" && r.ok && r.json), r => `${r.key}/${r.status}`);
-  const bodies = count(observations.filter(r => r.kind === "terminal" && r.bodyInspected), r => `${r.key}/${r.status}`);
+  const bodyProven = row => {
+    const proof = serverBodyProofs.get(`${row.documentId}/${row.id}`);
+    if (!proof) return false;
+    if (proof.source !== "actual-node-egress-finish-multiset" || proof.status !== row.status ||
+      !/^[a-f0-9]{64}$/.test(proof.captureKey ?? "") || !Array.isArray(proof.serverIds) ||
+      proof.serverIds.length !== proof.nativeRequestCount || new Set(proof.serverIds).size !== proof.serverIds.length ||
+      proof.serverIds.some(id => !Number.isSafeInteger(id) || id <= 0) ||
+      proof.nativeRequestCount !== network.filter(item => item.kind === "request" && item.key === row.key).length ||
+      proof.successfulJsonBodyCount !== network.filter(item => item.kind === "response" && item.key === row.key && item.ok && item.json).length ||
+      proof.resolvedBodyCount !== observations.filter(item => item.kind === "terminal" && item.key === row.key && item.bodyError).length ||
+      !Array.isArray(proof.bodyHashes) || proof.bodyHashes.length !== proof.successfulJsonBodyCount ||
+      proof.bodyHashes.some(body => !Number.isInteger(body.status) || body.status < 200 || body.status >= 300 || !/^[a-f0-9]{64}$/.test(body.sha256)) ||
+      row.bodyError !== "body_read_failed" ||
+      !row.json || row.status < 200 || row.status >= 300 || row.method !== "GET" || row.keepalive ||
+      row.signalAbortedAtStart || !row.signalAborted || row.bodyInspected)
+      throw new Error("INVALID_SERVER_EGRESS_BODY_PROOF");
+    return true;
+  };
+  const bodies = count(observations.filter(r => r.kind === "terminal" && (r.bodyInspected || bodyProven(r))), r => `${r.key}/${r.status}`);
   for (const [key, n] of expectedBodies) if ((bodies.get(key) ?? 0) < n) countFailure("UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", key, n, bodies.get(key) ?? 0);
   for (const [key, n] of bodies) if ((expectedBodies.get(key) ?? 0) < n) countFailure("UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY", key, expectedBodies.get(key) ?? 0, n);
-  if (observations.some(r => r.kind === "terminal" && r.bodyError)) throw new Error("ORIGINAL_FETCH_BODY_INSPECTION_FAILED");
+  if (observations.some(r => r.kind === "terminal" && r.bodyError && !bodyProven(r))) throw new Error("ORIGINAL_FETCH_BODY_INSPECTION_FAILED");
 }
 
 /** Fragment/identical URLs are same-document navigations, not fresh fixtures. */

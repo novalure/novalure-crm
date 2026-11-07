@@ -2,11 +2,12 @@
 // Accounts and business rows are synthetic. Login, MFA, cookies, CSRF, RLS and
 // application APIs are real; no sessions, auth headers or provider IO are faked.
 import assert from "node:assert/strict";
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload } from "./lib/qa-response-inspection.mjs";
+import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from "./lib/qa-response-inspection.mjs";
+import { qaRequestFingerprint, qualifyQaServerBodies, requestQaCaptureSnapshot } from "./lib/qa-server-response-capture.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
@@ -70,6 +71,22 @@ const results = [],
 const contexts = [];
 const responseBarriers = new WeakMap();
 const fetchAudits = new WeakMap();
+const serverBodyResolutions = new Map();
+const serverMultisetPublicIds = new Map();
+const capture = fixture.responseCapture;
+assert(capture?.syntheticOnly === true && capture.origin === base.origin && /^[a-f0-9]{32}$/.test(capture.runId) && /^[a-f0-9]{64}$/.test(capture.secret));
+async function serverBodyProofs(audit, timeoutMs = 1000) {
+  const records = await requestQaCaptureSnapshot(capture.runId, { timeoutMs: Math.min(1000, timeoutMs) });
+  assert(records.length <= 20000 && records.every(row => row.runId === capture.runId));
+  assert(!records.some(row => row.foreign), "Actual server egress contains a foreign private sentinel");
+  const proofs = qualifyQaServerBodies(audit.network, audit.observations, records, capture.runId);
+  for (const [id, proof] of proofs) {
+    if (!serverMultisetPublicIds.has(proof.captureKey)) serverMultisetPublicIds.set(proof.captureKey, randomBytes(16).toString("hex"));
+    serverBodyResolutions.set(id, { ...proof, publicServerId: serverMultisetPublicIds.get(proof.captureKey) });
+  }
+  return proofs;
+}
+const unresolvedInspectionErrors = () => responseInspectionErrors.filter(row => !serverBodyResolutions.has(`${row.documentId}/${row.id}`));
 function fetchAudit(page) {
   let audit = fetchAudits.get(page);
   if (!audit) { audit = { network: [], observations: [] }; fetchAudits.set(page, audit); }
@@ -86,16 +103,21 @@ async function drainResponseInspections(page) {
       const state = globalThis.__crmQaFetchBodies;
       return state ? state.drain(remaining) : { ok: false, errors: ["fetch_observer_missing"] };
     }, Math.max(1, deadline - Date.now()));
-    if (!result.ok) throw new Error("Original API fetch lifecycle did not settle: " + JSON.stringify({ ...result, lastCoverageError }));
+    if (!result.ok && (result.timedOut || !result.errors?.length || result.errors.some(error => error !== "body_read_failed")))
+      throw new Error("Original API fetch lifecycle did not settle: " + JSON.stringify(safeQaFetchDiagnostic({ ...result, lastCoverageError })));
     if (result.foreign) privateLeaks.push({ observation: "original-browser-body-clone" });
     try { await barrier?.drain(Math.max(1, deadline - Date.now())); }
     catch { throw new Error("Pending non-fetch API/body inspection before navigation timed out: " + JSON.stringify(barrier?.pendingInfo())); }
     const audit = fetchAudit(page);
-    try { assertObservedFetchCoverage(audit.network, audit.observations); return; }
+    try {
+      const proofs = await serverBodyProofs(audit, Math.max(1, deadline - Date.now()));
+      if (Date.now() >= deadline) throw new Error("Original/native Fetch coverage deadline exceeded");
+      assertObservedFetchCoverage(audit.network, audit.observations, proofs); return;
+    }
     catch (error) {
       // A new original fetch may start between the browser snapshot and its
       // native event delivery. Re-observe within the SAME budget, never refetch.
-      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY"].includes(error.message)) throw error;
+      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY", "QA_SERVER_CAPTURE_PENDING"].includes(error.message)) throw error;
       lastCoverageError = { code: error.message, ...(error.coverage ?? {}) };
       if (Date.now() >= deadline) throw error;
       await new Promise(resolve => setTimeout(resolve, 25));
@@ -689,7 +711,7 @@ async function verifyOperationalReaders() {
     async () => {
       for (const page of [operatorPage, customerPage, viewerPage].filter(Boolean)) await drainResponseInspections(page);
       await Promise.all(responseChecks);
-      assert.deepEqual(responseInspectionErrors, [], "Every observed successful API body must be inspected");
+      assert.deepEqual(unresolvedInspectionErrors(), [], "Every observed successful API body must be inspected");
       assert.deepEqual(serverErrors, []);
       assert.deepEqual(errors, []);
       assert.deepEqual(outbound, []);
@@ -783,18 +805,22 @@ async function newPage(label) {
     });
     return route.abort("blockedbyclient");
   });
-  await context.exposeBinding("__crmQaFetchReport", ({ page }, event) => {
-    assert(page && ["start", "terminal"].includes(event.kind) && /^[a-f0-9]{64}$/.test(event.key));
-    assert(Number.isSafeInteger(event.id) && event.id > 0 && typeof event.documentId === "string" && event.documentId.length < 100);
-    assert(/^\/api\/[A-Za-z0-9._~%/-]{1,450}$/.test(event.path) && /^[A-Z]{3,8}$/.test(event.method));
-    if (event.bodyInspected) assert(event.json && event.status >= 200 && event.status < 300 && /^[a-f0-9]{64}$/.test(event.bodySha256));
-    if (event.retiredReadBeforeHeaders) assert(event.method === "GET" && event.status === null && !event.keepalive && !event.bodyInspected);
+  await context.addInitScript(observeQaFetchBodies, { origin: base.origin, bindingTransport: "cdp" });
+  const page = await context.newPage();
+  // The native binding event already owns its serialized metadata. Unlike
+  // Playwright exposeBinding it needs no surviving execution-context lookup.
+  const channel = await context.newCDPSession(page);
+  channel.on("Runtime.bindingCalled", message => {
+    if (message.name !== "__crmQaFetchReport") return;
+    try {
+    const event = parseQaFetchBindingMessage(message);
     fetchAudit(page).observations.push({ ...event, role: label });
     if (event.kind === "terminal" && event.foreign) privateLeaks.push({ role: label, path: event.path });
-    if (event.kind === "terminal" && event.bodyError) responseInspectionErrors.push({ role: label, path: event.path, status: event.status, error: event.bodyError });
+    if (event.kind === "terminal" && event.bodyError) responseInspectionErrors.push({ role: label, documentId: event.documentId, id: event.id, path: event.path, status: event.status, error: event.bodyError });
+    } catch { responseInspectionErrors.push({ role: label, error: "native_fetch_metadata_binding_failed" }); }
   });
-  await context.addInitScript(observeQaFetchBodies, { origin: base.origin });
-  const page = await context.newPage();
+  await channel.send("Runtime.enable");
+  await channel.send("Runtime.addBinding", { name: "__crmQaFetchReport" });
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(90000);
   if (readersOnly)
@@ -822,7 +848,16 @@ async function newPage(label) {
     if (url.origin === base.origin && url.pathname.startsWith("/api/")) {
       const metadata = { path: url.pathname, method: request.method(), resourceType: request.resourceType(), responseReceived: false, finished: false };
       requestInfo.set(request, metadata);
-      if (request.resourceType() === "fetch") fetchAudit(page).network.push({ kind: "request", key: fetchKey(request), ...metadata });
+      if (request.resourceType() === "fetch") {
+        const row = { kind: "request", key: fetchKey(request), ...metadata };
+        fetchAudit(page).network.push(row);
+        metadata.captureKeyPromise = request.allHeaders().then(headers => {
+          row.captureKey = qaRequestFingerprint(capture.secret, request.method(), url.href, headers);
+          return row.captureKey;
+        });
+        const check = metadata.captureKeyPromise.catch(() => responseInspectionErrors.push({ role: label, path: url.pathname, error: "native_request_binding_failed" }));
+        responseChecks.push(check); barrier.inspect(check);
+      }
       else barrier.started(request, metadata);
     }
   });
@@ -2342,7 +2377,7 @@ async function runIntegration() {
       for (const page of [operatorPage, customerPage, viewerPage].filter(Boolean)) await drainResponseInspections(page);
       await Promise.all(responseChecks);
       assert.deepEqual(errors, []);
-      assert.deepEqual(responseInspectionErrors, [], "Every observed successful API body must be inspected");
+      assert.deepEqual(unresolvedInspectionErrors(), [], "Every observed successful API body must be inspected");
       assert.deepEqual(serverErrors, []);
       assert.deepEqual(outbound, []);
       assert.deepEqual(
@@ -2387,7 +2422,7 @@ try {
   // Closing the contexts can publish the final real pagehide records. Preserve
   // every historical/native obligation after that last lifecycle transition.
   for (const audit of finalFetchAudits) {
-    try { assertObservedFetchCoverage(audit.network, audit.observations); }
+    try { assertObservedFetchCoverage(audit.network, audit.observations, await serverBodyProofs(audit)); }
     catch (error) { results.push({ name: "Final original/native Fetch audit", status: "FAIL", error: error.message + ": " + JSON.stringify(error.coverage ?? null) }); }
   }
   const { events: fetchLifecycle, ...fetchLifecycleDiagnostics } = collectFetchLifecycleDiagnostics(finalFetchAudits);
@@ -2422,6 +2457,9 @@ try {
     privateLeaks,
     ...(readersOnly ? { readerMutations } : {}),
     responseInspectionErrors,
+    serverBodyResolutions: [...serverBodyResolutions].map(([id, proof]) => ({ id, source: proof.source, proofGroupId: proof.publicServerId,
+      status: proof.status, nativeRequestCount: proof.nativeRequestCount, successfulJsonBodyCount: proof.successfulJsonBodyCount,
+      resolvedBodyCount: proof.resolvedBodyCount, actualEgressEofAndBodiesInspected: true, exactIndividualRequestClaim: false })),
     fetchLifecycle,
     fetchLifecycleDiagnostics,
     consoleErrors,

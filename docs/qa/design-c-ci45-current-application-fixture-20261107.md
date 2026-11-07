@@ -255,3 +255,47 @@ real-EOF failures, and exercise synchronous/asynchronous bridge errors plus
 complete/private-field-free bounded diagnostics. Unchanged transport and product
 evidence is reused. No browser, provider, build or CI rerun is performed here;
 actual native confirmation remains required.
+# Received-body aborts and destroyed-document evidence
+
+The A607 native second attempt remains a recorded failure: 47 cases passed and
+five failed. One operator team GET received successful JSON headers before the
+React effect aborted its signal; four distinct viewer starts lost their terminal
+delivery in an intermediate document. These are separate evidence failures.
+
+The built Design C fixture now observes the existing Node HTTP server through
+its diagnostic channel. Its transparent write/end/header observers retain the
+original arguments, callbacks, return values and errors. A body qualifies only
+after actual Node `finish`, `writableFinished`, matching declared content length,
+bounded decompression and complete JSON inspection. `close`, truncation,
+overflow and a stream without end cannot produce EOF. This proves server
+egress completion, never browser receipt or original-clone EOF.
+
+The original browser fetch, its signal, native promise/Response and cancellation
+remain unchanged. A received-JSON clone failure can be resolved only by the
+independent complete server evidence for its authenticated request multiset.
+Native counts and all original starts/terminals remain mandatory. Concurrent
+equal URLs are not assigned FIFO identities: all matching requests, statuses and
+bodies must balance exactly, and every body in the bag must be complete and
+inspected. Missing, surplus, mixed-session, ambiguous or incomplete evidence
+fails closed. The original body failure stays in the result beside an explicit
+server-egress multiset resolution.
+
+Request header fingerprints and response body hashes exist only in host RAM.
+The already owned Next, sales-server, package controller and test-runner children
+exchange bounded snapshots over their private native IPC channels. They are
+never written to a capture file or report. The existing private fixture context
+holds only a fresh unrelated capture key/run nonce in addition to its existing
+synthetic credentials. Persistent diagnostics use unrelated opaque random
+references, counts, paths, status and inspection/EOF booleans. Authentication,
+CSRF, reset and invitation body digests are not persisted.
+
+Original lifecycle metadata is sent through native CDP `Runtime.bindingCalled`.
+The receiver validates a bounded metadata-only string without looking up or
+evaluating a destroyed execution context. This removes the specific deferred
+context-lookup drop in Playwright's `exposeBinding` path. No old document is
+excluded, no request is replayed, and no terminal or EOF is invented.
+
+Qualification here consists of targeted Node loopback HTTP, IPC and serialized
+observer tests, including old-path negatives. It is not a browser, native CI,
+protected QA or production result. The package controller is required for the
+private capture relay; direct invocation without that channel fails closed.
