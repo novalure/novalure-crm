@@ -112,6 +112,9 @@ jobs:
       - name: Final sales contract, approval, route and recovery regression
         run: npm run test:sales:final
 
+      - name: Registered autonomous CRM delegation and preserved machine authentication
+        run: npm run test:crm-autonomous-access
+
       - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
         run: npm run test:g08
 
