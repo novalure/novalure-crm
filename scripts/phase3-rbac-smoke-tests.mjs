@@ -165,6 +165,22 @@ test("write routes require server-side technical permission and product access g
   assert.match(tasksRoute, /export const POST = withCrmSalesWrite\(postHandler\)/);
   assert.match(wrapper, /tasks: \{ table: "tasks", entity: "task", capability: "workspace:operate" \}/);
   assert.match(readText("src/lib/crm-command.ts"), /hasProductCapability\(freshSession\.productRole, input\.capability\)/);
-  assert.match(newsletterRoute, /requirePermissionAndProductCapability\(request, "newsletter:send", "newsletter:send"\)/);
-  assert.match(newsletterRoute, /evaluateOutboundConsent/);
+  assert.match(newsletterRoute, /import \{ GET as readSavedMailings, POST as writeSavedMailings \} from "@\/app\/api\/crm\/newsletter\/route"/);
+  assert.match(newsletterRoute, /export const POST = writeSavedMailings/);
+  const savedMailingsRoute = readText("src/app/api/crm/newsletter/route.ts");
+  const mailingsRepository = readText("src/lib/db/newsletter-workspace-repository.ts");
+  assert.match(savedMailingsRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "workspace:operate" \}\)/);
+  assert.match(mailingsRepository, /session\.permissions\.includes\("newsletter:send"\) && hasProductCapability\(session\.productRole, "newsletter:send"\) && !session\.serviceIdentity/);
+  assert.match(mailingsRepository, /function requireSend\(session: AppSession\) \{ if \(!maySend\(session\)\) throw new CrmCommandError\("FORBIDDEN"/);
+  for (const operation of ["approveNewsletter", "sendNewsletterBatch", "sendNewsletterTest"]) {
+    const start = mailingsRepository.indexOf(`export async function ${operation}(`);
+    assert.ok(start >= 0, operation);
+    const end = mailingsRepository.indexOf("export async function ", start + 1);
+    const body = mailingsRepository.slice(start, end < 0 ? undefined : end);
+    assert.match(body, /requireSend\(fresh\)/, operation);
+    assert.match(body, /capability: "newsletter:send"/, operation);
+    assert.match(savedMailingsRoute, new RegExp(`${operation}\\(auth\\.session, input, metadata\\)`), operation);
+  }
+  assert.match(mailingsRepository, /await evaluateOutboundConsent\(/);
+  assert.match(mailingsRepository, /if \(!decision\.allowed\) reason = decision\.reason/);
 });

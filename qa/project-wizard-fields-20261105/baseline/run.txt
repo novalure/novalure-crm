@@ -1,0 +1,14 @@
+PHASE owned local PostgreSQL and unchanged historical schema
+PHASE immutable app-byte capture and real local Next server
+PHASE actual password and rendered TOTP enrollment
+PASS actual password/TOTP flow issued opaque HttpOnly MFA session
+PHASE actual project wizard and single real create
+PASS real project POST passed server authorization and CSRF
+PASS one create with real browser CSRF and command identity
+PASS real reload/Core and RLS-scoped runtime SQL agree on the created project
+FAIL wizard notes is transmitted and survives real reload
+FAIL wizard ownerUserId is transmitted and survives real reload
+FAIL wizard funnelTemplateId is transmitted and survives real reload
+FAIL selected pipeline template survives reload as explicit selection
+PASS no browser exception or external browser request
+{"output":"C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\qa\\project-wizard-fields-20261105\\baseline","totals":{"checks":9,"passed":5,"failed":4},"failure":null}

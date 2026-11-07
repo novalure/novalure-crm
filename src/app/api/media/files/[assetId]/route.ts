@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { withCrmRead } from "@/lib/crm-command";
-import { findWorkspaceMediaAsset, MediaStoreError, readMediaAssetContent } from "@/lib/media-store";
+import { canAccessWorkspaceMedia, findWorkspaceMediaAsset, MediaStoreError, readMediaAssetContent } from "@/lib/media-store";
 import { safeMediaContentDisposition } from "@/lib/media-security";
 
 type RouteContext = {
@@ -21,17 +21,18 @@ export async function GET(request: Request, context: RouteContext) {
   if (!auth.ok) return auth.response;
 
   const { assetId } = await context.params;
-  const asset = await withCrmRead(auth.session, (_tx, session) =>
-    findWorkspaceMediaAsset(assetId, session.workspaceId));
-  if (!asset) {
-    return NextResponse.json({ error: "Media asset not found." }, { headers: privateHeaders, status: 404 });
-  }
-
   try {
-    const content = await readMediaAssetContent(asset);
-    if (!content) {
+    const result = await withCrmRead(auth.session, async (_tx, session) => {
+      const asset = await findWorkspaceMediaAsset(assetId, session.workspaceId);
+      if (!asset || !await canAccessWorkspaceMedia(session.workspaceId, asset.folder, asset.id)) return null;
+      const content = await readMediaAssetContent(asset);
+      return content ? { asset, content } : null;
+    });
+    if (!result) {
       return NextResponse.json({ error: "Media asset not found." }, { headers: privateHeaders, status: 404 });
     }
+
+    const { asset, content } = result;
 
     return new Response(content.body, {
       headers: {

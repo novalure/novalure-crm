@@ -1,0 +1,293 @@
+{
+  "date": "2026-11-04",
+  "reason": "Production120_shared_behavior_package4 already applied; keep historical migrations immutable.",
+  "protected": {
+    "120_shared_behavior_package4.sql": "889ab12192322abaf8582e569e02d155c5fb35912ebe37b306d9af08252cba7f",
+    "146_ai_credit_billing.sql": "5a675cbdcf1135247404eed0ea02d9fa2d818373a698a49055a0abde3451190b",
+    "152_ai_billing_admin.sql": "e91b6bb840bc4958b859f8f78b5f471889f1d8d4a8c87915d9bbce44ac496ad6",
+    "153_ai_billing_runtime_acl.sql": "558a4e968403a44f5b635df33a04e48b4dffd8a515ae3d4fd655949c6bbe33d0"
+  },
+  "migrations": [
+    {
+      "original": "120_automation_graph.sql",
+      "release": "154_automation_graph.sql",
+      "originalSha256": "fce6dc363d9e735da755829896ccd077f6364d0a4cbc04b2eebc4f5eb728b672",
+      "releaseSha256": "fce6dc363d9e735da755829896ccd077f6364d0a4cbc04b2eebc4f5eb728b672",
+      "releaseLedgerChecksum": "fce6dc363d9e735da755829896ccd077f6364d0a4cbc04b2eebc4f5eb728b672",
+      "semanticChange": null,
+      "originalLedgerChecksum": "fce6dc363d9e735da755829896ccd077f6364d0a4cbc04b2eebc4f5eb728b672"
+    },
+    {
+      "original": "121_web_expose.sql",
+      "release": "155_web_expose.sql",
+      "originalSha256": "3c0f7fe7675c494adffd211850f739443676fadc1c0e1ef73ddddb13177bebc0",
+      "releaseSha256": "7a9582c730bc59e09d0f013ff5828760bc29a23948055c0fa61585aeb129989b",
+      "releaseLedgerChecksum": "b6cf2893e000c8213b8a5e3bf5e458aee46eb5d90d013d4b430d6e62709e77d7",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on six opaque-link public Expos\u00e9 entrypoints; no role inheritance.",
+      "originalLedgerChecksum": "513f4b9f60e76d94de25a0a4c25e765f2013144d6aa6d035fb7083bc07f30992"
+    },
+    {
+      "original": "122_property_portal_exports.sql",
+      "release": "156_property_portal_exports.sql",
+      "originalSha256": "a8283ef287c346cacb144037ddfb1487cfcaec9385a02a21cd8905b2f518ea84",
+      "releaseSha256": "a8283ef287c346cacb144037ddfb1487cfcaec9385a02a21cd8905b2f518ea84",
+      "releaseLedgerChecksum": "a8283ef287c346cacb144037ddfb1487cfcaec9385a02a21cd8905b2f518ea84",
+      "semanticChange": null,
+      "originalLedgerChecksum": "a8283ef287c346cacb144037ddfb1487cfcaec9385a02a21cd8905b2f518ea84"
+    },
+    {
+      "original": "123_newsletter_workspace.sql",
+      "release": "157_newsletter_workspace.sql",
+      "originalSha256": "f8d8b63e9219030cb8cf0b92da642c98ca2bdb5a55f17fc443a9c2f4377385a6",
+      "releaseSha256": "f8d8b63e9219030cb8cf0b92da642c98ca2bdb5a55f17fc443a9c2f4377385a6",
+      "releaseLedgerChecksum": "f8d8b63e9219030cb8cf0b92da642c98ca2bdb5a55f17fc443a9c2f4377385a6",
+      "semanticChange": null,
+      "originalLedgerChecksum": "f8d8b63e9219030cb8cf0b92da642c98ca2bdb5a55f17fc443a9c2f4377385a6"
+    },
+    {
+      "original": "124_web_expose_retention.sql",
+      "release": "158_web_expose_retention.sql",
+      "originalSha256": "68b5453b886dfa852791e7e827b8e1aa9d2ec046f8b1a6251958aecce4dd5a41",
+      "releaseSha256": "68b5453b886dfa852791e7e827b8e1aa9d2ec046f8b1a6251958aecce4dd5a41",
+      "releaseLedgerChecksum": "68b5453b886dfa852791e7e827b8e1aa9d2ec046f8b1a6251958aecce4dd5a41",
+      "semanticChange": null,
+      "originalLedgerChecksum": "68b5453b886dfa852791e7e827b8e1aa9d2ec046f8b1a6251958aecce4dd5a41"
+    },
+    {
+      "original": "125_lead_qualification.sql",
+      "release": "159_lead_qualification.sql",
+      "originalSha256": "da496ab98ce485af20d1f2cf0a954382a1fc7b59b484720274d0fa23122559d4",
+      "releaseSha256": "da496ab98ce485af20d1f2cf0a954382a1fc7b59b484720274d0fa23122559d4",
+      "releaseLedgerChecksum": "da496ab98ce485af20d1f2cf0a954382a1fc7b59b484720274d0fa23122559d4",
+      "semanticChange": null,
+      "originalLedgerChecksum": "da496ab98ce485af20d1f2cf0a954382a1fc7b59b484720274d0fa23122559d4"
+    },
+    {
+      "original": "126_project_sales_report_settings.sql",
+      "release": "160_project_sales_report_settings.sql",
+      "originalSha256": "f7b8a3738211895931d94811eba727f0ddcb29b22eed1f421a32136ed9ed1e06",
+      "releaseSha256": "f7b8a3738211895931d94811eba727f0ddcb29b22eed1f421a32136ed9ed1e06",
+      "releaseLedgerChecksum": "f7b8a3738211895931d94811eba727f0ddcb29b22eed1f421a32136ed9ed1e06",
+      "semanticChange": null,
+      "originalLedgerChecksum": "f7b8a3738211895931d94811eba727f0ddcb29b22eed1f421a32136ed9ed1e06"
+    },
+    {
+      "original": "127_crm_notification_preferences.sql",
+      "release": "161_crm_notification_preferences.sql",
+      "originalSha256": "085f0553566080691d79b84e178bb4bb83adb56fa21ab4ee3c4f5406302f9235",
+      "releaseSha256": "085f0553566080691d79b84e178bb4bb83adb56fa21ab4ee3c4f5406302f9235",
+      "releaseLedgerChecksum": "085f0553566080691d79b84e178bb4bb83adb56fa21ab4ee3c4f5406302f9235",
+      "semanticChange": null,
+      "originalLedgerChecksum": "085f0553566080691d79b84e178bb4bb83adb56fa21ab4ee3c4f5406302f9235"
+    },
+    {
+      "original": "128_lead_customer_requests.sql",
+      "release": "162_lead_customer_requests.sql",
+      "originalSha256": "67cd77161257b7da0466684cd6c365081e6d84007b690d6b1d7e207b90495d1b",
+      "releaseSha256": "099f867d70c16df5eaa7a3cadb62003c0e66addd42b6a9f8034ab569f9cdad01",
+      "releaseLedgerChecksum": "099f867d70c16df5eaa7a3cadb62003c0e66addd42b6a9f8034ab569f9cdad01",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on three opaque-token customer-request entrypoints.",
+      "originalLedgerChecksum": "67cd77161257b7da0466684cd6c365081e6d84007b690d6b1d7e207b90495d1b"
+    },
+    {
+      "original": "129_web_expose_resources.sql",
+      "release": "163_web_expose_resources.sql",
+      "originalSha256": "46854cd20ee9616596856b9e74c100c3a8aeac0fda433e5e9c3ef09c76829f11",
+      "releaseSha256": "2ed0aacda1246ca858fc16bbac63bcadc2b98bb0110678e7e98e3f883162a35b",
+      "releaseLedgerChecksum": "2ed0aacda1246ca858fc16bbac63bcadc2b98bb0110678e7e98e3f883162a35b",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on public link-scoped resource lookup.",
+      "originalLedgerChecksum": "46854cd20ee9616596856b9e74c100c3a8aeac0fda433e5e9c3ef09c76829f11"
+    },
+    {
+      "original": "130_crm_onboarding_examples.sql",
+      "release": "164_crm_onboarding_examples.sql",
+      "originalSha256": "176192aa17fda68e07479e3e78510b064ac0a1d42115a0228fdee571fdf17959",
+      "releaseSha256": "176192aa17fda68e07479e3e78510b064ac0a1d42115a0228fdee571fdf17959",
+      "releaseLedgerChecksum": "176192aa17fda68e07479e3e78510b064ac0a1d42115a0228fdee571fdf17959",
+      "semanticChange": null,
+      "originalLedgerChecksum": "176192aa17fda68e07479e3e78510b064ac0a1d42115a0228fdee571fdf17959"
+    },
+    {
+      "original": "131_automation_mail.sql",
+      "release": "165_automation_mail.sql",
+      "originalSha256": "77294699ef413fd3cdc6e19ffb2534513d5120ce76cb39a96209bf8f0f75a9c0",
+      "releaseSha256": "77294699ef413fd3cdc6e19ffb2534513d5120ce76cb39a96209bf8f0f75a9c0",
+      "releaseLedgerChecksum": "77294699ef413fd3cdc6e19ffb2534513d5120ce76cb39a96209bf8f0f75a9c0",
+      "semanticChange": null,
+      "originalLedgerChecksum": "77294699ef413fd3cdc6e19ffb2534513d5120ce76cb39a96209bf8f0f75a9c0"
+    },
+    {
+      "original": "132_web_expose_live_inventory.sql",
+      "release": "166_web_expose_live_inventory.sql",
+      "originalSha256": "31b55ff649d36afc1bb3c2e0e3b90006d7427c6d2ac71576de45eb63d0dddfcd",
+      "releaseSha256": "c5864225b78ba53446c26e90404b807d273aeda6f5b38b574d559b9d835eba67",
+      "releaseLedgerChecksum": "ac628b41cc76e9b04a34efd0924123d015c4b7efe9168fad4c379759e2ae9354",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app runtime on public link-scoped inventory lookup.",
+      "originalLedgerChecksum": "cff7cd9667d51cd97eafe6bcc6c0ef5158e4ba27b429ceb0c8a0aa5e94182d00"
+    },
+    {
+      "original": "133_crm_partner_cooperation.sql",
+      "release": "167_crm_partner_cooperation.sql",
+      "originalSha256": "ceb4c8924613a212a1d47f05f083e2482ebfa2e16a30294da7779a2e92a36963",
+      "releaseSha256": "ceb4c8924613a212a1d47f05f083e2482ebfa2e16a30294da7779a2e92a36963",
+      "releaseLedgerChecksum": "ceb4c8924613a212a1d47f05f083e2482ebfa2e16a30294da7779a2e92a36963",
+      "semanticChange": null,
+      "originalLedgerChecksum": "ceb4c8924613a212a1d47f05f083e2482ebfa2e16a30294da7779a2e92a36963"
+    },
+    {
+      "original": "134_crm_integrations.sql",
+      "release": "168_crm_integrations.sql",
+      "originalSha256": "305b35d26e05b5e010763df51c9aed5c2fba2080088374e8a07dba09d0567697",
+      "releaseSha256": "648131a0bf742b2193ada1675db92dcedca58b220ef65d11b7e1df2716d8b18a",
+      "releaseLedgerChecksum": "648131a0bf742b2193ada1675db92dcedca58b220ef65d11b7e1df2716d8b18a",
+      "semanticChange": "Explicit EXECUTE for the actual novalure_tenant_app server runtime on the signature-verified adapter event sink.",
+      "originalLedgerChecksum": "305b35d26e05b5e010763df51c9aed5c2fba2080088374e8a07dba09d0567697"
+    },
+    {
+      "original": "135_property_meeting_context.sql",
+      "release": "169_property_meeting_context.sql",
+      "originalSha256": "055aa9ef571a434d43f82c4fafd9f5b828e7a3df353b32e4762e6eb48454cc1c",
+      "releaseSha256": "055aa9ef571a434d43f82c4fafd9f5b828e7a3df353b32e4762e6eb48454cc1c",
+      "releaseLedgerChecksum": "055aa9ef571a434d43f82c4fafd9f5b828e7a3df353b32e4762e6eb48454cc1c",
+      "semanticChange": null,
+      "originalLedgerChecksum": "055aa9ef571a434d43f82c4fafd9f5b828e7a3df353b32e4762e6eb48454cc1c"
+    },
+    {
+      "original": "136_crm_personal_mailbox.sql",
+      "release": "170_crm_personal_mailbox.sql",
+      "originalSha256": "1cf5a164c6bcac6330b1839db01a9d5e53d75744c30fff819506cb274eb7624a",
+      "releaseSha256": "1cf5a164c6bcac6330b1839db01a9d5e53d75744c30fff819506cb274eb7624a",
+      "releaseLedgerChecksum": "1cf5a164c6bcac6330b1839db01a9d5e53d75744c30fff819506cb274eb7624a",
+      "semanticChange": null,
+      "originalLedgerChecksum": "1cf5a164c6bcac6330b1839db01a9d5e53d75744c30fff819506cb274eb7624a"
+    },
+    {
+      "original": "137_property_inquiry_assignments.sql",
+      "release": "171_property_inquiry_assignments.sql",
+      "originalSha256": "f88c3dde0b695e81a683d422d125a6a1c8e98026a59085ed61f65d4c8d5f1ce7",
+      "releaseSha256": "f88c3dde0b695e81a683d422d125a6a1c8e98026a59085ed61f65d4c8d5f1ce7",
+      "releaseLedgerChecksum": "f88c3dde0b695e81a683d422d125a6a1c8e98026a59085ed61f65d4c8d5f1ce7",
+      "semanticChange": null,
+      "originalLedgerChecksum": "f88c3dde0b695e81a683d422d125a6a1c8e98026a59085ed61f65d4c8d5f1ce7"
+    },
+    {
+      "original": "138_property_portal_release_checks.sql",
+      "release": "172_property_portal_release_checks.sql",
+      "originalSha256": "2de41b296242ec7762c62a09484384a740fd821f2858da2974311906c3f7de3a",
+      "releaseSha256": "2de41b296242ec7762c62a09484384a740fd821f2858da2974311906c3f7de3a",
+      "releaseLedgerChecksum": "2de41b296242ec7762c62a09484384a740fd821f2858da2974311906c3f7de3a",
+      "semanticChange": null,
+      "originalLedgerChecksum": "2de41b296242ec7762c62a09484384a740fd821f2858da2974311906c3f7de3a"
+    },
+    {
+      "original": "139_property_creation_drafts.sql",
+      "release": "173_property_creation_drafts.sql",
+      "originalSha256": "b87584a6e03372eb0c5755e1afc982e568b4a6edc88a5bf083060ce40cf1a820",
+      "releaseSha256": "b87584a6e03372eb0c5755e1afc982e568b4a6edc88a5bf083060ce40cf1a820",
+      "releaseLedgerChecksum": "b87584a6e03372eb0c5755e1afc982e568b4a6edc88a5bf083060ce40cf1a820",
+      "semanticChange": null,
+      "originalLedgerChecksum": "b87584a6e03372eb0c5755e1afc982e568b4a6edc88a5bf083060ce40cf1a820"
+    },
+    {
+      "original": "140_lead_qualification_plan.sql",
+      "release": "174_lead_qualification_plan.sql",
+      "originalSha256": "ad95128bd21b4eeae90e449a4bc537bf795a52a24fc405694e78daa6cb01e1fd",
+      "releaseSha256": "ad95128bd21b4eeae90e449a4bc537bf795a52a24fc405694e78daa6cb01e1fd",
+      "releaseLedgerChecksum": "ad95128bd21b4eeae90e449a4bc537bf795a52a24fc405694e78daa6cb01e1fd",
+      "semanticChange": null,
+      "originalLedgerChecksum": "ad95128bd21b4eeae90e449a4bc537bf795a52a24fc405694e78daa6cb01e1fd"
+    },
+    {
+      "original": "141_web_expose_templates.sql",
+      "release": "175_web_expose_templates.sql",
+      "originalSha256": "fa0fad0e463717282727f5583b0c90a636665163e0de319da71ef6513270b570",
+      "releaseSha256": "fa0fad0e463717282727f5583b0c90a636665163e0de319da71ef6513270b570",
+      "releaseLedgerChecksum": "fa0fad0e463717282727f5583b0c90a636665163e0de319da71ef6513270b570",
+      "semanticChange": null,
+      "originalLedgerChecksum": "fa0fad0e463717282727f5583b0c90a636665163e0de319da71ef6513270b570"
+    },
+    {
+      "original": "142_newsletter_schedules.sql",
+      "release": "176_newsletter_schedules.sql",
+      "originalSha256": "c91e9a18c73efac1e7f50587f3b480514347f6b5bdb9e4ba1e3acfe76338ce67",
+      "releaseSha256": "c91e9a18c73efac1e7f50587f3b480514347f6b5bdb9e4ba1e3acfe76338ce67",
+      "releaseLedgerChecksum": "c91e9a18c73efac1e7f50587f3b480514347f6b5bdb9e4ba1e3acfe76338ce67",
+      "semanticChange": null,
+      "originalLedgerChecksum": "c91e9a18c73efac1e7f50587f3b480514347f6b5bdb9e4ba1e3acfe76338ce67"
+    },
+    {
+      "original": "143_crm_notification_email.sql",
+      "release": "177_crm_notification_email.sql",
+      "originalSha256": "9bf9fe69187eb5f0b87696f8cf353cd9b1b428760d52ff26b5bd57e6e316c13e",
+      "releaseSha256": "9bf9fe69187eb5f0b87696f8cf353cd9b1b428760d52ff26b5bd57e6e316c13e",
+      "releaseLedgerChecksum": "9bf9fe69187eb5f0b87696f8cf353cd9b1b428760d52ff26b5bd57e6e316c13e",
+      "semanticChange": null,
+      "originalLedgerChecksum": "9bf9fe69187eb5f0b87696f8cf353cd9b1b428760d52ff26b5bd57e6e316c13e"
+    },
+    {
+      "original": "144_personal_mailbox_triage.sql",
+      "release": "178_personal_mailbox_triage.sql",
+      "originalSha256": "009949fbe4f577fcfdab6d0881a4f78b9331f2e51127a131d2247b52c416e7cb",
+      "releaseSha256": "009949fbe4f577fcfdab6d0881a4f78b9331f2e51127a131d2247b52c416e7cb",
+      "releaseLedgerChecksum": "009949fbe4f577fcfdab6d0881a4f78b9331f2e51127a131d2247b52c416e7cb",
+      "semanticChange": null,
+      "originalLedgerChecksum": "009949fbe4f577fcfdab6d0881a4f78b9331f2e51127a131d2247b52c416e7cb"
+    },
+    {
+      "original": "145_lead_proof_retention.sql",
+      "release": "179_lead_proof_retention.sql",
+      "originalSha256": "fba4114a20f001862954e44975590c1097e20f6b43243f08d44476b16ffd473b",
+      "releaseSha256": "fba4114a20f001862954e44975590c1097e20f6b43243f08d44476b16ffd473b",
+      "releaseLedgerChecksum": "fba4114a20f001862954e44975590c1097e20f6b43243f08d44476b16ffd473b",
+      "semanticChange": null,
+      "originalLedgerChecksum": "fba4114a20f001862954e44975590c1097e20f6b43243f08d44476b16ffd473b"
+    },
+    {
+      "original": "147_marketing_data.sql",
+      "release": "180_marketing_data.sql",
+      "originalSha256": "0be3b58a19af4c81233be374a5d142f10b0b5343786e3b609603199eadba5324",
+      "releaseSha256": "0be3b58a19af4c81233be374a5d142f10b0b5343786e3b609603199eadba5324",
+      "releaseLedgerChecksum": "0be3b58a19af4c81233be374a5d142f10b0b5343786e3b609603199eadba5324",
+      "semanticChange": null,
+      "originalLedgerChecksum": "0be3b58a19af4c81233be374a5d142f10b0b5343786e3b609603199eadba5324"
+    },
+    {
+      "original": "148_funnel_live_templates.sql",
+      "release": "181_funnel_live_templates.sql",
+      "originalSha256": "028d7b597a15f7a8e0b3ee8bbb3d78249e5d9d8211261099af1cc6280218f508",
+      "releaseSha256": "405d70da3529410e94f27266dd9f0f5441da9996bdde4a3e7b18c3e6b3433fc3",
+      "releaseLedgerChecksum": "405d70da3529410e94f27266dd9f0f5441da9996bdde4a3e7b18c3e6b3433fc3",
+      "semanticChange": "Fail-closed historical-response guard; transparent legacy-review draft reconciliation with preserved tracking/history and token-free technical audit; explicit tenant runtime EXECUTE on opaque-token lookup.",
+      "originalLedgerChecksum": "028d7b597a15f7a8e0b3ee8bbb3d78249e5d9d8211261099af1cc6280218f508"
+    },
+    {
+      "original": "149_personal_mailbox_sync.sql",
+      "release": "182_personal_mailbox_sync.sql",
+      "originalSha256": "fb69d00ea24df4eea3cf9bcc2e023deac8219d73fedd68c83bc63fd0bc531786",
+      "releaseSha256": "fb69d00ea24df4eea3cf9bcc2e023deac8219d73fedd68c83bc63fd0bc531786",
+      "releaseLedgerChecksum": "fb69d00ea24df4eea3cf9bcc2e023deac8219d73fedd68c83bc63fd0bc531786",
+      "semanticChange": null,
+      "originalLedgerChecksum": "fb69d00ea24df4eea3cf9bcc2e023deac8219d73fedd68c83bc63fd0bc531786"
+    },
+    {
+      "original": "150_marketing_contact_policy.sql",
+      "release": "183_marketing_contact_policy.sql",
+      "originalSha256": "9d99ac15b574a207b07e80cb6ca3c208e4accfd65d46267537fb6290ec14c102",
+      "releaseSha256": "9d99ac15b574a207b07e80cb6ca3c208e4accfd65d46267537fb6290ec14c102",
+      "releaseLedgerChecksum": "9d99ac15b574a207b07e80cb6ca3c208e4accfd65d46267537fb6290ec14c102",
+      "semanticChange": null,
+      "originalLedgerChecksum": "9d99ac15b574a207b07e80cb6ca3c208e4accfd65d46267537fb6290ec14c102"
+    },
+    {
+      "original": "151_web_expose_brand_layout.sql",
+      "release": "184_web_expose_brand_layout.sql",
+      "originalSha256": "60af34fe0b68e853ea9e49c0f8b00fa0150a12738751783b60846d89c201bdf7",
+      "releaseSha256": "bc0601343c06f421961d0909bf2616611004651d8f86f48e9b08fb434bfd250b",
+      "releaseLedgerChecksum": "bc0601343c06f421961d0909bf2616611004651d8f86f48e9b08fb434bfd250b",
+      "semanticChange": "Explicit tenant runtime EXECUTE on the public authorization-rechecking asset wrapper; revoke tenant EXECUTE on the renamed internal property-asset helper.",
+      "originalLedgerChecksum": "60af34fe0b68e853ea9e49c0f8b00fa0150a12738751783b60846d89c201bdf7"
+    }
+  ],
+  "hashFormat": "Raw UTF-8 file bytes; official ledger checksum normalizes CRLF to LF.",
+  "publicRuntimeRole": "novalure_tenant_app: NOSUPERUSER, NOBYPASSRLS, not a member of novalure_app; explicit capability-function EXECUTE only."
+}

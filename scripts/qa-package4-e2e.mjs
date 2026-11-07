@@ -29,7 +29,7 @@ const audit = {
   syntheticOnly: true,
   productionAccess: 0,
   startedAt: new Date().toISOString(),
-  fixture: { fresh: false, built: true, mode: "design-c-actual-predecessors" },
+  fixture: { fresh: false, built: true, mode: "design-c-current-application-originals" },
   suites,
   errors: [],
 };

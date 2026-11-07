@@ -1,0 +1,28 @@
+{
+  "recordedAt": "2026-11-04T22:08:45.987Z",
+  "base": "5f42f0ef8977dcf176996f3f9a89942b05422c0e",
+  "changedFile": "src/components/task-command-center.tsx",
+  "purpose": "Use explicit authorized workspaceId; never derive request scope from first project/task",
+  "checks": [
+    {
+      "command": "node --test scripts/crm-scope-persistence-smoke-tests.mjs",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+      "exitCode": 0
+    },
+    {
+      "command": "node node_modules/eslint/bin/eslint.js src/components/task-command-center.tsx --max-warnings=0",
+      "exitCode": 0
+    }
+  ],
+  "historicalFailurePreserved": true,
+  "independentReview": "PENDING",
+  "nativeCI": "PENDING",
+  "appAttestation": "PENDING",
+  "production": false
+}

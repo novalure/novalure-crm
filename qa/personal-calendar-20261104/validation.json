@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_IMPLEMENTATION_AND_TARGETED_TESTS_PASS_NOT_RELEASE_ACCEPTANCE",
+  "checkedAtUtc": "2026-11-04T23:09:10.989774+00:00",
+  "baseCommit": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+  "branch": "fix/personal-calendar-lifecycle-20261104",
+  "headAtCapture": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+  "commitNote": "Coherent commit created after this capture; verify these LF-normalized source hashes against its blobs. Final SHA is handed to the central release coordinator.",
+  "migration": 193,
+  "sourceHashes": [
+    {
+      "path": "migrations/193_personal_crm_calendar.sql",
+      "sha256WorktreeBytes": "b994627d285b7d1dd18144454ac400f9724fe5eda1a94e052949a0e110e38639",
+      "sha256LfNormalizedText": "b994627d285b7d1dd18144454ac400f9724fe5eda1a94e052949a0e110e38639"
+    },
+    {
+      "path": "scripts/calendar-oauth-source-tests.mjs",
+      "sha256WorktreeBytes": "22a35d2beecd4e86cd4d766f454acebaef203b55e409aa3fabe6a15121b34b8a",
+      "sha256LfNormalizedText": "3068f4744cd7717b06d50101179c7c6a65d1b414bc10fd0d63940650fa6caefb"
+    },
+    {
+      "path": "scripts/personal-calendar-contract-tests.ts",
+      "sha256WorktreeBytes": "13da53edc10400d681bd1aa38b337cbfddf34a5afb8bcf1ce2db2b00f78a277a",
+      "sha256LfNormalizedText": "13da53edc10400d681bd1aa38b337cbfddf34a5afb8bcf1ce2db2b00f78a277a"
+    },
+    {
+      "path": "scripts/personal-calendar-db-tests.ts",
+      "sha256WorktreeBytes": "1efc059c32ad184c97b25f399fd22cdaedac56b2ecd12c6c16575beea9c13d7a",
+      "sha256LfNormalizedText": "1efc059c32ad184c97b25f399fd22cdaedac56b2ecd12c6c16575beea9c13d7a"
+    },
+    {
+      "path": "scripts/personal-calendar-ui-tests.mjs",
+      "sha256WorktreeBytes": "92633ddd9ae0b98b76b66dacb9b5fb6656329c3d08c27f74f3523b1824044915",
+      "sha256LfNormalizedText": "92633ddd9ae0b98b76b66dacb9b5fb6656329c3d08c27f74f3523b1824044915"
+    },
+    {
+      "path": "scripts/standalone-calendar-provider-tests.ts",
+      "sha256WorktreeBytes": "283023a97cff07d93be7f98562b38e552edd758f590ffacf94889981806dffe8",
+      "sha256LfNormalizedText": "283023a97cff07d93be7f98562b38e552edd758f590ffacf94889981806dffe8"
+    },
+    {
+      "path": "src/app/api/calendar/google/route.ts",
+      "sha256WorktreeBytes": "865e91e7ce98a5ba7cfe61e3d75175ee72872328833a81563ca603b38a6822fa",
+      "sha256LfNormalizedText": "74d935490a7cf24f12f3e330261f40fa5d1c881f86ab712ac0033d7ed0b5fd3a"
+    },
+    {
+      "path": "src/app/api/calendar/microsoft/route.ts",
+      "sha256WorktreeBytes": "7cd12265f3b0401b5e9ece643eb02ed313189e4a157a61a4bc0ffbbc5ffc36bb",
+      "sha256LfNormalizedText": "a39e988cba8a645f56516abdbb1fb9242a27b0b93e28eb04b0f60f5ed0192f4a"
+    },
+    {
+      "path": "src/app/api/crm/personal-calendar/connect/[provider]/route.ts",
+      "sha256WorktreeBytes": "cafbda3e0fb7cd5ccfe1cf3384b26ea64a72685980aaba4112d196e549b128da",
+      "sha256LfNormalizedText": "cafbda3e0fb7cd5ccfe1cf3384b26ea64a72685980aaba4112d196e549b128da"
+    },
+    {
+      "path": "src/app/api/crm/personal-calendar/route.ts",
+      "sha256WorktreeBytes": "a97192c1370c6b46b69d866dcfa00e99679c50bcb15ae115253679b3aaaaf1dd",
+      "sha256LfNormalizedText": "a97192c1370c6b46b69d866dcfa00e99679c50bcb15ae115253679b3aaaaf1dd"
+    },
+    {
+      "path": "src/app/api/meetings/oauth/[provider]/callback/route.ts",
+      "sha256WorktreeBytes": "4d98ece321802ca926be8cd69fee07a33104283582d182793f1f4dad81cf68a2",
+      "sha256LfNormalizedText": "1bc604c0c53767522168507817551ae5df95465cd990aa372f7b2a29c0b211dc"
+    },
+    {
+      "path": "src/components/calendar-command-center.tsx",
+      "sha256WorktreeBytes": "19f9b919f1f9c8adb308450ac046f6e4022ad0843e322a4cd385659d757a2db3",
+      "sha256LfNormalizedText": "683f3844f3d7dd37dc8b2b2cb09909a3237db206572c79827982cfbc5eb412af"
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "sha256WorktreeBytes": "d867f3161dc51f5b05b26f98dc2302de6f29cc3ad7896c9905880722228f55e0",
+      "sha256LfNormalizedText": "96ddd6f2788d4fa420c76181c3e247a23b9e20842113e490c57545246130d9b8"
+    },
+    {
+      "path": "src/components/personal-calendar-workspace.tsx",
+      "sha256WorktreeBytes": "663f61913f6dbb63499f7ed0cbebc15deb49fd138a8f9cc34a71a1093944c708",
+      "sha256LfNormalizedText": "663f61913f6dbb63499f7ed0cbebc15deb49fd138a8f9cc34a71a1093944c708"
+    },
+    {
+      "path": "src/lib/booking/connections.ts",
+      "sha256WorktreeBytes": "f75c086a0e1a5e21953113668844464e47b17a8886103ef97339b7d0dfccd977",
+      "sha256LfNormalizedText": "6ffc2762f14abf77c833f7e31c91f0c68e178e695e7f3fbbe25a78275dfa7439"
+    },
+    {
+      "path": "src/lib/booking/providers.ts",
+      "sha256WorktreeBytes": "38b099bd488aa80b5ff25f654135e34d91e1b5da57b93aa050dfff280c0991c6",
+      "sha256LfNormalizedText": "8df1a1e6e07b9083d3b2d3e98f9c65e868628eb722a119a6007292b50d4c1547"
+    },
+    {
+      "path": "src/lib/booking/repository.ts",
+      "sha256WorktreeBytes": "70c9c97762c6cabba08c37c5ac9538e425f38eaa73d1bee104bd2a1658a466da",
+      "sha256LfNormalizedText": "4bd335a3fa9d05357450892d541d9da817a1d3c1fc02ffca0db13cde1be53a7d"
+    },
+    {
+      "path": "src/lib/booking/types.ts",
+      "sha256WorktreeBytes": "802bc8feb90bff2c1937daeaa4eda9db5fc286151373b9e0ec4a835345d2b198",
+      "sha256LfNormalizedText": "769aa7d917a2789862e95c3146ee820ef32bd934a4def8a5e8d62d3476c723aa"
+    },
+    {
+      "path": "src/lib/db/crm-write-repositories.ts",
+      "sha256WorktreeBytes": "4dc57364f9de13a73b82005238c60969e6a2c08b25eada9f00096b0f073fc0bd",
+      "sha256LfNormalizedText": "c4a6c5427e9e90f25b71d050724753ad882b370b43c8ced2f4dc07523a973891"
+    },
+    {
+      "path": "src/lib/db/personal-calendar-repository.ts",
+      "sha256WorktreeBytes": "a5ccb39c31d44df054b2988fd5ff419cec2d04afb271d57dde08df3711e1c4b6",
+      "sha256LfNormalizedText": "a5ccb39c31d44df054b2988fd5ff419cec2d04afb271d57dde08df3711e1c4b6"
+    },
+    {
+      "path": "src/lib/integrations/calendar-oauth-redirect.ts",
+      "sha256WorktreeBytes": "fc8261504d3c970d6b7876ad6a570d9ac78ccbb42ce8e2def78ba5d991e12c02",
+      "sha256LfNormalizedText": "fc8261504d3c970d6b7876ad6a570d9ac78ccbb42ce8e2def78ba5d991e12c02"
+    },
+    {
+      "path": "src/lib/personal-calendar-client-store.ts",
+      "sha256WorktreeBytes": "cd863a913b27c32b939de6b1c9190966f553676a69802bfd05edd70e29884e20",
+      "sha256LfNormalizedText": "cd863a913b27c32b939de6b1c9190966f553676a69802bfd05edd70e29884e20"
+    },
+    {
+      "path": "src/lib/personal-calendar.ts",
+      "sha256WorktreeBytes": "e84f7f53c5c8c2592a839405494596acb41148418430f90944185eb2996024e8",
+      "sha256LfNormalizedText": "e84f7f53c5c8c2592a839405494596acb41148418430f90944185eb2996024e8"
+    }
+  ],
+  "checks": [
+    {
+      "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-connections-tests.ts scripts/booking-production-guard-tests.ts scripts/booking-provider-tests.ts scripts/standalone-calendar-provider-tests.ts scripts/personal-calendar-contract-tests.ts scripts/personal-calendar-db-tests.ts",
+      "exitCode": 0,
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "targeted-tests.txt",
+      "scope": "Actual local PostgreSQL/tenant roles/RLS; simulated providers and transports"
+    },
+    {
+      "command": "node --import tsx scripts/personal-calendar-ui-tests.mjs",
+      "exitCode": 0,
+      "passed": 23,
+      "failed": 0,
+      "evidence": "ui-browser-results.json",
+      "scope": "Actual React component/store in local Chrome, synthetic HTTP only; not the full app"
+    },
+    {
+      "command": "node --import tsx --test scripts/calendar-oauth-source-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs",
+      "exitCode": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "ui-compatibility.log"
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "evidence": "typecheck.txt"
+    },
+    {
+      "command": "npx eslint <all 22 changed/new TS/TSX/MJS files> --max-warnings 0",
+      "exitCode": 0,
+      "evidence": "eslint.txt"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "evidenceHashes": [
+    {
+      "path": "qa/personal-calendar-20261104/eslint.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/targeted-tests.txt",
+      "sha256WorktreeBytes": "d6622b3f4c5c26bcd2aa568280b2c4e3fff7bf2c579863168350a302a563a17f",
+      "sha256LfNormalizedText": "eb4b0241742d6c321db65b804190499ab5d2a89c56d5d3ebb8c74c2f2e452664"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/typecheck.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-browser-results.json",
+      "sha256WorktreeBytes": "3f574fa93b4afb7b2256ecab0c92f2a0d43b5e89f4d2a0850d1230a83f6cefd6",
+      "sha256LfNormalizedText": "3f574fa93b4afb7b2256ecab0c92f2a0d43b5e89f4d2a0850d1230a83f6cefd6"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-browser.log",
+      "sha256WorktreeBytes": "20656207d6c4352c227d4d5e3576aa5904aeb13603bfafbcb35be469fe5e29bd",
+      "sha256LfNormalizedText": "eedfc560c1aa5f5fce0706c413bd4b2b253bf2212aac25a85346059e9be7fdd5"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-compatibility.log",
+      "sha256WorktreeBytes": "20d96775fb407da0731f5766228af4d3e2e7b20cd47bd065669306683ac6aeed",
+      "sha256LfNormalizedText": "737db941dbc27b0657a47d5075c7c1e3b10e18cb97a8d5d6e3c0db176c84646b"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-outcome-protocol-initial.json",
+      "sha256WorktreeBytes": "49ed83bd588a4fd4d18e168f8670285018a7c940f52e0456523a0630e607f578",
+      "sha256LfNormalizedText": "49ed83bd588a4fd4d18e168f8670285018a7c940f52e0456523a0630e607f578"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-outcome-protocol-initial.log",
+      "sha256WorktreeBytes": "6c6b28febfa7d1a177ef0c498ebbfb7c8725fb85e4762bc36a35bfa59adb572a",
+      "sha256LfNormalizedText": "5e3d400afd130a6795c306e55ffa4f576d1f654640a310bc422635328bc57ef2"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-validation.json",
+      "sha256WorktreeBytes": "da02b52159330f3be428e3bd003f7ca0370cdfdfcd0fa8afaef4877ad35cfd4a",
+      "sha256LfNormalizedText": "4422d15e3d30e5489f87709ae4fa5739fb59e896a1a5793a6cfcbee100fce8aa"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/ui-validation.md",
+      "sha256WorktreeBytes": "236f1781ce32523c8a8ec4630a82dcad5bfb78d854eabba3f546aace97e5cf9a",
+      "sha256LfNormalizedText": "236f1781ce32523c8a8ec4630a82dcad5bfb78d854eabba3f546aace97e5cf9a"
+    },
+    {
+      "path": "qa/personal-calendar-20261104/validation.md",
+      "sha256WorktreeBytes": "1e69dcfead42574cacd13073d09b7beceef3ae82232824a0678a24421ad09de0",
+      "sha256LfNormalizedText": "1e69dcfead42574cacd13073d09b7beceef3ae82232824a0678a24421ad09de0"
+    }
+  ],
+  "meaningfulRegressions": [
+    "Post-provider-commit permission revocation retains the journal and reconciles with one provider create",
+    "Duplicate request finalizing between transactions never emits a false pre-start version error",
+    "First unqualified403 survives real component remount with identical command ID/body",
+    "Exact attendee binding, fresh actor/project/connection authority, provider ownership/ETag, lease fencing, immutable receipts, RLS isolation and explicit remote-conflict import"
+  ],
+  "liveEffects": {
+    "providerWrites": 0,
+    "productionDatabaseWrites": 0,
+    "emailsOrInvitations": 0,
+    "pushes": 0,
+    "onlinePRs": 0,
+    "ciRuns": 0,
+    "deployments": 0
+  },
+  "openGates": [
+    "Central merge and release build/CI/App qualification",
+    "Actual production-schema migration/rollback rehearsal and authorized migration193",
+    "Explicit personal Booking OAuth/calendar binding, runtime activation and exact server invitation-binding configuration",
+    "Real browser-to-app-to-database-to-provider acceptance; complete original CRM matrix remains separate"
+  ],
+  "excludedScope": [
+    "General external calendar import",
+    "Recurring-series management",
+    "New mail/attachment implementation owned by the parallel mail task",
+    "Changes to original175-case matrix or historical8residuegroups"
+  ]
+}

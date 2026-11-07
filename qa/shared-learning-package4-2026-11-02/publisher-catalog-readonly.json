@@ -1,0 +1,19 @@
+{
+  "status": "ACTUAL_READ_ONLY_PRODUCTION_METADATA",
+  "metadata": {
+    "observedAtUtc": "2026-11-02T14:20:41.811079+00:00",
+    "publisherMembers": [
+      {
+        "name": "neondb_owner",
+        "login": true,
+        "super": false,
+        "bypassrls": true
+      }
+    ],
+    "maxMigrationNumber": 119,
+    "publisherPrivateSelect": false,
+    "publisherMembershipSelect": false
+  },
+  "providerWrites": 0,
+  "secretValuesReturned": false
+}

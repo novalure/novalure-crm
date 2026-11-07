@@ -8,11 +8,18 @@
     "npm": ">=11 <12"
   },
   "scripts": {
+    "test:crm-assistant": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-ai-assistant-tests.ts scripts/crm-ai-assistant-guard-tests.ts",
+    "qa:crm-assistant": "node scripts/crm-ai-assistant-ui-tests.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
+    "test:livelisted": "node scripts/run-livelisted-checks.mjs",
+    "test:ai-billing": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/ai-credit-billing-tests.ts scripts/ai-billing-http-tests.ts scripts/ai-billing-model-tests.ts scripts/ai-billing-admin-http-tests.ts scripts/ai-billing-runtime-acl-tests.ts",
+    "test:ai-billing:runtime-acl": "node --conditions=react-server --import tsx --test scripts/ai-billing-runtime-acl-tests.ts",
+    "qa:ai-billing-ui": "node scripts/ai-billing-ui-tests.mjs",
+    "ai:bookings": "node --import tsx scripts/manage-ai-bookings.ts",
     "ci:toolchain": "node scripts/check-toolchain.mjs",
     "ci:qa-target": "node scripts/qa-target-guard.mjs",
     "qa:studio-sales:preflight": "node scripts/studio-sales-qa-preflight.mjs",
@@ -21,7 +28,6 @@
     "security:production": "npm audit --omit=dev --audit-level=moderate",
     "test:unit": "node --import tsx --test scripts/phase0-smoke-tests.mjs scripts/phase1-persistence-smoke-tests.mjs scripts/phase2-pipeline-smoke-tests.mjs scripts/phase3-rbac-smoke-tests.mjs scripts/phase4-validation-smoke-tests.mjs scripts/phase5-copy-smoke-tests.mjs scripts/phase6-bot-grounding-smoke-tests.mjs scripts/phase7-mobile-smoke-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs scripts/i18n-localization-smoke-tests.mjs scripts/company-profile-settings-smoke-tests.mjs scripts/contact-access-rbac-smoke-tests.mjs scripts/contact-empty-state-regression-tests.mjs scripts/property-department-smoke-tests.mjs scripts/design-foundations-smoke-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs scripts/page-metadata-localization-tests.mjs scripts/password-input-accessibility-tests.mjs scripts/touch-target-smoke-tests.mjs scripts/durable-queue-smoke-tests.mjs scripts/cron-runtime-smoke-tests.mjs scripts/database-diagnostics-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/open-redirect-security-tests.mjs scripts/security-headers-smoke-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/p2-11-provider-and-assignee-tests.mjs scripts/auth-security-tests.mjs scripts/admin-navigation-smoke-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs scripts/csrf-security-tests.mjs scripts/deal-input-validation-tests.mjs scripts/oauth-state-security-tests.mjs scripts/public-submission-abuse-tests.mjs scripts/bot-document-share-lifecycle-tests.mjs scripts/unit-board-price-parser-smoke-tests.mjs scripts/unit-board-state-accessibility-tests.mjs scripts/lead-inbox-date-safety-tests.mjs scripts/app-role-grant-regression-tests.mjs scripts/production-rls-cutover-tests.mjs",
     "test:integration": "node --test scripts/qa-security-and-scope-smoke-tests.mjs scripts/qa-livegang-seed-tests.mjs",
-    "test:crm-full-backup": "node --test scripts/crm-full-backup-tests.mjs scripts/crm-full-backup-provider-tests.mjs scripts/crm-full-backup-http-tests.mjs",
     "test:protected-preview-access": "node --test scripts/protected-preview-access-tests.mjs scripts/package4-hosted-target-tests.mjs scripts/package4-hosted-browser-access-tests.mjs",
     "test:e2e": "node scripts/qa-livegang-api.mjs",
     "db:migrate:public-slug-routing": "node scripts/apply-public-slug-routing-migration.mjs",
@@ -68,6 +74,7 @@
     "test:sales:migrations": "node --import tsx --test scripts/sales-migration-upgrade-tests.ts",
     "test:sales:final": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-service-contract-tests.ts scripts/crm-machine-auth-tests.ts scripts/approval-reference-tests.ts scripts/sales-client-recovery-tests.ts scripts/sales-http-receipt-tests.ts scripts/sales-route-integration-tests.ts scripts/sales-final-negative-tests.ts",
     "test:crm-machine-auth": "node --conditions=react-server --import tsx --test scripts/crm-machine-auth-tests.ts",
+    "test:crm-autonomous-access": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-autonomous-access-tests.ts",
     "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs",
     "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts",
     "test:website-sales-ingestion": "node --conditions=react-server --import tsx --test scripts/website-sales-ingestion-tests.ts scripts/website-sales-transaction-tests.ts",
@@ -92,6 +99,7 @@
     "design:c:browser": "node design-c/scripts/verify-browser.mjs",
     "test:design-c-integration": "node --conditions=react-server --import tsx --test scripts/design-c-integration-tests.ts && node --import tsx --test scripts/customer-access-presentation-tests.ts scripts/form-command-center-source-tests.mjs scripts/newsletter-source-availability-tests.tsx scripts/lead-inbox-presentation-tests.ts",
     "qa:design-c-integration": "node scripts/qa-design-c-integration.mjs",
+    "test:crm-full-backup": "node --test scripts/crm-full-backup-tests.mjs scripts/crm-full-backup-provider-tests.mjs scripts/crm-full-backup-http-tests.mjs scripts/crm-backup-failure-warning-tests.mjs",
     "test:crm-operational-readers": "node --conditions=react-server --import tsx --test scripts/crm-operational-read-tests.ts && node --import tsx --test scripts/calendar-oauth-source-tests.mjs",
     "test:knowledge-package3": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-workflow-tests.ts scripts/knowledge-monitoring-tests.ts scripts/knowledge-monitoring-batch-tests.ts scripts/knowledge-package3-acceptance-tests.ts && node --import tsx --test scripts/knowledge-lifecycle-ui-tests.ts scripts/knowledge-design-c-integration-tests.ts",
     "test:package4-migrations": "node --conditions=react-server --import tsx --test scripts/package4-migration-tests.ts",
@@ -101,12 +109,13 @@
     "test:booking:setup": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-setup-tests.ts scripts/booking-travel-tests.ts scripts/booking-travel-service-tests.ts",
     "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts scripts/booking-message-production-tests.ts",
     "test:booking:language": "node --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-db-tests.ts",
-    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts",
+    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts scripts/studio-booking-offer-tests.ts",
     "qa:booking:public-ui": "node --import tsx scripts/booking-public-ui-browser.mjs",
     "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs",
     "test:knowledge-assistant-quota": "node --conditions=react-server --import tsx --test scripts/knowledge-connected-assistant-quota-tests.ts",
-    "test:customer-onboarding": "node --conditions=react-server --import tsx --test scripts/customer-workspace-provisioning-tests.ts",
-    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
+    "test:customer-onboarding": "node --conditions=react-server --import tsx --test scripts/customer-workspace-provisioning-tests.ts && npm run test:webchat-customer-product",
+    "test:webchat-customer-product": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/webchat-customer-product-tests.ts scripts/webchat-customer-portal-tests.ts",
+    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts scripts/native-assistant-late-authority-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -115,11 +124,11 @@
     "@tiptap/starter-kit": "3.31.4",
     "@types/react-grid-layout": "^1.3.6",
     "@vercel/blob": "2.8.0",
-    "@vercel/oidc": "3.8.8",
-    "ai": "^7.0.148",
+    "@vercel/oidc": "4.0.6",
+    "dompurify": "3.4.17",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.4.2",
+    "next": "16.4.5",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.4.299",
     "pdfkit": "0.20.2",
@@ -130,7 +139,8 @@
     "saxes": "6.0.0",
     "server-only": "0.0.1",
     "sharp": "0.35.5",
-    "yauzl": "3.4.0"
+    "yauzl": "3.4.0",
+    "ai": "^7.0.148"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
@@ -142,7 +152,7 @@
     "@types/react-dom": "^19",
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
     "tsx": "4.23.13",
     "typescript": "^5"
@@ -152,6 +162,9 @@
     "undici": "6.29.1",
     "@vercel/cli-config@0.2.7": {
       "zod": "4.6.7"
+    },
+    "@vercel/blob": {
+      "@vercel/oidc": "$@vercel/oidc"
     }
   }
 }

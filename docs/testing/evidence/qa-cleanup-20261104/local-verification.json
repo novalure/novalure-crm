@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-04T22:45:23.160Z",
+  "status": "LOCAL_REGISTERED_QA_RETIREMENT_SUBSET_PASS_LEGACY_REGISTRATION_AND_FULL_CLEANUP_OPEN",
+  "base": "9b7f60a5452e5b4c5894bdc4c94fcdee5e2c98d8",
+  "branch": "codex/qa-cleanup-20261104",
+  "executionSourceBinding": "OWN_UNCOMMITTED_SOURCE_BYTES_BOUND_BY_SHA256_BEFORE_COMMIT_NO_NATIVE_EXACT_HEAD_CLAIM",
+  "sourceHashes": {
+    "migrations/194_qa_registered_batch_lock.sql": "7db093a4beb5efa1cdaf95ce0b138eaf6bf65802c7e5769d89debcbfdac1c108",
+    "src/lib/qa-cleanup.ts": "2ad73bf856be2dbe6f37df2043babee767d4c83a4e4637819e53d40428d685b3",
+    "src/app/api/admin/qa-reset/route.ts": "96c1a595320a19a1a6313d7d500fe9924db4fe25a89801efb0e0c6237badf62e",
+    "scripts/qa-cleanup-tests.ts": "416f287c2ad3000e46dc7e3766c7c03bbbe6c19c36355a4e7a96a4ef1304efa0",
+    "scripts/qa-cleanup-migration-tests.ts": "4908ce4f704018e241f1d14331a23c92ceaea686293c8d84b59da30b86867d08",
+    "scripts/lib/qa-cleanup-replay-worker.ts": "ae135e1173d4244d4985b42aad3e8284fdb684224c05eaf746ab858ad9a9c632",
+    "package.json": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d",
+    "package-lock.json": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea",
+    "scripts/lib/local-sales-db.mjs": "739387e9f076d78b1a2079cc10dfcbf763207b3a344ee869d725bd8448c47a55"
+  },
+  "targetedTests": {
+    "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 --test-reporter=tap scripts/qa-cleanup-tests.ts scripts/qa-cleanup-migration-tests.ts",
+    "exitCode": 0,
+    "tests": 24,
+    "pass": 24,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "runtimeAndProtocolTests": 20,
+    "migrationOwnerTests": 4,
+    "tap": "docs/testing/evidence/qa-cleanup-20261104/local-tests.tap",
+    "sha256": "1643bda0fd076bcac6491bb695ba604753fb7c878ed04761533df34f1aed5fda",
+    "countsAreOneCombinedRunDoNotSumWithEarlierRuns": true
+  },
+  "typecheck": {
+    "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "exitCode": 0
+  },
+  "lint": {
+    "scope": [
+      "src/lib/qa-cleanup.ts",
+      "src/app/api/admin/qa-reset/route.ts",
+      "scripts/qa-cleanup-tests.ts",
+      "scripts/qa-cleanup-migration-tests.ts",
+      "scripts/lib/qa-cleanup-replay-worker.ts"
+    ],
+    "exitCode": 0,
+    "maxWarnings": 0
+  },
+  "gitDiffCheck": "PASS",
+  "migration194": {
+    "sha256": "7db093a4beb5efa1cdaf95ce0b138eaf6bf65802c7e5769d89debcbfdac1c108",
+    "newOwner": "novalure_qa_batch_locker",
+    "ownerFlags": {
+      "login": false,
+      "inherit": false,
+      "superuser": false,
+      "createdb": false,
+      "createrole": false,
+      "replication": false,
+      "bypassrls": false
+    },
+    "ownerLockGrant": "SELECT_AND_UPDATE_ID_ONLY_QA_BATCHES_NO_RUNTIME_DML_OR_MEMBERSHIP",
+    "temporaryDeployerSetAndOwnerSchemaCreateRestored": true,
+    "existingGrantorsAdminInheritSetAndCreateGrantOptionPreserved": true,
+    "originalFailureSql": "docs/testing/evidence/qa-cleanup-20261104/194-before-owner-transfer-fix.sql",
+    "originalFailureSqlSha256": "39951fe87e398f92ccc237f6614d386ad01cf0147db6adb26e7716fb4ed0c625",
+    "originalNativePg17High": "ROOT_REPORTED_MISSING_DEPLOYER_SET_AND_OWNER_SCHEMA_CREATE; ORIGINAL_42501_REPRODUCED_IN_NON_SUPERUSER_LOCAL_PROBE",
+    "nativePg17RestoredFullUpgradeConfirmation": "SEPARATE_ROOT_DB_AGENT_GATE_NOT_CLAIMED_HERE"
+  },
+  "positiveBusinessProof": "REGISTERED_OWN_ACTIVE_DRAFT_DISCARD_NEW_NODE_PROCESS_DURABLE_RECEIPT_REPLAY",
+  "otherAdapterScope": "PROJECT_BOT_EMPTY_KNOWLEDGE_AREA_IMPLEMENTED_CONSERVATIVE_ADMISSION_NOT_INDEPENDENTLY_LIVE_ACCEPTED",
+  "initialDevelopmentAttemptsRetained": [
+    {
+      "tests": 14,
+      "pass": 3,
+      "fail": 11,
+      "reason": "068 runtime intentionally lacks row-lock UPDATE; no runtime grant added"
+    },
+    {
+      "tests": 14,
+      "pass": 4,
+      "fail": 10,
+      "reason": "PLpgSQL current_role reserved identifier collision corrected to actor_role"
+    },
+    {
+      "tests": 14,
+      "pass": 11,
+      "fail": 3,
+      "reason": "Child CJS top-level await and SELECT-only unknown-child row-lock permission corrected"
+    },
+    {
+      "tests": 4,
+      "pass": 1,
+      "fail": 3,
+      "reason": "Migration-owner refinement: boolean SQL literal framing and invalid synthetic self-ADMIN fixture corrected"
+    }
+  ],
+  "fixture": "DISPOSABLE_LITERAL_LOOPBACK_POSTGRES_NONOWNER_TENANT_ROLE_TWO_SYNTHETIC_TENANTS_PLUS_NON_SUPERUSER_NOINHERIT_CREATEROLE_OWNER_PROBE",
+  "fixtureLimits": "Historical sales schema through106 with documented unchanged exclusions; actual173+194. Owner probe uses minimal exact068/080 contracts created under its deployer, not ownership reassignment. Neither fixture is a complete production upgrade.",
+  "realEffects": {
+    "providerCalls": 0,
+    "modelCalls": 0,
+    "productionDatabaseConnections": 0,
+    "productionMigrations": 0,
+    "legacyAdoptions": 0,
+    "customerWrites": 0,
+    "pushes": 0,
+    "deployments": 0
+  },
+  "currentHistoricalWorkspace": {
+    "id": "69f1202e-b506-4127-9f59-a68d44c4b6ce",
+    "isQa": false,
+    "registeredBatches": 0,
+    "qualification": "Root read-only observation only; no live connection in this task"
+  },
+  "open": [
+    "EXACT_SHA_INDEPENDENT_REVIEW",
+    "FULL_NATIVE_PG17_SCHEMA_OWNER_RUNNER_REHEARSAL",
+    "NATIVE_CI_AND_APP",
+    "EXPLICIT_DOUBLE_PROVENANCE_LEGACY_REGISTRATION",
+    "EIGHT_HISTORICAL_GROUPS_FULL_LIFECYCLE",
+    "TEMPORARY_USER_GRANT_AND_SETTINGS_CLEANUP",
+    "CURRENT_RELEASE_COOKIE_CSRF_AND_LIVE_ACCEPTANCE"
+  ]
+}

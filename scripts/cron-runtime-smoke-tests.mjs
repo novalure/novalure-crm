@@ -44,17 +44,38 @@ test("production schedules pin the approved booking cadence and workers use shar
   assert.deepEqual(
     vercel.crons.map((entry) => [entry.path, entry.schedule]),
     [
+      ["/api/cron/newsletter", "*/5 * * * *"],
+      ["/api/cron/notification-digests", "11,41 * * * *"],
+      ["/api/cron/lead-proof-retention", "37 3 * * *"],
+      ["/api/cron/web-expose-retention", "17 3 * * *"],
+      ["/api/cron/automations", "*/5 * * * *"],
       ["/api/cron/meeting-reminders", "* * * * *"],
       ["/api/cron/teams-alerts", "4,19,34,49 * * * *"],
       ["/api/cron/google-alerts", "9,24,39,54 * * * *"],
       ["/api/cron/property-reservations", "7 * * * *"],
       ["/api/cron/knowledge-monitoring", "0 6 * * *"],
+      ["/api/cron/mailbox-sync", "*/2 * * * *"],
     ],
   );
 
+  const delegated = {
+    "/api/cron/newsletter": ["handleNewsletterCron", "newsletter-scheduler"],
+    "/api/cron/notification-digests": ["handleCrmNotificationEmailCron", "crm-notification-email-worker"],
+    "/api/cron/lead-proof-retention": ["handleProofRetentionCron", "lead-proof-retention-scheduler"],
+    "/api/cron/web-expose-retention": ["handleWebExposeRetentionCron", "web-expose-maintenance"],
+    "/api/cron/automations": ["handleAutomationCron", "automation/scheduler"],
+    "/api/cron/mailbox-sync": ["handleMailboxSyncCron", "crm-mailbox-sync-worker"],
+  };
   for (const route of vercel.crons) {
     const entry = await readFile(new URL(`../src/app${route.path}/route.ts`, import.meta.url), "utf8");
     let source = entry;
+    if (delegated[route.path]) {
+      const [handler, module] = delegated[route.path];
+      assert.ok(entry.includes(`@/lib/${module}`), route.path);
+      assert.match(entry, new RegExp(`return ${handler}\\(request\\)`), route.path);
+      source = await readFile(new URL(`../src/lib/${module}.ts`, import.meta.url), "utf8");
+      assert.match(source, /!env\.CRON_SECRET\?\.trim\(\)\s*\|\|\s*!isCronAuthorized\(request,\s*env\)/, route.path);
+    }
     if (route.path === "/api/cron/knowledge-monitoring") {
       assert.match(entry, /import \{ handleKnowledgeMonitoringCron \} from "@\/lib\/knowledge-center\/monitoring-delegation"/);
       assert.match(entry, /return handleKnowledgeMonitoringCron\(request\)/);

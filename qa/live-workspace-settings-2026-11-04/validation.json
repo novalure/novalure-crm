@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-11-04T21:02:14+01:00",
+  "timezone": "Europe/Vienna",
+  "baseCommit": "fa234f226c41def89f038ee7b1c52e838b90cb4f",
+  "branch": "fix/live-qa-workspace-settings-20261104",
+  "status": "Lokal korrigiert und geprüft; nicht veröffentlicht; nicht live erneut geprüft",
+  "productionDeploymentPerformed": false,
+  "liveRetestPerformed": false,
+  "liveFailure": {
+    "domain": "www.novalure-crm.app",
+    "deployment": "dpl_8GGZ6dFQDg8vuR3YXnbhsKptSkzi",
+    "time": "2026-11-04T20:54:01.515+01:00",
+    "requestId": "55jxn-1793822039899-71baed008af1",
+    "method": "PATCH",
+    "path": "/api/workspaces",
+    "status": 500,
+    "sqlState": "42501",
+    "cause": "audit_logs INSERT outside the tenant transaction/context; workspace settings had already been saved",
+    "countFailure": "Global workspace list counted RLS-protected projects without their own tenant context and returned zero for a workspace with one active project"
+  },
+  "changes": [
+    "PATCH writes settings and audit in the same tenant transaction; failed audit rolls back settings and returns safe JSON",
+    "GET counts projects in the persisted membership and tenant context for each workspace; archived and unreadable projects are excluded"
+  ],
+  "validation": {
+    "command": "node --conditions=react-server --import tsx --test scripts/workspace-settings-route-tests.ts",
+    "passed": 6,
+    "failed": 0,
+    "cases": [
+      "Actual cookie and one-use CSRF routes against a disposable local PostgreSQL cluster",
+      "Active project counts in two authorized workspaces, archived project exclusion and unrelated workspace exclusion",
+      "Scoped admin setting update plus audit actor/workspace correctness; original workspace unchanged",
+      "Injected local audit rejection returns 503 and preserves previous settings",
+      "Existing internal cookie cannot write after target membership becomes viewer",
+      "Project-restricted membership sees one readable project while the workspace has two active projects"
+    ],
+    "beforeFix": "The same suite against fa234f2 reproduced count 0 instead of 1 and the audit RLS failure; exit 1",
+    "eslint": "npx eslint --max-warnings=0 src/app/api/workspaces/route.ts scripts/workspace-settings-route-tests.ts: exit 0",
+    "typecheck": "npm run typecheck: exit 0",
+    "diffCheck": "git diff --check: exit 0",
+    "limitations": [
+      "Existing sales schema fixture omits unrelated optional vector/manual cutovers; this is not a full production migration rehearsal",
+      "Synthetic local fixture reproduces existing production workspace UPDATE permission; audit RLS and append-only safeguards remain enabled",
+      "No production database permissions, triggers, source deployment or customer records were changed by this correction"
+    ]
+  }
+}

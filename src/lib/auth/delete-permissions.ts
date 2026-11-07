@@ -66,9 +66,9 @@ export const crmDeletePermissionRules: CrmDeletePermissionRule[] = [
     reversible: true,
   },
   {
-    action: "not_exposed",
-    allowedProductRoles: [],
-    allowedWorkspaceRoles: [],
+    action: "archive",
+    allowedProductRoles: crmAdministratorProductRoles,
+    allowedWorkspaceRoles: ["owner", "admin"],
     objectType: "calendar_event",
     reversible: true,
   },

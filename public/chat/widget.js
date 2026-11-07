@@ -274,7 +274,7 @@
         applyWidget(started.widget);
         mode.textContent = started.mode === "training" ? words.training : "";
       }
-      const answer = await post("answers", { sessionId: session.id, message: question }, { "x-novalure-session-token": session.token });
+      const answer = await post("answers", { sessionId: session.id, message: question, requestId: crypto.randomUUID() }, { "x-novalure-session-token": session.token });
       if (answer.contractVersion !== "website-answer-v1" || !["grounded", "insufficient_knowledge", "temporarily_unavailable"].includes(answer.answerStatus) || typeof answer.answer !== "string" || !Array.isArray(answer.citations)) throw new Error("invalid_answer");
       message(answer.answer, false, answer.answerStatus === "grounded" ? answer.citations : []);
     } catch (error) {

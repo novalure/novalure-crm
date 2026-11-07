@@ -12,7 +12,10 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
+import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
+import { calendarLocalDateTime, internalCalendarWriteBody, isUpcomingCalendarEvent } from "@/lib/internal-calendar";
+import { PersonalCalendarWorkspace } from "@/components/personal-calendar-workspace";
+import type { PersonalCalendarClientStore } from "@/lib/personal-calendar-client-store";
 
 type CalendarCommandCenterProps = {
   activeProjectId: string | null;
@@ -30,6 +33,7 @@ type CalendarCommandCenterProps = {
   workspaceId: string;
   sessionWorkspaceId: string;
   workspacePublicKey?: string;
+  personalCalendarStore?: PersonalCalendarClientStore;
 };
 
 type CalendarCommandCenterCopy = ReturnType<typeof getCalendarCommandCenterCopy>;
@@ -303,15 +307,8 @@ function mergeOAuthConnectionStatus(
   } satisfies CalendarConnectionConfig;
 }
 
-type LiveCalendarResponse = {
-  error?: string | null;
-  ok?: boolean;
-  onlineMeetingUrl?: string | null;
-  status?: string | null;
-  webLink?: string | null;
-};
-
 const statusStyles = {
+  abgesagt: "border-stone-200 bg-stone-50 text-stone-500",
   geplant: "border-blue-200 bg-blue-50 text-blue-900",
   vorbereiten: "border-amber-200 bg-amber-50 text-amber-900",
   bestätigt: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -451,7 +448,8 @@ function getMeetingProviderLabel(provider: MeetingProvider, text: CalendarComman
 function getEventCalendarProvider(
   event: CalendarEvent | undefined,
   fallback: CalendarProvider,
-): CalendarProvider {
+): CalendarProvider | "manual" {
+  if (event?.calendarProvider === "manual" || event?.internalManual) return "manual";
   if (event?.calendarProvider === "google" || event?.location === "Google Meet" || event?.googleMeetJoinUrl) {
     return "google";
   }
@@ -484,15 +482,6 @@ function getMeetingStatusLabel(event: CalendarEvent | undefined, text: CalendarC
   if (event.location === "Teams") return text.meetingStatusLabels.teamsMissing;
   if (event.location === "Telefon") return text.meetingStatusLabels.phone;
   return text.meetingStatusLabels.missing;
-}
-
-function escapeHtml(value: string | undefined) {
-  return (value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function resolveMeetingTokens(value: string, tokens: Record<string, string>) {
@@ -712,8 +701,10 @@ export function CalendarCommandCenter({
   workspaceId,
   sessionWorkspaceId,
   workspacePublicKey,
+  personalCalendarStore,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
+  const calendarStatusLabels={...text.statusLabels,abgesagt:language==="en"?"Cancelled":"Abgesagt"};
   const isHomeWorkspace = workspaceId === sessionWorkspaceId;
   const connectionReadOnlyMessage = language === "de"
     ? "Kalenderverbindungen sind hier schreibgeschützt. Änderungen sind nur im Anmelde-Workspace möglich."
@@ -773,6 +764,8 @@ export function CalendarCommandCenter({
   const [eventOverlays, setEventOverlays] = useState<CalendarEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [removedEventIds, setRemovedEventIds] = useState<string[]>([]);
   const [eventSaving, setEventSaving] = useState(false);
   const [eventCreateNotice, setEventCreateNotice] = useState("");
   const [eventDraft, setEventDraft] = useState<NewCalendarEventDraft>(() =>
@@ -1091,8 +1084,8 @@ export function CalendarCommandCenter({
 
   const effectiveEvents = useMemo(() => {
     const overlayIds = new Set(eventOverlays.map((event) => event.id));
-    return [...eventOverlays, ...events.filter((event) => !overlayIds.has(event.id))];
-  }, [eventOverlays, events]);
+    return [...eventOverlays, ...events.filter((event) => !overlayIds.has(event.id))].filter(event => event.workspaceId === workspaceId && (!activeProjectId || event.projectId === activeProjectId) && !event.archived && !removedEventIds.includes(event.id));
+  }, [activeProjectId, eventOverlays, events, removedEventIds, workspaceId]);
 
   const decoratedEvents = useMemo(
     () =>
@@ -1111,19 +1104,20 @@ export function CalendarCommandCenter({
     [contacts, effectiveEvents, leads, projects, sessionUserId, sessionUserName, users],
   );
 
-  const todayEvents = decoratedEvents.filter((item) => isSameDay(item.event.startsAt, today));
+  const upcomingEvents = decoratedEvents.filter(item => isUpcomingCalendarEvent(item.event, today));
+  const todayEvents = decoratedEvents.filter((item) => item.event.status!=="abgesagt"&&isSameDay(item.event.startsAt, today));
   const prepareEvents = decoratedEvents.filter((item) => item.event.status === "vorbereiten");
-  const teamsEvents = decoratedEvents.filter((item) => isOnlineMeeting(item.event));
+  const teamsEvents = decoratedEvents.filter((item) => item.event.status!=="abgesagt"&&isOnlineMeeting(item.event));
   const followUpEvents = decoratedEvents.filter((item) => item.event.status === "nachfassen");
   const filteredEvents = decoratedEvents.filter((item) => {
     const normalizedQuery = searchTerm.trim().toLowerCase();
-    const matchesView =
+    const matchesView = item.event.status!=="abgesagt"&&(
       (activeView === "today" && isSameDay(item.event.startsAt, today)) ||
-      (activeView === "upcoming" && new Date(item.event.startsAt).getTime() >= today.getTime()) ||
+      (activeView === "upcoming" && upcomingEvents.includes(item)) ||
       (activeView === "prepare" && item.event.status === "vorbereiten") ||
       (activeView === "teams" && isOnlineMeeting(item.event)) ||
       (activeView === "followUp" && item.event.status === "nachfassen") ||
-      activeView === "bookings";
+      activeView === "bookings");
     const searchable = [
       item.event.title,
       item.event.location,
@@ -1142,9 +1136,9 @@ export function CalendarCommandCenter({
     return matchesView && (!normalizedQuery || searchable.includes(normalizedQuery));
   });
   const selectedEvent =
-    decoratedEvents.find((item) => item.event.id === selectedEventId) ??
+    filteredEvents.find((item) => item.event.id === selectedEventId) ??
     filteredEvents[0] ??
-    decoratedEvents[0];
+    decoratedEvents.find(item=>item.event.status!=='abgesagt');
   const selectedTasks = selectedEvent?.event.contactId
     ? tasks.filter(
         (task) => task.contactId === selectedEvent.event.contactId && task.status === "open",
@@ -1152,7 +1146,7 @@ export function CalendarCommandCenter({
     : [];
   const views: Array<{ id: CalendarView; label: string; count: number | string }> = [
     { id: "today", label: text.today, count: todayEvents.length },
-    { id: "upcoming", label: text.upcoming, count: decoratedEvents.length },
+    { id: "upcoming", label: text.upcoming, count: upcomingEvents.length },
     { id: "prepare", label: text.prepare, count: prepareEvents.length },
     { id: "teams", label: text.teams, count: teamsEvents.length },
     { id: "followUp", label: text.followUp, count: followUpEvents.length },
@@ -1177,27 +1171,11 @@ export function CalendarCommandCenter({
     setEventSaving(true);
     setEventCreateNotice("");
     try {
-      const response = await csrfFetch("/api/crm/calendar-events", {
-        body: JSON.stringify({
-          event: {
-            contactId: eventDraft.contactId || undefined,
-            endsAt: new Date(eventDraft.endsAt).toISOString(),
-            leadId: eventDraft.leadId || undefined,
-            location: eventDraft.location,
-            meetingProvider: eventDraft.meetingProvider,
-            notes: eventDraft.notes.trim() || undefined,
-            outcomeGoal: eventDraft.outcomeGoal.trim(),
-            ownerUserId: eventDraft.ownerUserId || undefined,
-            preparation: eventDraft.notes.trim() ? [eventDraft.notes.trim()] : [],
-            projectId: eventDraft.projectId || undefined,
-            startsAt: new Date(eventDraft.startsAt).toISOString(),
-            status: eventDraft.status,
-            title: eventDraft.title.trim(),
-          },
-        }),
+      const response = await csrfFetch("/api/crm/calendar-events?workspaceId=" + encodeURIComponent(workspaceId), {
+        body: JSON.stringify(internalCalendarWriteBody(eventDraft, editingEvent)),
         headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
+        method: editingEvent ? "PATCH" : "POST",
+      }, async response => { const value = await response.json(); return value.persisted === true && value.event?.workspaceId === workspaceId && typeof value.event?.revision === "string"; });
       const payload = (await response.json().catch(() => ({}))) as { error?: string; event?: CalendarEvent };
 
       if (!response.ok || !payload.event) {
@@ -1213,13 +1191,39 @@ export function CalendarCommandCenter({
         activeProjectId,
       ));
       setIsCreateEventOpen(false);
-      setEventCreateNotice(text.eventCreated);
+      setEditingEvent(null);
+      setEventCreateNotice(editingEvent ? (language === "de" ? "Termin aktualisiert." : "Event updated.") : text.eventCreated);
       void onEventsChanged?.();
     } catch (error) {
       setEventCreateNotice(error instanceof Error ? error.message : text.eventCreateFailed);
     } finally {
       setEventSaving(false);
     }
+  };
+  const editSelectedInternalEvent = () => {
+    const event = selectedEvent?.event;
+    if (!event?.internalManual || !event.revision || eventSaving) return;
+    const local = calendarLocalDateTime;
+    setEditingEvent(event);
+    setEventDraft({ title: event.title, projectId: event.projectId, ownerUserId: event.ownerUserId ?? "", contactId: event.contactId ?? "", leadId: event.leadId ?? "", startsAt: local(event.startsAt), endsAt: local(event.endsAt), location: event.location, status: event.status, notes: event.notes ?? "", outcomeGoal: event.outcomeGoal, meetingProvider: event.meetingProvider ?? "manual-link" });
+    setIsCreateEventOpen(true); setEventCreateNotice("");
+  };
+  const removeSelectedInternalEvent = async () => {
+    const event = selectedEvent?.event;
+    if (!event?.internalManual || !event.revision || eventSaving) return;
+    setEventSaving(true); setEventCreateNotice("");
+    try {
+      const response = await csrfFetch("/api/crm/calendar-events?workspaceId=" + encodeURIComponent(workspaceId), {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: event.id, expectedRevision: event.revision }),
+      }, async response => { const value = await response.json(); return value.persisted === true && value.archived === true && value.eventId === event.id; });
+      const result = await response.json();
+      if (!response.ok || !result.archived) throw new Error(result.error ?? text.eventCreateFailed);
+      setRemovedEventIds(current => [...current, event.id]); setSelectedEventId("");
+      setEventCreateNotice(language === "de" ? "Interner Termin entfernt. Der Auditverlauf bleibt erhalten." : "Internal event removed. Audit history is retained.");
+      void onEventsChanged?.();
+    } catch (error) { setEventCreateNotice(error instanceof Error ? error.message : text.eventCreateFailed); }
+    finally { setEventSaving(false); }
   };
   const selectedProviderConfig = calendarIntegrations[calendarIntegrations.defaultProvider];
   const selectedProviderLabel = getCalendarProviderLabel(calendarIntegrations.defaultProvider, text);
@@ -1237,6 +1241,9 @@ export function CalendarCommandCenter({
     selectedEvent?.event,
     calendarIntegrations.defaultProvider,
   );
+  const selectedEventProviderLabel = selectedEventProvider === "manual"
+    ? language === "de" ? "Manuell" : "Manual"
+    : getCalendarProviderLabel(selectedEventProvider, text);
   const bookingSlug = shareConfig.slug.trim() || slugify(projectLabel) || "meeting";
   const bookingPath = workspacePublicKey
     ? `/book/${encodeURIComponent(workspacePublicKey)}/${encodeURIComponent(bookingSlug)}`
@@ -1644,72 +1651,7 @@ export function CalendarCommandCenter({
             ? text.liveSyncIdle
             : text.calendarSetup.missingConnection);
 
-  const syncLiveTeamsMeeting = async () => {
-    if (!isHomeWorkspace) return;
-    setLiveCalendarAction({ status: "running" });
-
-    try {
-      if (!selectedEvent) {
-        throw new Error(text.noEvents);
-      }
-
-      if (oauthStatus !== "ready" || !selectedProviderConfig.connected) {
-        throw new Error(oauthStatus !== "ready" ? oauthStatusMessage : text.calendarSetup.missingConnection);
-      }
-
-      const body = [
-        `<p><strong>${escapeHtml(text.project)}:</strong> ${escapeHtml(selectedEvent.project?.name ?? projectLabel)}</p>`,
-        `<p><strong>${escapeHtml(text.contact)}:</strong> ${escapeHtml(selectedEvent.contact?.name ?? text.noContact)}</p>`,
-        `<p><strong>${escapeHtml(text.leadContext)}:</strong> ${escapeHtml(selectedEvent.lead?.intent ?? text.noLead)}</p>`,
-        `<p><strong>${escapeHtml(text.outcomeGoal)}:</strong> ${escapeHtml(selectedEvent.event.outcomeGoal)}</p>`,
-        `<p><strong>${escapeHtml(text.preparation)}:</strong> ${escapeHtml(selectedEvent.event.preparation.join(", "))}</p>`,
-      ].join("");
-      const attendees = selectedEvent.contact?.email ? [selectedEvent.contact.email] : [];
-
-      const response = await csrfFetch(
-        calendarIntegrations.defaultProvider === "google"
-          ? "/api/calendar/google"
-          : "/api/calendar/microsoft",
-        {
-        body: JSON.stringify({
-          attendees,
-          body,
-          calendarEventId: selectedEvent.event.id,
-          createOnlineMeeting:
-            calendarIntegrations.defaultMeetingProvider === "microsoft-teams" ||
-            calendarIntegrations.defaultMeetingProvider === "google-meet",
-          endsAt: selectedEvent.event.endsAt,
-          location:
-            calendarIntegrations.defaultMeetingProvider === "microsoft-teams"
-              ? "Microsoft Teams"
-              : calendarIntegrations.defaultMeetingProvider === "google-meet"
-                ? "Google Meet"
-                : selectedEvent.event.location,
-          startsAt: selectedEvent.event.startsAt,
-          subject: selectedEvent.event.title,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-        },
-      );
-      const data = (await response.json()) as LiveCalendarResponse;
-
-      if (!response.ok || !data.ok) {
-        throw new Error(data.error || text.liveSyncError);
-      }
-
-      setLiveCalendarAction({
-        detail: text.liveSyncSuccess.replace("{{title}}", selectedEvent.event.title),
-        status: "success",
-        url: data.onlineMeetingUrl || data.webLink || null,
-      });
-    } catch (error) {
-      setLiveCalendarAction({
-        detail: error instanceof Error ? error.message : text.liveSyncError,
-        status: "error",
-      });
-    }
-  };
+  const openPersonalCalendar = () => document.getElementById("personal-calendar-workspace")?.focus();
 
   if (meetingBuilderOpen) {
     return (
@@ -2394,6 +2336,7 @@ export function CalendarCommandCenter({
 
   return (
     <section className="grid gap-4">
+      <PersonalCalendarWorkspace key={`${sessionUserId}:${workspaceId}`} workspaceId={workspaceId} sessionUserId={sessionUserId} language={language} activeProjectId={activeProjectId} projects={projects} store={personalCalendarStore} onEventsChanged={onEventsChanged} />
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -2423,9 +2366,10 @@ export function CalendarCommandCenter({
         <div className="mt-4 flex justify-end">
           <button
             className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-            disabled={!isHomeWorkspace}
+            disabled={!isHomeWorkspace || eventSaving}
             onClick={() => {
               if (!isCreateEventOpen) {
+                setEditingEvent(null);
                 setEventDraft(createDefaultCalendarEventDraft(
                   projects,
                   sessionUserId,
@@ -2441,7 +2385,7 @@ export function CalendarCommandCenter({
           </button>
         </div>
         {isCreateEventOpen ? (
-          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <fieldset disabled={eventSaving} className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold text-slate-950">{text.createEventTitle}</h4>
               <p className="mt-1 break-words text-sm text-stone-600">{text.createEventDescription}</p>
@@ -2460,6 +2404,7 @@ export function CalendarCommandCenter({
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("startsAt", event.target.value)}
+                  step="0.001"
                   type="datetime-local"
                   value={eventDraft.startsAt}
                 />
@@ -2469,6 +2414,7 @@ export function CalendarCommandCenter({
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("endsAt", event.target.value)}
+                  step="0.001"
                   type="datetime-local"
                   value={eventDraft.endsAt}
                 />
@@ -2574,7 +2520,7 @@ export function CalendarCommandCenter({
                 >
                   {(["geplant", "vorbereiten", "bestätigt", "nachfassen"] as CalendarEvent["status"][]).map((status) => (
                     <option key={status} value={status}>
-                      {text.statusLabels[status]}
+                      {calendarStatusLabels[status]}
                     </option>
                   ))}
                 </select>
@@ -2624,7 +2570,7 @@ export function CalendarCommandCenter({
                 {text.cancel}
               </button>
             </div>
-          </div>
+          </fieldset>
         ) : null}
         {eventCreateNotice ? (
           <p
@@ -3245,7 +3191,7 @@ export function CalendarCommandCenter({
             </p>
             <h4 className="mt-1 break-words text-lg font-semibold">{text.liveIntegrationTitle}</h4>
             <p className="mt-2 max-w-3xl break-words text-sm text-emerald-900">
-              {text.liveSyncDescription}
+              {language === "de" ? "Persönliche Termine werden oben mit ausdrücklicher Kontobindung und Anbieterabgleich verwaltet." : "Manage personal events above with an explicit account binding and provider readback."}
             </p>
             <p
               aria-live={liveCalendarAction.status === "error" ? "assertive" : "polite"}
@@ -3264,13 +3210,10 @@ export function CalendarCommandCenter({
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
             <button
               className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-              disabled={!isHomeWorkspace || oauthStatus !== "ready" || liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
-              onClick={syncLiveTeamsMeeting}
+              onClick={openPersonalCalendar}
               type="button"
             >
-              {liveCalendarAction.status === "running"
-                ? text.liveSyncRunning
-                : text.syncWithProvider(selectedProviderLabel)}
+              {language === "de" ? "Persönlichen Kalender öffnen" : "Open personal calendar"}
             </button>
             {liveCalendarAction.url ? (
               <a
@@ -3591,7 +3534,7 @@ export function CalendarCommandCenter({
                             : statusStyles[item.event.status]
                         }`}
                       >
-                        {text.statusLabels[item.event.status]}
+                        {calendarStatusLabels[item.event.status]}
                       </span>
                     </span>
                     <span className="flex flex-wrap gap-2 text-xs">
@@ -3642,14 +3585,18 @@ export function CalendarCommandCenter({
             {selectedEvent?.event.title ?? text.noEvents}
           </h4>
 
+          {isHomeWorkspace && selectedEvent?.event.internalManual && <div className="mt-4 flex flex-wrap gap-2">
+            <button className="min-h-11 rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold disabled:opacity-50" type="button" disabled={eventSaving} onClick={editSelectedInternalEvent}>{language === "de" ? "Internen Termin bearbeiten" : "Edit internal event"}</button>
+            <button className="min-h-11 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-800 disabled:opacity-50" type="button" disabled={eventSaving} onClick={() => void removeSelectedInternalEvent()}>{language === "de" ? "Internen Termin entfernen" : "Remove internal event"}</button>
+          </div>}
           <div className="mt-4 grid gap-3 text-sm">
             {[
               [text.start, selectedEvent ? formatDateTime(selectedEvent.event.startsAt, locale) : "-"],
               [text.end, selectedEvent ? formatTime(selectedEvent.event.endsAt, locale) : "-"],
               [text.location, selectedEvent?.event.location],
-              [text.calendarLabel, getCalendarProviderLabel(selectedEventProvider, text)],
+              [text.calendarLabel, selectedEventProviderLabel],
               [text.meetingLabel, getMeetingStatusLabel(selectedEvent?.event, text)],
-              [text.status, selectedEvent ? text.statusLabels[selectedEvent.event.status] : undefined],
+              [text.status, selectedEvent ? calendarStatusLabels[selectedEvent.event.status] : undefined],
               [text.owner, selectedEvent?.owner?.name],
               [text.contact, selectedEvent?.contact?.name ?? text.noContact],
               [text.leadContext, selectedEvent?.lead?.intent ?? text.noLead],

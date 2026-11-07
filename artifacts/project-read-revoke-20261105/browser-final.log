@@ -1,0 +1,1 @@
+{"classification":"LOCAL_UI_WITH_STUBBED_HTTP_NOT_AUTH_OR_PROVIDER_ACCEPTANCE","passed":4,"failed":0,"cases":["pending snapshot disables writes","late selection response ignored","unknown retry preserves command identity with fresh CSRF","payload refresh and independent source block writes"],"browserErrors":0,"unexpectedNetwork":0}

@@ -1,0 +1,155 @@
+TAP version 13
+# Subtest: personal send consent is explicit and MIME is a bounded plain text reply, never raw HTML
+ok 1 - personal send consent is explicit and MIME is a bounded plain text reply, never raw HTML
+  ---
+  duration_ms: 9.0978
+  type: 'test'
+  ...
+# Subtest: actual streamed request limit rejects chunked oversize, invalid UTF8 and arrays
+ok 2 - actual streamed request limit rejects chunked oversize, invalid UTF8 and arrays
+  ---
+  duration_ms: 79.8375
+  type: 'test'
+  ...
+# Subtest: private file inspection rejects executable/mismatch/active PDF and normalizes safe image bytes
+ok 3 - private file inspection rejects executable/mismatch/active PDF and normalizes safe image bytes
+  ---
+  duration_ms: 3365.7426
+  type: 'test'
+  ...
+# Subtest: provider POST failure is never treated as delivered or automatically retried
+ok 4 - provider POST failure is never treated as delivered or automatically retried
+  ---
+  duration_ms: 7.7491
+  type: 'test'
+  ...
+# Subtest: personal replies and attachments use actual two-tenant PostgreSQL auth, source binding, receipts and restart-safe no-resend
+    # Subtest: known-ID-only QA import checks test marker and participant metadata before content for both providers; business mail is never fetched
+    ok 1 - known-ID-only QA import checks test marker and participant metadata before content for both providers; business mail is never fetched
+      ---
+      duration_ms: 1739.852
+      type: 'test'
+      ...
+    # Subtest: Google and Outlook replies bind original thread, send one private attachment and persist accepted-not-delivered receipt
+    ok 2 - Google and Outlook replies bind original thread, send one private attachment and persist accepted-not-delivered receipt
+      ---
+      duration_ms: 388.4321
+      type: 'test'
+      ...
+    # Subtest: received file is personally fetched, checked, downloaded privately, erased permanently and never adopted across tenants
+    ok 3 - received file is personally fetched, checked, downloaded privately, erased permanently and never adopted across tenants
+      ---
+      duration_ms: 173.0507
+      type: 'test'
+      ...
+    # Subtest: matching attachment receipt cannot expose metadata after project revocation during replay provider I/O
+    ok 4 - matching attachment receipt cannot expose metadata after project revocation during replay provider I/O
+      ---
+      duration_ms: 196.5839
+      type: 'test'
+      ...
+    # Subtest: quarantined executable bytes never persist, download or enter a preview
+    ok 5 - quarantined executable bytes never persist, download or enter a preview
+      ---
+      duration_ms: 66.4675
+      type: 'test'
+      ...
+    # Subtest: old read-only grant and missing identity/session cannot obtain send authority from the message
+    ok 6 - old read-only grant and missing identity/session cannot obtain send authority from the message
+      ---
+      duration_ms: 41.7648
+      type: 'test'
+      ...
+    # Subtest: explicit OAuth reply consent is identity bound; subsequent read-only OAuth removes it
+    ok 7 - explicit OAuth reply consent is identity bound; subsequent read-only OAuth removes it
+      ---
+      duration_ms: 98.8721
+      type: 'test'
+      ...
+    # Subtest: foreign tenant and different user in same tenant cannot preview or attach to another private message
+    ok 8 - foreign tenant and different user in same tenant cannot preview or attach to another private message
+      ---
+      duration_ms: 108.1114
+      type: 'test'
+      ...
+    # Subtest: unknown/unassociated source, changed provider identity and changed recipient are denied without POST
+    ok 9 - unknown/unassociated source, changed provider identity and changed recipient are denied without POST
+      ---
+      duration_ms: 103.2452
+      type: 'test'
+      ...
+    # Subtest: revoked project grant, current role, session, contact consent and recipient change deny send after preview
+    ok 10 - revoked project grant, current role, session, contact consent and recipient change deny send after preview
+      ---
+      duration_ms: 380.7258
+      type: 'test'
+      ...
+    # Subtest: attachment erasure and stale preview digest block dispatch; prepared receipt is cancellable without resetting unknown
+    ok 11 - attachment erasure and stale preview digest block dispatch; prepared receipt is cancellable without resetting unknown
+      ---
+      duration_ms: 156.5649
+      type: 'test'
+      ...
+    # Subtest: associated manual message without any send job denies private attachment bytes and metadata after grant revocation
+    ok 12 - associated manual message without any send job denies private attachment bytes and metadata after grant revocation
+      ---
+      duration_ms: 382.6286
+      type: 'test'
+      ...
+    # Subtest: associated private_filed message without any send job denies private attachment bytes and metadata after grant revocation
+    ok 13 - associated private_filed message without any send job denies private attachment bytes and metadata after grant revocation
+      ---
+      duration_ms: 123.7363
+      type: 'test'
+      ...
+    # Subtest: unassociated personal copy remains owner-readable after unrelated project grant revocation
+    ok 14 - unassociated personal copy remains owner-readable after unrelated project grant revocation
+      ---
+      duration_ms: 72.9524
+      type: 'test'
+      ...
+    # Subtest: erasing an approved attachment blocks dispatch and preserves its immutable metadata
+    ok 15 - erasing an approved attachment blocks dispatch and preserves its immutable metadata
+      ---
+      duration_ms: 103.9338
+      type: 'test'
+      ...
+    # Subtest: lost provider acknowledgement is terminal across request replay, fresh service instance and a new idempotency key
+    ok 16 - lost provider acknowledgement is terminal across request replay, fresh service instance and a new idempotency key
+      ---
+      duration_ms: 2305.0743
+      type: 'test'
+      ...
+    # Subtest: lost database acknowledgement after provider call leaves durable dispatching and cannot resend
+    ok 17 - lost database acknowledgement after provider call leaves durable dispatching and cannot resend
+      ---
+      duration_ms: 99.5163
+      type: 'test'
+      ...
+    # Subtest: concurrent same-command calls produce one dispatch and changed payload conflicts
+    ok 18 - concurrent same-command calls produce one dispatch and changed payload conflicts
+      ---
+      duration_ms: 100.9054
+      type: 'test'
+      ...
+    # Subtest: private-copy erasure also erases cached bytes and prevents rehydration; immutable command audit survives
+    ok 19 - private-copy erasure also erases cached bytes and prevents rehydration; immutable command audit survives
+      ---
+      duration_ms: 55.7619
+      type: 'test'
+      ...
+    1..19
+ok 5 - personal replies and attachments use actual two-tenant PostgreSQL auth, source binding, receipts and restart-safe no-resend
+  ---
+  duration_ms: 25358.213
+  type: 'test'
+  ...
+1..5
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 32749.0125

@@ -12,6 +12,7 @@ export function propertyPurchaseCostsPayload(draft: PropertyDraft) {
     }
     return { purchaseAncillaryCalculation: null, purchaseAncillaryCosts: draft.purchaseAncillaryCosts };
   }
+  if (draft.geography && draft.geography.countryCode !== "AT") throw new Error("Invalid property editor purchase ancillary country; use a reviewed manual amount");
   const rateBps = parsePurchaseAncillaryRate(draft.purchaseAncillaryRate);
   const priceCents = parsePropertyEuroCents(draft.price);
   if (rateBps === null || priceCents === null || calculatePurchaseAncillaryCents(priceCents, rateBps) === null) {

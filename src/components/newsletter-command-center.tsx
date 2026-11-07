@@ -33,6 +33,10 @@ type NewsletterCommandCenterProps = {
   suppressions: NewsletterSuppression[];
   templates: NewsletterTemplate[];
   users: WorkspaceUser[];
+  persistedDrafts?: Record<string, DraftState>;
+  onSaveDraft?: (campaignId: string, draft: DraftState) => Promise<void>;
+  onReviewCampaign?: (campaignId: string, draft: DraftState) => Promise<string>;
+  focusCampaignId?:string;
 };
 
 type NewsletterArea =
@@ -101,7 +105,7 @@ type NewsletterEditorBlock =
       type: "divider";
     };
 
-type DraftState = {
+export type DraftState = {
   contentBlocks: NewsletterEditorBlock[];
   fromEmail: string;
   fromName: string;
@@ -111,6 +115,8 @@ type DraftState = {
   subject: string;
   variantA: string;
   variantB: string;
+  legalAddress: string;
+  language: "de" | "en" | "es";
 };
 
 type LiveNewsletterActionState = {
@@ -341,14 +347,16 @@ function hasImageAltText(blocks: NewsletterEditorBlock[]) {
 function getDefaultDraft(campaign: NewsletterCampaign | undefined): DraftState {
   return {
     contentBlocks: toEditorBlocks(campaign),
-    fromEmail: campaign?.fromEmail ?? "newsletter@novalure.eu",
-    fromName: campaign?.fromName ?? "Novalure",
+    fromEmail: campaign?.fromEmail ?? "",
+    fromName: campaign?.fromName ?? "",
     previewText: campaign?.previewText ?? "",
-    replyTo: campaign?.replyTo ?? "hello@novalure.eu",
+    replyTo: campaign?.replyTo ?? "",
     sendAt: campaign?.sendAt ?? "",
     subject: campaign?.subject ?? "",
     variantA: campaign?.abTest?.variantA ?? campaign?.subject ?? "",
     variantB: campaign?.abTest?.variantB ?? "",
+    legalAddress: "",
+    language: "de",
   };
 }
 
@@ -415,7 +423,7 @@ function renderNewsletterHtml(draft: DraftState, text: NewsletterCommandCenterTe
     "<main>",
     draft.previewText ? `<p>${escapeHtml(draft.previewText)}</p>` : "",
     blocks,
-    `<footer><p>${escapeHtml(text.footerNote)}</p><p>${escapeHtml(text.legalAddress)}</p><p><a href="${newsletterUnsubscribeUrlToken}">${escapeHtml(text.unsubscribeLink)}</a></p></footer>`,
+    `<footer><p>${escapeHtml(text.footerNote)}</p><p>${escapeHtml(draft.legalAddress)}</p><p><a href="${newsletterUnsubscribeUrlToken}">${escapeHtml(text.unsubscribeLink)}</a></p></footer>`,
     "</main>",
   ].join("");
 }
@@ -435,6 +443,10 @@ export function NewsletterCommandCenter({
   suppressions,
   templates,
   users,
+  persistedDrafts,
+  onSaveDraft,
+  onReviewCampaign,
+  focusCampaignId,
 }: NewsletterCommandCenterProps) {
   const text = getNewsletterCommandCenterCopy(language);
   const locale = getLocale(language);
@@ -451,7 +463,7 @@ export function NewsletterCommandCenter({
       };
   const [activeArea, setActiveArea] = useState<NewsletterArea>("campaigns");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns.some(c=>c.id===focusCampaignId)?focusCampaignId!:campaigns[0]?.id ?? "");
   const [drafts, setDrafts] = useState<Record<string, Partial<DraftState>>>({});
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const [liveNewsletterAction, setLiveNewsletterAction] = useState<LiveNewsletterActionState>({
@@ -505,6 +517,7 @@ export function NewsletterCommandCenter({
     decoratedCampaigns[0];
   const selectedDraft: DraftState = {
     ...getDefaultDraft(selectedCampaign?.campaign),
+    ...(selectedCampaign ? persistedDrafts?.[selectedCampaign.campaign.id] : {}),
     ...(selectedCampaign ? drafts[selectedCampaign.campaign.id] : {}),
   };
   const hasSelectedCampaign = Boolean(selectedCampaign);
@@ -534,18 +547,15 @@ export function NewsletterCommandCenter({
       .map((contact) => normalizeEmail(contact.email))
       .filter((email) => Boolean(email) && !suppressedEmails.has(email));
 
-    return Array.from(new Set(emails)).slice(0, 50);
+    return Array.from(new Set(emails));
   })();
   const previewCanvasClass =
     previewDevice === "mobile" ? "max-w-[360px]" : "max-w-[620px]";
   const previewIsDark = previewDevice === "dark";
   const personalizationTokens = [
-    "{{contact.firstName}}",
+    "{{contact.name}}",
     "{{project.name}}",
-    "{{project.city}}",
-    "{{lead.budget}}",
     "{{agent.name}}",
-    "{{booking.link}}",
   ];
   const totalRecipients = campaigns.reduce((sum, campaign) => sum + campaign.recipients, 0);
   const totalOptIns = segments.reduce((sum, segment) => sum + segment.optIns, 0);
@@ -611,7 +621,7 @@ export function NewsletterCommandCenter({
     },
     {
       label: text.legalFooterSafe,
-      ready: true,
+      ready: selectedDraft.legalAddress.trim().length >= 10,
     },
   ];
   const areas: Array<{ id: NewsletterArea; label: string; count: number | string }> = [
@@ -622,6 +632,7 @@ export function NewsletterCommandCenter({
     { id: "analytics", label: text.analytics, count: sentCampaigns.length },
     { id: "deliverability", label: text.deliverability, count: relatedDataAvailable ? deliverability.length : "—" },
   ];
+  const visibleAreas = onSaveDraft ? areas.filter(area => ["campaigns", "builder", "segments"].includes(area.id)) : areas;
   const liveNewsletterMessage = !relatedDataAvailable
     ? relatedDataText.detail
     : liveNewsletterAction.detail ??
@@ -712,7 +723,7 @@ export function NewsletterCommandCenter({
       ...selectedDraft.contentBlocks,
       {
         ctaLabel: text.buttonLabelPlaceholder,
-        ctaUrl: "{{booking.link}}",
+        ctaUrl: "",
         detail: text.propertyDetailPlaceholder,
         id: createBlockId("property"),
         location: text.propertyLocationPlaceholder,
@@ -739,10 +750,10 @@ export function NewsletterCommandCenter({
       ...selectedDraft.contentBlocks,
       {
         id: createBlockId("social"),
-        instagram: "https://instagram.com/novalure",
-        linkedin: "https://linkedin.com/company/novalure",
+        instagram: "",
+        linkedin: "",
         type: "social",
-        website: "https://novalure.eu",
+        website: "",
       },
     ]);
   };
@@ -765,6 +776,12 @@ export function NewsletterCommandCenter({
     setLiveNewsletterAction({ status: "running" });
 
     try {
+      if (onReviewCampaign && selectedCampaign) {
+        const detail = await onReviewCampaign(selectedCampaign.campaign.id, selectedDraft);
+        setDrafts(current => { const next = { ...current }; delete next[selectedCampaign.campaign.id]; return next; });
+        setLiveNewsletterAction({ status: "success", detail });
+        return;
+      }
       if (!relatedDataAvailable) {
         throw new Error(relatedDataText.detail);
       }
@@ -776,6 +793,7 @@ export function NewsletterCommandCenter({
       if (!campaignRecipientEmails.length) {
         throw new Error(text.liveSendNoRecipients);
       }
+      if (campaignRecipientEmails.length > 50) throw new Error(language === "de" ? "Bitte den gespeicherten Mailing-Freigabeablauf verwenden." : "Please use the saved mailing approval workflow.");
 
       const response = await csrfFetch("/api/newsletter/send", {
         body: JSON.stringify({
@@ -817,6 +835,14 @@ export function NewsletterCommandCenter({
       });
     }
   };
+
+  const saveSelectedDraft = async () => {
+    if (!onSaveDraft || !selectedCampaign) return;
+    setLiveNewsletterAction({ status: "running" });
+    try { await onSaveDraft(selectedCampaign.campaign.id, selectedDraft); setDrafts(current => { const next = { ...current }; delete next[selectedCampaign.campaign.id]; return next; }); setLiveNewsletterAction({ status: "success", detail: language === "de" ? "Mailingentwurf gespeichert." : "Mailing draft saved." }); }
+    catch (error) { setLiveNewsletterAction({ status: "error", detail: error instanceof Error ? error.message : text.liveSendError }); }
+  };
+  const saveButton = onSaveDraft ? <button type="button" className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={!selectedCampaign || liveNewsletterAction.status === "running"} onClick={() => void saveSelectedDraft()}>{language === "de" ? "Entwurf speichern" : "Save draft"}</button> : null;
 
   const addSnippet = (snippet: "project" | "viewing" | "seller" | "feedback") => {
     const snippets: Record<typeof snippet, NewsletterEditorBlock[]> = {
@@ -1400,7 +1426,7 @@ export function NewsletterCommandCenter({
                 }`}
               >
                 <p className="break-words">{text.footerNote}</p>
-                <p className="mt-2 break-words">{text.legalAddress}</p>
+                <p className="mt-2 break-words">{selectedDraft.legalAddress || (language === "de" ? "Absenderanschrift ergänzen" : "Add sender address")}</p>
                 <div className={`mt-3 flex flex-wrap gap-3 font-semibold ${previewIsDark ? "text-slate-200" : "text-slate-700"}`}>
                   <a className="underline underline-offset-2" href={unsubscribePreviewHref}>
                     {text.unsubscribeLink}
@@ -1438,6 +1464,7 @@ export function NewsletterCommandCenter({
         <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">
+              {saveButton}
               <button
                 className="shrink-0 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                 onClick={() => setActiveArea("campaigns")}
@@ -1474,15 +1501,15 @@ export function NewsletterCommandCenter({
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
                 disabled={
-                  !relatedDataAvailable ||
+                  (!onReviewCampaign && !relatedDataAvailable) ||
                   liveNewsletterAction.status === "running" ||
                   !selectedCampaign ||
-                  !campaignRecipientEmails.length
+                  (!onReviewCampaign && !campaignRecipientEmails.length)
                 }
                 onClick={sendSelectedNewsletterCampaign}
                 type="button"
               >
-                {liveNewsletterAction.status === "running" ? text.liveSendRunning : text.sendTestNewsletter}
+                {liveNewsletterAction.status === "running" ? text.liveSendRunning : onReviewCampaign ? (language === "de" ? "Empfänger und Versand prüfen" : "Review recipients and sending") : text.sendTestNewsletter}
               </button>
             </div>
           </div>
@@ -1591,8 +1618,10 @@ export function NewsletterCommandCenter({
                         { field: "fromName" as const, label: text.fromName, value: selectedDraft.fromName },
                         { field: "fromEmail" as const, label: text.fromEmail, value: selectedDraft.fromEmail },
                         { field: "replyTo" as const, label: text.replyTo, value: selectedDraft.replyTo },
+                        { field: "legalAddress" as const, label: language === "de" ? "Absenderanschrift" : "Sender address", value: selectedDraft.legalAddress },
+                        { field: "language" as const, label: language === "de" ? "Inhaltssprache (de, en, es)" : "Content language (de, en, es)", value: selectedDraft.language },
                         { field: "sendAt" as const, label: text.sendAt, value: selectedDraft.sendAt },
-                      ].map((input) => (
+                      ].filter(input => !onReviewCampaign || input.field !== "sendAt").map((input) => (
                         <label className="grid gap-1 text-sm font-semibold text-slate-900" key={input.field}>
                           {input.label}
                           <input
@@ -1636,7 +1665,7 @@ export function NewsletterCommandCenter({
                     </div>
                   </article>
 
-                  <article className="rounded-lg border border-stone-200 bg-white p-5">
+                  {!onSaveDraft && (<article className="rounded-lg border border-stone-200 bg-white p-5">
                     <p className="text-sm font-semibold text-slate-950">{text.abTest}</p>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <label className="grid gap-1 text-sm font-semibold text-slate-900">
@@ -1656,7 +1685,7 @@ export function NewsletterCommandCenter({
                         />
                       </label>
                     </div>
-                  </article>
+                  </article>)}
                 </>
               ) : (
                 <article className="rounded-lg border border-stone-200 bg-white p-5 text-sm font-semibold text-stone-600">
@@ -1685,7 +1714,7 @@ export function NewsletterCommandCenter({
             </p>
             <h3 className="mt-1 text-2xl font-semibold">{text.title}</h3>
             <p className="mt-2 max-w-4xl break-words text-sm text-stone-600">
-              {text.description}
+              {onSaveDraft ? (language === "de" ? "Mailingentwürfe bearbeiten, gespeicherte Zielgruppen und Vorlagen verwenden, Empfänger prüfen und jede Versandfassung gezielt freigeben. Versandbelege stehen in der Freigabeansicht; Flows und gemeinsame Ergebnisse im Marketingbereich." : "Edit saved mailings, use audiences and templates, review recipients and approve each sending revision. Delivery records are shown in the approval view; flows and shared results are available in Marketing.") : text.description}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
@@ -1705,7 +1734,7 @@ export function NewsletterCommandCenter({
 
         <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
-            {areas.map((area) => (
+            {visibleAreas.map((area) => (
               <button
                 className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                   activeArea === area.id
@@ -1741,7 +1770,7 @@ export function NewsletterCommandCenter({
             </p>
             <h4 className="mt-1 break-words text-lg font-semibold">{text.liveIntegrationTitle}</h4>
             <p className="mt-2 max-w-3xl break-words text-sm text-emerald-900">
-              {relatedDataAvailable ? text.liveIntegrationDescription : relatedDataText.detail}
+              {onReviewCampaign ? (language === "de" ? "Entwurf speichern, Empfänger und Ausschlüsse prüfen, diese Version freigeben und den Versand ausdrücklich starten." : "Save the draft, review recipients and exclusions, approve this version and explicitly start sending.") : relatedDataAvailable ? text.liveIntegrationDescription : relatedDataText.detail}
             </p>
             <p className="mt-2 break-words text-xs font-semibold text-emerald-900">
               {relatedDataAvailable ? text.liveSendRecipients.replace(
@@ -1763,19 +1792,19 @@ export function NewsletterCommandCenter({
               {liveNewsletterMessage}
             </p>
           </div>
-          <button
+          <div className="flex flex-wrap gap-2">{saveButton}<button
             className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
             disabled={
-              !relatedDataAvailable ||
+              (!onReviewCampaign && !relatedDataAvailable) ||
               liveNewsletterAction.status === "running" ||
               !selectedCampaign ||
-              !campaignRecipientEmails.length
+              (!onReviewCampaign && !campaignRecipientEmails.length)
             }
             onClick={sendSelectedNewsletterCampaign}
             type="button"
           >
-            {liveNewsletterAction.status === "running" ? text.liveSendRunning : text.sendTestNewsletter}
-          </button>
+            {liveNewsletterAction.status === "running" ? text.liveSendRunning : onReviewCampaign ? (language === "de" ? "Empfänger und Versand prüfen" : "Review recipients and sending") : text.sendTestNewsletter}
+          </button></div>
         </div>
       </article>
 
@@ -1909,8 +1938,10 @@ export function NewsletterCommandCenter({
                 { field: "fromName", label: text.fromName, value: selectedDraft.fromName },
                 { field: "fromEmail", label: text.fromEmail, value: selectedDraft.fromEmail },
                 { field: "replyTo", label: text.replyTo, value: selectedDraft.replyTo },
+                { field: "legalAddress", label: language === "de" ? "Absenderanschrift" : "Sender address", value: selectedDraft.legalAddress },
+                { field: "language", label: language === "de" ? "Inhaltssprache (de, en, es)" : "Content language (de, en, es)", value: selectedDraft.language },
                 { field: "sendAt", label: text.sendAt, value: selectedDraft.sendAt },
-              ].map((input) => (
+              ].filter(input => !onReviewCampaign || input.field !== "sendAt").map((input) => (
                 <label
                   className="grid gap-1 text-sm font-semibold text-slate-900"
                   key={input.field}
@@ -2308,7 +2339,7 @@ export function NewsletterCommandCenter({
               </div>
             </div>
 
-            <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+            {!onSaveDraft && (<div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
               <p className="text-sm font-semibold text-slate-950">{text.abTest}</p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <label className="grid gap-1 text-sm font-semibold text-slate-900">
@@ -2328,7 +2359,7 @@ export function NewsletterCommandCenter({
                   />
                 </label>
               </div>
-            </div>
+            </div>)}
           </article>
 
           <aside className="grid gap-4">
@@ -2637,7 +2668,7 @@ export function NewsletterCommandCenter({
                     }`}
                   >
                     <p className="break-words">{text.footerNote}</p>
-                    <p className="mt-2 break-words">{text.legalAddress}</p>
+                    <p className="mt-2 break-words">{selectedDraft.legalAddress || (language === "de" ? "Absenderanschrift ergänzen" : "Add sender address")}</p>
                     <div
                       className={`mt-3 flex flex-wrap gap-3 font-semibold ${
                         previewIsDark ? "text-slate-200" : "text-slate-700"

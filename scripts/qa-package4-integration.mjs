@@ -19,7 +19,7 @@ const base = new URL(fixture.baseUrl);
 assert(fixture.syntheticOnly && base.protocol === "http:" && base.hostname === "127.0.0.1" &&
   fixture.database?.host === "127.0.0.1" && /^sales_qa_[a-f0-9]+$/.test(fixture.database.user),
 "Package 4 requires the disposable loopback QA fixture");
-assert.equal(fixture.fixtureMode, "design-c-actual-predecessors");
+assert.equal(fixture.fixtureMode, "design-c-current-application-originals");
 assert.equal(fixture.database.database, "neondb");
 const output = path.resolve(".npm-cache/qa/package4-integration");
 await mkdir(output, { recursive: true });

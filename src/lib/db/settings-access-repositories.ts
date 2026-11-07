@@ -142,7 +142,7 @@ export async function updateSettingsWorkspaceUser(input: {
   status?: unknown;
   userId: string;
 }) {
-  return updateWorkspaceUserAccess(input);
+  return updateWorkspaceUserAccess({ ...input, capability: "settings:manage" });
 }
 
 export async function revokeWorkspaceInvitation(input: {
@@ -150,6 +150,7 @@ export async function revokeWorkspaceInvitation(input: {
   userId: string;
 }) {
   return updateWorkspaceUserAccess({
+    capability: "settings:manage",
     session: input.session,
     status: "suspended",
     userId: input.userId,

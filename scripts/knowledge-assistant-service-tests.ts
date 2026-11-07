@@ -304,7 +304,7 @@ test("voice subscription denial leaves webchat available and disabled assistant 
     assert.equal((await retrieve("webchat")).answerStatus, "grounded");
     await assert.rejects(assignKnowledgeAreas(session(), { botId: ids.bot, channel: "voice", areaIds: [voiceArea] }, options), error => (error as { code?: string }).code === "ENTITLEMENT_REQUIRED");
     await db.admin.query("insert into workspace_module_settings(workspace_id,module_key,enabled) values($1,'bots',false)", [ids.workspace]);
-    assertEmpty(await retrieve("webchat"));
+    await assert.rejects(retrieve("webchat"), error => (error as { code?: string }).code === "ENTITLEMENT_REQUIRED");
     assertEmpty(await retrieve("telephony"));
     await assignKnowledgeAreas(session(), { botId: ids.bot, channel: "voice", areaIds: [] }, options);
   } finally {

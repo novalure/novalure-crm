@@ -1,0 +1,35 @@
+# Projekt-Lesegrant und konfliktgeprüfter Entzug
+
+Exakter lokaler Quellfreeze `85fca24a476bf927c62eb5a715fdfbcc88c1cf09` auf `7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40`, Branch `codex/project-read-revoke-20261105`. Kein Push, keine Migration, keine Produktions-/Provider-/Mail-/Kontenaktion. Die zentrale Freigabe bleibt bei Root.
+
+## Änderung und Grenze
+
+Der bisherige Kundenprojekt-Writer aktualisierte `can_read` nicht; dessen Default ist seit080 `true`. Der neue Writer bindet den aktuellen gespeicherten Akteur und die gespeicherte Sitzung über die vorhandene CRM-Transaktion, prüft `customer-access:manage`, Workspace-Verwaltung und Projekt-Schreibzugriff erneut und verlangt einen zuvor gelesenen exakten Zustandsdigest. Fachgrant, Pipeline-Projektion, Geschäfts-/CRM-Audit, Analytics, Command-Receipt und Domain-Event werden in derselben Transaktion geschrieben. Ein Auditfehler rollt alles zurück. Wiederholung mit gleicher Command-Identität liefert nach erneuter aktueller Autorisierung nur den historischen Receipt.
+
+Der Digest umfasst alle Kundenprojekt-Grants desselben Workspace/Projekt/Benutzer-Paars, Pipeline, Kundenfreigabe, Projekt und Zielmitgliedschaft. Paarweiser Advisory-Lock, bestehende Zeilenlocks, Zielmitgliedschafts-FK-Lock und bedingte SQL-CAS verhindern verlorene Änderungen bzw. Übernahme eines zwischenzeitlich unabhängig eingefügten Pipeline-Grants. Die Grenzwerte sind100 Fachgrants,15s pro Statement/Lock und5s Poolcheckout; dies ist keine behauptete15s-Gesamttransaktion.
+
+Die Pipeline wird aus allen aktiven Fachgrants mit `canViewProject=true` gebildet. Ein zweiter solcher Grant erhält den Zugriff. `can_read=false` wird beim letzten Entzug ausdrücklich gespeichert. Andere Workspace-/Benutzer-/Kundenrechte, Manager-, Webchat-, Partner- und Verkaufsautoritäten werden nicht umgeschrieben. Ein Workspace-Manager behält deshalb seinen anderweitig autorisierten Projektzugriff.
+
+Eine Pipeline-Projektion wird nur dann verwaltet, wenn sie fehlt oder eine exakte v2-Herkunft dieses atomaren Writers besitzt: begrenzte Metadaten, referenzierte Fachquelle, sortierte exakte Beitrags-IDs, Status und zu diesen Quellen passende Berechtigungsbits. Ein manueller Grant oder ein alter zusammengeführter v1-Marker ist **kein Beweis ausschließlicher Herkunft** und blockiert die gesamte Änderung. Altbestände werden weder adoptiert noch bereinigt. Deren quellentreuer Herkunftsnachweis/gesonderter Verwaltungsweg bleibt eine echte offene Grenze; dieser Kandidat löst neue kontrollierte grant→revoke-Vorgänge.
+
+Die Oberfläche wartet auf den serverseitigen Zustand der aktuell ausgewählten Kombination. Wechsel der Auswahl, Payload-Aktualisierung und unabhängige Herkunft sperren Speichern. Verspätete Zustandsantworten werden verworfen. Eine manuelle Wiederholung nach unbekanntem Ausgang verwendet dieselbe Command-Identität und einen neuen CSRF-Token.
+
+## Enge lokale Prüfung
+
+- Reales isoliertes PostgreSQL18, nicht privilegierter Nicht-Owner-Runtime, zwei synthetische Mandanten:13/13 Node-Testfälle inklusive Elternfall (12 Unterfälle). Derselbe unveränderte gespeicherte Mitglieds-/Auth-Sitzungskontext verliert nach Entzug sowohl `crm_project_access(...,false)` als auch `loadPropertySalesWorkspace`; tatsächliche Parallelität/CAS, Erstinsert-FK-Lock, zweiter Grant, fremde unveränderte Workspaces/Benutzer/Kunden, unabhängige Herkunft, alte Rollen/Sitzungen, Audit-Rollback und Managergrenze sind geprüft.
+- Tatsächlich montierte Oberfläche mit vorhandener lokaler Chrome-Version und ausschließlich synthetischen HTTP-Antworten:4 Szenarien; keine unerwarteten Netzanforderungen/Browserfehler. Dies ist keine API-/Login-/Provider-Abnahme.
+- Bestehende Kunden-Darstellungstests:3/3. Typecheck und enger ESLint bestehen. Der ausdrücklich gewählte Webpack-Produktionsbuild (`node node_modules/next/dist/bin/next build --webpack`) besteht inklusive TypeScript und188/188 erzeugten Seiten. Der Standard-Turbopack-Fehler wird weiter separat ausgewiesen.
+
+Die PostgreSQL-Prüfung verwendet die bestehende historische Sales-Teilfixture bis090 und echte benötigte092–096/101–110/114/146/152/153/167/188/121/191-Quellen samt tatsächlichen Checksums. Wie die vorhandene191-Kompatibilitätsfixture aktiviert sie vor092 die geforderte FORCE-RLS-Vorbedingung. Der portable PG18-Bootstrap lässt seine bestehende, ausdrücklich dokumentierte unbeteiligte Vector-Einbettungsgrenze bestehen. **Keine vollständige native PG17-Upgrade-/Restore-Abnahme.** Der native PG17-Restoreblocker bleibt unverändert separat offen.
+
+Die historische Teilfixture enthält vier in Produktion vorhandene direkte `novalure_app`-CRUD-ACLs nicht. Ausschließlich in dieser neu erzeugten lokalen Testdatenbank werden sie aus dem echten lesenden Katalog nachgebildet: `customer_workspace_access`, `customer_project_access`, `project_pipeline_permissions`, `workspace_users`. Weder Produktmigration noch zusätzliche Produktionsrechte werden eingeführt; RLS/Owner dieser Tabellen werden dafür nicht geändert. Katalogquelle: `C:/Projects/crm-live-acceptance-20261104/db-upgrade/full-source-catalog.json`, SHA256 `56de3bfa00448df9cb3dcb3b7919f795d13de731a554874918e4ebc6f2ccd9ff`. Die tatsächliche Runtime-/ACL-Bindung bleibt vor einer späteren zentralen Freigabe erneut zu qualifizieren.
+
+## Ursprüngliche Fehlläufe bleiben Fehlläufe
+
+Während der lokalen Entwicklung waren eine fehlende Fixture-Ledgerzeile, die vier fehlenden historischen Fixture-ACLs, eine unzulässige `customer_owner`-Verwaltungsrolle und eine fehlende synthetische Session-Widerrufsbegründung fehlgeschlagen. Die Fixture führt nun tatsächliche Quellen mit Ledger, belegt vorhandene ACLs, verwendet `novalureAdmin` und schreibt eine Begründung. Kein Produkt-Guard wurde zur Fehlerumgehung abgeschaltet. Ein anfänglicher TypeScript-Narrowingfehler wurde durch eine korrekt deklarierte `never`-Fehlerfunktion behoben.
+
+Der erste Browserstart fand keine gebündelte Playwright-Chromiumdatei; stattdessen wurde vorhandenes Chrome ohne Installation benutzt. Der erste UI-Test selektierte zwei verschachtelte Sections; nur der Testselektor wurde auf die direkte Überschrifts-Section eingeengt. Dieser Originalfehler liegt im Belegordner. Der Standard-Turbopack-Build scheiterte an der vorhandenen externen `node_modules`-Junction; dessen Originalprotokoll bleibt erhalten. Ein ausdrücklich benannter Webpack-Build wird separat ausgewiesen und wertet den ursprünglichen Turbopack-Fehler nicht in einen PASS um.
+
+## Verbleibende Freigaben
+
+Unabhängiger Review des exakten lokalen Deltas durch Root, Integration in den zentralen Kandidaten und dessen eigene Gates stehen aus. Keine17-Rollen-/reale MFA-/Produktionsabnahme, keine Annahme eines vorhandenen QA-Kontenpools (der echte aggregierte Beleg weist0 explizite Produktions-QA-Workspaces aus). Neue temporäre QA-Identitäten/Workspaces und deren begrenzte Autorität sind ein separater Auftrag. Alte mehrdeutige Pipeline-Projektionen bleiben gesperrt. Die allgemeinen Mitgliedsänderungen außerhalb des Projektgrantpfads bekommen durch diesen Kandidaten keine zusätzliche CAS-/Atomaritätsabnahme.

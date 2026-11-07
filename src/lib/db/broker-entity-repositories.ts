@@ -4,6 +4,7 @@ import type { AppSession } from "@/lib/auth/session";
 import type { BrokerMandate, BuyerSearchProfile, Lead } from "@/lib/crm-types";
 import { queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { recordBuyerProfileCompletion } from "@/lib/automation/source-events";
 
 type BrokerMandateRow = {
   address: string;
@@ -269,6 +270,7 @@ async function upsertBuyerSearchProfileInTransaction(input: {
   if (!row) return { persisted: false, reason: "Buyer search profile could not be saved" };
 
   const profile = toBuyerSearchProfile(row);
+  await recordBuyerProfileCompletion(input.session, profile.id);
   await writeAuditLog({
     action: existingId ? "buyer_search_profile.updated" : "buyer_search_profile.created",
     after: profile,
@@ -350,12 +352,12 @@ export async function syncBrokerEntityForLead(input: {
 
 function isSellerLead(lead: Lead) {
   const type = String(lead.type).toLowerCase();
-  return Boolean(lead.sellerProfile) || type.includes("verk") || type.includes("seller");
+  return Boolean(lead.sellerProfile && Object.keys(lead.sellerProfile).length) || type.includes("verk") || type.includes("seller");
 }
 
 function isBuyerLead(lead: Lead) {
   const type = String(lead.type).toLowerCase();
-  return Boolean(lead.buyerProfile) || type.includes("kaeu") || type.includes("kauf") || type.includes("buyer");
+  return Boolean(lead.buyerProfile && Object.keys(lead.buyerProfile).length) || type.includes("käuf") || type.includes("kaeu") || type.includes("kauf") || type.includes("buyer");
 }
 
 async function resolveBrokerMandateId(workspaceId: string, mandate: Record<string, unknown>) {
@@ -581,7 +583,7 @@ export async function syncBuyerSearchProfileInTransaction(
  tx: import("@/lib/db/tenant-client").TenantTransaction,
  input: {session:AppSession;profile:Partial<BuyerSearchProfile> & Record<string,unknown>}
 ) {
- return tx.queryOne<{id:string}>(`
+ const saved = await tx.queryOne<{id:string}>(`
   insert into buyer_search_profiles (
    workspace_id,project_id,buyer_lead_id,contact_id,title,budget_from_cents,budget_to_cents,
    financing_status,desired_location,property_type,rooms,area_sqm,must_have_criteria,
@@ -594,6 +596,8 @@ export async function syncBuyerSearchProfileInTransaction(
    metadata=buyer_search_profiles.metadata || excluded.metadata,updated_at=now()
   returning id
  `,buyerSearchProfileParams(input.session,input.profile));
+ if(saved)await recordBuyerProfileCompletion(input.session,saved.id);
+ return saved;
 }
 
 export async function upsertBrokerMandate(input: Parameters<typeof upsertBrokerMandateInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertBrokerMandateInTransaction> {

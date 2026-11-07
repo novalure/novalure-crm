@@ -190,7 +190,7 @@ test("one-time ledger and explicit signed exceptions fail closed in source", asy
   assert.match(webhook, /verifyMetaWebhookSignature/);
   assert.match(cronRuntime, /timingSafeEqual/);
   assert.match(cronRuntime, /CRON_SECRET/);
-  assert.match(client, /requestCsrfToken\(method, url\.pathname\)/);
+  assert.match(client, /requestCsrfToken\(method, url\.pathname, signal\)/);
   assert.match(client, /headers\.set\(csrfHeaderName, token\)/);
   assert.doesNotMatch(client, /csrfTokenCache|cachedCsrf/);
 });

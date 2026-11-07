@@ -46,6 +46,8 @@ function PropertyInquiryAssignmentScope({
   const [propertyId, setPropertyId] = useState("");
   const [unitId, setUnitId] = useState("");
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const pending = useRef<{ body: string; idempotencyKey: string; correlationId: string } | null>(null);
   const generation = useRef(0);
   const mounted = useRef(false);
   const endpoint = propertyWorkspaceEndpoint("/api/crm/properties", workspaceId);
@@ -83,11 +85,11 @@ function PropertyInquiryAssignmentScope({
     : de ? "Noch keine bestätigte Zuordnung" : "No confirmed assignment yet";
 
   async function submitAssignment() {
-    if (!canAssign || loading || loadFailed || !candidate || !target || unchanged || isMutationBusy) return;
+    if (!canAssign || loading || loadFailed || !candidate || !target || (!uncertain && unchanged) || isMutationBusy) return;
     if (unitId && !targetUnits.some((unit) => unit.id === unitId)) return;
     const unitName = targetUnits.find((unit) => unit.id === unitId)?.unitNumber;
     const targetName = `${target.title}${unitName ? ` · ${de ? "Einheit" : "Unit"} ${unitName}` : ""}`;
-    if (!window.confirm(de
+    if (!pending.current && !window.confirm(de
       ? `Anfrage von ${candidate.contactName} verbindlich der Immobilie „${targetName}“ zuordnen?${candidate.assignment ? ` Die bisherige Zuordnung „${assignmentLabel(candidate)}“ wird ersetzt.` : ""} Es wird kein Deal und keine Reservierung angelegt.`
       : `Confirm assigning ${candidate.contactName}'s inquiry to “${targetName}”?${candidate.assignment ? ` This replaces “${assignmentLabel(candidate)}”.` : ""} No deal or reservation will be created.`)) return;
     const token = acquireMutation();
@@ -95,21 +97,27 @@ function PropertyInquiryAssignmentScope({
     const scopeGeneration = generation.current;
     const canUpdate = () => mounted.current && generation.current === scopeGeneration;
     setNotice(null);
+    let saved = false;
     try {
+      pending.current ??= { body: JSON.stringify({ operation: "assign_inquiry", leadId: candidate.leadId, propertyId,
+        unitId: unitId || null, expectedVersion: candidate.assignment?.version ?? null, confirmed: true }), idempotencyKey: crypto.randomUUID(), correlationId: crypto.randomUUID() };
+      const command = pending.current;
       const response = await csrfFetch(endpoint, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operation: "assign_inquiry", leadId: candidate.leadId, propertyId,
-          unitId: unitId || null, expectedVersion: candidate.assignment?.version ?? null, confirmed: true }),
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": command.idempotencyKey, "X-Correlation-Id": command.correlationId },
+        body: command.body,
       });
       const payload: unknown = await response.json();
       if (!response.ok || !isConfirmedInquiryResponse(payload, candidate.leadId, propertyId, unitId || null)) {
+        if (response.status < 500 && !response.ok) pending.current = null;
         throw new Error(de ? "Zuordnung nicht bestätigt. Bitte den Stand neu laden und erneut prüfen." : "Assignment not confirmed. Reload the current state and review again.");
       }
+      saved = true; pending.current = null; setUncertain(false);
       if (canUpdate()) {
         setCandidates((current) => current.map((entry) => entry.leadId === candidate.leadId ? payload.data : entry));
         setNotice({ error: false, text: de ? `Gespeichert: ${candidate.contactName} → ${targetName}.` : `Saved: ${candidate.contactName} → ${targetName}.` });
       }
       try {
+        await reload();
         await onRefresh?.();
       } catch {
         if (canUpdate()) setNotice({ error: false, text: de
@@ -117,7 +125,7 @@ function PropertyInquiryAssignmentScope({
           : "The assignment was saved. Other CRM views could not be refreshed. Reload; do not assign again." });
       }
     } catch (error) {
-      if (canUpdate()) setNotice({ error: true, text: error instanceof Error ? error.message : de ? "Zuordnung konnte nicht bestätigt werden." : "Assignment could not be confirmed." });
+      if (canUpdate()) { setUncertain(Boolean(pending.current)); setNotice({ error: true, text: pending.current ? (de ? "Das Ergebnis ist ungeklärt. Mit „Ergebnis erneut prüfen“ denselben Vorgang wiederholen; er wird nur einmal gespeichert. Diese Ansicht bis zur Klärung offen halten." : "The result is unknown. Use ‘Check result again’ to retry the same command; it is only saved once. Keep this view open until resolved.") : saved ? (de ? "Gespeichert. Bitte die Ansicht neu laden." : "Saved. Please reload this view.") : error instanceof Error ? error.message : de ? "Zuordnung konnte nicht bestätigt werden." : "Assignment could not be confirmed." }); }
     } finally {
       releaseMutation(token);
     }
@@ -137,7 +145,7 @@ function PropertyInquiryAssignmentScope({
       : "Suggestions are not saved relationships. A confirmed assignment links an existing inquiry to a saved property in the same project. Leads, buyers, deals and reservations are not changed."}</p>
     {notice ? <p ref={noticeRef} tabIndex={-1} aria-atomic="true" className={`break-words rounded-md border p-3 text-sm ${focusClass} ${notice.error ? "border-red-200 bg-red-50 text-red-800" : "border-stone-200 bg-stone-50 text-stone-800"}`} role={notice.error ? "alert" : "status"}>{notice.text}</p> : null}
     {loadFailed ? <p className="text-sm text-red-800" role="alert">{de ? "Gespeicherte Zuordnungen konnten nicht geladen werden. Zuordnen bleibt gesperrt, bis der Datenbankstand wieder verfügbar ist." : "Saved assignments could not be loaded. Assignment is disabled until the database state is available."}</p> : null}
-    <button className={`min-h-11 justify-self-start rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${focusClass}`} disabled={isMutationBusy || loading} onClick={() => void refreshAssignments()} type="button">{loading ? (de ? "Lädt …" : "Loading …") : (de ? "Zuordnungen neu laden" : "Reload assignments")}</button>
+    <button className={`min-h-11 justify-self-start rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${focusClass}`} disabled={isMutationBusy || loading || uncertain} onClick={() => void refreshAssignments()} type="button">{loading ? (de ? "Lädt …" : "Loading …") : (de ? "Zuordnungen neu laden" : "Reload assignments")}</button>
     <p role="status" aria-atomic="true" className="text-sm text-stone-600">{loading
       ? (de ? "Gespeicherte Anfragen und Zuordnungen werden geladen …" : "Loading saved inquiries and assignments …")
       : loadFailed ? (de ? "Aktueller Datenstand nicht verfügbar. Bitte erneut laden." : "Current data is unavailable. Please reload.")
@@ -154,18 +162,18 @@ function PropertyInquiryAssignmentScope({
     </ul> : null}
     <form aria-label={de ? "Anfrage verbindlich zuordnen" : "Confirm inquiry assignment"} aria-describedby={helpId} aria-busy={isMutationBusy || loading} onSubmit={(event) => { event.preventDefault(); void submitAssignment(); }} className="grid min-w-0 gap-3 rounded-md border border-stone-200 bg-stone-50 p-4 md:grid-cols-3">
       <label className="grid min-w-0 content-start gap-1 text-sm font-semibold">{de ? "1. Anfrage auswählen" : "1. Select inquiry"}
-        <select className={controlClass} name="inquiry" required disabled={isMutationBusy || loading || loadFailed || !canAssign || !candidates.length} value={leadId} onChange={(event) => {
+        <select className={controlClass} name="inquiry" required disabled={isMutationBusy || uncertain || loading || loadFailed || !canAssign || !candidates.length} value={leadId} onChange={(event) => {
           const next = candidates.find((entry) => entry.leadId === event.target.value);
           setLeadId(event.target.value); setPropertyId(next?.assignment?.propertyId ?? ""); setUnitId(next?.assignment?.unitId ?? ""); setNotice(null);
         }}><option value="">{de ? "Bitte auswählen" : "Please select"}</option>{candidates.map((entry) => <option key={entry.leadId} value={entry.leadId}>{entry.contactName} · {getCrmSystemTextLabel(entry.intent, language)}</option>)}</select>
       </label>
       <label className="grid min-w-0 content-start gap-1 text-sm font-semibold">{de ? "2. Gespeicherte Immobilie" : "2. Saved property"}
-        <select className={controlClass} name="property" required aria-describedby={targetHelpId} disabled={isMutationBusy || loading || !candidate || !canAssign || loadFailed || !targets.length} value={target ? propertyId : ""} onChange={(event) => { setPropertyId(event.target.value); setUnitId(""); setNotice(null); }}>
+        <select className={controlClass} name="property" required aria-describedby={targetHelpId} disabled={isMutationBusy || uncertain || loading || !candidate || !canAssign || loadFailed || !targets.length} value={target ? propertyId : ""} onChange={(event) => { setPropertyId(event.target.value); setUnitId(""); setNotice(null); }}>
           <option value="">{de ? "Bitte auswählen" : "Please select"}</option>{targets.map((asset) => <option key={asset.id} value={asset.sellerListingId}>{asset.title} · {asset.projectName}</option>)}
         </select>
       </label>
       <label className="grid min-w-0 content-start gap-1 text-sm font-semibold">{de ? "3. Verknüpfte Einheit (optional)" : "3. Linked unit (optional)"}
-        <select className={controlClass} name="unit" aria-describedby={unitHelpId} disabled={isMutationBusy || loading || !target || !canAssign || loadFailed || !targetUnits.length} value={unitId} onChange={(event) => { setUnitId(event.target.value); setNotice(null); }}>
+        <select className={controlClass} name="unit" aria-describedby={unitHelpId} disabled={isMutationBusy || uncertain || loading || !target || !canAssign || loadFailed || !targetUnits.length} value={unitId} onChange={(event) => { setUnitId(event.target.value); setNotice(null); }}>
           <option value="">{de ? "Nur Immobilie, keine Einheit" : "Property only, no unit"}</option>{targetUnits.map((unit) => <option key={unit.id} value={unit.id}>{de ? "Einheit" : "Unit"} {unit.unitNumber}</option>)}
         </select>
       </label>
@@ -174,7 +182,7 @@ function PropertyInquiryAssignmentScope({
       {candidate && !targets.length ? <p className="text-sm text-stone-600 md:col-span-3">{de ? "Keine gespeicherte Immobilie im selben Projekt verfügbar. Bitte zuerst das passende Objekt anlegen; die Projektzuordnung des Leads wird hier nicht automatisch geändert." : "No saved property is available in the same project. Create the matching property first; the lead's project is never changed automatically here."}</p> : null}
       {!canAssign ? <p className="text-sm text-stone-600 md:col-span-3">{disabledReason || (de ? "Keine Berechtigung zum Zuordnen." : "Assignment permission is required.")}</p> : null}
       {unchanged ? <p role="status" className="text-sm text-stone-600 md:col-span-3">{de ? "Diese Zuordnung ist bereits gespeichert. Wähle ein anderes Ziel, wenn du sie ändern möchtest." : "This assignment is already saved. Choose a different target to change it."}</p> : null}
-      <button className={`min-h-11 justify-self-start rounded-md bg-[var(--brand-primary,#f6d95d)] px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 md:col-span-3 ${focusClass}`} disabled={!canAssign || loading || loadFailed || !candidate || !target || unchanged || isMutationBusy} type="submit">{de ? (candidate?.assignment ? "Neue Zuordnung bestätigen und speichern" : "Zuordnung bestätigen und speichern") : (candidate?.assignment ? "Confirm and save reassignment" : "Confirm and save assignment")}</button>
+      <button className={`min-h-11 justify-self-start rounded-md bg-[var(--brand-primary,#f6d95d)] px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 md:col-span-3 ${focusClass}`} disabled={!canAssign || loading || loadFailed || !candidate || !target || (!uncertain && unchanged) || isMutationBusy} type="submit">{uncertain ? (de ? "Ergebnis erneut prüfen" : "Check result again") : de ? (candidate?.assignment ? "Neue Zuordnung bestätigen und speichern" : "Zuordnung bestätigen und speichern") : (candidate?.assignment ? "Confirm and save reassignment" : "Confirm and save assignment")}</button>
     </form>
   </section>;
 }

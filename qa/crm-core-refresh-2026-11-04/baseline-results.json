@@ -1,0 +1,16 @@
+{
+  "localOnly": true,
+  "actualCrmWorkspace": true,
+  "unrelatedChildrenStubbed": true,
+  "syntheticHttp": true,
+  "databaseIntegration": false,
+  "baselineReproduction": true,
+  "baselineRevision": "933a54660fa0be1368bd8b32dc077451cdb63bd6",
+  "results": [
+    {
+      "name": "immutable baseline reproduces late property A data overwriting active workspace B",
+      "status": "PASS"
+    }
+  ],
+  "browserErrors": []
+}

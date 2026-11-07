@@ -1,235 +1,44 @@
-import { NextResponse } from "next/server";
-import { requirePermission, type AppSession } from "@/lib/auth/session";
-import { findFunnelBlueprint } from "@/lib/funnel-builder-adapter";
-import { funnelSteps, funnels, projects, users } from "@/lib/crm-source";
-import { persistFunnelSubmission, persistFunnelTestSubmission } from "@/lib/db/runtime-repositories";
-import { getStoredFunnel } from "@/lib/funnel-store";
-import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
-import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
-import { getProductRoleCapabilities } from "@/lib/product-model";
-
-type RouteContext = {
-  params: Promise<{ funnelId: string }>;
-};
-
-function hasRequiredConsent(payload: FunnelSubmissionPayload) {
-  return payload.consent.privacy === true;
-}
-
-function scoreAnswers(payload: FunnelSubmissionPayload) {
-  return Object.values(payload.answers).reduce<number>((score, value) => {
-    if (value === true) return score + 5;
-    if (typeof value === "number" && value > 0) return score + Math.min(20, value);
-    if (typeof value === "string" && value.trim()) return score + 10;
-    if (Array.isArray(value) && value.length > 0) return score + value.length * 5;
-    return score;
-  }, 0);
-}
-
-function cleanString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : "";
-}
-
-function getRequestToken(request: Request) {
-  const url = new URL(request.url);
-
-  return cleanString(url.searchParams.get("token"))
-    || cleanString(request.headers.get("x-novalure-funnel-token"))
-    || cleanString(request.headers.get("x-funnel-token"));
-}
-
-function getTrackingToken(blueprint: FunnelBlueprint, storedTracking: Record<string, unknown> | undefined) {
-  const blueprintTracking = blueprint.tracking as Record<string, unknown>;
-
-  return cleanString(storedTracking?.publishToken)
-    || cleanString(storedTracking?.publicToken)
-    || cleanString(blueprintTracking.publishToken)
-    || cleanString(blueprintTracking.publicToken);
-}
-
-function canUsePublicLiveFunnel(input: {
-  blueprint: FunnelBlueprint;
-  request: Request;
-  stored: Awaited<ReturnType<typeof getStoredFunnel>>;
-}) {
-  if (!input.stored || input.stored.source !== "database") return false;
-
-  const token = getRequestToken(input.request);
-  const expectedToken = getTrackingToken(input.blueprint, input.stored.tracking);
-  if (expectedToken && token && expectedToken === token) return true;
-
-  return input.stored.status === "aktiv" || input.blueprint.status === "aktiv";
-}
-
-function runFunnelPreflight(blueprint: FunnelBlueprint) {
-  const blockers: string[] = [];
-  const formFields = collectFunnelFormFields(blueprint);
-
-  if (!cleanString(blueprint.name)) blockers.push("name_missing");
-  if (!cleanString(blueprint.projectId)) blockers.push("project_missing");
-  if (formFields.length === 0) blockers.push("contact_form_missing");
-  if (!hasPrivacyConsentField(formFields)) blockers.push("privacy_consent_missing");
-  if (!cleanString(blueprint.crmHandover?.destination)) blockers.push("crm_handover_missing");
-
-  for (const field of formFields) {
-    const required = Boolean(field.required);
-    const label = cleanString(field.label);
-    if (required && !label) blockers.push(`required_field_label_missing:${cleanString(field.id) || "unknown"}`);
-  }
-
-  return { blockers, ok: blockers.length === 0 };
-}
-
-function collectFunnelFormFields(blueprint: FunnelBlueprint) {
-  const fields: Array<Record<string, unknown>> = [];
-  for (const page of blueprint.pages ?? []) {
-    for (const section of page.sections ?? []) {
-      for (const row of section.rows ?? []) {
-        for (const column of row.columns ?? []) {
-          for (const element of column.elements ?? []) {
-            const candidate = element as Record<string, unknown>;
-            if (candidate.type !== "form") continue;
-            const elementFields = Array.isArray(candidate.fields) ? candidate.fields : [];
-            fields.push(...elementFields.filter((field): field is Record<string, unknown> => Boolean(field) && typeof field === "object"));
-          }
-        }
-      }
-    }
-  }
-
-  return fields;
-}
-
-function hasPrivacyConsentField(fields: Array<Record<string, unknown>>) {
-  return fields.some((field) => {
-    const searchable = [
-      field.type,
-      field.crmField,
-      field.name,
-      field.label,
-      field.helpText,
-    ].map((value) => String(value ?? "").toLowerCase()).join(" ");
-
-    return searchable.includes("privacy")
-      || searchable.includes("datenschutz")
-      || searchable.includes("consent")
-      || searchable.includes("dsgvo")
-      || searchable.includes("gdpr");
-  });
-}
-
-function createPublicFunnelSession(input: {
-  blueprint: FunnelBlueprint;
-  stored: NonNullable<Awaited<ReturnType<typeof getStoredFunnel>>>;
-}): AppSession {
-  return {
-    authenticated: true,
-    email: "funnel@novalure.local",
-    name: "Public Funnel Runtime",
-    permissions: [],
-    productPermissions: getProductRoleCapabilities("assistant_backoffice"),
-    productRole: "assistant_backoffice",
-    role: "owner",
-    source: "database",
-    userId: input.stored.ownerUserId ?? "public-funnel-runtime",
-    workspaceId: input.stored.workspaceId ?? input.blueprint.workspaceId,
-    workspaceName: input.stored.workspaceName ?? "Novalure",
-  };
-}
-
-export async function POST(request: Request, context: RouteContext) {
-  const text = getApiSystemCopy(resolveRequestLanguage(request));
-  const { funnelId } = await context.params;
-  const stored = await getStoredFunnel(funnelId);
-  const fallback = findFunnelBlueprint(funnelId, { funnels, projects, steps: funnelSteps, users });
-  const blueprint = stored?.blueprint ?? fallback;
-
-  if (!blueprint) {
-    return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
-  }
-
-  let payload: FunnelSubmissionPayload;
-  try {
-    payload = (await request.json()) as FunnelSubmissionPayload;
-  } catch {
-    return NextResponse.json({ error: text.invalidJson }, { status: 400 });
-  }
-
-  if (payload.funnelId !== funnelId) {
-    return NextResponse.json({ error: text.funnelMismatch }, { status: 400 });
-  }
-
-  if (!hasRequiredConsent(payload)) {
-    return NextResponse.json({ error: text.privacyConsentRequired }, { status: 422 });
-  }
-
-  const auth =
-    payload.mode === "test"
-      ? await requirePermission(request, "funnels:write")
-      : null;
-
-  if (auth && !auth.ok) return auth.response;
-
-  if (payload.mode === "live") {
-    if (!canUsePublicLiveFunnel({ blueprint, request, stored })) {
-      return NextResponse.json({ error: "Funnel is not published or token is invalid." }, { status: 403 });
-    }
-
-    const preflight = runFunnelPreflight(blueprint);
-    if (!preflight.ok) {
-      return NextResponse.json({ error: "Funnel live preflight is blocked.", preflight }, { status: 403 });
-    }
-  }
-
-  const score = scoreAnswers(payload);
-  const submissionId = `${payload.mode}_submission_${new Date().getTime()}`;
-  const eventId = `${funnelId}_${submissionId}`;
-  const session =
-    payload.mode === "live" && stored
-      ? createPublicFunnelSession({ blueprint, stored })
-      : auth?.session;
-
-  if (!session) {
-    return NextResponse.json({ error: "Funnel session could not be resolved." }, { status: 403 });
-  }
-
-  const persistence = payload.mode === "live"
-    ? await persistFunnelSubmission({
-        session,
-        blueprint,
-        payload,
-        score,
-      })
-    : await persistFunnelTestSubmission({
-        session,
-        blueprint,
-        payload,
-        score,
-      });
-
-  return NextResponse.json({
-    ok: true,
-    mode: payload.mode,
-    submissionId: persistence.persisted ? (persistence.ids.submissionId ?? submissionId) : submissionId,
-    eventId,
-    persisted: persistence.persisted,
-    persistence,
-    leadPreview: {
-      funnelId,
-      destination: blueprint.crmHandover.destination,
-      pipelineStage: blueprint.crmHandover.pipelineStage,
-      score,
-      createsLeadInboxEntry: blueprint.crmHandover.createLeadInboxEntry,
-      createsTask: blueprint.crmHandover.createTask,
-      createsAppointment: blueprint.crmHandover.createAppointment,
-    },
-    trackingPreview: {
-      consentMode: blueprint.tracking.consentMode,
-      metaPixelReady: Boolean(blueprint.tracking.metaPixelId),
-      metaCapiReady: Boolean(blueprint.tracking.metaCapiToken),
-      ga4Ready: Boolean(blueprint.tracking.gaMeasurementId),
-      gtmReady: Boolean(blueprint.tracking.gtmId),
-      webhookReady: Boolean(blueprint.tracking.webhookUrl),
-    },
-  });
-}
+import {readFunnelJson} from '@/lib/funnel-http';
+import {createHash} from 'node:crypto';
+import {NextResponse} from 'next/server';
+import {requirePermission} from '@/lib/auth/session';
+import {CrmCommandError,crmCommandErrorResponse,crmPayloadDigest,withCrmRead,assertProjectGrant} from '@/lib/crm-command';
+import {queryOne,withPublicSubmissionTransaction} from '@/lib/db/client';
+import {persistFunnelSubmission,persistFunnelTestSubmission} from '@/lib/db/runtime-repositories';
+import {getStoredFunnel,getPublishedFunnel} from '@/lib/funnel-store';
+import {parseFunnelSubmission,runFunnelPreflight} from '@/lib/funnel-validation';
+import {hasProductCapability} from '@/lib/product-model';
+type RouteContext={params:Promise<{funnelId:string}>};
+const token=(request:Request)=>new URL(request.url).searchParams.get('token')??request.headers.get('x-novalure-funnel-token')??'';
+export async function POST(request:Request,context:RouteContext){try{
+ const {funnelId}=await context.params,body=await readFunnelJson(request,85000);
+ if(body.mode!=='test'&&body.mode!=='live')throw new CrmCommandError('INVALID_MODE','Anfragemodus prüfen.');
+ if(body.mode==='test'){
+  const auth=await requirePermission(request,'funnels:write');if(!auth.ok)return auth.response;
+  const saved=await getStoredFunnel(funnelId,auth.session);if(!saved)return NextResponse.json({error:'Funnel nicht gefunden.'},{status:404});
+  const payload=parseFunnelSubmission(body,saved.blueprint);
+  const persistence=await withCrmRead(auth.session,async(tx,fresh)=>{await assertProjectGrant(tx,fresh,saved.projectId,true);return persistFunnelTestSubmission({session:fresh,blueprint:saved.blueprint,payload,score:0});});
+  if(!persistence.persisted)throw new CrmCommandError('PERSISTENCE_REQUIRED','Testanfrage wurde nicht gespeichert.',503);
+  return NextResponse.json({ok:true,mode:'test',persisted:true,submissionId:persistence.ids.submissionId,persistence});
+ }
+ const published=await getPublishedFunnel(funnelId,token(request));if(!published)throw new CrmCommandError('FUNNEL_UNAVAILABLE','Dieser Funnel ist nicht veröffentlicht oder der Link ist ungültig.',404);
+ const payload=parseFunnelSubmission(body,published.blueprint),preflight=runFunnelPreflight(published.blueprint);
+ const requestKey=request.headers.get('idempotency-key')??'';
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey))throw new CrmCommandError('IDEMPOTENCY_REQUIRED','Bitte die Anfrage erneut über das Formular senden.');
+ const idempotencyKey='funnel:'+createHash('sha256').update(published.funnelId+':'+published.versionId+':'+requestKey).digest('hex');
+ if(!preflight.ok)throw new CrmCommandError('PUBLISH_BLOCKED','Dieser Funnel nimmt derzeit keine Anfragen entgegen.',409);
+ const persistence=await withPublicSubmissionTransaction({actorId:published.session.userId,workspaceId:published.session.workspaceId},async()=>{
+  // Lock original scope and recheck publication after opening the same write transaction.
+  const row=await queryOne<{id:string}>(`select id from funnels where workspace_id=$1::uuid and project_id=$2::uuid and id=$3::uuid and status='aktiv' for update`,[published.session.workspaceId,published.blueprint.projectId,published.funnelId]);
+  const member=await queryOne<{role:string;productRole:string}>('select role,product_role as "productRole" from crm_lock_active_member($1::uuid,$2::uuid)',[published.session.workspaceId,published.session.userId]);
+  const allowed=await queryOne<{allowed:boolean}>('select crm_lock_project_access($1::uuid,$2::uuid,true) as allowed',[published.session.workspaceId,published.blueprint.projectId]);
+  const current=await getPublishedFunnel(funnelId,token(request));
+  if(!row||!member||!allowed?.allowed||!hasProductCapability(member.productRole as typeof published.session.productRole,'funnels:publish')||current?.versionId!==published.versionId)throw new CrmCommandError('FUNNEL_REVOKED','Funnel oder Projektfreigabe wurde geändert.',409);
+  const prior=await queryOne<{id:string;payload:unknown}>('select id,raw_payload as payload from funnel_submissions where workspace_id=$1::uuid and idempotency_key=$2',[published.session.workspaceId,idempotencyKey]);
+  if(prior){if(crmPayloadDigest(prior.payload)!==crmPayloadDigest(payload))throw new CrmCommandError('IDEMPOTENCY_CONFLICT','Die Anfrage wurde mit anderen Angaben bereits gesendet.',409);return {persisted:true as const,ids:{submissionId:prior.id}};}
+  return persistFunnelSubmission({session:published.session,blueprint:published.blueprint,payload,score:0,idempotencyKey});
+ });
+ if(!persistence.persisted||!persistence.ids.submissionId)throw new CrmCommandError('PERSISTENCE_REQUIRED','Die Anfrage wurde nicht gespeichert.',503);
+ // Public response contains no contact/lead/task IDs or internal scoring.
+ return NextResponse.json({ok:true,mode:'live',persisted:true,submissionId:persistence.ids.submissionId});
+ }catch(error){return crmCommandErrorResponse(error);}}

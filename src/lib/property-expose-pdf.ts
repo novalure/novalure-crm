@@ -10,6 +10,7 @@ const COLOR = { paper: "#faf9f7", ink: "#292a26", muted: "#66685f", line: "#e3e2
 const COPY = {
   de: { eyebrow: "IMMOBILIENEXPOSÉ", facts: "Auf einen Blick", costs: "Kosten", energy: "Energie & Gebäude", gallery: "Einblicke", floorplans: "Grundrisse", contact: "Ihr Kontakt", notices: "Hinweise", reference: "Objekt", date: "Stand", page: "Seite", photo: "Objektansicht", plan: "Grundriss", compact: "Die ausgewählten Inhalte passen nicht auf zwei Seiten. Bitte kürzen Sie den Exposétext, wählen Sie weniger Bilder oder verwenden Sie die vollständige Vorlage.", long: "Der Inhalt ist zu umfangreich für ein Exposé. Bitte reduzieren Sie die Auswahl.", glyph: "Der Exposétext enthält Zeichen, die die PDF-Schrift nicht unterstützt. Bitte ersetzen Sie diese Zeichen:", image: "Ein ausgewähltes Bild kann nicht im PDF dargestellt werden. Bitte laden Sie es erneut als JPEG oder PNG hoch." },
   en: { eyebrow: "PROPERTY DETAILS", facts: "At a glance", costs: "Costs", energy: "Energy & building", gallery: "A closer look", floorplans: "Floor plans", contact: "Your contact", notices: "Notes", reference: "Reference", date: "As of", page: "Page", photo: "Property photograph", plan: "Floor plan", compact: "The selected content does not fit on two pages. Shorten the brochure text, select fewer images or use the full template.", long: "There is too much content for one brochure. Please reduce the selection.", glyph: "The brochure text contains characters that the PDF font does not support. Please replace these characters:", image: "A selected image cannot be displayed in the PDF. Please upload it again as a JPEG or PNG." },
+  es: { eyebrow: "DOSSIER DEL INMUEBLE", facts: "Datos principales", costs: "Gastos", energy: "Energía y edificio", gallery: "Imágenes", floorplans: "Planos", contact: "Su contacto", notices: "Avisos", reference: "Referencia", date: "Información a fecha de", page: "Página", photo: "Fotografía del inmueble", plan: "Plano", compact: "El contenido seleccionado no cabe en dos páginas. Acorte el texto, seleccione menos imágenes o utilice la plantilla completa.", long: "El contenido del dossier es demasiado extenso. Reduzca la selección.", glyph: "El texto contiene caracteres que la fuente PDF no admite. Sustituya estos caracteres:", image: "Una imagen no se puede mostrar en el PDF. Vuelva a cargarla en formato JPEG o PNG." },
 };
 
 export class PropertyExposePdfError extends Error {
@@ -34,14 +35,16 @@ function clean(value: string): string {
 export async function renderPropertyExposePdf(document: PropertyExposeDocument): Promise<Uint8Array> {
   const copy = COPY[document.language];
   const compact = document.template === "compact";
-  if (!copy || !["compact", "full"].includes(document.template) || !clean(document.title) || !Number.isFinite(Date.parse(document.createdAt))) {
+  if (!copy || !["compact", "full"].includes(document.template) || !clean(document.title) || !Number.isFinite(Date.parse(document.createdAt)) ||
+      (document.locale !== undefined && !["de-AT", "de-DE", "es-ES", "en-IE", "de", "en", "es"].includes(document.locale))) {
     throw new PropertyExposePdfError("INVALID_DOCUMENT", "Invalid property brochure document.");
   }
   const [font, semibold] = await Promise.all([
     readFile(path.join(process.cwd(), "src/lib/property-expose-assets/figtree-regular.ttf")),
     readFile(path.join(process.cwd(), "src/lib/property-expose-assets/figtree-semibold.ttf")),
   ]);
-  const date = new Intl.DateTimeFormat(document.language === "de" ? "de-AT" : "en-GB", { dateStyle: "medium", timeZone: "Europe/Vienna" }).format(new Date(document.createdAt));
+  const locale = document.locale ?? (document.language === "de" ? "de-AT" : document.language === "es" ? "es-ES" : "en-GB");
+  const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "Europe/Vienna" }).format(new Date(document.createdAt));
   const pdfPlans: { page: PDFPage; caption: string; width: number; height: number; rotation: number; box: { left: number; bottom: number; right: number; top: number } }[] = [];
   for (const source of document.floorPlanPdfs || []) {
     try {
@@ -54,7 +57,7 @@ export async function renderPropertyExposePdf(document: PropertyExposeDocument):
           box: { left: crop.x, bottom: crop.y, right: crop.x + crop.width, top: crop.y + crop.height },
           caption: `${clean(source.caption) || copy.plan}${source.pageCount > 1 ? ` - ${copy.page} ${index + 1} / ${source.pageCount}` : ""}` });
       }
-    } catch { throw new PropertyExposePdfError("INVALID_FLOORPLAN", document.language === "de" ? "Ein PDF-Grundriss konnte nicht gelesen werden. Bitte prüfen Sie die Datei." : "A PDF floor plan could not be read. Please check the file."); }
+    } catch { throw new PropertyExposePdfError("INVALID_FLOORPLAN", document.language === "de" ? "Ein PDF-Grundriss konnte nicht gelesen werden. Bitte prüfen Sie die Datei." : document.language === "es" ? "No se pudo leer un plano PDF. Compruebe el archivo." : "A PDF floor plan could not be read. Please check the file."); }
   }
   if (pdfPlans.length > 40) throw new PropertyExposePdfError("EXPOSE_TOO_LONG", copy.long);
   const placements: { outputPage: number; source: typeof pdfPlans[number]; name: string }[] = [];
@@ -62,7 +65,7 @@ export async function renderPropertyExposePdf(document: PropertyExposeDocument):
   const pdfBytes = await new Promise<Uint8Array>((resolve, reject) => {
     const pdf = new PDFDocument({
       autoFirstPage: false, bufferPages: true, size: "A4", margins: { top: 0, bottom: 0, left: 0, right: 0 },
-      pdfVersion: "1.7", tagged: true, displayTitle: true, lang: document.language === "de" ? "de-AT" : "en-GB",
+      pdfVersion: "1.7", tagged: true, displayTitle: true, lang: document.language,
       info: { Title: clean(document.title), Author: clean(document.contact?.company || "Novalure"), Subject: `${copy.eyebrow} - ${clean(document.reference)}`, Creator: "Novalure CRM", CreationDate: new Date(document.createdAt), ModDate: new Date(document.createdAt) },
     });
     const chunks: Buffer[] = [];
@@ -76,7 +79,7 @@ export async function renderPropertyExposePdf(document: PropertyExposeDocument):
       // when an uncommon name/emoji is outside this existing Latin font subset.
       const embedded = (pdf as unknown as { _font: { font: { hasGlyphForCodePoint: (point: number) => boolean } } })._font.font;
       const visibleText = [document.title, document.reference, document.address, document.price,
-        ...document.facts.flatMap((fact) => [fact.label, fact.value]), ...document.costs.flatMap((fact) => [fact.label, fact.value]),
+        ...document.facts.flatMap((fact) => [fact.label, fact.value]), ...(document.detailGroups ?? []).flatMap(group => [group.heading, ...group.facts.flatMap(fact => [fact.label, fact.value])]), ...document.costs.flatMap((fact) => [fact.label, fact.value]),
         ...document.energy.flatMap((fact) => [fact.label, fact.value]), ...document.sections.flatMap((section) => [section.heading, section.text]),
         ...Object.values(document.contact || {}), ...document.images.map((image) => image.caption), ...pdfPlans.map((plan) => plan.caption), ...document.notices].filter((value): value is string => typeof value === "string");
       if (visibleText.reduce((sum, text) => sum + text.length, 0) > 100_000 || document.images.length > 28) throw new PropertyExposePdfError("EXPOSE_TOO_LONG", copy.long);
@@ -186,6 +189,21 @@ export async function renderPropertyExposePdf(document: PropertyExposeDocument):
         }
         y += compact ? 6 : 10;
       };
+      const detailRowHeight = (items: PropertyExposeFact[]) => Math.max(...items.slice(0, 3).map(item => wrap(`${item.label}: ${item.value}`, 10, (WIDTH - 24) / 3 - 20).length * 15 + 18)) + 8;
+      const detailFacts = (items: PropertyExposeFact[]) => {
+        const width = (WIDTH - 24) / 3;
+        for (let offset = 0; offset < items.length; offset += 3) {
+          const row = items.slice(offset, offset + 3), height = detailRowHeight(row) - 8;
+          ensure(height + 8);
+          row.forEach((item, index) => {
+            const x = PAGE.margin + index * (width + 12);
+            artifact(() => pdf.roundedRect(x, y, width, height, 6).fill(COLOR.white));
+            text(`${item.label}: ${item.value}`, x + 10, y + 9, 10, width - 20, "P", COLOR.ink, 15);
+          });
+          y += height + 8;
+        }
+        y += 6;
+      };
       const photo = (image: PropertyExposeImage, x: number, top: number, width: number, height: number, contain: boolean) => {
         const alt = clean(image.caption) || (contain ? copy.plan : copy.photo);
         artifact(() => pdf.roundedRect(x, top, width, height, 8).fill(COLOR.white));
@@ -227,6 +245,9 @@ export async function renderPropertyExposePdf(document: PropertyExposeDocument):
         y += compact ? 10 : 18;
       }
       if (document.facts.length) { heading(copy.facts, factRowHeight(document.facts, 3)); facts(document.facts); }
+      for (const group of document.detailGroups ?? []) {
+        if (group.facts.length) { section(); heading(group.heading, detailRowHeight(group.facts)); detailFacts(group.facts); }
+      }
       for (const entry of document.sections) {
         if (!clean(entry.text)) continue;
         section(); heading(entry.heading); paragraph(entry.text);

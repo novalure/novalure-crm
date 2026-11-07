@@ -688,6 +688,21 @@ test("connected-assistant quota requires the checksummed Knowledge Center predec
   assert.deepEqual(createMigrationPlan({ ledgerRows: [...ledgerRows, ledgerRow(migrations[1].version, "sha-108")], migrations, only: "" }), []);
 });
 
+test("private Exposé draft migration requires the exact checksummed public price guard", () => {
+  const predecessor = migration("198_property_website_price_visibility", "sha-198");
+  const draft = migration("199_private_expose_price_hidden_draft", "sha-199");
+  const migrations = [predecessor, draft];
+  const only = draft.version;
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [], migrations, only: "" }), [predecessor, draft]);
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only }), /required predecessor 198_property_website_price_visibility/);
+  const missing = [ledgerRow(predecessor.version, null)];
+  assert.throws(() => createMigrationPlan({ ledgerRows: missing, migrations, only }), /Missing checksum for 198_property_website_price_visibility/);
+  assert.throws(() => createMigrationPlan({ ledgerRows: missing, migrations, only: "" }), /Missing checksum for 198_property_website_price_visibility/);
+  assert.throws(() => createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, "wrong")], migrations, only }), /Checksum mismatch for 198_property_website_price_visibility/);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only }), [draft]);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow("198", predecessor.checksum)], migrations, only }), [draft]);
+});
+
 test("customer provisioning stays manual and requires the checksummed assistant quota predecessor", () => {
   const knowledge = migration("101_knowledge_center", "sha-101");
   const quota = migration("108_knowledge_connected_assistant_quota", "sha-108");
@@ -864,6 +879,22 @@ test("a manual cutover requires a single explicit version and opt-in flag", () =
   assert.match(runner, /migration\.manualCutover && !allowManualCutover/);
   assert.match(runner, /Refusing manual cutover migration/);
   assert.match(runner, /never included automatically/);
+});
+
+test("reservation withdrawal migration cannot run alone without the reservation workflow predecessor", () => {
+  const predecessor = migration("082_crm_property_sales_workflow", "sha-082");
+  const withdrawal = migration("200_property_reservation_withdrawal", "sha-200");
+  const migrations = [predecessor, withdrawal];
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only: withdrawal.version }), /required predecessor 082_crm_property_sales_workflow/);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only: withdrawal.version }), [withdrawal]);
+});
+
+test("internal calendar archive requires the released complete owner-read predecessor", () => {
+  const predecessor = migration("169_property_meeting_context", "sha-169");
+  const archive = migration("201_internal_calendar_archive", "sha-201");
+  const migrations = [predecessor, archive];
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only: archive.version }), /required predecessor 169_property_meeting_context/);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only: archive.version }), [archive]);
 });
 
 test("compatibility profiles bind production only to prod and QA or rehearsal only to test", () => {

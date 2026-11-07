@@ -1,0 +1,20 @@
+✔ the five visible calendar selectors have stable visible labels (2.2519ms)
+✔ booking output has a visible programmatic label and calendar has no nested main (0.513ms)
+✔ calendar feedback is announced without exposing decorative-only text (0.4273ms)
+✔ workspace dialogs are named, keyboard-contained, escapable, and restore focus (0.4907ms)
+✔ role priority headings always have non-empty fallback content (0.6639ms)
+✔ calendar initially renders an unknown connection state in both languages (33.6663ms)
+✔ managed workspace retains legacy read-only boundaries and uses the scoped personal calendar bridge (5.3523ms)
+✔ managed workspace context cannot invoke origin-workspace connection or settings writers (111.8361ms)
+✔ managed workspace booking overview never fetches origin-workspace records (28.0818ms)
+✔ a successful disconnected status remains a verified ready result (0.7278ms)
+✔ failed or malformed OAuth sources remain unavailable without replacing connection state (4.3055ms)
+✔ OAuth responses after unmount do not mutate connection state (1.4766ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1333.594

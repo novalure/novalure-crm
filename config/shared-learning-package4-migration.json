@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "shared-learning-package4-migration-v1",
+  "rolloutMode": "MANUAL_EXACT_REVISION_ONLY",
+  "projectId": "misty-cloud-70835427",
+  "branchId": "br-spring-night-alyu48yp",
+  "database": "neondb",
+  "version": "120_shared_behavior_package4",
+  "requiredPredecessor": "119_shared_behavior_revocable_operation",
+  "predecessorChecksum": "9590b94e58df2b665e8f0b1669065c021ef142a356ae76e5d5607cf2aeefca23",
+  "sqlChecksum": "889ab12192322abaf8582e569e02d155c5fb35912ebe37b306d9af08252cba7f"
+}

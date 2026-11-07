@@ -217,8 +217,8 @@ export async function updateWebsiteIntegrationStatus(
   if (!["test", "active", "disabled", "revoked"].includes(input.status)) throw new Error("Invalid status");
   return withTenantTransaction(scope(session), (transaction) => transaction.queryOne<{ id: string; status: string }>(
     `update public.external_integrations set status=$3,
-       revoked_at=case when $3='revoked' then now() else null end,updated_at=now()
-     where workspace_id=$1::uuid and id=$2::uuid returning id,status`,
+       revoked_at=case when $3='revoked' then coalesce(revoked_at,now()) else null end,updated_at=now()
+     where workspace_id=$1::uuid and id=$2::uuid and(status<>'revoked' or $3='revoked') returning id,status`,
     [session.workspaceId, input.integrationId, input.status],
   ));
 }

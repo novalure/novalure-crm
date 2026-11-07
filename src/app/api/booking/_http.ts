@@ -1,6 +1,7 @@
 import { requirePermissionAndProductCapability } from "@/lib/auth/session";
 import { getWorkspaceEnabledModules } from "@/lib/product-model";
 import { BookingError, type BookingKind, type BookingProviderName } from "@/lib/booking/types";
+import { BookingConnectionError } from "@/lib/booking/connections";
 
 export function bookingJson(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -61,6 +62,6 @@ export function bookingLocation(body: Record<string, unknown>): {location?:strin
   return {...(typeof body.location==="string"?{location:body.location.trim()}:{}),...(typeof body.locationConfirmed==="boolean"?{locationConfirmed:body.locationConfirmed}:{}),...(body.propertyId!==undefined?{propertyId:body.propertyId as string|null}:{})};
 }
 export function bookingFailure(error: unknown) {
-  if (error instanceof BookingError) return bookingJson({ error: error.code }, error.status);
+  if (error instanceof BookingError || error instanceof BookingConnectionError) return bookingJson({ error: error.code }, error.status);
   return bookingJson({ error: "booking_unavailable" }, 503);
 }

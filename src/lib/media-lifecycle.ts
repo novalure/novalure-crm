@@ -57,7 +57,10 @@ export function hasCompleteMediaReferenceVisibility(rows: Record<string, unknown
   const knowledge = rows.some(row => row.knowledge_center_enabled === true || row.table_name === "knowledge_source_versions");
   const expectedReferences = knowledge ? [...knownReferences,
     { table_name: "knowledge_source_versions", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "a" },
-  ] : knownReferences;
+  ] : [...knownReferences];
+  if (rows.some(row => row.lead_proof_enabled === true || row.table_name === "lead_qualification_proofs")) expectedReferences.push({ table_name: "lead_qualification_proofs", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "a" });
+  if (rows.some(row => row.web_resources_enabled === true || row.table_name === "web_expose_resources")) expectedReferences.push({ table_name: "web_expose_resources", columns: ["asset_id"], target_columns: ["id"], delete_action: "a" });
+  if (rows.some(row => row.brand_assets_enabled === true || row.table_name === "web_expose_brand_assets")) expectedReferences.push({ table_name: "web_expose_brand_assets", columns: ["asset_id"], target_columns: ["id"], delete_action: "a" });
   return rows.length === expectedReferences.length && expectedReferences.every(expected => rows.filter(row =>
     row.schema_name === "public" && row.table_name === expected.table_name && row.validated === true &&
     row.deferrable === false && row.delete_action === expected.delete_action &&
@@ -67,6 +70,9 @@ export function hasCompleteMediaReferenceVisibility(rows: Record<string, unknown
 
 const referenceCatalogSql = `select n.nspname as schema_name,t.relname as table_name,
   to_regclass('public.knowledge_source_versions') is not null as knowledge_center_enabled,
+  to_regclass('public.lead_qualification_proofs') is not null as lead_proof_enabled,
+  to_regclass('public.web_expose_resources') is not null as web_resources_enabled,
+  to_regclass('public.web_expose_brand_assets') is not null as brand_assets_enabled,
   c.convalidated as validated,c.condeferrable as deferrable,c.confdeltype as delete_action,
   row_security_active(c.conrelid) as rls_active,
   array(select a.attname::text from unnest(c.conkey) with ordinality key(attnum,position)
@@ -77,6 +83,8 @@ const referenceCatalogSql = `select n.nspname as schema_name,t.relname as table_
   where c.contype='f' and c.confrelid='public.media_assets'::regclass`;
 const referenceCountsSql = `select * from public.crm_studio_media_reference_counts($1::uuid)`;
 const knowledgeReferenceCountsSql = `select * from public.crm_knowledge_media_reference_counts($1::uuid)`;
+const webExposeReferenceCountsSql = `select * from public.crm_web_expose_media_reference_counts($1::uuid)`;
+const companyBrandReferenceCountsSql = `select * from public.crm_company_brand_media_reference_counts($1::uuid)`;
 
 /**
  * The parent lock serializes normal gallery and deletion writes for the same property.
@@ -123,13 +131,17 @@ export async function deleteDatabaseMedia(input: {
         throw new MediaLifecycleError("MEDIA_DELETE_VISIBILITY_UNCONFIRMED", "All media references could not be verified. Nothing was deleted.");
       }
       const knowledgeSchema = referenceCatalog.some(row => row.knowledge_center_enabled === true);
-      const scopedReferenceCountsSql = knowledgeSchema ? knowledgeReferenceCountsSql : referenceCountsSql;
+      const webResources = referenceCatalog.some(row => row.web_resources_enabled === true);
+      const brandAssets = referenceCatalog.some(row => row.brand_assets_enabled === true);
+      const scopedReferenceCountsSql = brandAssets ? companyBrandReferenceCountsSql : webResources ? webExposeReferenceCountsSql : knowledgeSchema ? knowledgeReferenceCountsSql : referenceCountsSql;
       const references = await transaction.queryOne(scopedReferenceCountsSql, [input.assetId]);
       const expectedMedia = input.target?.attachmentKind === "media" ? 1 : 0;
       const expectedDocuments = input.target?.attachmentKind === "document" ? 1 : 0;
       if (!references || references.media_count !== expectedMedia || references.document_count !== expectedDocuments ||
         references.send_count !== 0 || references.share_count !== 0 || references.studio_count !== 0 ||
         (knowledgeSchema && references.knowledge_count !== 0) ||
+        (webResources && (references.proof_count !== 0 || references.resource_count !== 0)) ||
+        (brandAssets && references.brand_count !== 0) ||
         asset.storageAccess !== "private" || asset.isPublic || row.publicToken != null) {
         throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This file has another use, sharing history or a protected lifecycle and cannot be deleted here.");
       }

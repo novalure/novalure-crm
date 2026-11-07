@@ -18,6 +18,10 @@ import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isProductRole, mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
+import { changeCustomerProjectGrant } from "./customer-project-grant-repository";
+import { CrmCommandError, withCrmRead, type TenantTransactionOptions } from "../crm-command";
+import { withTenantTransaction } from "./tenant-client";
+import { runWithTenantTransaction } from "./transaction-context";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
 export type CustomerAccessProjectRole = WorkspaceRole;
@@ -188,7 +192,6 @@ const customerAccessStatuses: CustomerWorkspaceAccessStatus[] = [
 const customerAccessHealthValues: CustomerAccessHealth[] = ["healthy", "attention", "risk"];
 const workspaceRoles: WorkspaceRole[] = ["owner", "admin", "agent", "assistant"];
 const grantAccessLevels: CustomerAccessLevel[] = ["viewer", "editor", "admin"];
-const grantStatuses: CustomerAccessGrantStatus[] = ["active", "invited", "suspended"];
 
 export async function listCustomerAccessCockpit(input: {
   projectId?: string | null;
@@ -360,190 +363,24 @@ export async function upsertCustomerProjectGrant(input: {
   session: AppSession;
   status?: unknown;
   userId: string;
-}) {
-  if (
-    !canPersist()
-    || !isUuid(input.session.workspaceId)
-    || !isUuid(input.accessId)
-    || !isUuid(input.projectId)
-    || !isUuid(input.userId)
-  ) {
-    return { ok: false as const, reason: "Grant input is incomplete" };
-  }
-
-  const existing = await queryOne<IdRow>(
-    `
-      select ca.id
-      from customer_workspace_access ca
-      join projects p on p.id = $3 and p.workspace_id = ca.workspace_id
-      join workspace_users wu on wu.id = $4 and wu.workspace_id = ca.workspace_id
-      where ca.workspace_id = $1 and ca.id = $2
-      limit 1
-    `,
-    [input.session.workspaceId, input.accessId, input.projectId, input.userId],
-  );
-  if (!existing) return { ok: false as const, reason: "Customer, user or project not found" };
-
-  const accessLevel = normalizeAccessLevel(input.accessLevel) ?? "viewer";
-  const projectRole = normalizeWorkspaceRole(input.projectRole) ?? "assistant";
-  const grantStatus = normalizeGrantStatus(input.status) ?? "active";
-  const defaults = defaultsForAccessLevel(accessLevel);
-  const canViewProject = input.canViewProject === undefined ? defaults.canViewProject : Boolean(input.canViewProject);
-  const canEditProject = input.canEditProject === undefined ? defaults.canEditProject : Boolean(input.canEditProject);
-  const canViewContacts = input.canViewContacts === undefined ? defaults.canViewContacts : Boolean(input.canViewContacts);
-  const canExportData = input.canExportData === undefined ? defaults.canExportData : Boolean(input.canExportData);
-  const grantIsActive = grantStatus === "active";
-  const pipelineCanEdit = grantIsActive && canEditProject;
-  const pipelineCanClose = grantIsActive && accessLevel === "admin";
-
-  const row = await queryOne<CustomerAccessGrantRow>(
-    `
-      insert into customer_project_access (
-        workspace_id,
-        customer_access_id,
-        project_id,
-        user_id,
-        project_role,
-        access_level,
-        can_view_project,
-        can_edit_project,
-        can_view_contacts,
-        can_export_data,
-        status,
-        metadata
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
-      on conflict (workspace_id, customer_access_id, project_id, user_id)
-      do update set
-        project_role = excluded.project_role,
-        access_level = excluded.access_level,
-        can_view_project = excluded.can_view_project,
-        can_edit_project = excluded.can_edit_project,
-        can_view_contacts = excluded.can_view_contacts,
-        can_export_data = excluded.can_export_data,
-        status = excluded.status,
-        metadata = customer_project_access.metadata || excluded.metadata,
-        updated_at = now()
-      returning
-        id,
-        workspace_id as "workspaceId",
-        customer_access_id as "customerAccessId",
-        project_id as "projectId",
-        user_id as "userId",
-        project_role as "projectRole",
-        access_level as "accessLevel",
-        can_view_project as "canViewProject",
-        can_edit_project as "canEditProject",
-        can_view_contacts as "canViewContacts",
-        can_export_data as "canExportData",
-        status,
-        updated_at as "updatedAt",
-        (select name from organizations where id = (
-          select organization_id from customer_workspace_access where id = customer_access_id
-        )) as "customerName",
-        (select name from projects where id = project_id) as "projectName",
-        (select name from workspace_users where id = user_id) as "userName",
-        (select email from workspace_users where id = user_id) as "userEmail"
-    `,
-    [
-      input.session.workspaceId,
-      input.accessId,
-      input.projectId,
-      input.userId,
-      projectRole,
-      accessLevel,
-      canViewProject,
-      canEditProject,
-      canViewContacts,
-      canExportData,
-      grantStatus,
-      JSON.stringify({ updatedByUserId: input.session.userId, source: "customer_access_cockpit" }),
-    ],
-  );
-
-  await queryOne<IdRow>(
-    `
-      insert into project_pipeline_permissions (
-        workspace_id,
-        project_id,
-        user_id,
-        can_edit_deals,
-        can_move_deals,
-        can_close_deals,
-        can_reopen_deals,
-        metadata
-      )
-      values ($1, $2, $3, $4, $4, $5, $5, $6::jsonb)
-      on conflict (workspace_id, project_id, user_id)
-      do update set
-        can_edit_deals = excluded.can_edit_deals,
-        can_move_deals = excluded.can_move_deals,
-        can_close_deals = excluded.can_close_deals,
-        can_reopen_deals = excluded.can_reopen_deals,
-        metadata = project_pipeline_permissions.metadata || excluded.metadata,
-        updated_at = now()
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      input.projectId,
-      input.userId,
-      pipelineCanEdit,
-      pipelineCanClose,
-      JSON.stringify({
-        customerAccessId: input.accessId,
-        grantStatus,
-        source: "customer_access_cockpit",
-      }),
-    ],
-  );
-
-  if (!row) return { ok: false as const, reason: "Project access could not be saved" };
-
-  await Promise.all([
-    writeAuditLog({
-      action: "customer_access.project_grant_upserted",
-      after: {
-        ...toProjectGrant(row),
-        pipelinePermissions: {
-          canCloseDeals: pipelineCanClose,
-          canEditDeals: pipelineCanEdit,
-          canMoveDeals: pipelineCanEdit,
-          canReopenDeals: pipelineCanClose,
-        },
-      },
-      entityId: row.id,
-      entityType: "customer_project_access",
-      projectId: row.projectId,
-      session: input.session,
-    }),
-    writeCrmAnalyticsEvent({
-      entityId: row.id,
-      entityType: "customer_project_access",
-      eventType: "customer_project_access_updated",
-      metadata: {
-        accessLevel,
-        canEditProject,
-        canExportData,
-        canViewContacts,
-        canViewProject,
-        grantStatus,
-        pipelineCanClose,
-        pipelineCanEdit,
-        projectRole,
-        userId: input.userId,
-      },
-      module: "dashboard",
-      projectId: row.projectId,
-      source: "customer_access_cockpit",
-      userId: input.session.userId,
-      workspaceId: input.session.workspaceId,
-    }),
-  ]);
-
-  return { data: toProjectGrant(row), ok: true as const };
+  expectedStateDigest?: unknown;
+  idempotencyKey: string;
+  correlationId: string;
+}, options: TenantTransactionOptions = {}) {
+  const accessLevel = input.accessLevel === undefined ? "viewer" : input.accessLevel;
+  const defaults = defaultsForAccessLevel(normalizeAccessLevel(accessLevel) ?? "viewer");
+  const result = await changeCustomerProjectGrant(input.session, {
+    accessId: input.accessId, projectId: input.projectId, userId: input.userId,
+    accessLevel, projectRole: input.projectRole === undefined ? "assistant" : input.projectRole,
+    status: input.status === undefined ? "active" : input.status,
+    canViewProject: input.canViewProject === undefined ? defaults.canViewProject : input.canViewProject,
+    canEditProject: input.canEditProject === undefined ? defaults.canEditProject : input.canEditProject,
+    canViewContacts: input.canViewContacts === undefined ? defaults.canViewContacts : input.canViewContacts,
+    canExportData: input.canExportData === undefined ? defaults.canExportData : input.canExportData,
+    expectedStateDigest: input.expectedStateDigest,
+  }, { idempotencyKey: input.idempotencyKey, correlationId: input.correlationId }, options);
+  return { ok: true as const, data: result.data.grant, mutation: { ...result.data, replayed: result.replayed, commandId: result.commandId, auditReference: result.auditReference } };
 }
-
 function canInviteWorkspaceUsers(session: AppSession) {
   if (session.role === "owner" || session.role === "admin") return true;
   return (
@@ -707,7 +544,7 @@ export async function inviteWorkspaceUser(input: {
               status = 'invited',
               password_hash = null,
               updated_at = now()
-          where id = $1 and workspace_id = $2
+          where id = $1 and workspace_id = $2 and status <> 'active'
           returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
         `,
         [existing.id, input.session.workspaceId, displayName, role, productRole],
@@ -831,17 +668,55 @@ export async function inviteWorkspaceUser(input: {
   };
 }
 
-export async function updateWorkspaceUserAccess(input: {
+type WorkspaceUserAccessUpdate = {
+  capability: "settings:manage" | "customer-access:manage";
   productRole?: unknown;
   role?: unknown;
   session: AppSession;
   status?: unknown;
   userId: string;
-}) {
+};
+
+export async function updateWorkspaceUserAccess(input: WorkspaceUserAccessUpdate) {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.userId)) {
     return { ok: false as const, reason: "User input is incomplete" };
   }
 
+  const scope = { actorId: input.session.userId, workspaceId: input.session.workspaceId };
+  let result: Awaited<ReturnType<typeof persistWorkspaceUserAccess>>;
+  try {
+    result = await withTenantTransaction(scope, async (tx) => {
+      // Serialize membership changes before taking actor locks and counting owners.
+      await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", ["workspace-membership:" + scope.workspaceId]);
+      return runWithTenantTransaction(scope, tx, () => withCrmRead(input.session, (_tx, session) => {
+        if (!session.productPermissions.includes(input.capability) ||
+            (input.capability === "settings:manage" && !session.permissions.includes("crm:write"))) {
+          throw new CrmCommandError("FORBIDDEN", "Workspace access management is not granted", 403);
+        }
+        return persistWorkspaceUserAccess({ ...input, session });
+      }));
+    });
+  } catch (error) {
+    if (error instanceof CrmCommandError) return { ok: false as const, reason: error.message, status: error.status };
+    return { ok: false as const, reason: "Workspace user could not be saved", status: 503 };
+  }
+  if (result.ok) {
+    const { id, role, productRole, status } = result.data;
+    await writeCrmAnalyticsEvent({
+      entityId: id,
+      entityType: "workspace_user",
+      eventType: "workspace_user_access_updated",
+      metadata: { role, productRole, status, targetUserId: id },
+      module: "dashboard",
+      source: "customer_access_cockpit",
+      userId: input.session.userId,
+      workspaceId: input.session.workspaceId,
+    });
+  }
+  return result;
+}
+
+async function persistWorkspaceUserAccess(input: WorkspaceUserAccessUpdate) {
   const existing = await queryOne<WorkspaceUserRow>(
     `
       select id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
@@ -867,6 +742,19 @@ export async function updateWorkspaceUserAccess(input: {
   });
   if (!roleGrant.ok) return { ok: false as const, reason: roleGrant.reason, status: roleGrant.status };
 
+  if ((existing.role === "owner" || role === "owner") && input.session.role !== "owner" && input.session.productRole !== "platform_admin") {
+    return { ok: false as const, reason: "Only owners can manage owner membership", status: 403 };
+  }
+
+  if (isProductRole(existing.productRole)) {
+    const existingGrant = validateWorkspaceUserRoleGrant({
+      session: input.session,
+      targetProductRole: existing.productRole,
+      targetRole: mapProductRoleToTechnicalRole(existing.productRole),
+    });
+    if (!existingGrant.ok) return { ok: false as const, reason: existingGrant.reason, status: existingGrant.status };
+  }
+
   if (existing.role === "owner" && existing.status === "active" && (role !== "owner" || status !== "active")) {
     const owners = await queryRows<IdRow>(
       "select id from workspace_users where workspace_id = $1 and role = 'owner' and status = 'active' limit 2",
@@ -877,6 +765,14 @@ export async function updateWorkspaceUserAccess(input: {
 
   if (input.userId === input.session.userId && status !== "active") {
     return { ok: false as const, reason: "Current user cannot be deactivated" };
+  }
+
+  if (existing.status !== status) {
+    // Memberships in other workspaces share the same login identity.
+    await queryOne(
+      "select id from auth_identities where id = (select auth_identity_id from workspace_users where id=$1 and workspace_id=$2) for no key update",
+      [input.userId, input.session.workspaceId],
+    );
   }
 
   const accessChanged =
@@ -892,7 +788,8 @@ export async function updateWorkspaceUserAccess(input: {
             status = $4,
             product_role = $5,
             updated_at = now()
-        where id = $1 and workspace_id = $2
+        where id = $1 and workspace_id = $2 and role = $8 and status = $9
+          and product_role is not distinct from $10
         returning id, workspace_id, name, email, role, product_role, status
       ), revoked_sessions as (
         update auth_sessions session
@@ -946,10 +843,24 @@ export async function updateWorkspaceUserAccess(input: {
       productRole,
       accessChanged,
       sessionRevocationReason,
+      existing.role,
+      existing.status,
+      existing.productRole,
     ],
   );
 
-  if (!row) return { ok: false as const, reason: "Workspace user could not be saved" };
+  if (!row) return { ok: false as const, reason: "Workspace user changed. Reload and try again.", status: 409 };
+
+  if (existing.status !== status && (existing.status === "suspended" || status === "suspended")) {
+    await queryRows(
+      "update auth_password_reset_tokens set used_at=now() where user_id=$1 and workspace_id=$2 and used_at is null",
+      [row.id, input.session.workspaceId],
+    );
+    await queryRows(
+      "update auth_password_reset_exchanges set used_at=now() where workspace_user_id=$1 and used_at is null",
+      [row.id],
+    );
+  }
 
   if (existing.status !== "suspended" && status === "suspended") {
     await queryOne<{ id: string }>(
@@ -984,45 +895,28 @@ export async function updateWorkspaceUserAccess(input: {
     );
   }
 
-  await Promise.all([
-    writeAuditLog({
-      action: "customer_access.workspace_user_updated",
-      after: row,
-      before: existing,
-      entityId: row.id,
-      entityType: "workspace_user",
-      session: input.session,
-    }),
-    writeCrmAnalyticsEvent({
-      entityId: row.id,
-      entityType: "workspace_user",
-      eventType: "workspace_user_access_updated",
-      metadata: {
-        role,
-        productRole,
-        status,
-        targetUserId: row.id,
-      },
-      module: "dashboard",
-      source: "customer_access_cockpit",
-      userId: input.session.userId,
-      workspaceId: input.session.workspaceId,
-    }),
-    writeAuthAuditEvent({
-      eventType: "auth.membership.access_updated",
-      metadata: {
-        actorUserId: input.session.userId,
-        productRole,
-        role,
-        status,
-      },
-      outcome: "success",
-      workspaceId: input.session.workspaceId,
-      workspaceUserId: row.id,
-    }),
-  ]);
+  await writeAuditLog({
+    action: "customer_access.workspace_user_updated",
+    after: row,
+    before: existing,
+    entityId: row.id,
+    entityType: "workspace_user",
+    session: input.session,
+  });
+  await writeAuthAuditEvent({
+    eventType: "auth.membership.access_updated",
+    metadata: {
+      actorUserId: input.session.userId,
+      productRole,
+      role,
+      status,
+    },
+    outcome: "success",
+    workspaceId: input.session.workspaceId,
+    workspaceUserId: row.id,
+  });
 
-  return { data: row, ok: true as const };
+  return { accessChanged, data: row, ok: true as const };
 }
 
 const customerAccessSelectSql = `
@@ -1249,12 +1143,6 @@ function normalizeAccessLevel(value: unknown) {
 function normalizeCustomerAccessStatus(value: unknown) {
   return typeof value === "string" && customerAccessStatuses.includes(value as CustomerWorkspaceAccessStatus)
     ? value as CustomerWorkspaceAccessStatus
-    : null;
-}
-
-function normalizeGrantStatus(value: unknown) {
-  return typeof value === "string" && grantStatuses.includes(value as CustomerAccessGrantStatus)
-    ? value as CustomerAccessGrantStatus
     : null;
 }
 
