@@ -94,8 +94,6 @@ function HistoryTimeline({ workspaceId, projectId, unitId, reservationId, curren
     const controller = new AbortController();
     lifecycle.controller = controller;
     const current = () => lifecycle.mounted && sequence === lifecycle.sequence;
-    setLoading(true);
-    setState(previous => ({ ...previous, error: "" }));
     try {
       const params = new URLSearchParams({ workspaceId, projectId, unitId });
       if (reservationId) params.set("reservationId", reservationId);
@@ -143,6 +141,13 @@ function HistoryTimeline({ workspaceId, projectId, unitId, reservationId, curren
 
   useEffect(() => { void load(null); }, [load]);
 
+  const beginLoad = (cursor: string | null) => {
+    if (!request.current.mounted || request.current.busy) return;
+    setLoading(true);
+    setState(previous => ({ ...previous, error: "" }));
+    void load(cursor);
+  };
+
   const reservationEvents = state.items.filter(item => item.source === "reservation_command");
   const unitEvents = state.items.filter(item => item.source === "unit_audit");
   const recordedWithdrawals = new Set(reservationEvents.filter(item => item.kind === "reservation.withdraw").map(item => item.reservationId));
@@ -150,14 +155,14 @@ function HistoryTimeline({ workspaceId, projectId, unitId, reservationId, curren
   return <div className="mt-4 min-w-0 space-y-4" aria-busy={loading}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <p className="text-sm text-stone-600">{loading ? "Verlauf wird geladen…" : state.loaded ? `${state.items.length} aufgezeichnete Ereignisse geladen` : "Noch kein Verlauf geladen"}</p>
-      <button type="button" className={buttonClass} disabled={loading} onClick={() => void load(null)}>Verlauf aktualisieren</button>
+      <button type="button" className={buttonClass} disabled={loading} onClick={() => beginLoad(null)}>Verlauf aktualisieren</button>
     </div>
     {state.error && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
     {state.loaded && <>
       {state.items.length === 0 && <p className="rounded-md bg-stone-50 p-3 text-sm">Für diese Auswahl sind keine aufgezeichneten Ereignisse vorhanden.</p>}
       {reservationEvents.length > 0 && <section aria-label="Reservierungsereignisse"><h4 className="mb-2 font-semibold">Reservierungsverlauf</h4><ol className="grid gap-3">{reservationEvents.map(item => <HistoryEvent key={`${item.source}:${item.id}`} item={item} />)}</ol></section>}
       {unitEvents.length > 0 && <section aria-label="Bestandsereignisse"><h4 className="mb-2 font-semibold">Bestandsereignisse der Einheit</h4><ol className="grid gap-3">{unitEvents.map(item => <HistoryEvent key={`${item.source}:${item.id}`} item={item} />)}</ol></section>}
-      {state.nextCursor && <button type="button" className={buttonClass} disabled={loading} onClick={() => void load(state.nextCursor)}>Weitere Ereignisse laden (bis zu 40)</button>}
+      {state.nextCursor && <button type="button" className={buttonClass} disabled={loading} onClick={() => beginLoad(state.nextCursor)}>Weitere Ereignisse laden (bis zu 40)</button>}
     </>}
     {legacyWithdrawals.length > 0 && <section className="rounded-md border border-stone-200 p-3" aria-label="Gespeicherte Rücknahmebelege">
       <h4 className="font-semibold">Gespeicherte Rücknahmebelege</h4>
