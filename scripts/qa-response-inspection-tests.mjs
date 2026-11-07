@@ -47,6 +47,7 @@ test("failed/aborted traffic can finish, while incomplete traffic blocks navigat
 import { webcrypto } from "node:crypto";
 import { createServer } from 'node:http';
 import { runInNewContext } from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage } from './lib/qa-response-inspection.mjs';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
@@ -56,7 +57,7 @@ async function bounded(condition) {
 }
 function observedFetch(perform, origin) {
   const reports = [], listeners = {};
-  const world = { fetch: perform, URL, Request, Reflect, TextEncoder, crypto: webcrypto, setTimeout,
+  const world = { fetch: perform, URL, Request, AbortSignal, DOMException, Reflect, TextEncoder, crypto: webcrypto, setTimeout,
     __crmQaFetchReport: async event => { reports.push(event); },
     addEventListener: (name, callback) => { listeners[name] = callback; } };
   // Keep the actual global object used by the serialized browser init function.
@@ -223,4 +224,81 @@ test('original/native coverage binds each terminal to its own exact start metada
   assert.throws(() => assertObservedFetchCoverage(network, [start, done, done]), /UNBOUND_ORIGINAL_FETCH_TERMINAL/);
   assert.throws(() => assertObservedFetchCoverage(network, [start, { ...done, status: undefined }]), /INVALID_ORIGINAL_BODY_PROOF/);
   assertObservedFetchCoverage(network, [start, done]);
+});
+
+test('pre-aborted actual GET has no dispatch, preserves its native promise and cannot hide any native request or body', async () => {
+  let requests = 0, nativePromise;
+  const server = createServer((_request, response) => { requests++; response.writeHead(200, { 'content-type': 'application/json' }); response.end('{"actual":true}'); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`, url = origin + '/api/crm/team';
+  try {
+    const world = observedFetch((...args) => { nativePromise = fetch(...args); return nativePromise; }, origin);
+    const controller = new AbortController(); controller.abort();
+    const original = world.fetch(url, { signal: controller.signal });
+    assert.equal(original, nativePromise); await assert.rejects(original, error => error === controller.signal.reason && error.name === 'AbortError');
+    assert.equal((await world.__crmQaFetchBodies.drain(500)).ok, true);
+    assert.equal(requests, 0); const done = world.reports.find(row => row.kind === 'terminal');
+    assert.equal(done.signalAbortedAtStart, true); assert.equal(done.preAbortedNoDispatch, true); assert.equal(done.bodyInspected, false);
+    assertObservedFetchCoverage([], world.reports);
+    assert.throws(() => assertObservedFetchCoverage([{ kind: 'request', key: done.key }], world.reports), /UNOBSERVED_NATIVE_FETCH_REQUEST/);
+    assert.throws(() => assertObservedFetchCoverage([{ kind: 'response', key: done.key, ok: true, json: true, status: 200 }], world.reports), /UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY/);
+    // A separate actual call to the identical URL still needs its full native
+    // request and completed JSON body; the canceled call cannot supply either.
+    const response = await world.fetch(url); assert.deepEqual(await response.json(), { actual: true });
+    assert.equal((await world.__crmQaFetchBodies.drain(500)).ok, true); assert.equal(requests, 1);
+    const native = [{ kind: 'request', key: done.key }, { kind: 'response', key: done.key, ok: true, json: true, status: 200 }];
+    assertObservedFetchCoverage(native, world.reports);
+    assert.throws(() => assertObservedFetchCoverage([], world.reports), /UNMATCHED_ORIGINAL_FETCH_START/);
+    assert.throws(() => assertObservedFetchCoverage([...native, native[0]], world.reports), /UNOBSERVED_NATIVE_FETCH_REQUEST/);
+    assert.throws(() => assertObservedFetchCoverage([...native, native[1]], world.reports), /UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY/);
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('pre-aborted dispatch proof excludes late Abort, event-only, POST, keepalive and forged terminal metadata', async () => {
+  for (const mode of ['late', 'POST', 'keepalive', 'other-reason', 'accessor']) {
+    const controller = new AbortController(); if (mode !== 'late') controller.abort();
+    let reject; const promise = new Promise((_, rejectPromise) => { reject = rejectPromise; });
+    const world = observedFetch(() => promise, 'http://127.0.0.1');
+    const init = { signal: controller.signal, method: mode === 'POST' ? 'POST' : 'GET', keepalive: mode === 'keepalive' };
+    if (mode === 'accessor') Object.defineProperty(init, 'signal', { get: () => controller.signal });
+    assert.equal(world.fetch('http://127.0.0.1/api/crm/team', init), promise);
+    if (mode === 'late') controller.abort();
+    const error = mode === 'other-reason' ? new DOMException('synthetic distinct object', 'AbortError') : controller.signal.reason;
+    const rejection = assert.rejects(promise); reject(error); await rejection;
+    await world.__crmQaFetchBodies.drain(500);
+    assert.equal(world.reports.find(row => row.kind === 'terminal').preAbortedNoDispatch, false);
+    assert.throws(() => assertObservedFetchCoverage([], world.reports), /UNMATCHED_ORIGINAL_FETCH_START/);
+  }
+  const controller = new AbortController(); controller.abort();
+  const unresolved = observedFetch(() => new Promise(() => {}), 'http://127.0.0.1');
+  unresolved.fetch('http://127.0.0.1/api/crm/team', { signal: controller.signal });
+  assert.equal((await unresolved.__crmQaFetchBodies.drain(30)).ok, false);
+  await bounded(() => unresolved.reports.some(row => row.kind === 'start'));
+  assert.throws(() => assertObservedFetchCoverage([], unresolved.reports), /UNSETTLED_ORIGINAL_FETCH_LIFECYCLE/);
+  const world = observedFetch(() => Promise.reject(controller.signal.reason), 'http://127.0.0.1');
+  await assert.rejects(world.fetch('http://127.0.0.1/api/crm/team', { signal: controller.signal }));
+  assert.equal((await world.__crmQaFetchBodies.drain(500)).ok, true);
+  for (const change of [{ signalAbortedAtStart: false }, { rejectedWithOriginalAbortReason: false }, { failedBeforeHeaders: false }, { signalAborted: false }, { keepalive: true }, { phase: 'body-eof' }, { status: 200 }, { json: true }, { bodyInspected: true }, { bodySha256: 'a'.repeat(64) }])
+    assert.throws(() => assertObservedFetchCoverage([], world.reports.map(row => row.kind === 'terminal' ? { ...row, ...change } : row)), /INVALID_PREABORTED_FETCH_PROOF/);
+  assert.throws(() => assertObservedFetchCoverage([], world.reports.map(row => row.kind === 'terminal' ? { ...row, path: '/api/crm/other' } : row)), /UNBOUND_ORIGINAL_FETCH_TERMINAL/);
+});
+
+test('finite quiet deadline cannot pass or conceal the last original/native coverage failure', async () => {
+  const world = observedFetch(fetch, 'http://127.0.0.1');
+  const short = await world.__crmQaFetchBodies.drain(75);
+  assert.equal(short.ok, false); assert.equal(short.timedOut, true); assert.equal(short.pending, 0); assert.equal(short.bridgesPending, 0);
+  assert.ok(short.quietTurns < 2);
+  const text = readFileSync(new URL('./qa-design-c-integration.mjs', import.meta.url), 'utf8');
+  const implementation = text.slice(text.indexOf('async function drainResponseInspections('), text.indexOf('\nasync function gotoAfterInspection('));
+  assert.ok(implementation.startsWith('async function drainResponseInspections('));
+  let now = 0, evaluated = 0;
+  const key = 'a'.repeat(64), page = { url: () => 'http://127.0.0.1/', async evaluate() { return ++evaluated === 1 ? { ok: true } : short; } };
+  const context = { Date: { now: () => now }, Error, JSON, Promise,
+    setTimeout: callback => { now += 25; callback(); },
+    responseBarriers: { get: () => ({ drain: async () => {} }) },
+    fetchAudit: () => ({ network: [{ kind: 'request', key }], observations: [] }),
+    assertObservedFetchCoverage, privateLeaks: [] };
+  runInNewContext(implementation + ';globalThis.run = drainResponseInspections;', context);
+  await assert.rejects(context.run(page), error => error.message.includes('"timedOut":true') && error.message.includes('"lastCoverageError":{"code":"UNOBSERVED_NATIVE_FETCH_REQUEST"') && error.message.includes('"nativeCount":1') && error.message.includes('"originalCount":0'));
+  assert.equal(evaluated, 2); assert.equal(now, 25);
 });

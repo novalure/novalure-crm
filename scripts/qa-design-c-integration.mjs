@@ -80,12 +80,13 @@ async function drainResponseInspections(page) {
   const barrier = responseBarriers.get(page);
   if (page.url() === "about:blank" && fetchAudit(page).network.length === 0) { await barrier?.drain(); return; }
   const deadline = Date.now() + 15000;
+  let lastCoverageError = null;
   while (Date.now() < deadline) {
     const result = await page.evaluate(async remaining => {
       const state = globalThis.__crmQaFetchBodies;
       return state ? state.drain(remaining) : { ok: false, errors: ["fetch_observer_missing"] };
     }, Math.max(1, deadline - Date.now()));
-    if (!result.ok) throw new Error("Original API fetch lifecycle did not settle: " + JSON.stringify(result));
+    if (!result.ok) throw new Error("Original API fetch lifecycle did not settle: " + JSON.stringify({ ...result, lastCoverageError }));
     if (result.foreign) privateLeaks.push({ observation: "original-browser-body-clone" });
     try { await barrier?.drain(Math.max(1, deadline - Date.now())); }
     catch { throw new Error("Pending non-fetch API/body inspection before navigation timed out: " + JSON.stringify(barrier?.pendingInfo())); }
@@ -95,11 +96,12 @@ async function drainResponseInspections(page) {
       // A new original fetch may start between the browser snapshot and its
       // native event delivery. Re-observe within the SAME budget, never refetch.
       if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY"].includes(error.message)) throw error;
+      lastCoverageError = { code: error.message, ...(error.coverage ?? {}) };
       if (Date.now() >= deadline) throw error;
       await new Promise(resolve => setTimeout(resolve, 25));
     }
   }
-  throw new Error("Original/native Fetch coverage did not settle within its finite budget");
+  throw new Error("Original/native Fetch coverage did not settle within its finite budget: " + JSON.stringify(lastCoverageError));
 }
 async function gotoAfterInspection(page, ...args) {
   await drainResponseInspections(page);

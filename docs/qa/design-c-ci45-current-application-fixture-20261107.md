@@ -177,3 +177,42 @@ exercise the formerly accepted extra same-key/distinct-id and observer-only
 records, extra/missing bodies, duplicate ids, and changed terminal metadata.
 The twelve unchanged transport groups above are reused, not rerun. The earlier
 4048 source is retained as the reviewed predecessor and is not release eligible.
+
+## Follow-up to the actual BA1 native result
+
+Run42390971619/job128458262765 passed mandatory1–44. Step45 retained
+47 Design C passes and3 failures,4 axe scans, and zero page/server/outbound/
+private-leak/body-inspection errors. Knowledge and Package4 were not run. The
+last operator document records an original team GET rejected on its AbortSignal
+before headers, with the remaining11 JSON bodies reaching EOF. Native request
+counts and the preceding coverage error were not retained; attributing these
+historical failures to the counter mismatch remains an inference.
+
+The actual team hook defers fetch into a promise turn while its effect cleanup
+can abort the signal first. [Fetch §5.6 step4](https://fetch.spec.whatwg.org/#dom-global-fetch)
+rejects a pre-aborted call before starting fetch. The inspected
+[Chromium FetchManager implementation](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/core/fetch/fetch_manager.cc)
+also rejects before creating/starting its loader (observed Gitblob
+302a9450b6b6f717fd7e1062dc58e7f30e9d90c7). This is source-contract evidence,
+not an executed native153 counter probe; that exact version tag was unavailable.
+
+Only an explicit own data-property signal read through the native AbortSignal
+getters synchronously before the call can qualify. Its original promise must
+then reject with that identical original DOMException AbortError, for a GET
+without keepalive. The call retains its unique document/id/start/terminal and
+same key/path/method, but is labeled undispatched rather than successful. No
+native event is removed: full two-sided request counts must match dispatched
+starts, and every native successful JSON response still needs its actual EOF
+proof. An unexpected native request for the canceled call fails; later Abort,
+an Abort event alone, POST, keepalive, unknown signal accessors, wrong rejection
+objects and malformed cancellation proofs cannot qualify. Ordinary calls to an
+identical URL remain separately counted. No API or application behavior changes.
+
+Timeout diagnostics now retain bridge/quiet state and the last bounded coverage
+error with hashed key/counts. A remainder too short for the required quiet turns
+still fails, and a timer waking after its deadline cannot report success. This
+diagnostic change does not convert an unsettled lifecycle or count mismatch into
+success. Three focused nonbrowser groups cover actual loopback zero-request
+pre-abort plus an ordinary identical-URL request, the negative boundary matrix,
+and finite timeout/error preservation. Unchanged transport evidence is reused;
+no browser/build/provider execution, CI rerun or native PASS is claimed.
