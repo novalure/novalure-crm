@@ -3,13 +3,13 @@
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { main } from '../crm-full-backup.mjs';
-import { BACKUP_SCOPE, backupProviderStages, defaultCrmBackupConfig as binding } from './crm-full-backup.mjs';
+import { BACKUP_SCOPE, backupProviderStages, defaultCrmBackupConfig as binding, validPointInTime } from './crm-full-backup.mjs';
 import { classifyCrmBackupFailure, createCrmBackupFailureEvent, createCrmBackupFailureNotifier } from './crm-backup-failure-warning.mjs';
 
 const headers = Object.freeze({ 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
 const knownFields = new Set(['status', 'code', 'mode', 'scope', 'source', 'target', 'snapshot', 'missing', 'retentionDays',
   'retentionMode', 'changesApplied', 'sourceSqlConnections', 'sourceBlobOperations', 'restoreFinalize', 'wholeApplicationBackup',
-  'existingSchedulesChanged', 'backupId', 'snapshotId', 'isolatedBranchId', 'fileCount', 'fileBytes', 'historicalReferenceCount',
+  'existingSchedulesChanged', 'backupId', 'snapshotId', 'pointInTime', 'isolatedBranchId', 'fileCount', 'fileBytes', 'historicalReferenceCount',
   'manifestSha256', 'cleanup', 'completedAt', 'remoteRequests', 'fullBackupClaimed', 'providerStage', 'providerHttpStatus']);
 const missingNames = new Map([
   ['NEON_API_KEY: project-scoped Neon management credential', 'NEON_API_KEY'],
@@ -61,6 +61,10 @@ function publicSummary(value) {
     if (value[key] === undefined) continue;
     if (typeof value[key] !== 'string' || !pattern.test(value[key])) return null;
     result[key] = value[key];
+  }
+  if (value.pointInTime !== undefined) {
+    if (!validPointInTime(value.pointInTime) || value.snapshotId !== undefined || value.snapshot !== undefined) return null;
+    result.pointInTime = value.pointInTime;
   }
   for (const key of ['fileCount', 'fileBytes', 'historicalReferenceCount', 'remoteRequests']) {
     if (value[key] === undefined) continue;

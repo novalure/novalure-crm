@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { main } from './crm-full-backup.mjs';
 import { createCrmBackupHttpHandler } from './lib/crm-full-backup-http.mjs';
 import { defaultCrmBackupConfig } from './lib/crm-full-backup.mjs';
 
@@ -351,5 +352,41 @@ test('HTTP exposes only allowlisted provider stage and matching numeric status',
     assert.equal(body.providerStage, undefined);
     assert.equal(body.providerHttpStatus, undefined);
     assert.equal(JSON.stringify(invalid.logs).includes('SYNTHETIC_PRIVATE_PATH'), false);
+  }
+});
+
+test('the operator plan chooses a separate fixed PITR point without provider I/O', async () => {
+  const output = [];
+  const pointInTime = '2026-11-06T03:00:00Z';
+  assert.equal(await main(['--plan', '--point-in-time', pointInTime, '--pitr-branch-limit', '1'], {}, value => output.push(value)), 0);
+  assert.equal(output[0].pointInTime, pointInTime);
+  assert.equal(output[0].snapshot, undefined);
+  assert.equal(output[0].changesApplied, 0);
+  output.length = 0;
+  assert.equal(await main(['--plan'], { CRM_FULL_BACKUP_COPY_MODE: 'point-in-time', CRM_FULL_BACKUP_PITR_BRANCH_LIMIT: '1' }, value => output.push(value)), 0);
+  assert.match(output[0].pointInTime, /^\d{4}-\d{2}-\d{2}T03:00:00Z$/u);
+  output.length = 0;
+  assert.equal(await main(['--plan', '--point-in-time', pointInTime], {}, value => output.push(value)), 1);
+  assert.equal(output[0].code, 'PITR_BRANCH_LIMIT_REQUIRED');
+  output.length = 0;
+  assert.equal(await main(['--plan', '--snapshot', 'snap-example-proof', '--point-in-time', pointInTime], {}, value => output.push(value)), 1);
+  assert.equal(output[0].code, 'CONFLICTING_BACKUP_RECOVERY_POINTS');
+});
+
+test('HTTP exposes an exact PITR time without treating it as a native snapshot', async () => {
+  const pointInTime = '2026-11-06T03:00:00Z';
+  const output = { status: 'FULL', backupId: 'backup-example-pitr', pointInTime };
+  const env = { ...workload, CRM_FULL_BACKUP_ENABLED: 'true', CRM_FULL_BACKUP_COPY_MODE: 'point-in-time' };
+  const f = fixture({ env, output });
+  const response = await f.handler(request());
+  assert.equal(response.status, 200);
+  const summary = await response.json();
+  assert.equal(summary.pointInTime, pointInTime);
+  assert.equal(summary.snapshotId, undefined);
+  assert.equal(f.calls[0].env.CRM_FULL_BACKUP_COPY_MODE, 'point-in-time');
+  assert.equal(f.calls[0].argv.includes(pointInTime), false);
+  for (const invalid of [{ ...output, snapshotId: 'snap-example-proof' }, { ...output, pointInTime: '2026-02-30T03:00:00Z' }]) {
+    const bad = await fixture({ env, output: invalid }).handler(request());
+    assert.equal((await bad.json()).code, 'BACKUP_HTTP_RESULT_INVALID');
   }
 });

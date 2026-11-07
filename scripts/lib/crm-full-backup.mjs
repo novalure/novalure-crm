@@ -1,5 +1,5 @@
 /** Production backup orchestration. Importing this module performs no I/O.
- * Recovery is ALWAYS a new, unfinalized branch. The source database is never
+ * Recovery always uses a new isolated branch. The source database is never
  * connected to, and source Blob ports expose no write/delete operation.
  */
 import { createHash, randomUUID } from 'node:crypto';
@@ -7,7 +7,9 @@ import { posix as path } from 'node:path';
 import { canonical, catalogQueries, captureDatabaseMetadata } from './studio-stage3-qa-fingerprint.mjs';
 
 export const BACKUP_SCOPE = 'FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES';
+export const PITR_COMPLETION = 'PRODUCTION_GUARD_BEFORE_FULL';
 export const backupProviderStages = Object.freeze(['PRODUCTION_BINDING_READ', 'SNAPSHOT_READ', 'SNAPSHOT_RESTORE',
+  'PITR_CHILD_CREATE',
   'ISOLATED_RESOURCE_READ', 'ISOLATED_ENDPOINT_CREATE', 'ISOLATED_ENDPOINT_UPDATE', 'ISOLATED_CONNECTION_READ',
   'OPERATION_READ', 'NEON_REQUEST']);
 /** Fixed operation categories and numeric status only, never path/body/error text. */
@@ -39,7 +41,7 @@ const errorCode = error => error instanceof CrmBackupError ? error.code : 'BACKU
 
 export function validateBackupConfig(value) {
   requireValue(value && typeof value === 'object' && !Array.isArray(value), 'BACKUP_CONFIG_REQUIRED');
-  const allowed = new Set([...Object.keys(defaultCrmBackupConfig), 'snapshotId']);
+  const allowed = new Set([...Object.keys(defaultCrmBackupConfig), 'snapshotId', 'pointInTime', 'pitrBranchLimit']);
   requireValue(Object.keys(value).every(key => allowed.has(key)), 'UNKNOWN_BACKUP_CONFIG_FIELD');
   const config = { ...defaultCrmBackupConfig, ...value };
   for (const [key, pattern] of Object.entries({ neonProjectId: /^[a-z0-9-]{8,100}$/, sourceBranchId: /^br-[a-z0-9-]{8,100}$/,
@@ -52,7 +54,30 @@ export function validateBackupConfig(value) {
   requireValue(Number.isSafeInteger(config.retentionDays) && config.retentionDays >= 1 && config.retentionDays <= 35, 'INVALID_BACKUP_RETENTION');
   requireValue(Number.isSafeInteger(config.maxFileBytes) && config.maxFileBytes >= 1 && config.maxFileBytes <= 100 * 1024 * 1024, 'INVALID_BACKUP_FILE_BUDGET');
   if (config.snapshotId !== undefined) requireValue(/^snap-[a-z0-9-]{5,100}$/.test(config.snapshotId), 'INVALID_BACKUP_SNAPSHOT');
+  if (config.pointInTime !== undefined) {
+    requireValue(config.snapshotId === undefined, 'CONFLICTING_BACKUP_RECOVERY_POINTS');
+    requireValue(validPointInTime(config.pointInTime), 'INVALID_BACKUP_POINT_IN_TIME');
+    requireValue(Number.isSafeInteger(config.pitrBranchLimit) && config.pitrBranchLimit >= 1 && config.pitrBranchLimit <= 35,
+      'PITR_BRANCH_LIMIT_REQUIRED');
+  } else {
+    requireValue(config.pitrBranchLimit === undefined, 'UNEXPECTED_PITR_BRANCH_LIMIT');
+  }
   return Object.freeze(config);
+}
+
+export function validPointInTime(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString().replace('.000Z', 'Z') === value;
+}
+
+export function pitrParentAtOrBefore(observed, requested) {
+  if (!validPointInTime(requested)) return false;
+  const parentAt = parseBackupInstant(observed), pointAt = Date.parse(requested);
+  if (parentAt < pointAt) return true;
+  // Date.parse rounds fractional seconds to milliseconds. The requested point
+  // has exact second precision, so a nonzero fraction at that second is later.
+  const fraction = typeof observed === 'string' ? /\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/u.exec(observed)?.[1] : null;
+  return parentAt === pointAt && !/[1-9]/u.test(fraction ?? '');
 }
 
 /** Every historical reference is retained. Generic private CRM images do not
@@ -101,7 +126,14 @@ function productionReceipt(value, config) {
 }
 function validateCopy(value, config, snapshot, name) {
   const branch = value?.branch;
-  requireValue(value?.finalize === false && branch?.id !== config.sourceBranchId && /^br-[a-z0-9-]{8,100}$/.test(branch?.id ?? '') && branch.projectId === config.neonProjectId && branch.name === name && branch.default === false && branch.primary === false && branch.restoredFrom === snapshot.id && branch.restoreStatus === 'restored', 'UNSAFE_OR_FINALIZED_RESTORE');
+  requireValue(value?.finalize === false && branch?.id !== config.sourceBranchId && /^br-[a-z0-9-]{8,100}$/.test(branch?.id ?? '') && branch.projectId === config.neonProjectId && branch.name === name && branch.default === false && branch.primary === false, 'UNSAFE_OR_FINALIZED_RESTORE');
+  if (config.pointInTime) {
+    requireValue(!branch.restoredFrom && !branch.restoreStatus && branch.parentId === config.sourceBranchId &&
+      pitrParentAtOrBefore(branch.parentTimestamp, config.pointInTime) &&
+      typeof branch.parentLsn === 'string' && /^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$/iu.test(branch.parentLsn), 'PITR_COPY_POINT_MISMATCH');
+  } else {
+    requireValue(branch.restoredFrom === snapshot.id && branch.restoreStatus === 'restored', 'UNSAFE_OR_FINALIZED_RESTORE');
+  }
   return branch;
 }
 function validateEndpoint(ep, branch, config) {
@@ -138,13 +170,12 @@ export function planBackupRetention(index, { now = new Date(), keepDays = 7, sou
 
 
 /** A candidate index row is not proof. Verify the private final marker and its
- * canonical manifest before exposing it to the plan-only retention reader. */
-export async function readCrmBackupIndex({ config: input, ports }) {
+ * canonical manifest before yielding either marker or snapshot metadata. */
+async function* readVerifiedBackupSets({ config: input, ports }, { confirmNoIncomplete = false } = {}) {
   const config = validateBackupConfig(input);
   requireValue(typeof ports?.listTargetRecords === 'function' && typeof ports.readTarget === 'function', 'BACKUP_INDEX_READ_PORTS_REQUIRED');
   const entries = await ports.listTargetRecords(config.prefix + '/index/');
   requireValue(Array.isArray(entries), 'INVALID_BACKUP_INDEX_INVENTORY');
-  const index = [];
   const readJson = async pathname => {
     const receipt = await ports.readTarget(pathname);
     if (!receipt) return null;
@@ -158,22 +189,75 @@ export async function readCrmBackupIndex({ config: input, ports }) {
     const candidate = (await readJson(entry.pathname))?.value;
     requireValue(candidate && /^[a-z0-9][a-z0-9-]{5,100}$/.test(candidate.backupId ?? ''), 'INVALID_BACKUP_INDEX_RECORD');
     const root = `${config.prefix}/sets/${candidate.backupId}`;
-    if (await ports.readTarget(root + '/INCOMPLETE.json')) continue;
+    const incompletePath = root + '/INCOMPLETE.json';
+    if (await ports.readTarget(incompletePath)) continue;
     const full = (await readJson(root + '/FULL.json'))?.value;
     if (!full) continue;
     requireValue(full.status === 'FULL' && full.scope === BACKUP_SCOPE && full.projectId === config.neonProjectId && full.sourceBranchId === config.sourceBranchId && full.productionEndpointId === config.productionEndpointId && full.sourceStoreId === config.sourceStoreId && full.targetStoreId === config.targetStoreId && full.backupId === candidate.backupId && full.snapshotId === candidate.snapshotId && full.manifestSha256 === candidate.manifestSha256 && full.manifestPath === root + '/manifest.json' && full.cleanup?.status === 'OBSERVED_DISABLED_AND_IDLE' && Array.isArray(full.cleanup.endpoints) && full.cleanup.endpoints.length > 0 && full.cleanup.endpoints.every(ep => ep.disabled === true && ep.currentState === 'idle'), 'INVALID_BACKUP_FULL_MARKER');
     const manifest = await readJson(full.manifestPath);
-    requireValue(manifest && sha256(manifest.bytes) === full.manifestSha256 && manifest.value.snapshot?.id === full.snapshotId && manifest.value.snapshot.sourceBranchId === config.sourceBranchId && manifest.value.backupId === full.backupId && manifest.value.scope === BACKUP_SCOPE && manifest.value.files?.length === full.fileCount && manifest.value.historicalReferences?.length === full.historicalReferenceCount, 'BACKUP_MANIFEST_HASH_MISMATCH');
-    index.push(full);
+    requireValue(manifest && sha256(manifest.bytes) === full.manifestSha256 && manifest.value.backupId === full.backupId && manifest.value.scope === BACKUP_SCOPE && manifest.value.files?.length === full.fileCount && manifest.value.historicalReferences?.length === full.historicalReferenceCount, 'BACKUP_MANIFEST_HASH_MISMATCH');
+    const { recoveryPoint, snapshot, isolatedBranch } = manifest.value;
+    if (full.recoveryPoint || recoveryPoint) {
+      requireValue(full.snapshotId === undefined && !snapshot && recoveryPoint?.kind === 'NEON_PITR' &&
+        recoveryPoint.sourceBranchId === config.sourceBranchId && validPointInTime(recoveryPoint.requestedAt) &&
+        digest(candidate.recoveryPoint ?? null) === digest(recoveryPoint) && digest(full.recoveryPoint ?? null) === digest(recoveryPoint) &&
+        candidate.pitrCompletion === PITR_COMPLETION && full.pitrCompletion === PITR_COMPLETION &&
+        isolatedBranch?.id === full.isolatedBranchId, 'BACKUP_MANIFEST_PITR_MISMATCH');
+      validateCopy({ finalize: false, branch: isolatedBranch }, { ...config, pointInTime: recoveryPoint.requestedAt }, null, `crm-backup-${full.backupId}`);
+    } else {
+      requireValue(typeof full.snapshotId === 'string' && snapshot?.id === full.snapshotId && snapshot.sourceBranchId === config.sourceBranchId, 'BACKUP_MANIFEST_HASH_MISMATCH');
+    }
+    // The writer can append INCOMPLETE if the post-FULL production guard fails.
+    if ((confirmNoIncomplete || full.recoveryPoint) && await ports.readTarget(incompletePath)) continue;
+    yield { full, pointAgeUpperBound: recoveryPoint?.requestedAt ?? snapshot.createdAt };
   }
+}
+
+export async function readCrmBackupIndex(options) {
+  const index = [];
+  for await (const { full } of readVerifiedBackupSets(options)) index.push(full);
   return index;
+}
+
+function parseBackupInstant(value) {
+  if (typeof value !== 'string') return NaN;
+  const date = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.exec(value)?.[1];
+  if (!date) return NaN;
+  const midnight = Date.parse(date);
+  if (!Number.isFinite(midnight) || new Date(midnight).toISOString().slice(0, 10) !== date) return NaN;
+  return Date.parse(value);
+}
+
+/** Read only the private backup index, markers and manifests. Snapshot creation
+ * or the requested PITR point bounds the age of the data. A recent FULL marker
+ * cannot prove the writer's final production check. */
+export async function readCrmBackupFreshness({ config, ports, now = new Date() } = {}) {
+  const rpoHours = 24;
+  const unverified = { status: 'unverified', rpoHours };
+  try {
+    const checkedAt = now instanceof Date ? now.getTime() : parseBackupInstant(now);
+    if (!Number.isFinite(checkedAt)) return unverified;
+    let latestPoint = -Infinity;
+    for await (const { pointAgeUpperBound } of readVerifiedBackupSets({ config, ports }, { confirmNoIncomplete: true })) {
+      const pointAt = parseBackupInstant(pointAgeUpperBound);
+      if (!Number.isFinite(pointAt) || pointAt > checkedAt) return unverified;
+      latestPoint = Math.max(latestPoint, pointAt);
+    }
+    if (latestPoint === -Infinity) return { status: 'no-full', rpoHours };
+    const minimumAgeMs = checkedAt - latestPoint;
+    if (minimumAgeMs <= rpoHours * 60 * 60 * 1000) return unverified;
+    return { status: 'stale', rpoHours, latestPossibleDataAt: new Date(latestPoint).toISOString(), minimumAgeMs };
+  } catch {
+    return unverified;
+  }
 }
 
 /** No truthy callback result can replace the individual evidence gates. */
 export async function runCrmFullBackup({ config: input, ports, now = () => new Date(), backupId = 'backup-' + randomUUID() }) {
   const config = validateBackupConfig(input);
   requireValue(/^[a-z0-9][a-z0-9-]{5,100}$/.test(backupId), 'INVALID_BACKUP_ID');
-  for (const name of ['credentialsReady', 'readProductionBinding', 'snapshotInfo', 'listSourceObjects', 'restoreSnapshot', 'waitForRestore', 'getIsolatedEndpoints', 'prepareIsolatedEndpoint', 'captureDatabase', 'readSourceFile', 'readTarget', 'writeTarget', 'disableIsolatedEndpoint']) requireValue(typeof ports?.[name] === 'function', 'BACKUP_PORTS_REQUIRED');
+  const copyPorts = config.pointInTime ? ['validatePointInTime', 'copyPointInTime'] : ['snapshotInfo', 'restoreSnapshot'];
+  for (const name of ['credentialsReady', 'readProductionBinding', ...copyPorts, 'listSourceObjects', 'waitForRestore', 'getIsolatedEndpoints', 'prepareIsolatedEndpoint', 'captureDatabase', 'readSourceFile', 'readTarget', 'writeTarget', 'disableIsolatedEndpoint']) requireValue(typeof ports?.[name] === 'function', 'BACKUP_PORTS_REQUIRED');
   const ready = await ports.credentialsReady();
   requireValue(ready?.neonApiKey === true, 'BLOCKED_NEON_API_KEY_REQUIRED');
   requireValue(ready?.productionOidc === true && ready.projectId === config.backupProjectId && ready.teamId === config.teamId && ready.environment === 'production', 'BLOCKED_PRODUCTION_OIDC_REQUIRED');
@@ -232,15 +316,26 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     const sourceObjects = await ports.listSourceObjects();
     requireValue(Array.isArray(sourceObjects) && sourceObjects.every(object => object.storeId === config.sourceStoreId && object.access === 'private' && typeof object.pathname === 'string'), 'SOURCE_STORE_INVENTORY_MISMATCH');
     initial = await checkProduction();
-    snapshot = await ports.snapshotInfo(config.snapshotId);
-    requireValue(/^snap-[a-z0-9-]{5,100}$/.test(snapshot?.id ?? '') && snapshot.sourceBranchId === config.sourceBranchId && Number.isFinite(Date.parse(snapshot.createdAt)) && (!config.snapshotId || config.snapshotId === snapshot.id), 'SNAPSHOT_SOURCE_BINDING_MISMATCH');
-    evidence.snapshot = snapshot;
-    const claimPath = `${config.prefix}/snapshots/${snapshot.id}/claim.json`;
+    let claimKey, claimPoint;
+    if (config.pointInTime) {
+      const admitted = await ports.validatePointInTime();
+      requireValue(admitted?.pointInTime === config.pointInTime && Date.parse(config.pointInTime) < Date.parse(createdAt), 'PITR_POINT_NOT_VERIFIED');
+      evidence.recoveryPoint = { kind: 'NEON_PITR', sourceBranchId: config.sourceBranchId, requestedAt: config.pointInTime };
+      claimKey = `pitr/${config.pointInTime.replace(/\D/g, '')}`;
+      claimPoint = { pointInTime: config.pointInTime };
+    } else {
+      snapshot = await ports.snapshotInfo(config.snapshotId);
+      requireValue(/^snap-[a-z0-9-]{5,100}$/.test(snapshot?.id ?? '') && snapshot.sourceBranchId === config.sourceBranchId && Number.isFinite(Date.parse(snapshot.createdAt)) && (!config.snapshotId || config.snapshotId === snapshot.id), 'SNAPSHOT_SOURCE_BINDING_MISMATCH');
+      evidence.snapshot = snapshot;
+      claimKey = `snapshots/${snapshot.id}`;
+      claimPoint = { snapshotId: snapshot.id };
+    }
+    const claimPath = `${config.prefix}/${claimKey}/claim.json`;
     requireValue(await ports.readTarget(claimPath) === null, 'BACKUP_SNAPSHOT_ALREADY_CLAIMED');
     // Atomic no-overwrite creates one owner for a scheduled snapshot. An
     // interrupted claim is reviewed explicitly; execution never repeats restore.
     try {
-      const claimed = await ports.writeTarget(claimPath, Buffer.from(canonical({ backupId, snapshotId: snapshot.id, sourceBranchId: config.sourceBranchId, sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId })), { access: 'private', allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' });
+      const claimed = await ports.writeTarget(claimPath, Buffer.from(canonical({ backupId, ...claimPoint, sourceBranchId: config.sourceBranchId, sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId })), { access: 'private', allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' });
       requireValue(claimed?.storeId === config.targetStoreId && claimed.pathname === claimPath && claimed.access === 'private', 'BACKUP_RECORD_TARGET_MISMATCH');
       claimOwned = true;
     } catch (error) {
@@ -253,12 +348,16 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     await save(root + '/RUNNING.json', evidence);
     await checkProduction();
     const name = `crm-backup-${backupId}`;
-    const restored = await ports.restoreSnapshot({ snapshotId: snapshot.id, name, finalize: false });
+    const restored = config.pointInTime ? await ports.copyPointInTime({ name }) :
+      await ports.restoreSnapshot({ snapshotId: snapshot.id, name, finalize: false });
     branch = validateCopy(restored, config, snapshot, name);
     await checkProduction();
-    validateCopy(await ports.waitForRestore(restored), config, snapshot, name);
+    const verifiedCopy = validateCopy(await ports.waitForRestore(restored), config, snapshot, name);
+    if (config.pointInTime) requireValue(verifiedCopy.id === branch.id && verifiedCopy.parentLsn === branch.parentLsn &&
+      verifiedCopy.parentTimestamp === branch.parentTimestamp, 'PITR_COPY_POINT_MISMATCH');
     const endpoints = await ports.getIsolatedEndpoints(branch);
     requireValue(Array.isArray(endpoints), 'ISOLATED_ENDPOINT_INVENTORY_REQUIRED');
+    if (config.pointInTime) requireValue(endpoints.length === 0, 'PITR_COPY_UNEXPECTED_COMPUTE');
     endpoints.forEach(ep => validateEndpoint(ep, branch, config));
     await checkProduction();
     const endpoint = validateEndpoint(await ports.prepareIsolatedEndpoint(branch, endpoints), branch, config);
@@ -301,7 +400,7 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     await checkProduction();
     cleanup = await shutDown();
     const referenced = new Set(inventory.assets.map(file => file.pathname));
-    const manifest = { ...evidence, status: 'DATA_COMPLETE', snapshot, isolatedBranch: branch,
+    const manifest = { ...evidence, status: 'DATA_COMPLETE', isolatedBranch: branch,
       productionBinding: initial, database: captured.fingerprint, files, historicalReferences: inventory.references,
       versionBindingsSha256: inventory.versionBindingsSha256, legacyPublic: inventory.legacyPublic,
       unreferencedSourceObjects: sourceObjects.filter(object => !referenced.has(object.pathname)),
@@ -309,14 +408,17 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
       cleanup, expiresAt: new Date(Date.parse(createdAt) + config.retentionDays * 86400000).toISOString() };
     const manifestReceipt = await save(root + '/manifest.json', manifest);
     await checkProduction();
-    const full = { ...evidence, status: 'FULL', snapshotId: snapshot.id, isolatedBranchId: branch.id,
+    const full = { ...evidence, status: 'FULL', ...(snapshot ? { snapshotId: snapshot.id } : { pitrCompletion: PITR_COMPLETION }), isolatedBranchId: branch.id,
       completedAt: timestamp(), manifestPath: manifestReceipt.pathname, manifestSha256: manifestReceipt.sha256,
       fileCount: files.length, fileBytes: files.reduce((sum, file) => sum + file.bytes, 0), historicalReferenceCount: inventory.references.length, cleanup };
     // Index first, commit marker last. Readers must verify FULL.json AND its hash.
     await save(`${config.prefix}/index/${backupId}-FULL.json`, { ...full, status: 'COMMIT_CANDIDATE', requiresVerifiedFullMarker: true });
+    // The PITR marker is a terminal target-only write. It is visible only
+    // after the last source guard. Preserve the original snapshot sequence.
+    if (config.pointInTime) await checkProduction();
     fullMarkerAttempted = true;
     await save(root + '/FULL.json', full);
-    await checkProduction();
+    if (!config.pointInTime) await checkProduction();
     return full;
   } catch (error) {
     let cleanupCode = null, cleanupFailure = null, productionVerification = { status: 'NOT_YET_CAPTURED' };
