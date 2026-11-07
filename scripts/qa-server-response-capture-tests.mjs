@@ -235,6 +235,46 @@ test("group coverage counts actual native JSON bodies once without assigning suc
   } finally { await f.stop(); }
 });
 
+test("a complete group cannot carry a keepalive or at-start-aborted uninspected sibling through an eligible read", () => {
+  const a = audit("http://127.0.0.1", { cookie: "SYNTHETIC_MIXED_SCOPE" }, 403), b = audit("http://127.0.0.1", { cookie: "SYNTHETIC_MIXED_SCOPE" });
+  const preheader = (row, id) => ({ ...row, id, phase: row.kind === "start" ? "request" : "fetch-aborted-before-headers", status: null, json: false,
+    bodyError: null, bodyInspected: false, bodySha256: null, signalAborted: row.kind === "terminal", signalAbortedAtStart: false,
+    failedBeforeHeaders: row.kind === "terminal", preAbortedNoDispatch: false, rejectedWithOriginalAbortReason: false, retiredReadBeforeHeaders: false });
+  const network = [...a.network, ...b.network], baseObservations = [...a.observations.map(row => preheader(row, 1)), ...b.observations.map(row => preheader(row, 2))];
+  // Explicit complete Node/native metadata fixtures for the review witness:
+  // eligible ID1 has403; ineligible sibling ID2 has200. No actual IO is claimed.
+  const records = [403, 200].flatMap((status, i) => {
+    const identity = { runId, id: i + 1, key: a.key, captureKey: a.captureKey, path: "/api/crm/team", method: "GET" };
+    return [{ ...identity, kind: "start" }, { ...identity, kind: "terminal", status, json: true, complete: true, terminal: "finish",
+      bodySha256: status === 200 ? sha('{"synthetic":true}') : null, foreign: false, inspectionError: null }];
+  });
+  const positive = qualifyQaServerBodies(network, baseObservations, records, runId);
+  assert.equal(positive.size, 2); assert.doesNotThrow(() => assertObservedFetchCoverage(network, baseObservations, positive));
+  for (const mode of ["keepalive", "at-start"]) {
+    const observations = structuredClone(baseObservations);
+    for (const row of observations.filter(row => row.id === 2)) {
+      if (mode === "keepalive") row.keepalive = true; else row.signalAbortedAtStart = true;
+    }
+    const diagnostic = [], denied = qualifyQaServerBodies(network, observations, records, runId, diagnostic);
+    assert.equal(denied.size, 0); assert.equal(diagnostic[0].reason, "INELIGIBLE_UNRESOLVED_SIBLING");
+    assert.equal(diagnostic[0].originalCandidateCount, 1); assert.equal(diagnostic[0].unresolvedOriginalSiblingCount, 2);
+    assert.throws(() => assertObservedFetchCoverage(network, observations, denied), /UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY/);
+    const staleProof = new Map([[`${doc}/1`, positive.get(`${doc}/1`)]]);
+    assert.throws(() => assertObservedFetchCoverage(network, observations, staleProof), /INVALID_SERVER_EGRESS_BODY_PROOF/);
+  }
+  for (const mode of ["completed403", "completedNonJson"]) {
+    const known = structuredClone({ network, observations: baseObservations, records });
+    Object.assign(known.network[1], { status: 200, ok: true });
+    Object.assign(known.network[3], { status: mode === "completed403" ? 403 : 200, ok: mode !== "completed403", json: mode === "completed403" });
+    Object.assign(known.records[1], { status: 200, bodySha256: sha('{"synthetic":true}') });
+    Object.assign(known.records[3], { status: mode === "completed403" ? 403 : 200, json: mode === "completed403", bodySha256: null });
+    Object.assign(known.observations[3], { phase: "response-not-json-success", status: mode === "completed403" ? 403 : 200,
+      json: mode === "completed403", signalAborted: false, failedBeforeHeaders: false });
+    const proof = qualifyQaServerBodies(known.network, known.observations, known.records, runId);
+    assert.equal(proof.size, 1); assert.doesNotThrow(() => assertObservedFetchCoverage(known.network, known.observations, proof));
+  }
+});
+
 test("native copied CDP metadata survives context removal; old exposeBinding lookup loses the same four terminals", async () => {
   const source = row("c".repeat(64), { phase: "document-retired-before-headers", status: null, json: false, signalAborted: false,
     bodyError: null, retiredReadBeforeHeaders: true });

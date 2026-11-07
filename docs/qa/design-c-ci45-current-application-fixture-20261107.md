@@ -366,6 +366,12 @@ own groups, wrong sessions, incomplete/invalid/non-JSON bodies, at-start aborts,
 writes and keepalive cannot use this path. Fixed scalar diagnostics also report
 native JSON deficits with no eligible original terminal.
 
+Every unresolved original sibling of a claimed key must satisfy that same
+eligibility. An eligible read cannot carry an ineligible keepalive, at-start
+aborted or otherwise unqualified null-status sibling through the group proof.
+An already completed non-success or non-JSON original Response has no outstanding
+successful-JSON body obligation; that existing boundary is preserved.
+
 New targeted nonbrowser controls observe an actual original Fetch rejection after
 real loopback Node finish and retain its null status, with explicit native-event
 fixtures (no Chromium claim). Additional cases cover the exact new eligibility,

@@ -21,6 +21,9 @@ const receivedBodyFailure = row => row.kind === "terminal" && row.bodyError === 
 const preheaderStartBound = (row, observations) => observations.some(start => start.kind === "start" &&
   start.documentId === row.documentId && start.id === row.id && start.key === row.key && start.path === row.path &&
   start.method === "GET" && start.keepalive === false && start.signalAbortedAtStart === false);
+const unresolvedOriginalSibling = row => row.kind === "terminal" && !row.bodyInspected &&
+  !(row.phase === "response-not-json-success" && row.bodyError === null && Number.isInteger(row.status) && row.status >= 200 && row.status <= 599 &&
+    (!row.json || row.status >= 300));
 export function qaRequestFingerprint(secret, method, url, headers) {
   assert(/^[a-f0-9]{64}$/.test(secret));
   // Values stay in local host RAM. The per-run digest crosses owned IPC only;
@@ -166,6 +169,7 @@ export function qualifyQaServerBodies(network, observations, records, runId, dia
   for (const [key, native] of nativeCounts) if (native > (originalCounts.get(key) ?? 0)) keys.add(key);
   for (const key of keys) {
     const group = candidates.filter(row => row.key === key);
+    const unresolvedSiblings = observations.filter(row => row.key === key && unresolvedOriginalSibling(row));
     const nativeRequests = network.filter(row => row.kind === "request" && row.key === key);
     const nativeResponses = network.filter(row => row.kind === "response" && row.key === key);
     const allServerStarts = [...starts.values()].filter(row => row.key === key);
@@ -184,8 +188,10 @@ export function qualifyQaServerBodies(network, observations, records, runId, dia
       nativeSuccessfulJsonCount: nativeBodies.length, fingerprintGroupCount: fingerprints.size,
       serverStartCount: serverStarts.length, serverTerminalCount: serverStarts.filter(row => terminals.has(row.id)).length,
       unclaimedServerStartCount: allServerStarts.length - serverStarts.length, originalCandidateCount: group.length,
+      unresolvedOriginalSiblingCount: unresolvedSiblings.length,
       bodyErrorCount: group.filter(row => row.bodyError).length, preHeaderAbortedReadCount: group.filter(isQaPreheaderAbortedRead).length, ...extra });
     if (!group.length) { report("NO_ELIGIBLE_ORIGINAL_TERMINAL"); continue; }
+    if (unresolvedSiblings.length !== group.length) { report("INELIGIBLE_UNRESOLVED_SIBLING"); continue; }
     if (group.some(row => !receivedBodyFailure(row) && !isQaPreheaderAbortedRead(row))) { report("INELIGIBLE_ORIGINAL_BODY"); continue; }
     if (group.some(row => isQaPreheaderAbortedRead(row) && !preheaderStartBound(row, observations))) { report("PREHEADER_START_BINDING_INVALID"); continue; }
     if (!nativeRequests.length || [...fingerprints].some(value => !validFingerprint(value))) { report("NATIVE_REQUEST_FINGERPRINT_MISSING"); continue; }
@@ -262,8 +268,9 @@ export function validQaServerAuthGroups(network, row, proof) {
 
 export function validQaServerOriginalBag(observations, row, proof) {
   const candidates = observations.filter(item => item.kind === "terminal" && item.key === row.key && (item.bodyError || isQaPreheaderAbortedRead(item)));
+  const unresolvedSiblings = observations.filter(item => item.key === row.key && unresolvedOriginalSibling(item));
   const received = candidates.filter(receivedBodyFailure), preHeader = candidates.filter(isQaPreheaderAbortedRead);
-  if (candidates.length !== received.length + preHeader.length || proof.originalCandidateCount !== candidates.length ||
+  if (unresolvedSiblings.length !== candidates.length || candidates.length !== received.length + preHeader.length || proof.originalCandidateCount !== candidates.length ||
     proof.receivedBodyErrorCount !== received.length || proof.preHeaderAbortedReadCount !== preHeader.length ||
     preHeader.some(item => !preheaderStartBound(item, observations))) return false;
   const remaining = [...proof.bodyHashes];
