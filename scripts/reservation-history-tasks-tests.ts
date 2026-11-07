@@ -21,6 +21,11 @@ type Row = Record<string, any>;
 type Seed = { unit: string; lead: string; buyer: string; reservation?: string };
 const envNames = ["DATABASE_URL", "NODE_ENV", "CRM_LOCAL_TEST_DATABASE", "NOVALURE_SESSION_SECRET", "NOVALURE_APP_ORIGIN", "NOVALURE_AUTH_STRICT", "NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AUTH_RATE_LIMIT_SECRET"] as const;
 const publicItemKeys = ["actor", "expiresAt", "id", "kind", "occurredAt", "reservationId", "reservationVersion", "source", "sourceReference", "status", "taskId", "unitId", "unitVersion"].sort();
+const fullJsonValue = (value: unknown): unknown => {
+  const encoded = JSON.stringify(value);
+  assert.ok(typeof encoded === "string");
+  return JSON.parse(encoded);
+};
 
 // One disposable synthetic PG fixture and direct real Request/Response route calls.
 // No Next server, browser, provider, mail, cloud connection or production migration.
@@ -117,7 +122,7 @@ test("reservation history and manual follow-ups: focused real PostgreSQL and coo
       const confirmed = await run(confirm, agent); await reviewTask(confirmed, item, confirm.action, ids.agent);
       const extended = await run(command("reservation.extend", { reservationId: item.reservation, unitVersion: 2, expiresAt: future(3), sourceReference: "MUSTER Fristverlängerung" }, 2));
       await reviewTask(extended, item, "reservation.extend");
-      const replay = await run(request); assert.equal(replay.replayed, true); assert.equal(replay.commandId, requested.commandId); assert.deepEqual(replay.data, requested.data);
+      const replay = await run(request); assert.equal(replay.replayed, true); assert.equal(replay.commandId, requested.commandId); assert.deepEqual(fullJsonValue(replay.data), fullJsonValue(requested.data));
       assert.deepEqual(await scalar("select * from tasks where id=$1", [requestTask.id]), requestTask);
       const after = await counts(); assert.equal(after.tasks, before.tasks + 3); assert.equal(after.receipts, before.receipts + 3);
       const page = await history(item); publicPage(page);
@@ -162,7 +167,7 @@ test("reservation history and manual follow-ups: focused real PostgreSQL and coo
       const race = await Promise.allSettled(candidates.map(value => run(value)));
       assert.equal(race.filter(value => value.status === "fulfilled").length, 1);
       const failed = race.find(value => value.status === "rejected"); assert.ok(failed?.status === "rejected"); assert.match(String(failed.reason), /Version changed/);
-      const replay = await run(firstCommand); assert.equal(taskId(replay), taskId(first)); assert.deepEqual(replay.data, first.data);
+      const replay = await run(firstCommand); assert.equal(taskId(replay), taskId(first)); assert.deepEqual(fullJsonValue(replay.data), fullJsonValue(first.data));
       const another = await seed(), request = command("reservation.request", { unitId: another.unit, leadId: another.lead, expiresAt: future(2) });
       const exact = await Promise.all([run(request), run(request)]);
       assert.equal(exact[0].commandId, exact[1].commandId); assert.equal(exact.filter(value => value.replayed).length, 1);
@@ -392,7 +397,7 @@ test("reservation history and manual follow-ups: focused real PostgreSQL and coo
         assert.equal(anonymous.headers.get("cache-control"), "private, no-store");
         assert.ok(!Object.hasOwn(await anonymous.json(), "data"));
       }
-      await db.admin.query("update auth_sessions set revoked_at=now() where id=$1", [sessionId]);
+      await db.admin.query("update auth_sessions set revoked_at=now(),revoked_reason='SYNTHETIC HTTP test' where id=$1", [sessionId]);
       const denied = await get(); assert.equal(denied.status, 401); assert.ok(!Object.hasOwn(await denied.json(), "data"));
       assert.deepEqual(await counts(), beforeReads, "history GET and denied tokens cannot create tasks, commands or business audit events");
     });

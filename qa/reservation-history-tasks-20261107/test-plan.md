@@ -1,6 +1,6 @@
 # Gezielter Testentwurf: Reservierungshistorie und manuelle Folgeaufgaben
 
-Stand: 7. November 2026. Vorbereitung im gemeinsamen Worktree; noch kein funktionaler Lauf. Die Datei `scripts/reservation-history-tasks-tests.ts` verwendet genau eine vorhandene lokale Sales-PG-Fixture (`startLocalSalesDb` / `applySalesSchema`) und reguläre Route-Handler mit echten `Request`/`Response`-Objekten. Sie startet keinen Next-/HTTP-Server und enthält keinen Browser-, Provider-, Mail- oder Produktivnachweis. Der historische Sales-Schemabootstrap behält seine dokumentierten Ausschlüsse; daraus folgt keine vollständige Produktionsmigrationsprüfung oder SCRAM-Browserqualifikation.
+Stand: 7. November 2026. Gezielter Test im gemeinsamen Worktree. Die Datei `scripts/reservation-history-tasks-tests.ts` verwendet genau eine vorhandene lokale Sales-PG-Fixture (`startLocalSalesDb` / `applySalesSchema`) und reguläre Route-Handler mit echten `Request`/`Response`-Objekten. Sie startet keinen Next-/HTTP-Server und enthält keinen Browser-, Provider-, Mail- oder Produktivnachweis. Der historische Sales-Schemabootstrap behält seine dokumentierten Ausschlüsse; daraus folgt keine vollständige Produktionsmigrationsprüfung oder SCRAM-Browserqualifikation.
 
 ## Dreizehn eng begrenzte Unterfälle
 
@@ -24,4 +24,14 @@ Stand: 7. November 2026. Vorbereitung im gemeinsamen Worktree; noch kein funktio
 node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/reservation-history-tasks-tests.ts
 ```
 
-Root führt diesen gezielten Lauf erst nach Freigabe des gemeinsamen Backend-/UI-Entwurfs aus. Keine Wiederholung der vollständigen 81er-Rücknahme- oder 96er-Kalendersuite. Bis zu einem tatsächlichen Lauf bestehen ausschließlich vorbereitete Assertions und statische Prüfung; bestehende frühere Browserbelege behalten ihre Original-SHA und werden dadurch nicht neu zu PASS erklärt.
+Root führt diesen gezielten Lauf nach Freigabe des gemeinsamen Backend-/UI-Entwurfs aus. Keine Wiederholung der vollständigen 81er-Rücknahme- oder 96er-Kalendersuite. Gesamterfolg des korrigierten Scripts ist erst durch den erneuten tatsächlichen Lauf belegt; bestehende frühere Browserbelege behalten ihre Original-SHA und werden dadurch nicht neu zu PASS erklärt.
+
+## Erster tatsächlicher Root-Lauf und enge Fixturekorrektur
+
+Der abgeschlossene Lauf auf `195fe315bb5abc23a20f8c762e81a7b3d5f13a2c` in `history-tasks-195fe31.log` ergab zehn vollständig bestandene Unterfälle und drei fehlgeschlagene Unterfälle; Node zählt zusätzlich den dadurch fehlgeschlagenen äußeren Fixturetest (14 insgesamt, 10 PASS, 4 FAIL). Exitcode 1. Laut Root war der eigene PG-Port 60389 nach Abschluss mit `ECONNREFUSED` geschlossen. Dies ist kein Gesamt-PASS.
+
+Zwei Unterfälle scheiterten ausschließlich am vollständigen Receiptvergleich von direkten PG-`Date`-Objekten mit den ISO-Strings des gespeicherten JSON-Receipts. Die Korrektur normalisiert beide vollständigen `data`-Bäume über JSON, ohne Felder zu entfernen. Die nach der jeweiligen fehlgeschlagenen Assertion liegenden Historien-/Reassignment- beziehungsweise weiteren Parallel-/Zählerassertions waren im ersten Lauf noch nicht erreicht.
+
+Der Cookie-/CSRF-Unterfall erreichte die reguläre Anfrage, Wiederholung, Core-Aufgabe, History-GET, den verweigerten generischen Reconcile, doppelte Selektoren und beide frischen unangemeldeten GETs (401). Der anschließende SQL-Fixtureentzug setzte bisher nur `revoked_at` und verletzte dadurch `auth_sessions_revocation_reason_check` aus Migration 056. Die Korrektur setzt wie vorhandene HTTP-Fixtures gemeinsam `revoked_at` und `revoked_reason='SYNTHETIC HTTP test'`. Der eigentliche GET mit widerrufenem Cookie und die nachfolgenden Unverändertheitsassertions sind erst im erneuten Lauf zu belegen. Keine Constraint- oder Grantänderung und kein Backendfehler wird daraus abgeleitet.
+
+Alle zehn anderen Unterfälle waren im ersten Log vollständig grün, einschließlich echter K-vor-Unit-Sperrprobe, Legacy-NULL-Receiptgrenzen, Pagination, atomarem Rollback und der vier spezifischen Vollmachtentzüge. Ein erneuter gezielter Lauf des korrigierten Scripts bleibt Root vorbehalten; frühere Belege werden unverändert erhalten.
