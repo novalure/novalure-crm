@@ -19,7 +19,8 @@ import {
  * production-predecessor test. Every pinned migration runs unchanged; these
  * local role names satisfy its real guard without weakening production SQL.
  */
-export async function startDesignCIntegrationDatabase({ accountLanguagePreference = false, bookingSetup = false } = {}) {
+export async function startDesignCIntegrationDatabase({ accountLanguagePreference = false, bookingSetup = false, currentApplicationSchema = false } = {}) {
+  if (currentApplicationSchema && (!accountLanguagePreference || !bookingSetup)) throw new Error("Current application fixture requires its actual language and booking predecessors");
   const cluster = await startLocalSalesDb();
   let owner, bootstrap, runtime;
   try {
@@ -76,7 +77,7 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       // predecessor-only database tests keep their original schema by default.
       ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),
       // Current booking navigation also runs the shared private unit loader.
-      ...(bookingSetup ? ["186_property_unit_details.sql"] : []),
+      ...(bookingSetup && !currentApplicationSchema ? ["186_property_unit_details.sql"] : []),
     ]) {
       if (bookingSetup && filename === "108_universal_booking.sql") {
         const { reviewedNumber108Coexistence } = await import("../db-migrate.mjs");
@@ -117,6 +118,15 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
         client.release();
       }
     }
+    if (currentApplicationSchema) {
+      // The original 114 provisioning SQL must grant the existing tenant role
+      // to its new constrained helper. Only this disposable installer receives
+      // ADMIN; the application runtime keeps its original NOBYPASS boundary.
+      await cluster.admin.query("grant novalure_tenant_app to neondb_owner with admin true,inherit false,set false");
+    }
+    const currentSchema = currentApplicationSchema
+      ? await (await import("./design-c-current-application-schema.mjs")).applyDesignCCurrentApplicationSchema({ owner, applied, directory: cluster.directory })
+      : null;
     const identity = await runtime.query(
       "select current_database() as database,current_user as role,rolsuper,rolbypassrls from pg_roles where rolname=current_user",
     );
@@ -135,6 +145,7 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
           unmodifiedPinnedMigrations: true,
           optionalRagExcluded: true,
           bookingSetup,
+          currentSchema,
           manual062Excluded: true,
           preview097Through099Excluded: true,
           applied,
@@ -150,7 +161,7 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       admin: bootstrap,
       pool: runtime,
       database: "neondb",
-      fixtureMode: "design-c-actual-predecessors",
+      fixtureMode: currentApplicationSchema ? "design-c-current-application-originals" : "design-c-actual-predecessors",
       stop() {
         if (stopping) return stopping;
         stopping = (async () => {

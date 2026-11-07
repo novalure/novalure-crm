@@ -6,6 +6,7 @@ import { createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createResponseInspectionBarrier } from "./lib/qa-response-inspection.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { createTextPdf } from "./lib/knowledge-document-fixtures.ts";
@@ -43,8 +44,8 @@ const artifactPrefix = readersOnly ? "readers-" : "";
 const output = path.resolve(".npm-cache/qa/design-c-integration");
 assert.equal(
   fixture.fixtureMode,
-  "design-c-actual-predecessors",
-  "Start qa:sales:server with --built --design-c to preserve the actual 091–106 predecessor contracts and additive account-language schema",
+  "design-c-current-application-originals",
+  "Start qa:sales:server with --built --design-c to apply the current original application frontier and its actual predecessors",
 );
 assert.equal(fixture.database.database, "neondb");
 await mkdir(output, { recursive: true });
@@ -66,6 +67,18 @@ const results = [],
   readerMutations = [],
   authenticationProofs = [];
 const contexts = [];
+const responseBarriers = new WeakMap();
+async function drainResponseInspections(page) {
+  await responseBarriers.get(page)?.drain();
+}
+async function gotoAfterInspection(page, ...args) {
+  await drainResponseInspections(page);
+  return page.goto(...args);
+}
+async function reloadAfterInspection(page, ...args) {
+  await drainResponseInspections(page);
+  return page.reload(...args);
+}
 let browser, accounts, operatorPage, customerPage, viewerPage, areaId, sourceId;
 const operationalReaders = [
   {
@@ -152,8 +165,9 @@ async function readerPanel(
   // An identical URL containing a fragment can be a same-document navigation.
   // Repeated checks need a fresh request after their interceptor is installed.
   if (previousUrl === page.url()) {
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await reloadAfterInspection(page, { waitUntil: "domcontentloaded" });
     await expect(page.locator("[data-crm-content]")).toBeVisible();
+    await waitForCrmSection(page, reader.id === "calendar" ? "calendar" : "bots");
     await page.evaluate(() => document.fonts.ready);
   }
   if (reader.tab)
@@ -649,7 +663,9 @@ async function verifyOperationalReaders() {
   await step(
     "Targeted reader traffic has no HTTP500, browser exception, mutation or observed foreign leak",
     async () => {
+      for (const page of [operatorPage, customerPage, viewerPage].filter(Boolean)) await drainResponseInspections(page);
       await Promise.all(responseChecks);
+      assert.deepEqual(responseInspectionErrors, [], "Every observed successful API body must be inspected");
       assert.deepEqual(serverErrors, []);
       assert.deepEqual(errors, []);
       assert.deepEqual(outbound, []);
@@ -763,6 +779,14 @@ async function newPage(label) {
     if (message.type() === "error")
       consoleErrors.push({ role: label, message: message.text() });
   });
+  const barrier = createResponseInspectionBarrier();
+  responseBarriers.set(page, barrier);
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.origin === base.origin && url.pathname.startsWith("/api/")) barrier.started(request);
+  });
+  page.on("requestfinished", request => barrier.finished(request));
+  page.on("requestfailed", request => barrier.finished(request));
   page.on("response", (response) => {
     const url = new URL(response.url());
     if (url.origin === base.origin && response.status() >= 500)
@@ -778,33 +802,20 @@ async function newPage(label) {
       (response.headers()["content-type"] || "").includes("application/json")
     ) {
       let timer;
-      responseChecks.push(
-        Promise.race([
-          response.text(),
-          new Promise((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("JSON response inspection timed out")),
-              15000,
-            );
-          }),
-        ])
-          .then((body) => {
-            if (
-              /SYNTHETIC FOREIGN PRIVATE SENTINEL|FOREIGN-PRIVATE-UNIT/.test(
-                body,
-              )
-            )
-              privateLeaks.push({ role: label, path: url.pathname });
-          })
-          .catch((error) =>
-            responseInspectionErrors.push({
-              role: label,
-              path: url.pathname,
-              error: error.message,
-            }),
-          )
-          .finally(() => clearTimeout(timer)),
-      );
+      const check = Promise.race([
+        response.text(),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("JSON response inspection timed out")), 15000);
+        }),
+      ])
+        .then(body => {
+          if (/SYNTHETIC FOREIGN PRIVATE SENTINEL|FOREIGN-PRIVATE-UNIT/.test(body))
+            privateLeaks.push({ role: label, path: url.pathname });
+        })
+        .catch(error => responseInspectionErrors.push({ role: label, path: url.pathname, error: error.message }))
+        .finally(() => clearTimeout(timer));
+      responseChecks.push(check);
+      barrier.inspect(check);
     }
   });
   return page;
@@ -849,7 +860,7 @@ async function api(
 }
 
 async function login(page, account, negatives = false) {
-  await page.goto(new URL("/login", base).href);
+  await gotoAfterInspection(page, new URL("/login", base).href);
   const consent = page.getByRole("button", {
     name: /^(Nur essenzielle|Only necessary)$/,
   });
@@ -857,6 +868,7 @@ async function login(page, account, negatives = false) {
   async function password(value) {
     await page.locator("#login-email").fill(account.email);
     await page.locator("#login-password").fill(value);
+    await drainResponseInspections(page);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       page.locator("form:has(#login-password) button[type=submit]").click(),
@@ -877,6 +889,7 @@ async function login(page, account, negatives = false) {
     ? page.getByRole("button", { name: account.name, exact: false })
     : null;
   if (workspaceChoice && (await workspaceChoice.isVisible())) {
+    await drainResponseInspections(page);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       workspaceChoice.click(),
@@ -904,6 +917,7 @@ async function login(page, account, negatives = false) {
       for (let value = 0; accepted.has(wrong); value++)
         wrong = String(value + 1).padStart(6, "0");
       await page.locator("#login-mfa-code").fill(wrong);
+      await drainResponseInspections(page);
       await Promise.all([
         page.waitForNavigation({ waitUntil: "domcontentloaded" }),
         page
@@ -915,6 +929,7 @@ async function login(page, account, negatives = false) {
       await page.locator("input[name=recoveryCodesSaved]").check();
     }
     await page.locator("#login-mfa-code").fill(totp(secret));
+    await drainResponseInspections(page);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       page
@@ -932,7 +947,7 @@ async function login(page, account, negatives = false) {
   });
   assert.equal(language.status, 200, "The ordinary session must save its own account language");
   assert.equal(language.body.persisted, true);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await reloadAfterInspection(page, { waitUntil: "domcontentloaded" });
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await expect(page.locator(".crm-app")).toBeVisible();
   const cookie = (await page.context().cookies()).find(
@@ -982,14 +997,30 @@ async function open(
   url.hash = section;
   // The real CRM can poll live modules; readiness is its rendered shell and
   // scoped content, rather than the absence of background network activity.
-  await page.goto(url.href, { waitUntil: "domcontentloaded" });
+  await gotoAfterInspection(page, url.href, { waitUntil: "domcontentloaded" });
   await expect(page.locator(".crm-app")).toBeVisible();
   await expect(page.locator("[data-crm-content]")).toBeVisible();
+  await waitForCrmSection(page, section, projectId);
   if (workspaceId === accounts?.customer.workspaceId && section === "knowledge")
     await expect(
       page.getByRole("button", { name: /^Wissensquellen \(/ }),
     ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
+}
+
+async function waitForCrmSection(page, section, projectId = "all") {
+  await expect(page.locator("[data-crm-eyebrow]")).not.toHaveText(/Projektscope wird geladen|Loading project scope|Ungültiger Projektscope|Invalid project scope/);
+  await expect(page.locator("[data-crm-header] [data-crm-project-select]")).toHaveValue(projectId);
+  // #bots shares a section with AI self-service. Choose the existing Bots tab
+  // explicitly, so the bot workflow exercises Bots rather than the AI assistant.
+  if (section === "bots") {
+    const bots = page.locator('[data-crm-section-entry="bots"]');
+    await expect(bots).toBeVisible();
+    await bots.click();
+    await expect(bots).toHaveAttribute("aria-current", "page");
+  }
+  const selected = page.locator('[data-crm-sidebar] [data-crm-nav-item][aria-current="page"]');
+  await expect(selected).toHaveAttribute("data-crm-nav-target", section === "meetings" ? "calendar" : section);
 }
 
 async function chooseProfile(page, profile) {
@@ -1015,6 +1046,7 @@ async function themeAndLayout(page) {
     theme: element.getAttribute("data-design"),
     background: getComputedStyle(element).backgroundColor,
     accent: getComputedStyle(element).getPropertyValue("--dc-accent").trim(),
+    rail: getComputedStyle(element).getPropertyValue("--dc-rail").trim(),
     sidebar: getComputedStyle(element.querySelector("[data-crm-sidebar]"))
       .backgroundColor,
     viewport: innerWidth,
@@ -1027,9 +1059,10 @@ async function themeAndLayout(page) {
   );
   assert.equal(
     styles.sidebar,
-    "rgb(23, 29, 48)",
-    "Actual CRM navigation must use Design C navy",
+    "rgb(30, 79, 194)",
+    "Actual CRM navigation must render the authenticated blue brand rail",
   );
+  assert.equal(styles.rail, "#1e4fc2", "Authenticated CRM brand token must be present");
   assert(styles.accent, "Design C token sheet must be present");
   assert(
     styles.document <= styles.viewport + 1,
@@ -1205,7 +1238,7 @@ async function runIntegration() {
       ? "Anonymous operational readers deny access"
       : "Anonymous CRM, booking page and Knowledge APIs deny access",
     async () => {
-      await operatorPage.goto(new URL("/login", base).href);
+      await gotoAfterInspection(operatorPage, new URL("/login", base).href);
       for (const endpoint of [
         "/api/crm/core",
         "/api/knowledge-center",
@@ -1214,7 +1247,7 @@ async function runIntegration() {
       ])
         assert.equal((await api(operatorPage, endpoint)).status, 401);
       if (!readersOnly) {
-        await operatorPage.goto(new URL("/booking", base).href);
+        await gotoAfterInspection(operatorPage, new URL("/booking", base).href);
         await expect(operatorPage).toHaveURL(/\/login(?:\?|$)/);
         await expect(operatorPage.getByRole("heading", { name: "Terminbuchung", exact: true })).toHaveCount(0);
       }
@@ -1307,6 +1340,7 @@ async function runIntegration() {
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
       const nav = operatorPage.locator("[data-crm-sidebar] [data-crm-nav]");
+      await expect.poll(() => nav.locator("[data-crm-nav-item]").count()).toBeGreaterThanOrEqual(6);
       const entries = await nav
         .locator("[data-crm-nav-item]")
         .evaluateAll((elements) =>
@@ -1360,12 +1394,14 @@ async function runIntegration() {
           assert.equal(href, "/booking");
           for (let roundTrip = 1; roundTrip <= 3; roundTrip++) {
             await captureBookingNavigation("Before booking link");
+            await drainResponseInspections(operatorPage);
             await nav.getByRole("link", { name: label, exact: true }).click();
             await captureBookingNavigation("After booking link");
             await expectBookingUrl("Booking link opens exact authenticated /booking route", new URL("/booking", base).href);
             await expect(operatorPage.getByRole("heading", { name: "Terminbuchung", exact: true })).toBeVisible();
             const back = operatorPage.getByRole("link", { name: "Zurück zum CRM", exact: true });
             await expect(back).toHaveAttribute("href", "/#meetings");
+            await drainResponseInspections(operatorPage);
             await back.click();
             await captureBookingNavigation("After CRM backlink");
             // The CRM may add its current scope query during hydration; the
@@ -1593,9 +1629,11 @@ async function runIntegration() {
         const refresh = operatorPage
           .locator("[data-crm-header]")
           .getByRole("button", { name: "Aktualisieren", exact: true });
+        await expect(refresh).toBeEnabled();
+        await drainResponseInspections(operatorPage);
         await Promise.all([
           operatorPage.waitForResponse(
-            (response) => response.url() === coreUrl,
+            (response) => response.url() === coreUrl && response.request().method() === "GET",
           ),
           refresh.click(),
         ]);
@@ -1607,8 +1645,7 @@ async function runIntegration() {
           operatorPage.locator("[data-crm-content]"),
         ).not.toContainText("Synthetic developer representative");
         await operatorPage
-          .locator("[data-crm-sidebar] [data-crm-nav-item]")
-          .first()
+          .locator('[data-crm-sidebar] [data-crm-nav-group="overview"][data-crm-nav-target="dashboard"]')
           .click();
         await expect(
           operatorPage.locator("[data-evelyn-command-center]"),
@@ -2234,8 +2271,10 @@ async function runIntegration() {
   await step(
     "No browser exceptions, server failures, browser outbound requests or preview UI",
     async () => {
+      for (const page of [operatorPage, customerPage, viewerPage].filter(Boolean)) await drainResponseInspections(page);
       await Promise.all(responseChecks);
       assert.deepEqual(errors, []);
+      assert.deepEqual(responseInspectionErrors, [], "Every observed successful API body must be inspected");
       assert.deepEqual(serverErrors, []);
       assert.deepEqual(outbound, []);
       assert.deepEqual(
@@ -2309,7 +2348,7 @@ try {
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
       "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
-      "The isolated fixture applies unchanged pinned 091–096 and 100–106, including package-3 workflow/monitoring and operational readers, plus additive account-language migration 110 for the current browser runtime; optional pgvector, historical manual media migration 062 and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
+      "The explicit current fixture applies its complete124-entry original application manifest through201, including original manual prerequisites; its existing portable001 RAG substitution, manual062 exclusion and unused preview097–099 exclusions remain. No production migration or restore equivalence is claimed.",
       "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
     ],
   };

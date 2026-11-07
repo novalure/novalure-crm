@@ -78,7 +78,7 @@ try {
   }
   checkStop();
   db = designCIntegration
-    ? await (await import("./lib/design-c-integration-fixture.mjs")).startDesignCIntegrationDatabase({ accountLanguagePreference: true, bookingSetup: true })
+    ? await (await import("./lib/design-c-integration-fixture.mjs")).startDesignCIntegrationDatabase({ accountLanguagePreference: true, bookingSetup: true, currentApplicationSchema: true })
     : await startLocalSalesDb();
   checkStop();
   if (!designCIntegration) await applySalesSchema(db, livelistedIntegration ? { maxMigrationNumber: 106 } : {});
