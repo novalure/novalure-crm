@@ -66,6 +66,10 @@ const results = [],
   readerMutations = [],
   authenticationProofs = [];
 const contexts = [];
+const screenshotDiagnostics = [];
+const screenshotRoles = new WeakMap();
+const screenshotEpoch = performance.now();
+let screenshotCleanup = false;
 let browser, accounts, operatorPage, customerPage, viewerPage, areaId, sourceId;
 const operationalReaders = [
   {
@@ -283,7 +287,7 @@ async function verifyOperationalReaders() {
       `${reader.id}: actual read panel distinguishes verified empty data`,
       async () => {
         await verifyReaderUi(reader, false);
-        await operatorPage.screenshot({
+        await captureScreenshot(operatorPage, "reader-empty", {
           path: path.join(output, `readers-${reader.id}-empty-1440.png`),
           fullPage: true,
         });
@@ -499,7 +503,7 @@ async function verifyOperationalReaders() {
           .locator('[data-crm-content] input[type="file"]')
           .all())
           await expect(upload).toBeDisabled();
-        await operatorPage.screenshot({
+        await captureScreenshot(operatorPage, "reader-managed-bots", {
           path: path.join(output, "readers-managed-nonempty-bots-1440.png"),
           fullPage: true,
         });
@@ -550,7 +554,7 @@ async function verifyOperationalReaders() {
           [],
           "Managed workspace must not read home-only documents, booking or settings adapters",
         );
-        await operatorPage.screenshot({
+        await captureScreenshot(operatorPage, "reader-managed-calendar", {
           path: path.join(output, "readers-managed-nonempty-calendar-1440.png"),
           fullPage: true,
         });
@@ -662,6 +666,76 @@ async function verifyOperationalReaders() {
   );
 }
 
+function screenshotDiagnostic(label, role, stage) {
+  if (screenshotDiagnostics.length >= 256) return null;
+  const record = {
+    label,
+    ...(role ? { role } : {}),
+    stage,
+    startMs: Math.round(performance.now() - screenshotEpoch),
+    cleanupFlag: screenshotCleanup,
+  };
+  if (screenshotDiagnostics.length === 255) {
+    record.label = "diagnostics-limit";
+    record.stage = "limit-reached";
+    record.endMs = record.startMs;
+    screenshotDiagnostics.push(record);
+    return null;
+  }
+  screenshotDiagnostics.push(record);
+  return record;
+}
+
+function finishScreenshotDiagnostic(record, status) {
+  if (record) {
+    record.status = status;
+    record.endMs = Math.round(performance.now() - screenshotEpoch);
+  }
+}
+
+async function captureScreenshot(page, label, options) {
+  const role = screenshotRoles.get(page);
+  const geometry = screenshotDiagnostic(label, role, "geometry");
+  const signal = AbortSignal.timeout(3000);
+  let onAbort;
+  let observed;
+  try {
+    // Bound the optional evaluation itself as well as locator resolution.
+    const aborted = new Promise((_, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+    observed = await Promise.race([
+      page.locator("html").evaluate(
+        (element) => ({
+          viewport: { width: innerWidth, height: innerHeight },
+          document: { width: element.scrollWidth, height: element.scrollHeight },
+          fontsStatus: document.fonts.status === "loaded" ? "loaded" : "loading",
+        }),
+        undefined,
+        { signal },
+      ),
+      aborted,
+    ]);
+    if (geometry) Object.assign(geometry, observed);
+    finishScreenshotDiagnostic(geometry, "complete");
+  } catch {
+    finishScreenshotDiagnostic(geometry, "unavailable");
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+  const capture = screenshotDiagnostic(label, role, "capture");
+  if (capture && observed) Object.assign(capture, observed);
+  try {
+    const result = await page.screenshot(options);
+    finishScreenshotDiagnostic(capture, "passed");
+    return result;
+  } catch (error) {
+    finishScreenshotDiagnostic(capture, "failed");
+    throw error;
+  }
+}
+
 async function step(name, run, fatal = false) {
   try {
     const detail = await run();
@@ -681,14 +755,13 @@ async function step(name, run, fatal = false) {
       viewerPage,
     ].entries()) {
       if (page && !page.isClosed())
-        await page
-          .screenshot({
-            path: path.join(
-              output,
-              `${artifactPrefix}failure-${results.length}-${index}.png`,
-            ),
-            fullPage: true,
-          })
+        await captureScreenshot(page, "failure-evidence", {
+          path: path.join(
+            output,
+            `${artifactPrefix}failure-${results.length}-${index}.png`,
+          ),
+          fullPage: true,
+        })
           .catch(() => {});
     }
     if (fatal) throw error;
@@ -741,6 +814,12 @@ async function newPage(label) {
     return route.abort("blockedbyclient");
   });
   const page = await context.newPage();
+  screenshotRoles.set(page, label);
+  for (const event of ["crash", "close"])
+    page.on(event, () => {
+      const record = screenshotDiagnostic("page-lifecycle", label, event);
+      if (record) record.endMs = record.startMs;
+    });
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(90000);
   if (readersOnly)
@@ -1115,7 +1194,7 @@ async function verifyWorkspaceSwitch() {
   await expect(operatorPage.locator("[data-crm-content]")).not.toContainText(
     "SYNTHETIC SECOND PROJECT CONTACT",
   );
-  await operatorPage.screenshot({
+  await captureScreenshot(operatorPage, "workspace-switch", {
     path: path.join(output, "workspace-switch-live-1440.png"),
     fullPage: true,
   });
@@ -1161,7 +1240,7 @@ async function verifyWorkspaceSwitch() {
     ),
   );
   await themeAndLayout(operatorPage);
-  await operatorPage.screenshot({
+  await captureScreenshot(operatorPage, "studio-workspace", {
     path: path.join(output, "studio-live-1440.png"),
     fullPage: true,
   });
@@ -1195,6 +1274,10 @@ async function runIntegration() {
     ...(process.env.CRM_QA_CHROMIUM_PATH
       ? { executablePath: process.env.CRM_QA_CHROMIUM_PATH }
       : {}),
+  });
+  browser.on("disconnected", () => {
+    const record = screenshotDiagnostic("browser-lifecycle", null, "disconnected");
+    if (record) record.endMs = record.startMs;
   });
   operatorPage = await newPage("operator");
   await step(
@@ -1287,7 +1370,7 @@ async function runIntegration() {
         /Atelier Nord|Atelier Linden|Parkquartier · Demo|48\.250|Guten Morgen\. Ihr Fokus/,
       );
       await themeAndLayout(operatorPage);
-      await operatorPage.screenshot({
+      await captureScreenshot(operatorPage, "operator-dashboard", {
         path: path.join(output, "operator-dashboard-1440.png"),
         fullPage: true,
       });
@@ -1394,6 +1477,9 @@ async function runIntegration() {
     "Authorized search uses a native modal and never reveals another tenant",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
+      await expect(operatorPage.locator("[data-crm-eyebrow]")).toHaveText(
+        "Alle Projekte",
+      );
       const trigger = operatorPage.getByRole("button", {
         name: "CRM durchsuchen",
         exact: true,
@@ -2121,10 +2207,18 @@ async function runIntegration() {
             ["dashboard", "knowledge", "properties"].includes(section) &&
             [1440, 390].includes(width)
           )
-            await customerPage.screenshot({
-              path: path.join(output, `customer-${section}-${width}.png`),
-              fullPage: true,
-            });
+            await captureScreenshot(
+              customerPage,
+              {
+                dashboard: "customer-dashboard",
+                knowledge: "customer-knowledge",
+                properties: "customer-properties",
+              }[section],
+              {
+                path: path.join(output, `customer-${section}-${width}.png`),
+                fullPage: true,
+              },
+            );
           if (
             width === 1440 &&
             ["dashboard", "knowledge", "settings"].includes(section)
@@ -2267,6 +2361,7 @@ try {
       error: error.stack || error.message,
     });
 } finally {
+  screenshotCleanup = true;
   for (const context of contexts) await context.close().catch(() => {});
   await browser?.close();
   await admin.end();
@@ -2300,6 +2395,7 @@ try {
     ...(readersOnly ? { readerMutations } : {}),
     responseInspectionErrors,
     consoleErrors,
+    screenshotDiagnostics,
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
       "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
