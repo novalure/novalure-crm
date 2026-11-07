@@ -427,8 +427,11 @@ async function verifyOperationalReaders() {
       operatorPage.on("request", requestListener);
       try {
         await operatorPage
+          .locator("[data-crm-sidebar] [data-crm-nav-group='knowledge']")
+          .click();
+        await operatorPage
           .locator(
-            "[data-crm-sidebar] [data-crm-nav-item][aria-label='KI-Bots']",
+            "[data-crm-section-entry='bots']",
           )
           .click();
         await expect(
@@ -1714,9 +1717,9 @@ async function runIntegration() {
       await expect(
         customerPage.locator("[data-crm-content]"),
       ).not.toContainText(/FOREIGN PRIVATE|SECOND PROJECT CONTACT/);
-      const navText = await customerPage
+      const navText = (await customerPage
         .locator("[data-crm-sidebar] [data-crm-nav]")
-        .innerText();
+        .allTextContents()).join("\n");
       assert(
         !/Mandantenverwaltung|Customer Access|Kundenzugänge|Managed Service|Novalure Studio/.test(
           navText,
