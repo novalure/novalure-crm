@@ -299,3 +299,39 @@ Qualification here consists of targeted Node loopback HTTP, IPC and serialized
 observer tests, including old-path negatives. It is not a browser, native CI,
 protected QA or production result. The package controller is required for the
 private capture relay; direct invocation without that channel fails closed.
+
+## Complete authenticated groups after the B4 native failure
+
+B4 run42406747086 passed mandatory steps1–44, then Design C recorded47 passes
+and4 failures. All592 original starts have terminal metadata; the former missing
+viewer terminals did not recur. The remaining operator team GET received200
+JSON, then its original clone failed after a late signal abort. Native body
+coverage was18 against17 inspected or qualified bodies, with zero server body
+resolutions. No browser/server exception, outbound request or private leak was
+recorded. Knowledge and Package4 were not run. These remain native failures.
+
+The old qualifier rejects every URL with more than one native request-header
+fingerprint. Native response rows previously lacked that RAM-only binding as
+well. The retained B4 artifact contains neither private fingerprints nor server
+rows, so it does not prove which predicate rejected this particular execution.
+
+The qualifier now checks every claimed native authentication group separately:
+its exact server starts and terminals, complete successful JSON bodies and status
+counts must all match. Response fingerprints derive from the same actual
+request-header promise as their native requests. Only after all claimed groups
+qualify does the complete union of body hashes balance against original inspected
+bodies and the remaining late-aborted bodies. There is no FIFO, individual
+request or individual session assignment to an unresolved original body.
+
+The global server relay also contains other pages, roles and API probes. An
+unclaimed group is excluded from this page's proof and cannot replace any missing
+claimed group. Missing or extra records within a claimed group, wrong-session
+replacement, missing response binding, incomplete/foreign bodies, changed status
+counts and mismatched original bodies still fail. The global foreign-sentinel
+check remains mandatory, including unrelated sessions.
+
+Bounded diagnostic records expose fixed rejection reasons, scalar counts and
+unrelated random references only. No request-header, URL, response-body digest or
+payload is persisted. Targeted loopback multi-session negatives, snapshot and
+observer groups plus strict focused lint qualify the helper draft. No browser,
+provider, deployment, workflow rerun or native PASS is claimed.

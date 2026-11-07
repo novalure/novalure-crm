@@ -6,8 +6,10 @@ import { once, EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { observeQaServerResponse, qaRequestFingerprint, qualifyQaServerBodies, createQaCaptureRelay, requestQaCaptureSnapshot, answerQaCaptureRequest } from "./lib/qa-server-response-capture.mjs";
-import { assertObservedFetchCoverage, parseQaFetchBindingMessage, safeQaFetchDiagnostic, collectFetchLifecycleDiagnostics } from "./lib/qa-response-inspection.mjs";
+import { assertObservedFetchCoverage, parseQaFetchBindingMessage, safeQaFetchDiagnostic, collectFetchLifecycleDiagnostics, createResponseInspectionBarrier } from "./lib/qa-response-inspection.mjs";
 
 const secret = "b".repeat(64), runId = "a".repeat(32), doc = "1794075165538-0.7775903198219385";
 const sha = value => createHash("sha256").update(value).digest("hex");
@@ -16,7 +18,7 @@ function row(key, extra = {}) { return { kind: "terminal", documentId: doc, id: 
   failedBeforeHeaders: false, retiredReadBeforeHeaders: false, preAbortedNoDispatch: false, rejectedWithOriginalAbortReason: false, ...extra }; }
 function audit(origin, headers, status = 200) {
   const url = origin + "/api/crm/team?workspaceId=SYNTHETIC_PRIVATE_QUERY", key = sha("GET\0" + url), captureKey = qaRequestFingerprint(secret, "GET", url, headers);
-  return { key, captureKey, network: [{ kind: "request", key, captureKey }, { kind: "response", key, status, ok: status >= 200 && status < 300, json: true }],
+  return { key, captureKey, network: [{ kind: "request", key, captureKey }, { kind: "response", key, captureKey, status, ok: status >= 200 && status < 300, json: true }],
     observations: [row(key, { kind: "start", phase: "request", status: null, json: false, signalAborted: false, bodyError: null }), row(key)] };
 }
 async function fixture(handler) {
@@ -108,6 +110,94 @@ test("concurrent same-URL same-session requests require the complete inspected m
       }
       assert.equal(calls, 2);
     } finally { await f.stop(); }
+  }
+});
+
+test("actual separate auth groups require every claimed group and body; unrelated global sessions cannot replace one", async () => {
+  let calls = 0;
+  const headers = session => ({ cookie: "SYNTHETIC_SESSION_" + session, accept: "application/json", "user-agent": "Synthetic transport", "sec-fetch-mode": "cors" });
+  const bodies = ["A", "B", "UNRELATED"].map(session => JSON.stringify({ syntheticSession: session }));
+  const f = await fixture((_request, response) => { response.writeHead(200, { "content-type": "application/json" }); response.end(bodies[calls++]); });
+  try {
+    const url = f.origin + "/api/crm/team?workspaceId=SYNTHETIC_PRIVATE_QUERY";
+    const first = await fetch(url, { headers: headers("A"), redirect: "error" }); assert.equal(await first.text(), bodies[0]);
+    const controller = new AbortController(), second = await fetch(url, { headers: headers("B"), signal: controller.signal, redirect: "error" });
+    const clone = second.clone(); controller.abort(); await assert.rejects(() => clone.text());
+    const unrelated = await fetch(url, { headers: headers("UNRELATED"), redirect: "error" }); assert.equal(await unrelated.text(), bodies[2]);
+    assert.equal(f.records.length, 6); assert(f.records.filter(row => row.kind === "terminal").every(row => row.complete));
+    const a = audit(f.origin, headers("A")), b = audit(f.origin, headers("B"));
+    Object.assign(a.observations[1], { phase: "body-eof", bodyError: null, bodyInspected: true, bodySha256: sha(bodies[0]), signalAborted: false });
+    b.observations = b.observations.map(row => ({ ...row, id: 2 }));
+    const source = { network: [...a.network, ...b.network], observations: [...a.observations, ...b.observations], records: f.records };
+    const diagnostics = [], proofs = qualifyQaServerBodies(source.network, source.observations, source.records, runId, diagnostics);
+    assert.equal(proofs.size, 1); assert.doesNotThrow(() => assertObservedFetchCoverage(source.network, source.observations, proofs));
+    const proof = [...proofs.values()][0];
+    assert.equal(proof.authGroups.length, 2); assert.equal(proof.nativeRequestCount, 2); assert.equal(proof.successfulJsonBodyCount, 2);
+    assert.equal(proof.resolvedBodyCount, 1); assert.equal(proof.serverIds.length, 2); assert.equal(proof.serverId, undefined);
+    assert.equal(diagnostics[0].reason, "QUALIFIED_COMPLETE_AUTH_GROUPS"); assert.equal(diagnostics[0].unclaimedServerStartCount, 1);
+    const negatives = [
+      ["missing own group cannot borrow the unrelated session", x => x.records = x.records.filter(row => row.id !== 2), "AUTH_GROUP_REQUEST_COUNT_MISMATCH"],
+      ["surplus in a claimed group", x => x.records.push(...x.records.filter(row => row.id === 1).map(row => ({ ...row, id: 4 }))), "AUTH_GROUP_REQUEST_COUNT_MISMATCH"],
+      ["missing own terminal", x => x.records = x.records.filter(row => row.id !== 2 || row.kind !== "terminal"), "AUTH_GROUP_TERMINAL_MISSING"],
+      ["wrong session cannot replace the exact own group", x => x.records.filter(row => row.id === 2).forEach(row => row.captureKey = x.records[4].captureKey), "AUTH_GROUP_REQUEST_COUNT_MISMATCH"],
+      ["response must bind to its actual request auth group", x => x.network[3].captureKey = x.network[0].captureKey, "AUTH_GROUP_REQUEST_COUNT_MISMATCH"],
+      ["unclaimed response group", x => x.network[3].captureKey = x.records[4].captureKey, "UNMATCHED_AUTH_GROUP"],
+      ["missing response binding", x => delete x.network[3].captureKey, "NATIVE_RESPONSE_FINGERPRINT_MISSING"],
+      ["incomplete body", x => x.records[3].complete = false, "INCOMPLETE_OR_UNSAFE_SERVER_BODY"],
+      ["status counts are bound per auth group", x => x.records[3].status = 201, "AUTH_GROUP_SUCCESSFUL_BODY_STATUS_MISMATCH"],
+      ["original inspected body must remain in the complete bag", x => x.observations[1].bodySha256 = sha("NOT_THE_ACTUAL_BODY"), "ORIGINAL_BODY_MULTISET_MISMATCH"],
+      ["missing server request despite extra native count", x => x.network.push({ ...x.network[2] }), "AUTH_GROUP_REQUEST_COUNT_MISMATCH"],
+    ];
+    for (const [label, mutate, reason] of negatives) {
+      const x = structuredClone(source), diagnostic = []; mutate(x);
+      const denied = qualifyQaServerBodies(x.network, x.observations, x.records, runId, diagnostic);
+      assert.equal(denied.size, 0, label); assert.equal(diagnostic[0].reason, reason, label);
+      assert.throws(() => assertObservedFetchCoverage(x.network, x.observations, denied), undefined, label);
+    }
+    const foreign = structuredClone(source); foreign.records[5].foreign = true;
+    assert.throws(() => qualifyQaServerBodies(foreign.network, foreign.observations, foreign.records, runId), /foreign private sentinel/);
+    for (const mutate of [p => p.authGroups.pop(), p => p.authGroups[0].nativeRequestCount++,
+      p => p.authGroups[1].captureKey = p.authGroups[0].captureKey, p => p.authGroups[0].serverIds = [...p.authGroups[1].serverIds],
+      p => p.authGroups[0].bodyHashes[0].sha256 = sha("FORGED")]) {
+      const changed = structuredClone(proof); mutate(changed);
+      assert.throws(() => assertObservedFetchCoverage(source.network, source.observations, new Map([[`${doc}/2`, changed]])), /INVALID_SERVER_EGRESS_BODY_PROOF/);
+    }
+    const repeated = []; qualifyQaServerBodies(source.network, source.observations, source.records, runId, repeated);
+    assert.equal(repeated[0].reference, diagnostics[0].reference);
+    const persisted = JSON.stringify([...diagnostics, ...repeated]);
+    for (const forbidden of [url, secret, a.key, a.captureKey, b.captureKey, ...bodies.map(sha), "SYNTHETIC_SESSION", "SYNTHETIC_PRIVATE_QUERY"])
+      assert(!persisted.includes(forbidden));
+    for (const diagnostic of [...diagnostics, ...repeated]) for (const [key, value] of Object.entries(diagnostic))
+      assert(key === "reference" ? /^[a-f0-9]{32}$/.test(value) : key === "reason" ? /^[A-Z_]+$/.test(value) : Number.isSafeInteger(value) && value >= 0);
+    assert.equal(calls, 3);
+  } finally { await f.stop(); }
+});
+
+test("actual response metadata callback binds only its own delayed request-header promise and holds missing bindings", async () => {
+  const text = readFileSync(new URL("./qa-design-c-integration.mjs", import.meta.url), "utf8");
+  const start = text.indexOf('  page.on("response", (response) => {');
+  const implementation = text.slice(start, text.indexOf("\n  });", start) + 6);
+  assert(implementation.startsWith('  page.on("response",'));
+  for (const mode of ["delayed", "missing", "invalid"]) {
+    const page = new EventEmitter(), request = { resourceType: () => "fetch", method: () => "GET" };
+    let resolveHeaders;
+    const captureKeyPromise = mode === "missing" ? undefined : new Promise(resolve => { resolveHeaders = resolve; });
+    const metadata = { captureKeyPromise }, requestInfo = new WeakMap([[request, metadata]]), responseChecks = [], responseInspectionErrors = [];
+    const network = [], barrier = createResponseInspectionBarrier(), base = new URL("http://127.0.0.1");
+    const fingerprint = sha("SYNTHETIC_HEADER_PROMISE_ONLY"), response = { url: () => base.origin + "/api/crm/team?private=SYNTHETIC_QUERY",
+      request: () => request, status: () => 200, ok: () => true, headers: () => ({ "content-type": "application/json" }),
+      text() { throw Error("Native fetch response must never be consumed by this metadata callback"); } };
+    runInNewContext(implementation, { page, URL, base, requestInfo, fetchKey: () => sha("SYNTHETIC_URL_ONLY"), fetchAudit: () => ({ network }),
+      Promise, assert, responseChecks, responseInspectionErrors, barrier, label: "synthetic", serverErrors: [], privateLeaks: [] });
+    page.emit("response", response);
+    assert.equal(network.length, 1); assert.equal(network[0].captureKey, undefined); assert.equal(metadata.responseReceived, true);
+    if (mode !== "missing") {
+      let drained = false; const pending = barrier.drain(500).then(() => { drained = true; });
+      await Promise.resolve(); assert.equal(drained, false);
+      resolveHeaders(mode === "invalid" ? undefined : fingerprint); await Promise.all(responseChecks); await pending;
+    } else await Promise.all(responseChecks);
+    if (mode === "delayed") { assert.equal(network[0].captureKey, fingerprint); assert.equal(responseInspectionErrors.length, 0); }
+    else { assert.equal(network[0].captureKey, undefined); assert.equal(responseInspectionErrors.length, 1); assert.equal(responseInspectionErrors[0].error, "native_response_binding_failed"); }
   }
 });
 

@@ -73,16 +73,25 @@ const responseBarriers = new WeakMap();
 const fetchAudits = new WeakMap();
 const serverBodyResolutions = new Map();
 const serverMultisetPublicIds = new Map();
+const serverBodyQualificationDiagnostics = new Map();
 const capture = fixture.responseCapture;
 assert(capture?.syntheticOnly === true && capture.origin === base.origin && /^[a-f0-9]{32}$/.test(capture.runId) && /^[a-f0-9]{64}$/.test(capture.secret));
 async function serverBodyProofs(audit, timeoutMs = 1000) {
   const records = await requestQaCaptureSnapshot(capture.runId, { timeoutMs: Math.min(1000, timeoutMs) });
   assert(records.length <= 20000 && records.every(row => row.runId === capture.runId));
   assert(!records.some(row => row.foreign), "Actual server egress contains a foreign private sentinel");
-  const proofs = qualifyQaServerBodies(audit.network, audit.observations, records, capture.runId);
+  const diagnostics = [];
+  const proofs = qualifyQaServerBodies(audit.network, audit.observations, records, capture.runId, diagnostics);
+  for (const diagnostic of diagnostics) {
+    const prior = serverBodyQualificationDiagnostics.get(diagnostic.reference);
+    assert(serverBodyQualificationDiagnostics.size < 2000 || prior, "Bounded server qualification diagnostics exceeded");
+    const reasonCounts = { ...prior?.reasonCounts };
+    reasonCounts[diagnostic.reason] = (reasonCounts[diagnostic.reason] ?? 0) + 1;
+    serverBodyQualificationDiagnostics.set(diagnostic.reference, { ...diagnostic, observations: (prior?.observations ?? 0) + 1, reasonCounts });
+  }
   for (const [id, proof] of proofs) {
-    if (!serverMultisetPublicIds.has(proof.captureKey)) serverMultisetPublicIds.set(proof.captureKey, randomBytes(16).toString("hex"));
-    serverBodyResolutions.set(id, { ...proof, publicServerId: serverMultisetPublicIds.get(proof.captureKey) });
+    if (!serverMultisetPublicIds.has(proof.requestKey)) serverMultisetPublicIds.set(proof.requestKey, randomBytes(16).toString("hex"));
+    serverBodyResolutions.set(id, { ...proof, publicServerId: serverMultisetPublicIds.get(proof.requestKey) });
   }
   return proofs;
 }
@@ -868,8 +877,13 @@ async function newPage(label) {
     const metadata = requestInfo.get(response.request());
     if (metadata) { metadata.responseReceived = true; metadata.status = response.status(); }
     if (url.origin === base.origin && url.pathname.startsWith("/api/") && response.request().resourceType() === "fetch") {
-      fetchAudit(page).network.push({ kind: "response", key: fetchKey(response.request()), path: url.pathname, method: response.request().method(),
-        ok: response.ok(), status: response.status(), json: (response.headers()["content-type"] ?? "").includes("application/json") });
+      const row = { kind: "response", key: fetchKey(response.request()), path: url.pathname, method: response.request().method(),
+        ok: response.ok(), status: response.status(), json: (response.headers()["content-type"] ?? "").includes("application/json") };
+      fetchAudit(page).network.push(row);
+      const check = Promise.resolve(metadata?.captureKeyPromise).then(value => {
+        assert(/^[a-f0-9]{64}$/.test(value ?? "")); row.captureKey = value;
+      }).catch(() => responseInspectionErrors.push({ role: label, path: url.pathname, error: "native_response_binding_failed" }));
+      responseChecks.push(check); barrier.inspect(check);
     }
     if (url.origin === base.origin && response.status() >= 500)
       serverErrors.push({
@@ -2459,7 +2473,9 @@ try {
     responseInspectionErrors,
     serverBodyResolutions: [...serverBodyResolutions].map(([id, proof]) => ({ id, source: proof.source, proofGroupId: proof.publicServerId,
       status: proof.status, nativeRequestCount: proof.nativeRequestCount, successfulJsonBodyCount: proof.successfulJsonBodyCount,
-      resolvedBodyCount: proof.resolvedBodyCount, actualEgressEofAndBodiesInspected: true, exactIndividualRequestClaim: false })),
+      resolvedBodyCount: proof.resolvedBodyCount, fingerprintGroupCount: proof.authGroups.length,
+      actualEgressEofAndBodiesInspected: true, exactIndividualRequestClaim: false })),
+    serverBodyQualificationDiagnostics: [...serverBodyQualificationDiagnostics.values()],
     fetchLifecycle,
     fetchLifecycleDiagnostics,
     consoleErrors,

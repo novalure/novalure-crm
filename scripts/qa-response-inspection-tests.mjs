@@ -48,7 +48,7 @@ import { webcrypto } from "node:crypto";
 import { createServer } from 'node:http';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, parseQaFetchBindingMessage } from './lib/qa-response-inspection.mjs';
+import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from './lib/qa-response-inspection.mjs';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 async function bounded(condition) {
@@ -297,6 +297,7 @@ test('finite quiet deadline cannot pass or conceal the last original/native cove
     setTimeout: callback => { now += 25; callback(); },
     responseBarriers: { get: () => ({ drain: async () => {} }) },
     fetchAudit: () => ({ network: [{ kind: 'request', key }], observations: [] }),
+    serverBodyProofs: async () => new Map(), safeQaFetchDiagnostic,
     assertObservedFetchCoverage, privateLeaks: [] };
   runInNewContext(implementation + ';globalThis.run = drainResponseInspections;', context);
   await assert.rejects(context.run(page), error => error.message.includes('"timedOut":true') && error.message.includes('"lastCoverageError":{"code":"UNOBSERVED_NATIVE_FETCH_REQUEST"') && error.message.includes('"nativeCount":1') && error.message.includes('"originalCount":0'));

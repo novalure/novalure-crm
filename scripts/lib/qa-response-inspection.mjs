@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { validQaServerAuthGroups } from "./qa-server-response-capture.mjs";
 const opaqueReferences = new Map();
 const opaqueReference = value => {
   if (typeof value !== "string") return null;
@@ -258,7 +259,7 @@ export function assertObservedFetchCoverage(network, observations, serverBodyPro
     const proof = serverBodyProofs.get(`${row.documentId}/${row.id}`);
     if (!proof) return false;
     if (proof.source !== "actual-node-egress-finish-multiset" || proof.status !== row.status ||
-      !/^[a-f0-9]{64}$/.test(proof.captureKey ?? "") || !Array.isArray(proof.serverIds) ||
+      !Array.isArray(proof.serverIds) ||
       proof.serverIds.length !== proof.nativeRequestCount || new Set(proof.serverIds).size !== proof.serverIds.length ||
       proof.serverIds.some(id => !Number.isSafeInteger(id) || id <= 0) ||
       proof.nativeRequestCount !== network.filter(item => item.kind === "request" && item.key === row.key).length ||
@@ -268,7 +269,7 @@ export function assertObservedFetchCoverage(network, observations, serverBodyPro
       proof.bodyHashes.some(body => !Number.isInteger(body.status) || body.status < 200 || body.status >= 300 || !/^[a-f0-9]{64}$/.test(body.sha256)) ||
       row.bodyError !== "body_read_failed" ||
       !row.json || row.status < 200 || row.status >= 300 || row.method !== "GET" || row.keepalive ||
-      row.signalAbortedAtStart || !row.signalAborted || row.bodyInspected)
+      row.signalAbortedAtStart || !row.signalAborted || row.bodyInspected || !validQaServerAuthGroups(network, row, proof))
       throw new Error("INVALID_SERVER_EGRESS_BODY_PROOF");
     return true;
   };
