@@ -182,7 +182,7 @@ import { registerAutonomousCrmAccess } from "../../src/lib/crm-autonomous-regist
 
 const manifest = JSON.parse(await readFile(process.argv[2], "utf8"));
 const connectionString = process.env.CRM_AUTONOMOUS_BOOTSTRAP_URL;
-if (!connectionString || !["stage", "register"].includes(manifest.phase) ||
+if (!connectionString || !["stage", "upgrade-personal", "register"].includes(manifest.phase) ||
     !manifest.database || !manifest.registrar) throw Error("BOOTSTRAP_INPUT_REQUIRED");
 const client = new pg.Client({ connectionString });
 try {
@@ -193,10 +193,13 @@ try {
       target.rolsuper || target.rolbypassrls ||
       ["public", "novalure_app", "novalure_tenant_app"].includes(target.registrar))
     throw Error("BOOTSTRAP_TARGET_OR_OWNER_DENIED");
-  if (manifest.phase === "stage") {
-    const sql = await readFile("migrations/staged/evelyn_autonomous_access.sql", "utf8");
-    if (createHash("sha256").update(sql).digest("hex") !==
-        "b2b9f7e1cf891e5214551239c41fd74ad0913fd2db18512124ff87d7757b47e5")
+  if (manifest.phase !== "register") {
+    const upgrade = manifest.phase === "upgrade-personal";
+    const sql = await readFile(upgrade ? "migrations/staged/evelyn_autonomous_personal_source.sql"
+      : "migrations/staged/evelyn_autonomous_access.sql", "utf8");
+    const expected = upgrade ? "159ad97378d3e02f05bc1545e28a074cbbccbd5b84ce97497a20150d86b4865e"
+      : "b2b9f7e1cf891e5214551239c41fd74ad0913fd2db18512124ff87d7757b47e5";
+    if (createHash("sha256").update(sql).digest("hex") !== expected)
       throw Error("BOOTSTRAP_SOURCE_MISMATCH");
     await client.query("begin");
     try { await client.query(sql); await client.query("commit"); }
@@ -218,7 +221,7 @@ exact `registrar`, and for registration an `assignment` matching
 `AutonomousCrmRegistration`. Its IDs must identify existing approved internal
 actors, explicit project permissions and a real allowed source; it contains only
 the Ed25519 public SPKI key, never the private key or connection secret. One
-fixed workload registration is retained. Revocation and replacement follow the
+fixed workload registration per approved source profile is retained. Revocation and replacement follow the
 owner-only lifecycle above; normal runtime never calls this driver.
 
 On Evelyn, compose the reviewed `createRegisteredCrmDepartmentConnector` from
@@ -235,3 +238,60 @@ the original complete command body with fresh transport credentials.
 These host bindings, actual signing custody, real registrations, exact hosted
 deployment, native review/CI and remaining target gates are open. No arbitrary
 department-wide business-entity access or new financial/legal authority is added.
+
+### Separate native personal source (source implementation; inactive)
+
+Registration alone could not authorize the real `franz-personal` caller through
+the former production-only verifier and SQL bundle. The additive personal source
+now exists exclusively in the real delegated gateway; the original
+`crm-machine-auth.ts`, synthetic callers and original staged SQL remain byte-identical.
+The personal verifier requires server flag `CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED=1`
+on the production CRM target. Missing flag denies the personal source. The fixed
+profile is:
+
+| Field | Exact value |
+| --- | --- |
+| issuer | `https://oidc.vercel.com/novalure` |
+| audience | `urn:novalure:crm:production` |
+| owner | `team_sjD78IkSicXJK6TAOR1JC7Wv` |
+| project | `prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I` |
+| subject | `owner:novalure:project:evelyn:environment:franz-personal` |
+| environment | `franz-personal` |
+| custom environment | `env_sue274zKgFxQJiKfw64x7BmEfEwE` |
+| real identity | `EVELYN_CRM_PERSONAL_INTERNAL_IDENTITY` |
+| internal workspace | `8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101` |
+
+RSA signature, issuer/audience, complete native bundle, UUIDv4 JTI, current expiry,
+not-before and issued-at freshness (at most five minutes) are checked. A fresh
+transport token does not authorize any resource without the separate registered
+grant and Ed25519 key. Source audit retains `environment: franz-personal`.
+
+After the original staged schema, run the driver's `upgrade-personal` phase once
+against the exact gated target as the same designated non-runtime schema owner.
+The separate upgrade adds the native custom-environment column and one complete
+two-profile CHECK, preserves UNIQUE identity and fixed issuer/owner/project pins,
+retains the old seven-argument authenticator as production-only, and adds a narrow
+eight-argument native authenticator. Only its EXECUTE permission is granted to the
+existing tenant runtime; no registry write, role, principal, grant or key is seeded.
+The current grant-lock function accepts only the complete registered production
+or native bundle and preserves all member/project/lifetime locks.
+
+The registrar's optional `sourceProfile: "FRANZ_PERSONAL"` selects only the fixed
+native constants; omission/`PRODUCTION` preserves the old profile. Use a separate
+workload ID and grant/public-key registration with the actual existing A1 task,
+department, agent, internal actor and explicit project/resource permission.
+Readback compares the complete saved source bundle, so an existing production
+workload cannot be reinterpreted as personal. The normal native caller already
+requests fresh OIDC through its real host; it must not impersonate production.
+
+Local author evidence: one targeted composite case passed using actual RSA JWT
+bytes and disposable PostgreSQL: production registration before/after the staged
+upgrade, personal default-off/unregistered denial, own Describe/Read/Update/replay,
+native audit attribution, invalid signature/claims, cross-profile grant/key denial,
+seven-argument native denial, runtime registry isolation and revocation. CRM strict
+typecheck and affected lint passed. The earlier six Describe groups and original
+access/History/client evidence remain component evidence, not new full-suite runs.
+
+No actual target upgrade, native flag, registration, key custody, source deployment,
+provider/SSO role or production gate was activated by this implementation. These
+remain exact-target activation steps after independent review and applicable gates.

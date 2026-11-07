@@ -13,6 +13,7 @@ import {
   CrmMachineAuthError, getCrmMachineBearer, verifyCrmMachineToken,
   type CrmMachineAuthOptions,
 } from "./crm-machine-auth";
+import { CRM_PERSONAL_SOURCE, verifyPersonalAutonomousCrmToken } from "./crm-autonomous-personal-auth";
 import { readKnowledgeJson } from "./knowledge-center/http";
 import { KnowledgeCenterError } from "./knowledge-center/policy";
 
@@ -115,11 +116,18 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
         request.headers.has("cookie") || request.headers.has("origin")) denied("ACCESS_DENIED", 401);
     const token = getCrmMachineBearer(request.headers);
     if (!token) denied("ACCESS_DENIED", 401);
-    const claims = await verifyCrmMachineToken(token, options.machineAuth);
+    const claims = await verifyCrmMachineToken(token, options.machineAuth).catch(error => {
+      if ((options.machineAuth?.env ?? process.env).CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED !== "1") throw error;
+      return verifyPersonalAutonomousCrmToken(token, options.machineAuth);
+    });
     const principalParams = [claims.issuer, claims.audience, claims.projectId, claims.ownerId,
       claims.subject, claims.workspaceId, claims.environment];
-    const principal = (await queryAuthenticationRows<Principal>(principalSql, principalParams, options))[0];
-    if (!principal || principal.workspace_id !== claims.workspaceId) denied();
+    const personal = claims.identityId === CRM_PERSONAL_SOURCE.identityId;
+    const principal = (await queryAuthenticationRows<Principal>(personal
+      ? "select * from public.crm_authenticate_personal_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8)" : principalSql,
+    personal ? [...principalParams, claims.customEnvironmentId] : principalParams, options))[0];
+    if (!principal || principal.workspace_id !== claims.workspaceId || principal.identity_id !==
+        (personal ? CRM_PERSONAL_SOURCE.identityId : "EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY")) denied();
     const delegation = parseDelegation(request.headers.get("x-evelyn-delegation"));
     const body = parseRequest(await readKnowledgeJson(request,
       ["contractVersion", "operation", "correlationId", "idempotencyKey", "expectedVersion", "patch"], 8192));
@@ -132,8 +140,11 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
       workspaceId: grant.workspace_id, workspaceName: "Registered internal delegation", name: "Registered CRM service agent",
       email: "delegated-crm-agent@service.invalid", role: "agent", productRole: "novalure_operator",
       permissions: getRolePermissions("agent"), productPermissions: getProductRoleCapabilities("novalure_operator"),
-      serviceIdentity: { identityId: principal.identity_id, role: claims.role, consumer: claims.consumer,
-        environment: claims.environment, jtiHash: claims.jtiHash } };
+      serviceIdentity: claims.environment === "franz-personal"
+        ? { identityId: CRM_PERSONAL_SOURCE.identityId, role: claims.role, consumer: claims.consumer,
+          environment: claims.environment, jtiHash: claims.jtiHash }
+        : { identityId: principal.identity_id, role: claims.role, consumer: claims.consumer,
+          environment: claims.environment, jtiHash: claims.jtiHash } };
     const attribution = { grantId: grant.id, departmentId: grant.department_id, agentId: grant.agent_id, taskId: grant.task_id };
     const commandInput: CrmCommandInput = { operation: "autonomous.task.title.update", resourceId: grant.source_id,
       projectId: grant.project_id, expectedVersion: body.expectedVersion!, idempotencyKey: body.idempotencyKey,

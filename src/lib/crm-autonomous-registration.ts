@@ -3,6 +3,7 @@ import { createPublicKey } from "node:crypto";
 import { assertCrmUuid, crmPayloadDigest } from "./crm-command";
 import { CRM_MACHINE_AUDIENCE, CRM_MACHINE_ENVIRONMENT, CRM_MACHINE_ISSUER,
   CRM_MACHINE_OWNER_ID, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_SUBJECT, CRM_MACHINE_WORKSPACE_ID } from "./crm-machine-auth";
+import { CRM_PERSONAL_SOURCE } from "./crm-autonomous-personal-auth";
 
 export const autonomousCrmDepartments = [
   "EVELYN_CEO", "BUSINESS_DEVELOPMENT", "SALES", "MARKETING_ADS", "WEBSITE_STUDIO", "REAL_ESTATE_OPERATIONS",
@@ -15,6 +16,7 @@ export type AutonomousCrmRegistration = Readonly<{
   agentId: string; taskId: string; entity: "Task" | "Project";
   scopes: readonly ("crm.tasks.read" | "crm.tasks.write" | "crm.projects.read")[];
   publicKey: string; authorityReference: string; expiresAt: string | null;
+  sourceProfile?: "PRODUCTION" | "FRANZ_PERSONAL";
 }>;
 type BootstrapConnection = {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
@@ -24,6 +26,11 @@ type BootstrapConnection = {
  * No HTTP route exposes this function. It receives public key material only.
  * Call only after the exact target, source and applicable deployment gates pass. */
 export async function registerAutonomousCrmAccess(connection: BootstrapConnection, input: AutonomousCrmRegistration) {
+  if (input.sourceProfile !== undefined && !["PRODUCTION", "FRANZ_PERSONAL"].includes(input.sourceProfile)) throw new Error("AUTONOMOUS_REGISTRATION_INVALID");
+  const source = input.sourceProfile === "FRANZ_PERSONAL" ? CRM_PERSONAL_SOURCE : {
+    identityId: "EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY", environment: CRM_MACHINE_ENVIRONMENT,
+    subject: CRM_MACHINE_SUBJECT, customEnvironmentId: null,
+  };
   for (const id of [input.workloadId, input.workloadActorId, input.grantId, input.actorId, input.projectId, input.sourceId, input.taskId]) assertCrmUuid(id);
   const key = createPublicKey({ key: Buffer.from(input.publicKey, "base64url"), format: "der", type: "spki" });
   const allowedScopes = input.entity === "Task" ? ["crm.tasks.read", "crm.tasks.write"] : ["crm.projects.read"];
@@ -42,15 +49,25 @@ export async function registerAutonomousCrmAccess(connection: BootstrapConnectio
       group by r.rolsuper,r.rolbypassrls`)).rows[0];
     if (!owner?.owns_registration || owner.rolsuper || owner.rolbypassrls ||
         ["public", "novalure_app", "novalure_tenant_app"].includes(String(owner.registrar))) throw new Error("AUTONOMOUS_BOOTSTRAP_OWNER_REQUIRED");
-    await connection.query(`insert into crm_autonomous_workloads(id,identity_id,workspace_id,actor_user_id,issuer,audience,
+    if (input.sourceProfile === "FRANZ_PERSONAL") await connection.query(`insert into crm_autonomous_workloads
+      (id,identity_id,workspace_id,actor_user_id,issuer,audience,project_id,owner_id,subject,environment,custom_environment_id,authority_reference)
+      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict(id) do nothing`,
+    [input.workloadId, source.identityId, CRM_MACHINE_WORKSPACE_ID, input.workloadActorId, CRM_MACHINE_ISSUER,
+      CRM_MACHINE_AUDIENCE, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, source.subject, source.environment,
+      source.customEnvironmentId, input.authorityReference]);
+    else await connection.query(`insert into crm_autonomous_workloads(id,identity_id,workspace_id,actor_user_id,issuer,audience,
       project_id,owner_id,subject,environment,authority_reference)
       values($1,'EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY',$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(id) do nothing`,
     [input.workloadId, CRM_MACHINE_WORKSPACE_ID, input.workloadActorId, CRM_MACHINE_ISSUER, CRM_MACHINE_AUDIENCE,
       CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, CRM_MACHINE_SUBJECT, CRM_MACHINE_ENVIRONMENT, input.authorityReference]);
-    const workload = (await connection.query(`select actor_user_id,workspace_id,authority_reference,disabled,kill_switch_active,revoked_at
-      from crm_autonomous_workloads where id=$1`, [input.workloadId])).rows[0];
+    const workload = (await connection.query(`select actor_user_id,workspace_id,authority_reference,disabled,kill_switch_active,revoked_at,
+      identity_id,issuer,audience,project_id,owner_id,subject,environment,to_jsonb(w)->>'custom_environment_id' as custom_environment_id
+      from crm_autonomous_workloads w where id=$1`, [input.workloadId])).rows[0];
     if (!workload || workload.actor_user_id !== input.workloadActorId || workload.workspace_id !== CRM_MACHINE_WORKSPACE_ID ||
-        workload.authority_reference !== input.authorityReference || workload.disabled || workload.kill_switch_active || workload.revoked_at) {
+        workload.authority_reference !== input.authorityReference || workload.disabled || workload.kill_switch_active || workload.revoked_at ||
+        workload.identity_id !== source.identityId || workload.issuer !== CRM_MACHINE_ISSUER || workload.audience !== CRM_MACHINE_AUDIENCE ||
+        workload.project_id !== CRM_MACHINE_PROJECT_ID || workload.owner_id !== CRM_MACHINE_OWNER_ID || workload.subject !== source.subject ||
+        workload.environment !== source.environment || workload.custom_environment_id !== source.customEnvironmentId) {
       throw new Error("AUTONOMOUS_WORKLOAD_CONFLICT");
     }
     await connection.query(`insert into crm_autonomous_access_grants(id,workload_id,workspace_id,actor_user_id,project_id,source_id,
