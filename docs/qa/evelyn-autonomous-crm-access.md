@@ -93,8 +93,10 @@ renew, reactivate or expand authority.
 
 ## Local evidence and remaining activation
 
-`npm run test:crm-autonomous-access` executes 18 passing groups with no skips,
-including the unchanged five legacy machine-auth groups. The new groups use the
+`npm run test:crm-autonomous-access` executes the 13 new groups. The final local
+run of these groups together with the unchanged five legacy machine-auth groups
+passed 18/18 with no skips. CI runs legacy authentication in its existing sales
+suite and adds only the new groups. The new groups use the
 real handler, Ed25519 signatures and a disposable PostgreSQL database with a
 separate non-superuser, non-BYPASSRLS bootstrap owner. They cover all departments,
 missing registration, wrong keys/actor selectors, private/foreign resources,
