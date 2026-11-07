@@ -116,3 +116,51 @@ claimed.
 
 The documented lifecycle is [request, headers, then completed body](https://playwright.dev/docs/api/class-request),
 and [Response.finished waits for completion](https://playwright.dev/docs/api/class-response#response-finished).
+
+
+## Follow-up to the actual01 native result
+
+Run42384706743/job128439539008 passed mandatory steps1–44. Step45 reached
+30 passed cases (all functional cases and1440px) before20 failures. The first
+remaining pending GET `/api/crm/expose-template-assets` had no response headers
+and no request-finished event. Its source consumer reads `response.json()` and
+aborts its original fetch on effect cleanup; there is no request-dedupe cache.
+Thus that case has no body to clone. The artifact also retains24 passive CDP
+body-read failures after navigation on other successful API responses. Heartbeat
+bodies completed; server/page error arrays stayed empty. Later suites did not run.
+
+The follow-up observes every original same-origin API Fetch promise directly.
+Its actual fulfillment/rejection and original AbortSignal are independent of CDP
+request-finished events. A signal event alone never settles the wait. Successful
+JSON bodies are read through their original Response clone to EOF and hashed;
+only pathname/method/status/phase/hash metadata and foreign-sentinel booleans
+cross the test binding. Original promise/Response, cookies, CSRF, requests and
+application source remain untouched. No request is added, replayed or fulfilled.
+
+Native network events still require matching original-Fetch start coverage and
+actual completed JSON-body proofs, including duplicate cardinality. Missing,
+unsettled or malformed proof fails closed. Non-Fetch API transport retains its
+existing body inspector; HTTP500 and all original role/tenant/business/exception
+assertions remain. The old duplicate CDP Fetch body reader is replaced by this
+covered browser-owned reader, not filtered by its error messages or endpoint.
+An active never-headers request and a never-ending200 JSON body still time out.
+A rejected unsafe request remains an unknown-outcome failure.
+
+A retiring non-keepalive document GET with no headers is explicitly recorded as
+a canceled read, with no body or API-success claim. A pending write, keepalive
+request or already received but uninspected body on retirement remains failure.
+All original Fetch starts require a terminal record; a missing cancellation or
+missing body cannot disappear during document changes. Bounded quiet turns and
+pre-action drains also let React's pending effects register their requests.
+Late native/bridge events are re-observed within that same15-second budget; no
+endpoint, mutation or request is retried.
+
+Thirteen targeted transport checks pass, including actual loopback HTTP and
+Fetch/stream controls for ordinary APIs, private query/header redaction, one
+request and identical native promise/Response/auth/CSRF behavior, actual Abort
+rejection, ignored-Abort negative control, never-headers/never-EOF failures,
+document retirement, unmatched/duplicate network coverage and retained non-Fetch
+barriers. Focused lint, syntax and whitespace pass. There is no browser/build/DB/
+provider execution, CI rerun or native PASS claim for this draft. The precise
+original browser-promise outcome of the01 assets request was not retained; that
+cause remains an inference for native confirmation, not a declared product fix.

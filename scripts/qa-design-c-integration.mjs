@@ -2,11 +2,11 @@
 // Accounts and business rows are synthetic. Login, MFA, cookies, CSRF, RLS and
 // application APIs are real; no sessions, auth headers or provider IO are faked.
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createResponseInspectionBarrier, observeQaHeartbeatBodies, requiresCrmDocumentReload } from "./lib/qa-response-inspection.mjs";
+import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, requiresCrmDocumentReload } from "./lib/qa-response-inspection.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
@@ -69,29 +69,37 @@ const results = [],
   authenticationProofs = [];
 const contexts = [];
 const responseBarriers = new WeakMap();
-async function heartbeatEvidence(page) {
-  let timer;
-  try {
-    return await Promise.race([
-      page.evaluate(() => {
-        const s = globalThis.__crmQaHeartbeatBodies;
-        return s ? { pending: s.pending, completed: s.completed, foreign: s.foreign, errors: s.errors.slice(0, 5) } : null;
-      }),
-      new Promise(resolve => { timer = setTimeout(() => resolve({ observationUnavailable: true }), 1000); }),
-    ]);
-  } catch { return { observationUnavailable: true }; }
-  finally { clearTimeout(timer); }
+const fetchAudits = new WeakMap();
+function fetchAudit(page) {
+  let audit = fetchAudits.get(page);
+  if (!audit) { audit = { network: [], observations: [] }; fetchAudits.set(page, audit); }
+  return audit;
 }
+const fetchKey = request => createHash("sha256").update(request.method() + "\0" + new URL(request.url()).href).digest("hex");
 async function drainResponseInspections(page) {
   const barrier = responseBarriers.get(page);
-  try { await barrier?.drain(); }
-  catch { throw new Error("Pending API/body inspection before navigation timed out: " + JSON.stringify({ pending: barrier?.pendingInfo(), heartbeatBody: await heartbeatEvidence(page) })); }
-  const observed = await page.evaluate(() => {
-    const state = globalThis.__crmQaHeartbeatBodies;
-    return state ? { pending: state.pending, completed: state.completed, foreign: state.foreign, errors: state.errors.splice(0) } : null;
-  });
-  if (observed?.foreign) privateLeaks.push({ path: "/api/auth/session", observation: "original-browser-body-clone" });
-  for (const error of observed?.errors ?? []) responseInspectionErrors.push({ path: "/api/auth/session", error });
+  if (page.url() === "about:blank" && fetchAudit(page).network.length === 0) { await barrier?.drain(); return; }
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const result = await page.evaluate(async remaining => {
+      const state = globalThis.__crmQaFetchBodies;
+      return state ? state.drain(remaining) : { ok: false, errors: ["fetch_observer_missing"] };
+    }, Math.max(1, deadline - Date.now()));
+    if (!result.ok) throw new Error("Original API fetch lifecycle did not settle: " + JSON.stringify(result));
+    if (result.foreign) privateLeaks.push({ observation: "original-browser-body-clone" });
+    try { await barrier?.drain(Math.max(1, deadline - Date.now())); }
+    catch { throw new Error("Pending non-fetch API/body inspection before navigation timed out: " + JSON.stringify(barrier?.pendingInfo())); }
+    const audit = fetchAudit(page);
+    try { assertObservedFetchCoverage(audit.network, audit.observations); return; }
+    catch (error) {
+      // A new original fetch may start between the browser snapshot and its
+      // native event delivery. Re-observe within the SAME budget, never refetch.
+      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY"].includes(error.message)) throw error;
+      if (Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  throw new Error("Original/native Fetch coverage did not settle within its finite budget");
 }
 async function gotoAfterInspection(page, ...args) {
   await drainResponseInspections(page);
@@ -423,7 +431,8 @@ async function verifyOperationalReaders() {
       const details = workspaceSwitch.locator("xpath=ancestor::details[1]");
       if (!(await workspaceSwitch.isVisible()))
         await details.locator("summary").first().click();
-      await workspaceSwitch.selectOption(customer.workspaceId);
+      await drainResponseInspections(operatorPage);
+  await workspaceSwitch.selectOption(customer.workspaceId);
       await expect(workspaceSwitch).toHaveValue(customer.workspaceId);
       await expect(operatorPage.locator("[data-crm-content]")).toContainText(
         "SYNTHETIC CUSTOMER CONTACT",
@@ -772,7 +781,17 @@ async function newPage(label) {
     });
     return route.abort("blockedbyclient");
   });
-  await context.addInitScript(observeQaHeartbeatBodies, { origin: base.origin });
+  await context.exposeBinding("__crmQaFetchReport", ({ page }, event) => {
+    assert(page && ["start", "terminal"].includes(event.kind) && /^[a-f0-9]{64}$/.test(event.key));
+    assert(Number.isSafeInteger(event.id) && event.id > 0 && typeof event.documentId === "string" && event.documentId.length < 100);
+    assert(/^\/api\/[A-Za-z0-9._~%/-]{1,450}$/.test(event.path) && /^[A-Z]{3,8}$/.test(event.method));
+    if (event.bodyInspected) assert(event.json && event.status >= 200 && event.status < 300 && /^[a-f0-9]{64}$/.test(event.bodySha256));
+    if (event.retiredReadBeforeHeaders) assert(event.method === "GET" && event.status === null && !event.keepalive && !event.bodyInspected);
+    fetchAudit(page).observations.push({ ...event, role: label });
+    if (event.kind === "terminal" && event.foreign) privateLeaks.push({ role: label, path: event.path });
+    if (event.kind === "terminal" && event.bodyError) responseInspectionErrors.push({ role: label, path: event.path, status: event.status, error: event.bodyError });
+  });
+  await context.addInitScript(observeQaFetchBodies, { origin: base.origin });
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(90000);
@@ -800,7 +819,9 @@ async function newPage(label) {
     const url = new URL(request.url());
     if (url.origin === base.origin && url.pathname.startsWith("/api/")) {
       const metadata = { path: url.pathname, method: request.method(), resourceType: request.resourceType(), responseReceived: false, finished: false };
-      requestInfo.set(request, metadata); barrier.started(request, metadata);
+      requestInfo.set(request, metadata);
+      if (request.resourceType() === "fetch") fetchAudit(page).network.push({ kind: "request", key: fetchKey(request), ...metadata });
+      else barrier.started(request, metadata);
     }
   });
   page.on("requestfinished", request => { if (requestInfo.has(request)) requestInfo.get(request).finished = true; barrier.finished(request); });
@@ -809,6 +830,10 @@ async function newPage(label) {
     const url = new URL(response.url());
     const metadata = requestInfo.get(response.request());
     if (metadata) { metadata.responseReceived = true; metadata.status = response.status(); }
+    if (url.origin === base.origin && url.pathname.startsWith("/api/") && response.request().resourceType() === "fetch") {
+      fetchAudit(page).network.push({ kind: "response", key: fetchKey(response.request()), path: url.pathname, method: response.request().method(),
+        ok: response.ok(), status: response.status(), json: (response.headers()["content-type"] ?? "").includes("application/json") });
+    }
     if (url.origin === base.origin && response.status() >= 500)
       serverErrors.push({
         role: label,
@@ -818,6 +843,7 @@ async function newPage(label) {
     if (
       url.origin === base.origin &&
       url.pathname.startsWith("/api/") &&
+      response.request().resourceType() !== "fetch" &&
       response.ok() &&
       (response.headers()["content-type"] || "").includes("application/json")
     ) {
@@ -832,8 +858,7 @@ async function newPage(label) {
           if (/SYNTHETIC FOREIGN PRIVATE SENTINEL|FOREIGN-PRIVATE-UNIT/.test(body))
             privateLeaks.push({ role: label, path: url.pathname });
         })
-        .catch(async error => responseInspectionErrors.push({ role: label, path: url.pathname, method: response.request().method(), status: response.status(), requestFinished: metadata?.finished ?? false, error: error.message,
-          ...(url.pathname === "/api/auth/session" ? { heartbeatBody: await heartbeatEvidence(page) } : {}),
+        .catch(error => responseInspectionErrors.push({ role: label, path: url.pathname, method: response.request().method(), status: response.status(), requestFinished: metadata?.finished ?? false, error: error.message,
         }))
         .finally(() => clearTimeout(timer));
       responseChecks.push(check);
@@ -1047,6 +1072,7 @@ async function waitForCrmSection(page, section, projectId = "all") {
   if (section === "bots") {
     const bots = page.locator('[data-crm-section-entry="bots"]');
     await expect(bots).toBeVisible();
+    await drainResponseInspections(page);
     await bots.click();
     await expect(bots).toHaveAttribute("aria-current", "page");
   }
@@ -1055,6 +1081,7 @@ async function waitForCrmSection(page, section, projectId = "all") {
 }
 
 async function chooseProfile(page, profile) {
+  await drainResponseInspections(page);
   // Initial hash/profile hydration can reset the focused sidebar. Perform the
   // actual toggle and observe its state before operating its conditional form.
   await expect(async () => {
@@ -1171,6 +1198,7 @@ async function verifyWorkspaceSwitch() {
   const details = workspaceSwitch.locator("xpath=ancestor::details[1]");
   if ((await details.count()) && !(await workspaceSwitch.isVisible()))
     await details.locator("summary").first().click();
+  await drainResponseInspections(operatorPage);
   await workspaceSwitch.selectOption(accounts.customer.workspaceId);
   await expect(workspaceSwitch).toHaveValue(accounts.customer.workspaceId);
   // Workspace changes preserve the user's current section. The existing
@@ -1201,6 +1229,7 @@ async function verifyWorkspaceSwitch() {
   );
   // The existing controller changes managed workspaces through its authorized
   // dropdown; a URL scope alone does not change the server login membership.
+  await drainResponseInspections(operatorPage);
   await workspaceSwitch.selectOption(accounts.studio.workspaceId);
   await expect(workspaceSwitch).toHaveValue(accounts.studio.workspaceId);
   await expect(operatorPage.locator("[data-crm-content]")).toContainText(
@@ -1453,6 +1482,7 @@ async function runIntegration() {
           continue;
         }
         assert.equal(tag, "button", `Unsupported role-authorized navigation element: ${label}`);
+        await drainResponseInspections(operatorPage);
         await nav.getByRole("button", { name: label, exact: true }).click();
         await expect(
           nav.getByRole("button", { name: label, exact: true }),
@@ -2171,6 +2201,7 @@ async function runIntegration() {
   );
 
   for (const width of [1440, 768, 390, 360]) {
+    await drainResponseInspections(customerPage);
     await customerPage.setViewportSize({
       width,
       height: width < 768 ? 844 : 1000,
@@ -2379,6 +2410,7 @@ try {
     privateLeaks,
     ...(readersOnly ? { readerMutations } : {}),
     responseInspectionErrors,
+    fetchLifecycle: [operatorPage, customerPage, viewerPage].filter(Boolean).flatMap(page => fetchAudit(page).observations.filter(event => event.kind === "terminal")),
     consoleErrors,
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
