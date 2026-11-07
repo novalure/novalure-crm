@@ -1002,7 +1002,7 @@ async function chooseProfile(page, profile) {
     await expect(sidebar).toHaveAttribute("data-collapsed", "false", {
       timeout: 1500,
     });
-    const select = page.locator("[data-crm-profile-card] select");
+    const select = page.locator("[data-crm-sidebar] [data-crm-profile-select]");
     await select.selectOption(profile, { timeout: 1500 });
     await expect(select).toHaveValue(profile, { timeout: 1500 });
   }).toPass({ timeout: 15000, intervals: [100, 250, 500] });
