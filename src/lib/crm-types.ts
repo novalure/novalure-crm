@@ -705,7 +705,7 @@ export type PropertyUnit = Partial<PropertyUnitDetails> & {
   updatedAt: string;
 };
 
-export type PropertyReservationStatus = "requested" | "hold" | "reserved" | "expired" | "converted";
+export type PropertyReservationStatus = "requested" | "hold" | "reserved" | "expired" | "converted" | "withdrawn";
 
 export type PropertyReservation = {
   id: ID;

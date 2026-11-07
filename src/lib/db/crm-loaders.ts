@@ -3192,6 +3192,7 @@ function normalizePropertyReservationStatus(value: string): PropertyReservation[
   if (value === "reserved") return "reserved";
   if (value === "expired") return "expired";
   if (value === "converted") return "converted";
+  if (value === "withdrawn") return "withdrawn";
   return "hold";
 }
 

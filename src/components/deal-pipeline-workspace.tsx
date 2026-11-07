@@ -2,6 +2,7 @@
 
 import { compareTaskDue, formatTaskDue, taskDueState } from "@/lib/task-due";
 import { useTaskClock } from "@/lib/use-task-clock";
+import { findOpenDealReservation } from "@/lib/property-reservation-state";
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
 import type {
   CalendarEvent,
@@ -637,9 +638,7 @@ export function DealPipelineWorkspace({
         const unit = propertyUnits.find(
           (item) => item.dealId === deal.id || (contact?.id && item.buyerContactId === contact.id),
         );
-        const reservation = propertyReservations.find(
-          (item) => item.dealId === deal.id || (contact?.id && item.contactId === contact.id),
-        );
+        const reservation = findOpenDealReservation(propertyReservations, deal.projectId, deal.id, contact?.id);
         const listing = sellerListings.find((item) => item.sellerLeadId === lead?.id);
         const latestHistory = stageHistory[deal.id]?.find((entry) => entry.toStage === deal.stage);
         const stageAgeDays = getDaysBetween(latestHistory?.changedAt ?? lead?.lastContactAt ?? lead?.receivedAt);
@@ -671,7 +670,7 @@ export function DealPipelineWorkspace({
 
         if (
           reservation &&
-          reservation.status !== "converted" &&
+          ["requested", "hold", "reserved"].includes(reservation.status) &&
           new Date(reservation.expiresAt).getTime() <= NOW.getTime() + 3 * 24 * 60 * 60 * 1000
         ) {
           warnings.push({ id: "reservationDue", tone: "amber" });

@@ -112,6 +112,7 @@ const statusStyles: Record<PropertyUnit["status"], string> = {
 const reservationStyles: Record<PropertyReservation["status"], string> = {
   requested: "border-violet-200 bg-violet-50 text-violet-900",
   converted: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  withdrawn: "border-stone-200 bg-stone-50 text-stone-700",
   expired: "border-rose-200 bg-rose-50 text-rose-900",
   hold: "border-amber-200 bg-amber-50 text-amber-900",
   reserved: "border-blue-200 bg-blue-50 text-blue-900",
@@ -407,7 +408,8 @@ export function UnitBoard({
         item.days !== null &&
         item.days <= 7 &&
         item.reservation.status !== "converted" &&
-        item.reservation.status !== "expired",
+        item.reservation.status !== "expired" &&
+        item.reservation.status !== "withdrawn",
     )
     .sort((left, right) => (left.days ?? 0) - (right.days ?? 0));
 

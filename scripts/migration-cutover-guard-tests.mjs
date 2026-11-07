@@ -881,6 +881,14 @@ test("a manual cutover requires a single explicit version and opt-in flag", () =
   assert.match(runner, /never included automatically/);
 });
 
+test("reservation withdrawal migration cannot run alone without the reservation workflow predecessor", () => {
+  const predecessor = migration("082_crm_property_sales_workflow", "sha-082");
+  const withdrawal = migration("200_property_reservation_withdrawal", "sha-200");
+  const migrations = [predecessor, withdrawal];
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only: withdrawal.version }), /required predecessor 082_crm_property_sales_workflow/);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only: withdrawal.version }), [withdrawal]);
+});
+
 test("compatibility profiles bind production only to prod and QA or rehearsal only to test", () => {
   assert.equal(compatibilityProfileMatchesTarget("", "test"), true);
   assert.equal(compatibilityProfileMatchesTarget("production", "prod"), true);

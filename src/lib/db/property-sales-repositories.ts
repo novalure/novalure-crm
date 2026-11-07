@@ -6,6 +6,7 @@ import type { TenantTransaction, TenantTransactionOptions } from "@/lib/db/tenan
 import { syncBuyerSearchProfileInTransaction } from "@/lib/db/broker-entity-repositories";
 import { recordSourceAutomationEvent } from "@/lib/automation/source-events";
 import { assertReservationTransition, salesActions, salesText, salesUuid, salesVersion, validateQualification, validateViewing, PropertySalesValidationError, type PropertySalesAction } from "@/lib/property-sales";
+import { withdrawReservationInTransaction } from "@/lib/db/reservation-withdrawal-repository";
 type Row = Record<string,unknown>;
 export type PropertySalesCommand = {action:PropertySalesAction;projectId:string;expectedVersion?:number;idempotencyKey:string;correlationId:string;payload:Record<string,unknown>};
 function object(value:unknown):Record<string,unknown>{return value && typeof value==='object' && !Array.isArray(value)?value as Record<string,unknown>:{}}
@@ -64,6 +65,21 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
   if(!salesActions.includes(command.action))throw new PropertySalesValidationError('Unsupported action');
   const projectId=salesUuid(command.projectId,'projectId'), p=object(command.payload);
   const capability=command.action==='authority.assign'?'settings:manage':'reservations:write';
+  if(command.action==='reservation.withdraw'){
+   // Revalidate authority even before receipt replay. Match the existing reservation -> unit -> authority lock order.
+   return await withCrmRead(session,async(tx,freshSession)=>{
+    await assertProjectGrant(tx,freshSession,projectId,true);
+    const reservationId=salesUuid(p.reservationId,'reservationId');
+    const reservation=required(await tx.queryOne<Row>('select * from property_reservations where workspace_id=$1 and project_id=$2 and id=$3 for update',[freshSession.workspaceId,projectId,reservationId]),'Reservation');
+    const selected=await unit(tx,freshSession.workspaceId,projectId,reservation.unit_id);
+    const auth=await authority(tx,freshSession,projectId,'reservation');
+    return executeCrmCommand(freshSession,{operation:'property_sales.reservation.withdraw',resourceId:reservationId,projectId,expectedVersion:command.expectedVersion,idempotencyKey:command.idempotencyKey,correlationId:command.correlationId,payload:p,capability},async(tx,ctx)=>{
+     version(reservation,command.expectedVersion);version(selected,p.unitVersion);
+     assertReservationTransition(command.action,String(reservation.status),String(selected.status));
+     return withdrawReservationInTransaction(tx,ctx.session,projectId,reservation,selected,auth.id,source(p.sourceReference));
+    },options);
+   },options);
+  }
   return await executeCrmCommand(session,{operation:'property_sales.'+command.action,projectId,expectedVersion:command.expectedVersion,idempotencyKey:command.idempotencyKey,correlationId:command.correlationId,payload:p,capability},async(tx,ctx)=>{
    const session=ctx.session;
    const w=session.workspaceId;

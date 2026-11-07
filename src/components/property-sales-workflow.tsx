@@ -12,6 +12,7 @@ const actions:{value:PropertySalesAction;label:string}[]=[
  {value:"reservation.confirm",label:"Reservierung verbindlich bestätigen"},
  {value:"reservation.extend",label:"Bestätigte Reservierung verlängern"},
  {value:"reservation.expire",label:"Abgelaufene Reservierung freigeben"},
+ {value:"reservation.withdraw",label:"Reservierung zurücknehmen"},
  {value:"sale.confirm",label:"Verkauf bestätigen"},
  {value:"unit.price.confirm",label:"Bestätigten Verkaufspreis übernehmen"},
  {value:"authority.assign",label:"Bauträger und Projektbefugnisse verwalten"}];
@@ -61,7 +62,7 @@ export function PropertySalesWorkflow({projects,workspaceId,initialProjectId,onC
  const reservationUnit=data?.units.find(row=>row.id===reservation?.unit_id);
  const viewing=data?.viewings.find(row=>row.id===fields.viewingId);
  const authority=data?.authorities.find(row=>row.user_id===fields.userId);
- const isReservation=["reservation.confirm","reservation.extend","reservation.expire","sale.confirm"].includes(action);
+ const isReservation=["reservation.confirm","reservation.extend","reservation.expire","reservation.withdraw","sale.confirm"].includes(action);
  const textField=(key:string,label:string,type="text",required=true)=><label key={key} className="grid min-w-0 gap-1 text-sm">{label}<input required={required} className={inputClass} type={type} value={fields[key]??""} onChange={event=>field(key,event.target.value)} step={type==="number"?"0.01":undefined}/></label>;
  const chooseLead=(id:string)=>{
   const lead=data?.leads.find(row=>row.id===id),profile=(lead?.buyer_profile??{}) as Record<string,unknown>,qualification=(lead?.sales_qualification??{}) as Record<string,unknown>;
@@ -126,6 +127,7 @@ export function PropertySalesWorkflow({projects,workspaceId,initialProjectId,onC
     </>}
     {["reservation.request","reservation.extend"].includes(action)&&textField("expiresAt","Gewünschte Reservierungsfrist","datetime-local")}
     {isReservation&&<Picker label="Reservierung" value={fields.reservationId??""} onChange={id=>field("reservationId",id)} items={data.reservations.map(row=>({...row,name:(data.units.find(u=>u.id===row.unit_id)?.unit_number??"Einheit")+" · "+(data.leads.find(l=>l.id===row.buyer_lead_id)?.name??"Käufer")}))}/>}
+    {action==="reservation.withdraw"&&<p className="text-sm text-stone-600 md:col-span-2">Die Rücknahme beendet die Reservierung und gibt deren reservierte Einheit frei. Eine Aufgabe zur manuellen Prüfung vertraglicher Folgen und einer Anzahlung wird angelegt. Verträge, Zahlungen und bestehende Aufgaben werden dadurch nicht geändert.</p>}
     {action==="unit.price.confirm"&&textField("price","Bestätigter Verkaufspreis EUR","number")}
     {action==="authority.assign"&&<>
      <Picker label="Bauträger" value={fields.organizationId??""} onChange={id=>field("organizationId",id)} items={data.organizations}/>
@@ -144,6 +146,7 @@ export function PropertySalesWorkflow({projects,workspaceId,initialProjectId,onC
     <summary className="cursor-pointer font-semibold">Übergaben und bestätigte Abschlüsse nachvollziehen</summary>
     <ul className="mt-3 grid gap-2 text-sm">
      {data.handovers.map(row=><li key={row.id} className="break-words rounded-md bg-stone-50 p-2">Übergabe: {data.leads.find(lead=>lead.id===row.lead_id)?.name??"Käufer"} → {data.users.find(user=>user.id===row.recipient_user_id)?.name??"Empfänger"} · {new Date(String(row.created_at)).toLocaleString()} · {String(row.source_reference)}</li>)}
+     {data.reservations.filter(row=>row.status==="withdrawn").map(row=>{const evidence=(row.metadata as Record<string,unknown>|undefined)?.withdrawal as Record<string,unknown>|undefined;return <li key={row.id} className="break-words rounded-md bg-stone-50 p-2">Reservierung zurückgenommen: {data.units.find(unit=>unit.id===row.unit_id)?.unit_number??"Einheit"} · {String(evidence?.sourceReference??"")} · {evidence?.withdrawnAt?new Date(String(evidence.withdrawnAt)).toLocaleString():""} · Vertrag und Anzahlung manuell prüfen</li>})}
      {data.sales.map(row=><li key={row.id} className="break-words rounded-md bg-emerald-50 p-2">Verkauf: {data.units.find(unit=>unit.id===row.unit_id)?.unit_number??"Einheit"} · bestätigt durch {data.users.find(user=>user.id===row.confirmed_by)?.name??"Projektbevollmächtigten"} · {new Date(String(row.confirmed_at)).toLocaleString()} · {String(row.source_reference)}</li>)}
     </ul>
    </details>

@@ -2941,6 +2941,7 @@ export const unitBoardCopy = {
       sold: "Sold",
     },
     reservationStatusLabels: {
+      withdrawn: "Withdrawn",
       requested: "Request (non-binding)",
       converted: "Converted",
       expired: "Expired",
@@ -3084,6 +3085,7 @@ export const unitBoardCopy = {
       sold: "Verkauft",
     },
     reservationStatusLabels: {
+      withdrawn: "Zurückgenommen",
       requested: "Anfrage (unverbindlich)",
       converted: "Konvertiert",
       expired: "Abgelaufen",

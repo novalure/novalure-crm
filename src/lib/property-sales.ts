@@ -1,6 +1,6 @@
 /** Pure validation for persistent Flow B commands. */
 export class PropertySalesValidationError extends Error {}
-export const salesActions = ['authority.assign','qualification.save','handover.create','viewing.save','reservation.request','reservation.confirm','reservation.extend','reservation.expire','sale.confirm','unit.price.confirm'] as const;
+export const salesActions = ['authority.assign','qualification.save','handover.create','viewing.save','reservation.request','reservation.confirm','reservation.extend','reservation.expire','reservation.withdraw','sale.confirm','unit.price.confirm'] as const;
 export type PropertySalesAction = typeof salesActions[number];
 export type SalesPriority = 'high' | 'medium' | 'low';
 export type BuyerQualification = {budgetFrom:number;budgetTo:number;financingStatus:string;purchaseTimeline:string;useCase:'Eigennutzung'|'Anlage';desiredUnitId:string;priority:SalesPriority;sourceReference:string};
@@ -41,6 +41,7 @@ export function assertReservationTransition(action:string,status:string,unitStat
  :action==='reservation.confirm'?status==='requested'&&unitStatus==='available'
  :action==='reservation.extend'?status==='reserved'&&unitStatus==='reserved'
  :action==='reservation.expire'?['requested','reserved'].includes(status)&&['available','reserved'].includes(unitStatus)
+ :action==='reservation.withdraw'?((status==='requested'&&unitStatus==='available')||(status==='hold'&&['available','reserved'].includes(unitStatus))||(status==='reserved'&&unitStatus==='reserved'))
  :action==='sale.confirm'?status==='reserved'&&unitStatus==='reserved':false;
  if(!allowed) throw new PropertySalesValidationError('Invalid reservation/unit transition');
 }
