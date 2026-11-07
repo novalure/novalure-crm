@@ -36,7 +36,7 @@ export function requestQaCaptureSnapshot(runId, { parent = process, timeoutMs = 
   const requestId = randomBytes(16).toString("hex");
   return new Promise((resolve, reject) => {
     let timer;
-    const finish = (error, rows) => { clearTimeout(timer); parent.off("message", receive); error ? reject(error) : resolve(rows); };
+    const finish = (error, rows) => { clearTimeout(timer); parent.off("message", receive); if (error) reject(error); else resolve(rows); };
     const receive = message => {
       if (message?.type !== "crm.qa.capture-snapshot/v1" || message.requestId !== requestId) return;
       if (message.runId !== runId || message.held || !Array.isArray(message.rows) || message.rows.length > 20000) finish(new Error("QA_SERVER_CAPTURE_HELD"));
