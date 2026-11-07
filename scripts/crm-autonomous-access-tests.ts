@@ -111,6 +111,47 @@ test("protected noninteractive owner registers durable scope idempotently and ru
     assert.deepEqual(rows.map(row => row.workspace_id), [CRM_MACHINE_WORKSPACE_ID]);
   } finally { await owner.query("reset role"); owner.release(); }
 });
+test("DescribeAssignment renews only its own saved binding and returns no business fields", async () => {
+  const input = body({ operation: "DescribeAssignment" }), credential = delegation(input);
+  const start = Math.floor(Date.now() / 1000), result = await call(input, credential);
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(result.body.grantId, grantId); assert.equal(result.body.taskId, missionId);
+  assert.equal(result.body.departmentId, "IT_CRM"); assert.equal(result.body.agentId, registration().agentId);
+  assert.deepEqual(Object.keys(result.body.data as object).sort(), ["expiresAt", "operations"]);
+  const data = result.body.data as { operations: string[]; expiresAt: number };
+  assert.deepEqual(data.operations, ["Read", "UpdateTask"]);
+  assert.ok(data.expiresAt > start && data.expiresAt <= Math.floor(Date.now() / 1000) + 60);
+  assert.doesNotMatch(JSON.stringify(result.body), /SYNTHETIC internal task|delegation_public_key|actor_user_id|authority_reference/);
+  assert.equal((await call(input, credential)).status, 409);
+  const renewed = await call(body({ operation: "DescribeAssignment" }));
+  assert.equal(renewed.status, 200); assert.notEqual(renewed.body.auditReference, result.body.auditReference);
+});
+test("DescribeAssignment denies wrong signing keys, selectors, revocation and moved source", async () => {
+  const input = body({ operation: "DescribeAssignment" });
+  assert.equal((await call(input, delegation(input, grantId, generateKeyPairSync("ed25519").privateKey))).status, 401);
+  assert.equal((await call(body({ operation: "DescribeAssignment", departmentId: "HR" }))).status, 400);
+  const count = (await db.admin.query("select count(*) from crm_autonomous_access_events")).rows[0].count;
+  await db.admin.query("update crm_autonomous_access_grants set revoked_at=clock_timestamp() where id=$1", [grantId]);
+  try { assert.equal((await call(input)).status, 403); }
+  finally { await db.admin.query("update crm_autonomous_access_grants set revoked_at=null where id=$1", [grantId]); }
+  const movedSource = randomUUID(), movedGrant = registration({ grantId: randomUUID(), sourceId: movedSource });
+  await db.admin.query("insert into tasks(id,workspace_id,project_id,title,data_classification) values($1,$2,$3,'SYNTHETIC moved source','NOVALURE_INTERNAL')", [movedSource, CRM_MACHINE_WORKSPACE_ID, projectId]);
+  await provision(movedGrant);
+  await db.admin.query("update tasks set project_id=$2 where id=$1", [movedSource, foreignProject]);
+  assert.equal((await call(input, delegation(input, movedGrant.grantId))).status, 403);
+  assert.equal((await db.admin.query("select count(*) from crm_autonomous_access_events")).rows[0].count, count);
+});
+test("DescribeAssignment Project is read-only and a write-only Task grant cannot introspect", async () => {
+  for (const [entity, source, scopes, expected] of [
+    ["Project", projectId, ["crm.projects.read"], 200], ["Task", sourceId, ["crm.tasks.write"], 403],
+  ] as const) {
+    const registered = registration({ grantId: randomUUID(), entity, sourceId: source, scopes: [...scopes] });
+    await provision(registered); const input = body({ operation: "DescribeAssignment" });
+    const result = await call(input, delegation(input, registered.grantId));
+    assert.equal(result.status, expected, JSON.stringify(result.body));
+    if (expected === 200) assert.deepEqual((result.body.data as { operations: string[] }).operations, ["Read"]);
+  }
+});
 test("real internal Task read uses saved department/subagent/task and has a durable successful audit", async () => {
   const result = await call(); assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.departmentId, "IT_CRM"); assert.equal(result.body.agentId, registration().agentId);
