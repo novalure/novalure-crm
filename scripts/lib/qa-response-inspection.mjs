@@ -133,22 +133,32 @@ export function observeQaFetchBodies({ origin }) {
 }
 
 export function assertObservedFetchCoverage(network, observations) {
-  const startsById = new Set(), terminalIds = new Set();
+  const startsById = new Map(), terminalIds = new Set();
   for (const row of observations) {
     const id = `${row.documentId}/${row.id}`;
-    if (row.kind === "start") { if (startsById.has(id)) throw new Error("DUPLICATE_ORIGINAL_FETCH_START"); startsById.add(id); }
-    else { if (!startsById.has(id) || terminalIds.has(id)) throw new Error("UNBOUND_ORIGINAL_FETCH_TERMINAL"); terminalIds.add(id); }
+    if (row.kind === "start") {
+      if (startsById.has(id)) throw new Error("DUPLICATE_ORIGINAL_FETCH_START");
+      startsById.set(id, row);
+    } else {
+      const start = startsById.get(id);
+      if (row.kind !== "terminal" || !start || terminalIds.has(id) ||
+        ["key", "path", "method"].some(field => row[field] !== start[field]))
+        throw new Error("UNBOUND_ORIGINAL_FETCH_TERMINAL");
+      terminalIds.add(id);
+    }
   }
-  if ([...startsById].some(id => !terminalIds.has(id))) throw new Error("UNSETTLED_ORIGINAL_FETCH_LIFECYCLE");
-  if (observations.some(r => r.bodyInspected && (!r.json || r.status < 200 || r.status >= 300 || !/^[a-f0-9]{64}$/.test(r.bodySha256))))
+  if ([...startsById.keys()].some(id => !terminalIds.has(id))) throw new Error("UNSETTLED_ORIGINAL_FETCH_LIFECYCLE");
+  if (observations.some(r => r.bodyInspected && (!r.json || !Number.isInteger(r.status) || r.status < 200 || r.status >= 300 || !/^[a-f0-9]{64}$/.test(r.bodySha256))))
     throw new Error("INVALID_ORIGINAL_BODY_PROOF");
   const count = (rows, key) => rows.reduce((m, r) => m.set(key(r), (m.get(key(r)) ?? 0) + 1), new Map());
   const starts = count(observations.filter(r => r.kind === "start"), r => r.key);
   const actual = count(network.filter(r => r.kind === "request"), r => r.key);
   for (const [key, n] of actual) if ((starts.get(key) ?? 0) < n) throw new Error("UNOBSERVED_NATIVE_FETCH_REQUEST");
+  for (const [key, n] of starts) if ((actual.get(key) ?? 0) < n) throw new Error("UNMATCHED_ORIGINAL_FETCH_START");
   const expectedBodies = count(network.filter(r => r.kind === "response" && r.ok && r.json), r => `${r.key}/${r.status}`);
   const bodies = count(observations.filter(r => r.kind === "terminal" && r.bodyInspected), r => `${r.key}/${r.status}`);
   for (const [key, n] of expectedBodies) if ((bodies.get(key) ?? 0) < n) throw new Error("UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY");
+  for (const [key, n] of bodies) if ((expectedBodies.get(key) ?? 0) < n) throw new Error("UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY");
   if (observations.some(r => r.kind === "terminal" && r.bodyError)) throw new Error("ORIGINAL_FETCH_BODY_INSPECTION_FAILED");
 }
 

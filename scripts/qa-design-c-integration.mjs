@@ -94,7 +94,7 @@ async function drainResponseInspections(page) {
     catch (error) {
       // A new original fetch may start between the browser snapshot and its
       // native event delivery. Re-observe within the SAME budget, never refetch.
-      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY"].includes(error.message)) throw error;
+      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY"].includes(error.message)) throw error;
       if (Date.now() >= deadline) throw error;
       await new Promise(resolve => setTimeout(resolve, 25));
     }

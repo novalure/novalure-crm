@@ -189,14 +189,38 @@ test('retired document pre-header GET is recorded as canceled read, while a pend
   }
 });
 
-test('unobserved native requests, missing EOF and duplicate response coverage fail closed', () => {
+test('original/native coverage requires exact two-sided request and body multisets', () => {
   const key = 'a'.repeat(64), hash = 'b'.repeat(64);
-  const start = { kind: 'start', key, id: 1, documentId: 'test' };
-  const done = { kind: 'terminal', key, id: 1, documentId: 'test', status: 200, json: true, bodyInspected: true, bodySha256: hash };
+  const start = { kind: 'start', key, path: '/api/crm/expose-template-assets', method: 'GET', id: 1, documentId: 'test' };
+  const done = { ...start, kind: 'terminal', status: 200, json: true, bodyInspected: true, bodySha256: hash };
   const request = { kind: 'request', key }, response = { kind: 'response', key, ok: true, json: true, status: 200 };
   assert.throws(() => assertObservedFetchCoverage([request], []), /UNOBSERVED/);
   assert.throws(() => assertObservedFetchCoverage([request, response], [start]), /UNSETTLED/);
   assert.throws(() => assertObservedFetchCoverage([request, response, response], [start, done]), /UNINSPECTED/);
+  // These unmatched extra observations passed the former one-sided comparison.
+  assert.throws(() => assertObservedFetchCoverage([request, response], [start, done, { ...start, id: 2 }, { ...done, id: 2 }]), /UNMATCHED_ORIGINAL_FETCH_START/);
+  assert.throws(() => assertObservedFetchCoverage([request, response], [start, done, { ...start, key: 'c'.repeat(64), id: 2 }, { ...done, key: 'c'.repeat(64), id: 2 }]), /UNMATCHED_ORIGINAL_FETCH_START/);
+  assert.throws(() => assertObservedFetchCoverage([], [start, done]), /UNMATCHED_ORIGINAL_FETCH_START/);
+  assert.throws(() => assertObservedFetchCoverage([request], [start, done]), /UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY/);
+  assert.throws(() => assertObservedFetchCoverage([request, response, request], [start, done, { ...start, id: 2 }, { ...done, id: 2 }]), /UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY/);
   assertObservedFetchCoverage([request, response, request, response], [start, done, { ...start, id: 2 }, { ...done, id: 2 }]);
   assert.throws(() => assertObservedFetchCoverage([request, response], [start, { ...done, bodyError: 'body_read_failed' }]), /INSPECTION_FAILED/);
+});
+
+test('original/native coverage binds each terminal to its own exact start metadata', () => {
+  const key = 'a'.repeat(64), path = '/api/crm/expose-template-assets', method = 'GET';
+  const start = { kind: 'start', key, path, method, id: 1, documentId: 'test' };
+  const done = { ...start, kind: 'terminal', status: 200, json: true, bodyInspected: true, bodySha256: 'b'.repeat(64) };
+  const network = [{ kind: 'request', key }, { kind: 'response', key, ok: true, json: true, status: 200 }];
+  for (const replacement of [{ key: 'c'.repeat(64) }, { path: '/api/crm/other' }, { method: 'POST' }, { id: 2 }, { documentId: 'other' }, { kind: 'unknown' }])
+    assert.throws(() => assertObservedFetchCoverage(network, [start, { ...done, ...replacement }]), /UNBOUND_ORIGINAL_FETCH_TERMINAL/);
+  // Equal aggregate counts cannot let the body for request2 serve request1.
+  const otherStart = { ...start, key: 'c'.repeat(64), id: 2 };
+  const otherDone = { ...done, key: otherStart.key, id: 2 };
+  const otherNetwork = network.map(row => ({ ...row, key: otherStart.key }));
+  assert.throws(() => assertObservedFetchCoverage([...network, ...otherNetwork], [start, otherStart, { ...done, key: otherStart.key }, { ...otherDone, key }]), /UNBOUND_ORIGINAL_FETCH_TERMINAL/);
+  assert.throws(() => assertObservedFetchCoverage(network, [start, start, done]), /DUPLICATE_ORIGINAL_FETCH_START/);
+  assert.throws(() => assertObservedFetchCoverage(network, [start, done, done]), /UNBOUND_ORIGINAL_FETCH_TERMINAL/);
+  assert.throws(() => assertObservedFetchCoverage(network, [start, { ...done, status: undefined }]), /INVALID_ORIGINAL_BODY_PROOF/);
+  assertObservedFetchCoverage(network, [start, done]);
 });

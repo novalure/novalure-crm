@@ -164,3 +164,16 @@ barriers. Focused lint, syntax and whitespace pass. There is no browser/build/DB
 provider execution, CI rerun or native PASS claim for this draft. The precise
 original browser-promise outcome of the01 assets request was not retained; that
 cause remains an inference for native confirmation, not a declared product fix.
+
+The independent review of the isolated4048 draft found that its coverage counts
+were only compared in one direction. Extra observer starts or body proofs could
+therefore pass, and a terminal could retain its id while changing its request
+metadata. The follow-up requires exact two-sided request/body multisets and binds
+each terminal to its start's key, pathname and method as well as document/id.
+Missing or excess counts may settle only inside the original15-second drain
+budget; malformed or misbound terminal proofs fail immediately. No request retry,
+response waiver or application change was added. Two focused coverage groups
+exercise the formerly accepted extra same-key/distinct-id and observer-only
+records, extra/missing bodies, duplicate ids, and changed terminal metadata.
+The twelve unchanged transport groups above are reused, not rerun. The earlier
+4048 source is retained as the reviewed predecessor and is not release eligible.
