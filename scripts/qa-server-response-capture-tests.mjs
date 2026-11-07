@@ -201,6 +201,40 @@ test("actual response metadata callback binds only its own delayed request-heade
   }
 });
 
+test("group coverage counts actual native JSON bodies once without assigning success to null-status original terminals", async () => {
+  let calls = 0;
+  const headers = { cookie: "SYNTHETIC_GROUP_ONLY", "user-agent": "Synthetic transport", accept: "application/json", "sec-fetch-mode": "cors" };
+  const f = await fixture((_request, response) => { const status = ++calls === 1 ? 200 : 403; response.writeHead(status, { "content-type": "application/json" }); response.end(JSON.stringify({ syntheticStatus: status })); });
+  try {
+    for (let i = 0; i < 2; i++) { const response = await fetch(f.origin + "/api/crm/team?workspaceId=SYNTHETIC_PRIVATE_QUERY", { headers, redirect: "error" }); await response.text(); }
+    const a = audit(f.origin, headers), b = audit(f.origin, headers, 403);
+    const preheader = (row, id) => ({ ...row, id, phase: row.kind === "start" ? "request" : "fetch-aborted-before-headers", status: null, json: false,
+      bodyError: null, bodyInspected: false, bodySha256: null, signalAborted: row.kind === "terminal", signalAbortedAtStart: false,
+      failedBeforeHeaders: row.kind === "terminal", preAbortedNoDispatch: false, rejectedWithOriginalAbortReason: false, retiredReadBeforeHeaders: false });
+    // Explicit original/native metadata fixtures; HTTP body and status evidence
+    // above is real. Neither these fixtures nor this test claim Chromium IO.
+    const network = [...a.network, ...b.network], observations = [...a.observations.map(row => preheader(row, 1)), ...b.observations.map(row => preheader(row, 2))];
+    const proofs = qualifyQaServerBodies(network, observations, f.records, runId);
+    assert.equal(proofs.size, 2); assert.doesNotThrow(() => assertObservedFetchCoverage(network, observations, proofs));
+    assert(observations.filter(row => row.kind === "terminal").every(row => row.status === null && row.json === false && !row.bodyInspected));
+    for (const proof of proofs.values()) { assert.equal(proof.status, null); assert.equal(proof.originalCandidateCount, 2); assert.equal(proof.resolvedBodyCount, 1); assert.equal(proof.successfulJsonBodyCount, 1); }
+    for (const mutate of [proof => proof.resolvedBodyCount++, proof => proof.originalCandidateCount--, proof => proof.preHeaderAbortedReadCount--,
+      proof => proof.receivedBodyErrorCount++, proof => proof.status = 200]) {
+      const changed = new Map([...proofs].map(([id, proof]) => [id, structuredClone(proof)]));
+      for (const proof of changed.values()) mutate(proof);
+      assert.throws(() => assertObservedFetchCoverage(network, observations, changed), /INVALID_SERVER_EGRESS_BODY_PROOF/);
+    }
+    const insufficient = structuredClone({ network, observations, records: f.records });
+    insufficient.network[3].status = 200; insufficient.network[3].ok = true;
+    insufficient.records[3].status = 200; insufficient.records[3].bodySha256 = sha('{"syntheticStatus":200}');
+    Object.assign(insufficient.observations[3], { phase: "response-not-json-success", status: 403, json: true, failedBeforeHeaders: false, signalAborted: false });
+    const diagnostics = [], denied = qualifyQaServerBodies(insufficient.network, insufficient.observations, insufficient.records, runId, diagnostics);
+    assert.equal(denied.size, 0); assert.equal(diagnostics[0].reason, "UNRESOLVED_BODY_COUNT_MISMATCH");
+    assert.throws(() => assertObservedFetchCoverage(insufficient.network, insufficient.observations, denied));
+    assert.equal(calls, 2);
+  } finally { await f.stop(); }
+});
+
 test("native copied CDP metadata survives context removal; old exposeBinding lookup loses the same four terminals", async () => {
   const source = row("c".repeat(64), { phase: "document-retired-before-headers", status: null, json: false, signalAborted: false,
     bodyError: null, retiredReadBeforeHeaders: true });

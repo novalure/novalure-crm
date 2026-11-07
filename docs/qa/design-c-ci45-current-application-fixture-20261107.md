@@ -335,3 +335,40 @@ unrelated random references only. No request-header, URL, response-body digest o
 payload is persisted. Targeted loopback multi-session negatives, snapshot and
 observer groups plus strict focused lint qualify the helper draft. No browser,
 provider, deployment, workflow rerun or native PASS is claimed.
+
+## Native JSON evidence after an original preheader rejection
+
+The616 native run42410114440 remains failed at step45 (47/4); steps1–44 passed.
+All592 original starts have terminals. For one original team URL key there are17
+JSON EOF terminals and one late-aborted GET terminal before headers. That original
+terminal has `status:null`, `json:false` and no bodyError. The independent native
+body counter is18/17. The old candidate filter considered bodyError only, so it
+produced no candidates, resolutions or rejection diagnostics. The saved artifact
+does not retain private native/server RAM bags or a reversible relation between
+the two opaque diagnostic references. It establishes this filter gap, not an
+individual CDP-to-original response or actual missing-body Node EOF proof.
+
+A narrow late-aborted non-keepalive GET may now be a candidate after its actual
+original promise rejection before headers, provided its signal was not aborted
+at call time. Its original terminal remains unchanged: null status, non-JSON and
+no inspected original body. The same complete authenticated URL/method groups,
+native response/status counts, actual Node finish/EOF and successful full JSON
+inspection remain required. A native200 without that complete server proof still
+fails. No request, body, signal, promise or cancellation is changed or repeated.
+
+Only the complete successful JSON body bag replaces body counts for its exact
+native key. It is counted once even if several original rejected reads are
+coverage candidates. The remaining inspected server bodies must include all known
+original body hashes and every received-body failure's status count. The number
+of additional bodies cannot exceed the qualifying original rejected reads. No
+individual rejected read is assigned a200 status or a particular body. Missing
+own groups, wrong sessions, incomplete/invalid/non-JSON bodies, at-start aborts,
+writes and keepalive cannot use this path. Fixed scalar diagnostics also report
+native JSON deficits with no eligible original terminal.
+
+New targeted nonbrowser controls observe an actual original Fetch rejection after
+real loopback Node finish and retain its null status, with explicit native-event
+fixtures (no Chromium claim). Additional cases cover the exact new eligibility,
+missing/unsafe Node evidence and group cardinality. The existing unchanged
+original observer, HTTP EOF monitor and private RAM boundary evidence is reused.
+No rerun, build, deployment or further release authority is inferred.

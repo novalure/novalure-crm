@@ -11,6 +11,16 @@ const diagnosticReferences = new Map();
 const counts = rows => rows.reduce((map, row) => map.set(row.status, (map.get(row.status) ?? 0) + 1), new Map());
 const equalCounts = (a, b) => a.size === b.size && [...a].every(([status, n]) => b.get(status) === n);
 const validFingerprint = value => /^[a-f0-9]{64}$/.test(value ?? "");
+export const isQaPreheaderAbortedRead = row => row.kind === "terminal" && row.method === "GET" && row.keepalive === false &&
+  row.phase === "fetch-aborted-before-headers" && row.failedBeforeHeaders === true && row.signalAborted === true &&
+  row.signalAbortedAtStart === false && row.preAbortedNoDispatch === false && row.rejectedWithOriginalAbortReason === false &&
+  row.retiredReadBeforeHeaders === false && row.status === null && row.json === false && row.bodyInspected === false &&
+  row.bodySha256 === null && row.bodyError === null;
+const receivedBodyFailure = row => row.kind === "terminal" && row.bodyError === "body_read_failed" && row.method === "GET" &&
+  !row.keepalive && !row.signalAbortedAtStart && row.signalAborted && row.json && row.status >= 200 && row.status < 300 && !row.bodyInspected;
+const preheaderStartBound = (row, observations) => observations.some(start => start.kind === "start" &&
+  start.documentId === row.documentId && start.id === row.id && start.key === row.key && start.path === row.path &&
+  start.method === "GET" && start.keepalive === false && start.signalAbortedAtStart === false);
 export function qaRequestFingerprint(secret, method, url, headers) {
   assert(/^[a-f0-9]{64}$/.test(secret));
   // Values stay in local host RAM. The per-run digest crosses owned IPC only;
@@ -148,8 +158,13 @@ export function qualifyQaServerBodies(network, observations, records, runId, dia
       terminals.set(row.id, row);
     }
   }
-  const candidates = observations.filter(row => row.kind === "terminal" && row.bodyError);
-  for (const key of new Set(candidates.map(row => row.key))) {
+  const candidates = observations.filter(row => row.kind === "terminal" && (row.bodyError || isQaPreheaderAbortedRead(row)));
+  const keys = new Set(candidates.map(row => row.key));
+  const nativeCounts = new Map(), originalCounts = new Map();
+  for (const row of network.filter(row => row.kind === "response" && row.ok && row.json)) nativeCounts.set(row.key, (nativeCounts.get(row.key) ?? 0) + 1);
+  for (const row of observations.filter(row => row.kind === "terminal" && row.bodyInspected)) originalCounts.set(row.key, (originalCounts.get(row.key) ?? 0) + 1);
+  for (const [key, native] of nativeCounts) if (native > (originalCounts.get(key) ?? 0)) keys.add(key);
+  for (const key of keys) {
     const group = candidates.filter(row => row.key === key);
     const nativeRequests = network.filter(row => row.kind === "request" && row.key === key);
     const nativeResponses = network.filter(row => row.kind === "response" && row.key === key);
@@ -168,9 +183,11 @@ export function qualifyQaServerBodies(network, observations, records, runId, dia
       nativeRequestCount: nativeRequests.length, nativeResponseCount: nativeResponses.length,
       nativeSuccessfulJsonCount: nativeBodies.length, fingerprintGroupCount: fingerprints.size,
       serverStartCount: serverStarts.length, serverTerminalCount: serverStarts.filter(row => terminals.has(row.id)).length,
-      unclaimedServerStartCount: allServerStarts.length - serverStarts.length, bodyErrorCount: group.length, ...extra });
-    if (group.some(row => row.bodyError !== "body_read_failed" || row.method !== "GET" || row.keepalive ||
-      row.signalAbortedAtStart || !row.signalAborted || !row.json || row.status < 200 || row.status >= 300 || row.bodyInspected)) { report("INELIGIBLE_ORIGINAL_BODY"); continue; }
+      unclaimedServerStartCount: allServerStarts.length - serverStarts.length, originalCandidateCount: group.length,
+      bodyErrorCount: group.filter(row => row.bodyError).length, preHeaderAbortedReadCount: group.filter(isQaPreheaderAbortedRead).length, ...extra });
+    if (!group.length) { report("NO_ELIGIBLE_ORIGINAL_TERMINAL"); continue; }
+    if (group.some(row => !receivedBodyFailure(row) && !isQaPreheaderAbortedRead(row))) { report("INELIGIBLE_ORIGINAL_BODY"); continue; }
+    if (group.some(row => isQaPreheaderAbortedRead(row) && !preheaderStartBound(row, observations))) { report("PREHEADER_START_BINDING_INVALID"); continue; }
     if (!nativeRequests.length || [...fingerprints].some(value => !validFingerprint(value))) { report("NATIVE_REQUEST_FINGERPRINT_MISSING"); continue; }
     if (nativeResponses.some(row => !validFingerprint(row.captureKey))) { report("NATIVE_RESPONSE_FINGERPRINT_MISSING"); continue; }
     if (nativeResponses.some(row => !fingerprints.has(row.captureKey))) { report("UNMATCHED_AUTH_GROUP"); continue; }
@@ -198,15 +215,18 @@ export function qualifyQaServerBodies(network, observations, records, runId, dia
       remaining.splice(i, 1);
     }
     if (unmatchedOriginal) { report("ORIGINAL_BODY_MULTISET_MISMATCH"); continue; }
-    if (remaining.length !== group.length) { report("UNRESOLVED_BODY_COUNT_MISMATCH", { remainingBodyCount: remaining.length }); continue; }
-    const unresolvedCounts = counts(remaining), groupCounts = counts(group);
-    if (!equalCounts(unresolvedCounts, groupCounts)) { report("UNRESOLVED_BODY_STATUS_MISMATCH"); continue; }
+    const receivedFailures = group.filter(receivedBodyFailure), preHeaderReads = group.filter(isQaPreheaderAbortedRead);
+    if (!remaining.length) { report("NO_UNINSPECTED_NATIVE_JSON_BODY"); continue; }
+    if (remaining.length < receivedFailures.length || remaining.length > group.length) { report("UNRESOLVED_BODY_COUNT_MISMATCH", { remainingBodyCount: remaining.length }); continue; }
+    const unresolvedCounts = counts(remaining), receivedCounts = counts(receivedFailures);
+    if ([...receivedCounts].some(([status, n]) => (unresolvedCounts.get(status) ?? 0) < n)) { report("UNRESOLVED_BODY_STATUS_MISMATCH"); continue; }
     // Do not invent FIFO identity for simultaneous identical requests. The
     // evidence is the complete, two-sided, fully inspected authenticated bag.
     for (const row of group) proofs.set(`${row.documentId}/${row.id}`, {
       source: "actual-node-egress-finish-multiset", requestKey: key, authGroups, status: row.status,
       serverIds: serverStarts.map(start => start.id), nativeRequestCount: nativeRequests.length,
-      successfulJsonBodyCount: serverBodies.length, resolvedBodyCount: group.length,
+      successfulJsonBodyCount: serverBodies.length, resolvedBodyCount: remaining.length,
+      originalCandidateCount: group.length, receivedBodyErrorCount: receivedFailures.length, preHeaderAbortedReadCount: preHeaderReads.length,
       bodyHashes: serverBodies.map(body => ({ status: body.status, sha256: body.bodySha256 })),
     });
     report("QUALIFIED_COMPLETE_AUTH_GROUPS", { serverSuccessfulJsonCount: serverBodies.length });
@@ -238,4 +258,21 @@ export function validQaServerAuthGroups(network, row, proof) {
   return new Set(ids).size === ids.length && ids.length === proof.serverIds.length &&
     ids.every(id => Number.isSafeInteger(id) && id > 0 && proof.serverIds.includes(id)) &&
     equalCounts(bag(hashes), bag(proof.bodyHashes));
+}
+
+export function validQaServerOriginalBag(observations, row, proof) {
+  const candidates = observations.filter(item => item.kind === "terminal" && item.key === row.key && (item.bodyError || isQaPreheaderAbortedRead(item)));
+  const received = candidates.filter(receivedBodyFailure), preHeader = candidates.filter(isQaPreheaderAbortedRead);
+  if (candidates.length !== received.length + preHeader.length || proof.originalCandidateCount !== candidates.length ||
+    proof.receivedBodyErrorCount !== received.length || proof.preHeaderAbortedReadCount !== preHeader.length ||
+    preHeader.some(item => !preheaderStartBound(item, observations))) return false;
+  const remaining = [...proof.bodyHashes];
+  for (const body of observations.filter(item => item.kind === "terminal" && item.key === row.key && item.bodyInspected)) {
+    const index = remaining.findIndex(item => item.status === body.status && item.sha256 === body.bodySha256);
+    if (index < 0) return false;
+    remaining.splice(index, 1);
+  }
+  const available = counts(remaining);
+  return proof.resolvedBodyCount === remaining.length && remaining.length > 0 && remaining.length >= received.length &&
+    remaining.length <= candidates.length && [...counts(received)].every(([status, n]) => (available.get(status) ?? 0) >= n);
 }

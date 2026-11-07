@@ -49,6 +49,7 @@ import { createServer } from 'node:http';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from './lib/qa-response-inspection.mjs';
+import { observeQaServerResponse, qualifyQaServerBodies } from './lib/qa-server-response-capture.mjs';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 async function bounded(condition) {
@@ -413,4 +414,61 @@ test('actual serialized observer emits four synchronous native-CDP terminals wit
   const native = world.reports.filter(row => row.kind === 'start').map(row => ({ kind: 'request', key: row.key }));
   assert.doesNotThrow(() => assertObservedFetchCoverage(native, world.reports));
   assert.equal(originals.length, 4); assert.equal(init.signal.aborted, false);
+});
+
+test('actual preheader promise rejection stays null-status while actual Node EOF can cover only a complete native-event fixture bag', async () => {
+  const records = [], controller = new AbortController(), runId = 'a'.repeat(32), secret = 'b'.repeat(64);
+  let origin, calls = 0, originalPromise;
+  const server = createServer((request, response) => {
+    calls++;
+    observeQaServerResponse(request, response, { origin, secret, runId, id: calls, emit: row => records.push(row) });
+    response.once('finish', () => controller.abort());
+    response.writeHead(200, { 'content-type': 'application/json' }); response.end('{"synthetic":true}');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); origin = `http://127.0.0.1:${server.address().port}`;
+  const world = observedFetch((...args) => { originalPromise = fetch(...args); return originalPromise; }, origin);
+  try {
+    const actual = world.fetch(origin + '/api/crm/team', { signal: controller.signal, redirect: 'error' });
+    assert.equal(actual, originalPromise); await assert.rejects(actual, error => error.name === 'AbortError');
+    await bounded(() => world.reports.some(row => row.kind === 'terminal'));
+    assert.equal(calls, 1); const terminal = world.reports.find(row => row.kind === 'terminal');
+    assert.equal(terminal.phase, 'fetch-aborted-before-headers'); assert.equal(terminal.status, null); assert.equal(terminal.json, false);
+    assert.equal(terminal.bodyError, null); assert.equal(terminal.signalAbortedAtStart, false); assert.equal(terminal.bodyInspected, false);
+    const node = records.find(row => row.kind === 'terminal'); assert(node.complete && node.terminal === 'finish' && node.bodySha256);
+    // No Chromium runs here: these two explicit native-event fixture rows use
+    // the actual server metadata. They do not claim an observed CDP response.
+    const network = [{ kind: 'request', key: node.key, captureKey: node.captureKey },
+      { kind: 'response', key: node.key, captureKey: node.captureKey, status: node.status, json: node.json, ok: true }];
+    assert.throws(() => assertObservedFetchCoverage(network, world.reports), /UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY/);
+    const diagnostics = [], proofs = qualifyQaServerBodies(network, world.reports, records, runId, diagnostics);
+    assert.equal(proofs.size, 1); assert.doesNotThrow(() => assertObservedFetchCoverage(network, world.reports, proofs));
+    assert.equal(terminal.status, null); assert.equal(terminal.json, false); assert.equal(terminal.bodyInspected, false);
+    const proof = [...proofs.values()][0]; assert.equal(proof.status, null); assert.equal(proof.preHeaderAbortedReadCount, 1);
+    assert.equal(proof.receivedBodyErrorCount, 0); assert.equal(proof.resolvedBodyCount, 1);
+    assert.equal(diagnostics[0].reason, 'QUALIFIED_COMPLETE_AUTH_GROUPS');
+    for (const change of [x => x.signalAbortedAtStart = true, x => x.preAbortedNoDispatch = true, x => x.signalAborted = false,
+      x => x.method = 'POST', x => x.keepalive = true, x => x.phase = 'fetch-rejected-before-headers',
+      x => x.retiredReadBeforeHeaders = true, x => x.status = 200, x => x.json = true]) {
+      const observations = structuredClone(world.reports); change(observations[1]);
+      const denied = qualifyQaServerBodies(network, observations, records, runId);
+      assert.equal(denied.size, 0); assert.throws(() => assertObservedFetchCoverage(network, observations, denied));
+    }
+    for (const change of [start => start.signalAbortedAtStart = true, start => start.keepalive = true]) {
+      const observations = structuredClone(world.reports); change(observations[0]);
+      const denied = qualifyQaServerBodies(network, observations, records, runId);
+      assert.equal(denied.size, 0); assert.throws(() => assertObservedFetchCoverage(network, observations, denied));
+    }
+    for (const change of [x => x[1].complete = false, x => x.pop(), x => x[1].json = false,
+      x => x[1].inspectionError = 'egress_json_inspection_failed', x => x.forEach(row => row.captureKey = 'f'.repeat(64)),
+      x => x.push(...x.map(row => ({ ...row, id: 2 })))]) {
+      const changed = structuredClone(records); change(changed);
+      const denied = qualifyQaServerBodies(network, world.reports, changed, runId);
+      assert.equal(denied.size, 0); assert.throws(() => assertObservedFetchCoverage(network, world.reports, denied));
+    }
+    const noCandidate = world.reports.map(row => row.kind === 'terminal' ? { ...row, phase: 'fetch-rejected-before-headers', signalAborted: false } : row);
+    const missingDiagnostics = []; assert.equal(qualifyQaServerBodies(network, noCandidate, records, runId, missingDiagnostics).size, 0);
+    assert.equal(missingDiagnostics[0].reason, 'NO_ELIGIBLE_ORIGINAL_TERMINAL');
+    assert(!JSON.stringify(diagnostics).includes(node.key)); assert(!JSON.stringify(diagnostics).includes(node.captureKey));
+    assert(!JSON.stringify(diagnostics).includes(node.bodySha256));
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

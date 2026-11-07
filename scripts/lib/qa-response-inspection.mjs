@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { validQaServerAuthGroups } from "./qa-server-response-capture.mjs";
+import { validQaServerAuthGroups, validQaServerOriginalBag, isQaPreheaderAbortedRead } from "./qa-server-response-capture.mjs";
 const opaqueReferences = new Map();
 const opaqueReference = value => {
   if (typeof value !== "string") return null;
@@ -264,16 +264,23 @@ export function assertObservedFetchCoverage(network, observations, serverBodyPro
       proof.serverIds.some(id => !Number.isSafeInteger(id) || id <= 0) ||
       proof.nativeRequestCount !== network.filter(item => item.kind === "request" && item.key === row.key).length ||
       proof.successfulJsonBodyCount !== network.filter(item => item.kind === "response" && item.key === row.key && item.ok && item.json).length ||
-      proof.resolvedBodyCount !== observations.filter(item => item.kind === "terminal" && item.key === row.key && item.bodyError).length ||
       !Array.isArray(proof.bodyHashes) || proof.bodyHashes.length !== proof.successfulJsonBodyCount ||
       proof.bodyHashes.some(body => !Number.isInteger(body.status) || body.status < 200 || body.status >= 300 || !/^[a-f0-9]{64}$/.test(body.sha256)) ||
-      row.bodyError !== "body_read_failed" ||
-      !row.json || row.status < 200 || row.status >= 300 || row.method !== "GET" || row.keepalive ||
-      row.signalAbortedAtStart || !row.signalAborted || row.bodyInspected || !validQaServerAuthGroups(network, row, proof))
+      (!(row.bodyError === "body_read_failed" && row.json && row.status >= 200 && row.status < 300 && row.method === "GET" &&
+        !row.keepalive && !row.signalAbortedAtStart && row.signalAborted && !row.bodyInspected) && !isQaPreheaderAbortedRead(row)) ||
+      !validQaServerAuthGroups(network, row, proof) || !validQaServerOriginalBag(observations, row, proof))
       throw new Error("INVALID_SERVER_EGRESS_BODY_PROOF");
     return true;
   };
-  const bodies = count(observations.filter(r => r.kind === "terminal" && (r.bodyInspected || bodyProven(r))), r => `${r.key}/${r.status}`);
+  const bodies = count(observations.filter(r => r.kind === "terminal" && r.bodyInspected), r => `${r.key}/${r.status}`);
+  const qualifiedBags = new Map();
+  for (const row of observations.filter(row => row.kind === "terminal")) if (bodyProven(row)) qualifiedBags.set(row.key, serverBodyProofs.get(`${row.documentId}/${row.id}`));
+  for (const [key, proof] of qualifiedBags) {
+    // A complete actual server bag replaces body counts for this exact key.
+    // It never assigns a successful status or body to an aborted original call.
+    for (const name of bodies.keys()) if (name.startsWith(key + "/")) bodies.delete(name);
+    for (const body of proof.bodyHashes) { const name = `${key}/${body.status}`; bodies.set(name, (bodies.get(name) ?? 0) + 1); }
+  }
   for (const [key, n] of expectedBodies) if ((bodies.get(key) ?? 0) < n) countFailure("UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", key, n, bodies.get(key) ?? 0);
   for (const [key, n] of bodies) if ((expectedBodies.get(key) ?? 0) < n) countFailure("UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY", key, expectedBodies.get(key) ?? 0, n);
   if (observations.some(r => r.kind === "terminal" && r.bodyError && !bodyProven(r))) throw new Error("ORIGINAL_FETCH_BODY_INSPECTION_FAILED");
