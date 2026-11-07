@@ -6,7 +6,7 @@ import { createHash, createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, requiresCrmDocumentReload } from "./lib/qa-response-inspection.mjs";
+import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload } from "./lib/qa-response-inspection.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
@@ -2383,6 +2383,16 @@ try {
   for (const context of contexts) await context.close().catch(() => {});
   await browser?.close();
   await admin.end();
+  const finalFetchAudits = [operatorPage, customerPage, viewerPage].filter(Boolean).map(fetchAudit);
+  // Closing the contexts can publish the final real pagehide records. Preserve
+  // every historical/native obligation after that last lifecycle transition.
+  for (const audit of finalFetchAudits) {
+    try { assertObservedFetchCoverage(audit.network, audit.observations); }
+    catch (error) { results.push({ name: "Final original/native Fetch audit", status: "FAIL", error: error.message + ": " + JSON.stringify(error.coverage ?? null) }); }
+  }
+  const { events: fetchLifecycle, ...fetchLifecycleDiagnostics } = collectFetchLifecycleDiagnostics(finalFetchAudits);
+  if (!fetchLifecycleDiagnostics.complete)
+    results.push({ name: "Complete bounded original Fetch diagnostics", status: "FAIL", error: "FETCH_LIFECYCLE_DIAGNOSTIC_LIMIT_EXCEEDED" });
   const failed = results.filter((result) => result.status === "FAIL");
   const report = {
     syntheticOnly: true,
@@ -2412,7 +2422,8 @@ try {
     privateLeaks,
     ...(readersOnly ? { readerMutations } : {}),
     responseInspectionErrors,
-    fetchLifecycle: [operatorPage, customerPage, viewerPage].filter(Boolean).flatMap(page => fetchAudit(page).observations.filter(event => event.kind === "terminal")),
+    fetchLifecycle,
+    fetchLifecycleDiagnostics,
     consoleErrors,
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",

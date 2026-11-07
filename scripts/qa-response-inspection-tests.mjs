@@ -48,21 +48,21 @@ import { webcrypto } from "node:crypto";
 import { createServer } from 'node:http';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage } from './lib/qa-response-inspection.mjs';
+import { observeQaFetchBodies, requiresCrmDocumentReload, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics } from './lib/qa-response-inspection.mjs';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 async function bounded(condition) {
   const deadline = Date.now() + 1000;
   while (!condition()) { assert.ok(Date.now() < deadline, 'bounded synthetic observation'); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
-function observedFetch(perform, origin) {
+function observedFetch(perform, origin, { report, observerSource } = {}) {
   const reports = [], listeners = {};
   const world = { fetch: perform, URL, Request, AbortSignal, DOMException, Reflect, TextEncoder, crypto: webcrypto, setTimeout,
-    __crmQaFetchReport: async event => { reports.push(event); },
+    __crmQaFetchReport: report ? event => report(event, reports) : async event => { reports.push(event); },
     addEventListener: (name, callback) => { listeners[name] = callback; } };
   // Keep the actual global object used by the serialized browser init function.
   const context = { ...world, origin };
-  runInNewContext(`(${observeQaFetchBodies.toString()})({origin})`, context);
+  runInNewContext(`(${observerSource ?? observeQaFetchBodies.toString()})({origin})`, context);
   context.reports = reports; context.listeners = listeners;
   return context;
 }
@@ -301,4 +301,92 @@ test('finite quiet deadline cannot pass or conceal the last original/native cove
   runInNewContext(implementation + ';globalThis.run = drainResponseInspections;', context);
   await assert.rejects(context.run(page), error => error.message.includes('"timedOut":true') && error.message.includes('"lastCoverageError":{"code":"UNOBSERVED_NATIVE_FETCH_REQUEST"') && error.message.includes('"nativeCount":1') && error.message.includes('"originalCount":0'));
   assert.equal(evaluated, 2); assert.equal(now, 25);
+});
+
+test('synchronous lifecycle delivery survives immediate document destruction; exact former deferral loses its terminal', async () => {
+  const current = observeQaFetchBodies.toString();
+  // Exact former FD report block. Only the reporting block is substituted;
+  // both cases execute the same original fetch/pagehide lifecycle code.
+  const formerReport = `const report = (kind, e) => {
+    const task = e.keyPromise.then(async key => {
+      e.key = key;
+      await globalThis.__crmQaFetchReport({ kind, ...metadata(e) });
+    }).catch(() => { state.errors.push("fetch_observer_bridge_failed"); });
+    bridges.add(task); void task.finally(() => bridges.delete(task));
+  };`;
+  const former = current.replace(/const report = \(kind, e\) => \{[\s\S]*?\n  \};/, formerReport);
+  assert.notEqual(former, current);
+  for (const observerSource of [former, current]) {
+    let destroyed = false, calls = 0;
+    const promise = new Promise(() => {}), init = { method: 'GET' };
+    const world = observedFetch((_url, actualInit) => { calls++; assert.equal(actualInit, init); return promise; }, 'http://127.0.0.1', {
+      observerSource, report(event, reports) { if (destroyed) throw Error('synthetic document destroyed'); reports.push(event); },
+    });
+    assert.equal(world.fetch('http://127.0.0.1/api/crm/team', init), promise);
+    await bounded(() => world.reports.some(row => row.kind === 'start'));
+    const key = world.reports[0].key; assert.match(key, /^[a-f0-9]{64}$/);
+    world.listeners.pagehide({ persisted: false }); destroyed = true;
+    const sentSynchronously = world.reports.some(row => row.kind === 'terminal');
+    await turn(); assert.equal(calls, 1);
+    if (observerSource === former) {
+      assert.equal(sentSynchronously, false);
+      assert.equal(world.reports.some(row => row.kind === 'terminal'), false);
+      assert.throws(() => assertObservedFetchCoverage([{ kind: 'request', key }], world.reports), /UNSETTLED_ORIGINAL_FETCH_LIFECYCLE/);
+    } else {
+      assert.equal(sentSynchronously, true);
+      const end = world.reports.find(row => row.kind === 'terminal');
+      assert.equal(end.retiredReadBeforeHeaders, true); assert.equal(end.bodyInspected, false); assert.equal(end.status, null);
+      assertObservedFetchCoverage([{ kind: 'request', key }], world.reports);
+    }
+  }
+});
+
+test('synchronous lifecycle reporting retains pending writes, keepalive and real JSON EOF requirements', async () => {
+  for (const init of [{ method: 'POST' }, { method: 'GET', keepalive: true }]) {
+    const world = observedFetch(() => new Promise(() => {}), 'http://127.0.0.1');
+    world.fetch('http://127.0.0.1/api/crm/team', init);
+    await bounded(() => world.reports.some(row => row.kind === 'start'));
+    world.listeners.pagehide({ persisted: false });
+    const end = world.reports.find(row => row.kind === 'terminal');
+    assert.ok(end.bodyError); assert.equal(end.bodyInspected, false);
+    assert.throws(() => assertObservedFetchCoverage([{ kind: 'request', key: end.key }], world.reports), /ORIGINAL_FETCH_BODY_INSPECTION_FAILED/);
+  }
+  for (const eofBeforeRetirement of [false, true]) {
+    let stream; const response = new Response(new ReadableStream({ start(controller) { stream = controller; } }), { headers: { 'content-type': 'application/json' } });
+    const native = Promise.resolve(response), world = observedFetch(() => native, 'http://127.0.0.1');
+    const returned = world.fetch('http://127.0.0.1/api/crm/team'); assert.equal(returned, native); assert.equal(await returned, response);
+    await bounded(() => world.reports.some(row => row.kind === 'start'));
+    if (eofBeforeRetirement) { stream.enqueue(new TextEncoder().encode('{"actual":true}')); stream.close(); await bounded(() => world.reports.some(row => row.kind === 'terminal')); }
+    world.listeners.pagehide({ persisted: false });
+    const end = world.reports.find(row => row.kind === 'terminal');
+    const network = [{ kind: 'request', key: end.key }, { kind: 'response', key: end.key, status: 200, ok: true, json: true }];
+    if (eofBeforeRetirement) { assert.equal(end.bodyInspected, true); assertObservedFetchCoverage(network, world.reports); }
+    else { assert.ok(end.bodyError); assert.equal(end.bodyInspected, false); assert.throws(() => assertObservedFetchCoverage(network, world.reports)); stream.error(Error('synthetic retired stream')); }
+  }
+});
+
+test('synchronous lifecycle bridge failures and complete bounded diagnostics cannot silently pass or expose extra fields', async () => {
+  for (const asyncFailure of [false, true]) {
+    const world = observedFetch(() => new Promise(() => {}), 'http://127.0.0.1', { report(event, reports) {
+      if (event.kind === 'start') { reports.push(event); return Promise.resolve(); }
+      const error = Error('SYNTHETIC_PRIVATE_BRIDGE_REASON'); if (asyncFailure) return Promise.reject(error); throw error;
+    } });
+    world.fetch('http://127.0.0.1/api/crm/team');
+    await bounded(() => world.reports.some(row => row.kind === 'start'));
+    world.listeners.pagehide({ persisted: false });
+    const drained = await world.__crmQaFetchBodies.drain(500);
+    assert.equal(drained.ok, false); assert.equal(drained.bridgesPending, 0);
+    assert.equal(drained.errors[0], 'fetch_observer_bridge_failed'); assert.doesNotMatch(JSON.stringify(drained), /SYNTHETIC_PRIVATE_BRIDGE_REASON/);
+  }
+  const first = { kind: 'start', documentId: 'old-document', id: 3, key: 'a'.repeat(64), path: '/api/crm/team', method: 'GET', url: 'SYNTHETIC_PRIVATE_URL', abortReason: 'SYNTHETIC_PRIVATE_REASON', body: 'SYNTHETIC_PRIVATE_BODY' };
+  const next = { ...first, documentId: 'next-document', id: 1 };
+  const rows = [first, next, { ...next, kind: 'terminal', bodyInspected: false }], audit = [{ observations: rows }];
+  const diagnostic = collectFetchLifecycleDiagnostics(audit);
+  assert.equal(diagnostic.complete, true); assert.equal(diagnostic.total, 3); assert.equal(diagnostic.events.length, 3);
+  assert.equal(diagnostic.missingTerminalCount, 1); assert.deepEqual(diagnostic.missingTerminalExamples[0], { documentId: first.documentId, id: 3, key: first.key, path: first.path, method: 'GET' });
+  assert.doesNotMatch(JSON.stringify(diagnostic), /SYNTHETIC_PRIVATE_/);
+  assert.throws(() => assertObservedFetchCoverage([], rows), error => error.message === 'UNSETTLED_ORIGINAL_FETCH_LIFECYCLE' && error.coverage.missingTerminalExamples[0].documentId === first.documentId);
+  const overflow = collectFetchLifecycleDiagnostics([{ observations: Array.from({ length: 4001 }, (_, id) => ({ ...first, id })) }]);
+  assert.equal(overflow.complete, false); assert.equal(overflow.total, 4001); assert.equal(overflow.events.length, 4000); assert.equal(overflow.missingTerminalExamples.length, 10);
+  assert.equal(rows.length, 3); assert.equal(audit[0].observations, rows);
 });

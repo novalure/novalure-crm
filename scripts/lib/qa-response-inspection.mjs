@@ -63,10 +63,17 @@ export function observeQaFetchBodies({ origin }) {
     bodyError: e.bodyError ?? null, failedBeforeHeaders: e.failedBeforeHeaders ?? false,
     retiredReadBeforeHeaders: e.retiredReadBeforeHeaders ?? false, bodySha256: e.bodySha256 ?? null });
   const report = (kind, e) => {
-    const task = e.keyPromise.then(async key => {
+    const deliver = key => {
       e.key = key;
-      await globalThis.__crmQaFetchReport({ kind, ...metadata(e) });
-    }).catch(() => { state.errors.push("fetch_observer_bridge_failed"); });
+      return globalThis.__crmQaFetchReport({ kind, ...metadata(e) });
+    };
+    let task;
+    try {
+      // pagehide can be the last synchronous callback of this document. With
+      // the real hash ready, enqueue its actual message before returning.
+      task = /^[a-f0-9]{64}$/.test(e.key ?? "") ? Promise.resolve(deliver(e.key)) : e.keyPromise.then(deliver);
+    } catch { state.errors.push("fetch_observer_bridge_failed"); return; }
+    task = task.catch(() => { state.errors.push("fetch_observer_bridge_failed"); });
     bridges.add(task); void task.finally(() => bridges.delete(task));
   };
   const finish = e => {
@@ -152,6 +159,22 @@ export function observeQaFetchBodies({ origin }) {
   });
 }
 
+const requestTrace = row => Object.fromEntries(["documentId", "id", "key", "path", "method"].map(field => [field, row[field] ?? null]));
+
+/** Complete bounded metadata only; overflow is a caller-owned failure, never a
+ * silent partial coverage claim. The internal full audit is not modified. */
+export function collectFetchLifecycleDiagnostics(audits) {
+  const rows = audits.flatMap(audit => audit.observations), limit = 4000;
+  const ids = row => `${row.documentId}/${row.id}`;
+  const terminalIds = new Set(rows.filter(row => row.kind === "terminal").map(ids));
+  const missing = rows.filter(row => row.kind === "start" && !terminalIds.has(ids(row)));
+  const terminalFields = ["phase", "status", "json", "bodyInspected", "signalAborted", "signalAbortedAtStart", "preAbortedNoDispatch", "rejectedWithOriginalAbortReason", "keepalive", "foreign", "bodyError", "failedBeforeHeaders", "retiredReadBeforeHeaders", "bodySha256"];
+  return { complete: rows.length <= limit, limit, total: rows.length,
+    missingTerminalCount: missing.length, missingTerminalExamples: missing.slice(0, 10).map(requestTrace),
+    events: rows.slice(0, limit).map(row => ({ kind: row.kind, role: row.role ?? null, ...requestTrace(row),
+      ...Object.fromEntries((row.kind === "terminal" ? terminalFields : ["signalAbortedAtStart", "keepalive"]).map(field => [field, row[field] ?? null])) })) };
+}
+
 export function assertObservedFetchCoverage(network, observations) {
   const startsById = new Map(), terminalIds = new Set(), undispatchedIds = new Set();
   for (const row of observations) {
@@ -174,7 +197,12 @@ export function assertObservedFetchCoverage(network, observations) {
       }
     }
   }
-  if ([...startsById.keys()].some(id => !terminalIds.has(id))) throw new Error("UNSETTLED_ORIGINAL_FETCH_LIFECYCLE");
+  const missing = [...startsById].filter(([id]) => !terminalIds.has(id)).map(([, row]) => row);
+  if (missing.length) {
+    const error = new Error("UNSETTLED_ORIGINAL_FETCH_LIFECYCLE");
+    error.coverage = { missingTerminalCount: missing.length, missingTerminalExamples: missing.slice(0, 10).map(requestTrace) };
+    throw error;
+  }
   if (observations.some(r => r.bodyInspected && (!r.json || !Number.isInteger(r.status) || r.status < 200 || r.status >= 300 || !/^[a-f0-9]{64}$/.test(r.bodySha256))))
     throw new Error("INVALID_ORIGINAL_BODY_PROOF");
   const count = (rows, key) => rows.reduce((m, r) => m.set(key(r), (m.get(key(r)) ?? 0) + 1), new Map());

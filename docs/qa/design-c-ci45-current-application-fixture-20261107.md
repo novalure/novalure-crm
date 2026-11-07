@@ -216,3 +216,42 @@ success. Three focused nonbrowser groups cover actual loopback zero-request
 pre-abort plus an ordinary identical-URL request, the negative boundary matrix,
 and finite timeout/error preservation. Unchanged transport evidence is reused;
 no browser/build/provider execution, CI rerun or native PASS is claimed.
+
+## Follow-up to the actual FD native result
+
+Run42394393423/job128468536585 passed mandatory1–44; Step45 retained2 Design C
+passes and1 prerequisite failure at profile choice. The current document had7
+completed bodies, zero pending/bridges/errors, but the cumulative audit reported
+UNSETTLED_ORIGINAL_FETCH_LIFECYCLE. The previous authenticated document retained
+terminal ids1,2,4,5; no endpoint or phase for its missing id3 was exported. The
+native login form and helper both navigate naturally, after non-atomic pre-action
+drains. This is a historical missing-proof failure, not a demonstrated product
+defect or a passing prior-round replacement.
+
+The report path previously always deferred binding invocation through
+keyPromise.then, even when the actual hash was ready. At pagehide that callback
+can run after its document is destroyed. With a previously computed hash, the
+observer now invokes the same metadata binding synchronously inside the actual
+lifecycle callback, then tracks its returned promise and fixed bridge errors.
+Unknown hashes keep their existing asynchronous calculation. No raw URL/host
+hash interface, original-fetch/argument change or lifecycle exception is added.
+Pending writes, keepalive, received but unread JSON, missing terminals and all
+native count/body obligations still fail. A terminal is never manufactured as
+successful or erased because its document retired.
+
+The result exports both complete start and terminal metadata, with only the
+existing hashed key/path/method/document/id and fixed observation fields. Query
+strings, URLs, bodies and abort reasons are not projected. The internal audit
+stays complete; beyond4000 exported events an explicit failure and incomplete
+diagnostic marker replace any silent truncation claim. Missing-terminal counts
+and at most10 identifying tuples accompany the primary error and final report.
+The same complete native/lifecycle assertion also checks the final audit after
+context close has delivered its last pagehide records; a new closure failure
+cannot be reported as a passing case merely because the earlier drain passed.
+
+Focused cases compare the exact former deferred reporter with synchronous
+delivery before immediate simulated document destruction, retain write/keepalive/
+real-EOF failures, and exercise synchronous/asynchronous bridge errors plus
+complete/private-field-free bounded diagnostics. Unchanged transport and product
+evidence is reused. No browser, provider, build or CI rerun is performed here;
+actual native confirmation remains required.
