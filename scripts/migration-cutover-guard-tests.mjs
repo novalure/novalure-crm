@@ -889,6 +889,14 @@ test("reservation withdrawal migration cannot run alone without the reservation 
   assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only: withdrawal.version }), [withdrawal]);
 });
 
+test("internal calendar archive requires the released complete owner-read predecessor", () => {
+  const predecessor = migration("169_property_meeting_context", "sha-169");
+  const archive = migration("201_internal_calendar_archive", "sha-201");
+  const migrations = [predecessor, archive];
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only: archive.version }), /required predecessor 169_property_meeting_context/);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [ledgerRow(predecessor.version, predecessor.checksum)], migrations, only: archive.version }), [archive]);
+});
+
 test("compatibility profiles bind production only to prod and QA or rehearsal only to test", () => {
   assert.equal(compatibilityProfileMatchesTarget("", "test"), true);
   assert.equal(compatibilityProfileMatchesTarget("production", "prod"), true);

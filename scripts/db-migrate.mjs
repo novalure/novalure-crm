@@ -105,6 +105,7 @@ const migrationDependencies = new Map([
   ["114_customer_workspace_provisioning", "108_knowledge_connected_assistant_quota"],
   [privateExposeDraftMigration, "198_property_website_price_visibility"],
   ["200_property_reservation_withdrawal", "082_crm_property_sales_workflow"],
+  ["201_internal_calendar_archive", "169_property_meeting_context"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);

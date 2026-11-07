@@ -53,13 +53,14 @@ async function freePort() {
   });
 }
 /** Entirely local, disposable synthetic cluster. No environment connection string is consumed. */
-export async function startLocalSalesDb() {
+export async function startLocalSalesDb({ separateBootstrap = false } = {}) {
   await mkdir(qaRoot, { recursive: true });
   const directory = await mkdtemp(path.join(qaRoot, "sales-pg-"));
   if (!directory.startsWith(qaRoot + path.sep)) throw new Error("Unsafe QA directory");
   const bin = await binaries();
   const port = await freePort();
-  await run(bin.initdb, ["-D", directory, "--username=qa_admin", "--auth-local=trust", "--auth-host=trust", "--encoding=UTF8", "--locale=C"], workRoot);
+  const bootstrapUser = separateBootstrap ? "sales_fixture_bootstrap" : "qa_admin";
+  await run(bin.initdb, ["-D", directory, "--username=" + bootstrapUser, "--auth-local=trust", "--auth-host=trust", "--encoding=UTF8", "--locale=C"], workRoot);
   const logfile = path.join(directory, "postgres.log");
   const options = `-h 127.0.0.1 -p ${port}`;
   const role = `sales_qa_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -69,6 +70,11 @@ export async function startLocalSalesDb() {
   const stopCluster = () => run(bin.pg_ctl, ["-D", directory, "-m", "fast", "-t", "15", "-w", "stop"], workRoot);
   try {
     await run(bin.pg_ctl, ["-D", directory, "-l", logfile, "-o", options, "-t", "30", "-w", "start"], workRoot);
+    if (separateBootstrap) {
+      const bootstrap = new LocalSalesPool({ host: "127.0.0.1", port, user: bootstrapUser, database: "postgres", max: 1 });
+      try { await bootstrap.query("create role qa_admin login superuser"); }
+      finally { await bootstrap.end(); }
+    }
     admin = new LocalSalesPool({ host: "127.0.0.1", port, user: "qa_admin", database: "postgres", max: 5, connectionTimeoutMillis: 5_000, query_timeout: 15_000 });
     await admin.query(`create role ${role} login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls`);
     await admin.query("create role novalure_app nologin inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");

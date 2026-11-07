@@ -1,3 +1,4 @@
+import { assertInternalCalendarHttpAccess } from "@/lib/db/crm-write-repositories";
 import type { AppSession } from "@/lib/auth/session";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { assertCrmUuid, assertProjectGrant, CrmCommandError, crmCommandErrorResponse, crmRequestMetadata, executeCrmCommand, reconcileCrmCommand, withCrmRead, type CrmCommandInput, type TenantTransactionOptions } from "@/lib/crm-command";
@@ -5,6 +6,7 @@ import type { ProductCapability } from "@/lib/product-model";
 
 export type SalesHttpRequest = { target: string; method: string; body: Record<string, unknown>; idempotencyKey: string; correlationId: string };
 const scopes: Record<string, { table: string; entity: string; capability: ProductCapability }> = {
+  "calendar-events": { table: "calendar_events", entity: "event", capability: "workspace:operate" },
   contacts: { table: "contacts", entity: "contact", capability: "workspace:operate" },
   tasks: { table: "tasks", entity: "task", capability: "workspace:operate" },
   projects: { table: "projects", entity: "project", capability: "settings:manage" },
@@ -12,17 +14,32 @@ const scopes: Record<string, { table: string; entity: string; capability: Produc
   deals: { table: "deals", entity: "deal", capability: "pipeline:write" },
 };
 class RejectedWrite extends Error { constructor(readonly response: { status: number; body: unknown }) { super("CRM write rejected"); } }
+/** Calendar command identity and the handler must resolve the same single target. */
+export function calendarEventResourceId(url: URL, method: string, body: Record<string, unknown>): string | undefined {
+  if (url.searchParams.has("id") || url.searchParams.has("eventId")) throw new CrmCommandError("INVALID_EVENT", "Calendar target belongs in the JSON body");
+  if (method === "DELETE") {
+    const id = body.id === undefined ? undefined : assertCrmUuid(body.id, "id").toLowerCase();
+    const eventId = body.eventId === undefined ? undefined : assertCrmUuid(body.eventId, "eventId").toLowerCase();
+    if (id && eventId && id !== eventId) throw new CrmCommandError("INVALID_EVENT", "Conflicting calendar event ids");
+    return eventId ?? id ?? assertCrmUuid(undefined, "eventId");
+  }
+  if (body.eventId !== undefined || (body.event !== undefined && body.id !== undefined)) throw new CrmCommandError("INVALID_EVENT", "Use the event id only");
+  const event = body.event && typeof body.event === "object" && !Array.isArray(body.event) ? body.event as Record<string, unknown> : body;
+  if (event.id !== undefined) return assertCrmUuid(event.id, "id").toLowerCase();
+  if (method === "PATCH") throw new CrmCommandError("INVALID_EVENT", "Existing calendar event id required");
+  return undefined;
+}
 /** Exact original HTTP request, including query selectors, is part of the effect digest. */
 export async function salesHttpCommand(session: AppSession, input: SalesHttpRequest, options: TenantTransactionOptions = {}): Promise<CrmCommandInput> {
   const url = new URL(input.target, "https://crm.invalid");
-  const match = /^\/api\/crm\/(contacts|tasks|projects|leads|deals)(?:\/([0-9a-f-]+)\/stage)?$/.exec(url.pathname);
-  if (!input.target.startsWith("/") || input.target.startsWith("//") || !match || !["POST", "PATCH", "DELETE"].includes(input.method) || (match[2] && match[1] !== "deals") || (input.method === "DELETE" && match[1] !== "contacts")) throw new CrmCommandError("UNSUPPORTED_OPERATION", "Unsupported CRM write target");
+  const match = /^\/api\/crm\/(contacts|tasks|projects|leads|deals|calendar-events)(?:\/([0-9a-f-]+)\/stage)?$/.exec(url.pathname);
+  if (!input.target.startsWith("/") || input.target.startsWith("//") || !match || !["POST", "PATCH", "DELETE"].includes(input.method) || (match[2] && match[1] !== "deals") || (input.method === "DELETE" && !["contacts", "calendar-events"].includes(match[1]))) throw new CrmCommandError("UNSUPPORTED_OPERATION", "Unsupported CRM write target");
   if (!input.body || typeof input.body !== "object" || Array.isArray(input.body)) throw new CrmCommandError("INVALID_REQUEST", "JSON object required");
   const rule = scopes[match[1]];
   const candidate = input.body[rule.entity];
   const entity = candidate && typeof candidate === "object" && !Array.isArray(candidate) ? candidate as Record<string, unknown> : input.body;
-  const id = match[2] ?? entity.id ?? input.body.contactId ?? url.searchParams.get("id") ?? url.searchParams.get(rule.entity + "Id");
-  const resourceId = typeof id === "string" && id ? assertCrmUuid(id, "resourceId") : undefined;
+  const id = match[2] ?? entity.id ?? (match[1] === "contacts" ? input.body.contactId : undefined) ?? url.searchParams.get("id") ?? url.searchParams.get(rule.entity + "Id");
+  const resourceId = match[1] === "calendar-events" ? calendarEventResourceId(url, input.method, input.body) : typeof id === "string" && id ? assertCrmUuid(id, "resourceId") : undefined;
   const expected = input.body.expectedVersion ?? entity.version;
   const expectedVersion = expected === undefined ? undefined : Number.isSafeInteger(expected) && typeof expected === "number" ? expected : (() => { throw new CrmCommandError("VERSION_REQUIRED", "Invalid expectedVersion"); })();
   const requestedProject = typeof entity.projectId === "string" && entity.projectId ? assertCrmUuid(entity.projectId, "projectId") : undefined;
@@ -35,11 +52,12 @@ export async function salesHttpCommand(session: AppSession, input: SalesHttpRequ
       projectId = requestedProject ?? row.projectId ?? undefined;
     }
     if (projectId) await assertProjectGrant(tx, fresh, projectId, true);
+    if (rule.table === "calendar_events") await assertInternalCalendarHttpAccess({ session: fresh, resourceId, requestedProjectId: requestedProject, archive: input.method === "DELETE" });
     if (!projectId && rule.table !== "projects") {
       const manager = await tx.queryOne<{ allowed: boolean }>("select crm_workspace_manager($1::uuid) as allowed", [fresh.workspaceId]);
       if (!manager?.allowed) throw new CrmCommandError("PROJECT_REQUIRED", "An explicit authorized project is required", 403);
     }
-    return { operation: `legacy_http.${match[1]}.${match[2] ? "stage." : ""}${input.method.toLowerCase()}`, resourceId, projectId, expectedVersion, idempotencyKey: input.idempotencyKey, correlationId: input.correlationId, capability: match[1] === "contacts" && (input.method === "DELETE" || input.body.action === "archive") ? "settings:manage" : rule.capability, payload: { target: input.target, method: input.method, body: input.body, correlationId: input.correlationId } };
+    return { operation: `legacy_http.${match[1]}.${match[2] ? "stage." : ""}${input.method.toLowerCase()}`, resourceId, projectId, expectedVersion, idempotencyKey: input.idempotencyKey, correlationId: input.correlationId, capability: ((match[1] === "contacts" && (input.method === "DELETE" || input.body.action === "archive")) || (match[1] === "calendar-events" && input.method === "DELETE")) ? "settings:manage" : rule.capability, payload: { target: input.target, method: input.method, body: input.body, correlationId: input.correlationId } };
   }, options);
 }
 export async function executeSalesHttp(session: AppSession, input: SalesHttpRequest, callback: (freshSession: AppSession) => Promise<Response>, options: TenantTransactionOptions = {}): Promise<Response> {

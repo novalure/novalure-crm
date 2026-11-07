@@ -1,6 +1,7 @@
 import type { TenantTransactionOptions } from "@/lib/db/tenant-client";
+import { INTERNAL_CALENDAR_REVISION_SQL } from "@/lib/db/internal-calendar-row";
 import { createHash, randomUUID } from "node:crypto";
-import { CrmCommandError, executeCrmCommand, withCrmRead } from "@/lib/crm-command";
+import { assertProjectGrant, CrmCommandError, executeCrmCommand, withCrmRead } from "@/lib/crm-command";
 import { assertLegacyOfferDealWrite } from "@/lib/db/offer-repositories";
 import type { AppSession } from "@/lib/auth/session";
 import { canArchiveCrmObject } from "@/lib/auth/delete-permissions";
@@ -223,6 +224,7 @@ type CalendarEventWriteRow = {
   contactId: string | null;
   endsAt: string | Date;
   id: string;
+  revision: string;
   leadId: string | null;
   location: string;
   metadata: Record<string, unknown> | null;
@@ -1670,9 +1672,11 @@ async function listCalendarEventRecordsInTransaction(input: {
         preparation,
         outcome_goal as "outcomeGoal",
         teams_join_url as "teamsJoinUrl",
-        metadata
+        metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
       from calendar_events
       where workspace_id = $1
+        and not (metadata ? 'internalCalendarArchive')
         and ($2::uuid is null or lead_id = $2::uuid)
         and ($3::uuid is null or contact_id = $3::uuid)
       order by starts_at asc
@@ -1686,6 +1690,8 @@ async function listCalendarEventRecordsInTransaction(input: {
 
 async function upsertCalendarEventRecordInTransaction(input: {
   event: Record<string, unknown>;
+  expectedRevision?: unknown;
+  enforceInternalCommand?: boolean;
   session: AppSession;
 }): Promise<RepositoryWriteResult<CalendarEvent>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -1715,14 +1721,21 @@ async function upsertCalendarEventRecordInTransaction(input: {
             preparation,
             outcome_goal as "outcomeGoal",
             teams_join_url as "teamsJoinUrl",
-            metadata
+            metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
           from calendar_events
           where id = $1 and workspace_id = $2
-          limit 1
+          limit 1 for update
         `,
         [input.event.id, input.session.workspaceId],
       )
     : null;
+
+  if (input.enforceInternalCommand && input.event.id && !existing) throw new CrmCommandError("NOT_FOUND", "Calendar event not found", 404);
+  if (existing?.metadata && Object.hasOwn(existing.metadata, "internalCalendarArchive")) throw new CrmCommandError("CONFLICT", "Calendar event was removed; reload before editing", 409);
+  if (input.enforceInternalCommand && existing && (typeof input.expectedRevision !== "string" || input.expectedRevision !== existing.revision)) {
+    throw new CrmCommandError("CONFLICT", "Calendar event changed; reload before editing", 409);
+  }
 
   const leadId = normalizeWriteProjectId(input.event.leadId) ?? existing?.leadId ?? null;
   const lead = leadId
@@ -1798,14 +1811,15 @@ async function upsertCalendarEventRecordInTransaction(input: {
   if (existing?.metadata?.source === "personal_standalone_calendar" || inputMetadata.source === "personal_standalone_calendar" || Object.hasOwn(inputMetadata,"personalCalendarState")) {
     return { persisted: false, reason: "Personal calendar event must only be changed through its personal calendar workflow" };
   }
-  const notes = cleanString(input.event.notes) || cleanString(inputMetadata.notes);
+  const notesProvided = Object.hasOwn(input.event, "notes") || Object.hasOwn(inputMetadata, "notes");
+  const notes = Object.hasOwn(input.event, "notes") ? cleanString(input.event.notes) : cleanString(inputMetadata.notes);
   const metadata = {
     ...(existing?.metadata ?? {}),
     ...inputMetadata,
     calendarProvider: "manual",
     externalCommunication: false,
     meetingProvider: cleanString(input.event.meetingProvider) || "manual-link",
-    ...(notes ? { notes } : {}),
+    ...(notesProvided ? { notes: notes ?? "" } : {}),
     source: "crm_internal_calendar_event",
     updatedByUserId: input.session.userId,
   };
@@ -1845,7 +1859,8 @@ async function upsertCalendarEventRecordInTransaction(input: {
             preparation,
             outcome_goal as "outcomeGoal",
             teams_join_url as "teamsJoinUrl",
-            metadata
+            metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
         `,
         [
           existing.id,
@@ -1898,7 +1913,8 @@ async function upsertCalendarEventRecordInTransaction(input: {
             preparation,
             outcome_goal as "outcomeGoal",
             teams_join_url as "teamsJoinUrl",
-            metadata
+            metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
         `,
         [
           input.session.workspaceId,
@@ -1931,6 +1947,53 @@ async function upsertCalendarEventRecordInTransaction(input: {
   });
 
   return { data: event, persisted: true };
+}
+
+/** Rechecked before both command execution and read-only receipt reconciliation. */
+export async function assertInternalCalendarHttpAccess(input: {
+  session: AppSession; resourceId?: string; requestedProjectId?: string; archive: boolean;
+}) {
+  const { session } = input;
+  if (!currentTenantTransaction()) throw new CrmCommandError("SCOPED_TRANSACTION_REQUIRED", "A current scoped transaction is required", 403);
+  if (input.archive && !canArchiveCrmObject(session, "calendar_event")) throw new CrmCommandError("FORBIDDEN", "Calendar removal requires workspace admin permission", 403);
+  if (!input.resourceId) {
+    if (!input.requestedProjectId) throw new CrmCommandError("PROJECT_REQUIRED", "An explicit authorized project is required", 403);
+    return;
+  }
+  const row = await queryOne<CalendarEventWriteRow>(`select id,workspace_id as "workspaceId",project_id as "projectId",owner_user_id as "ownerUserId",metadata
+    from calendar_events where workspace_id=$1::uuid and id=$2::uuid for update`, [session.workspaceId, input.resourceId]);
+  if (!row) throw new CrmCommandError("NOT_FOUND", "Calendar event not found", 404);
+  const metadata = row.metadata ?? {};
+  if (metadata.source !== "crm_internal_calendar_event" || metadata.calendarProvider !== "manual" || metadata.externalCommunication !== false
+    || metadata.bookingId || metadata.viewingId || metadata.propertyId || metadata.externalCalendarId || metadata.personalCalendarState) {
+    throw new CrmCommandError("ORIGINATING_WORKFLOW_REQUIRED", "Use this event's originating calendar or booking workflow", 403);
+  }
+  if (!row.projectId || (input.requestedProjectId && input.requestedProjectId !== row.projectId)) throw new CrmCommandError("PROJECT_IMMUTABLE", "Calendar project cannot be changed through this workflow", 409);
+  await assertProjectGrant(currentTenantTransaction()!.transaction, session, row.projectId, true);
+  const access = await assertRecordWriteAccess({ entityLabel: "Calendar event", existingOwnerUserId: row.ownerUserId, projectId: row.projectId, session });
+  if (!access.ok) throw new CrmCommandError("FORBIDDEN", access.reason, 403);
+  const viewing = await queryOne(`select id from property_viewing_slots where workspace_id=$1::uuid and calendar_event_id=$2::uuid limit 1`, [session.workspaceId, row.id]);
+  if (viewing) throw new CrmCommandError("ORIGINATING_WORKFLOW_REQUIRED", "Use the linked property viewing workflow", 403);
+  if (input.archive) {
+    const check = await queryOne<{ allowed: boolean }>("select crm_internal_calendar_archive_unlinked($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid) as allowed", [session.workspaceId, session.userId, row.id, session.authSessionId ?? null, session.authIdentityId ?? null]);
+    if (!check?.allowed) throw new CrmCommandError("CALENDAR_ARCHIVE_DENIED", "This calendar event has dependencies or its current removal scope cannot be verified", 403);
+  }
+}
+
+export async function archiveInternalCalendarEvent(input: { session: AppSession; eventId: string; expectedRevision?: unknown }) {
+  return withCrmRead(input.session, async (_tx, session) => {
+    await assertInternalCalendarHttpAccess({ session, resourceId: input.eventId, archive: true });
+    const row = await queryOne<CalendarEventWriteRow & { snapshot: Record<string, unknown> }>(`select to_jsonb(calendar_events) as snapshot,id,workspace_id as "workspaceId",project_id as "projectId",owner_user_id as "ownerUserId",metadata,
+      ${INTERNAL_CALENDAR_REVISION_SQL} as revision from calendar_events where workspace_id=$1::uuid and id=$2::uuid for update`, [session.workspaceId, input.eventId]);
+    if (!row || Object.hasOwn(row.metadata ?? {}, "internalCalendarArchive") || typeof input.expectedRevision !== "string" || input.expectedRevision !== row.revision) throw new CrmCommandError("CONFLICT", "Calendar event changed or was removed; reload before removing", 409);
+    const archive = { archivedAt: new Date().toISOString(), archivedByUserId: session.userId, authSessionId: session.authSessionId, authIdentityId: session.authIdentityId };
+    const archived = await queryOne<{ snapshot: Record<string, unknown> }>(`update calendar_events set status='abgesagt',metadata=metadata || jsonb_build_object('internalCalendarArchive',$3::jsonb),updated_at=now()
+      where workspace_id=$1::uuid and id=$2::uuid returning to_jsonb(calendar_events) as snapshot`, [session.workspaceId, row.id, JSON.stringify(archive)]);
+    if (!archived) throw new CrmCommandError("SAVE_UNCONFIRMED", "Calendar removal was not confirmed", 503);
+    await writeAuditLog({ session, action: "calendar_event.archived", entityType: "calendar_event", entityId: row.id, projectId: row.projectId,
+      before: row.snapshot, after: archived.snapshot });
+    return { id: row.id, archived: true };
+  });
 }
 
 async function upsertLeadRecordInTransaction(input: {
@@ -4198,6 +4261,9 @@ function toCalendarEventRecord(row: CalendarEventWriteRow): CalendarEvent {
 
   return {
     calendarProvider,
+    revision: row.revision,
+    archived: Object.hasOwn(metadata, "internalCalendarArchive"),
+    internalManual: metadata.source === "crm_internal_calendar_event" && !metadata.bookingId && !metadata.viewingId && !metadata.externalCalendarId && metadata.externalCommunication !== true,
     contactId: row.contactId ?? undefined,
     endsAt: toIso(row.endsAt),
     externalCalendarId: typeof metadata.externalCalendarId === "string" ? metadata.externalCalendarId : undefined,

@@ -1,3 +1,4 @@
+import { INTERNAL_CALENDAR_REVISION_SQL } from "@/lib/db/internal-calendar-row";
 import { UNIT_DETAIL_SELECT, mapUnitDetails } from "@/lib/property-unit-details";
 import { websitePriceVisibilityReadValues } from "@/lib/property-website-price-visibility";
 import type {
@@ -237,6 +238,7 @@ type CalendarEventRow = {
   contactId: string | null;
   endsAt: string | Date;
   id: string;
+  revision: string;
   leadId: string | null;
   location: string;
   metadata: unknown;
@@ -2847,9 +2849,11 @@ export async function loadCalendarEvents(workspaceId: string): Promise<CalendarE
       preparation,
       outcome_goal as "outcomeGoal",
       teams_join_url as "teamsJoinUrl",
-      metadata
+      metadata,
+      ${INTERNAL_CALENDAR_REVISION_SQL} as revision
     from calendar_events
     where workspace_id = $1
+      and not (metadata ? 'internalCalendarArchive')
     order by starts_at asc
     limit 500
   `,
@@ -2861,6 +2865,9 @@ export async function loadCalendarEvents(workspaceId: string): Promise<CalendarE
 
     return {
       calendarProvider: getCalendarProviderFromMetadata(metadata),
+      revision: row.revision,
+      archived: Object.hasOwn(metadata, "internalCalendarArchive"),
+      internalManual: metadata.source === "crm_internal_calendar_event" && !metadata.bookingId && !metadata.viewingId && !metadata.externalCalendarId && metadata.externalCommunication !== true,
       contactId: row.contactId ?? undefined,
       endsAt: toIso(row.endsAt),
       externalCalendarId:

@@ -859,6 +859,9 @@ export type DailyQueueData = {
 
 export type CalendarEvent = {
   id: ID;
+  revision?: string;
+  internalManual?: boolean;
+  archived?: boolean;
   workspaceId: ID;
   projectId: ID;
   contactId?: ID;

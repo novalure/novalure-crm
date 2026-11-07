@@ -6,7 +6,7 @@ export type SalesResponseValidator = (response: Response) => Promise<boolean>;
 export async function safeSalesFetch(target: string, init: RequestInit, perform: (target: string, init: RequestInit) => Promise<Response>, validate?: SalesResponseValidator) {
   const method = (init.method ?? "GET").toUpperCase();
   const path = target.split("?")[0];
-  if (!/^(?:\/api\/crm\/(?:contacts|tasks|projects|leads|deals)(?:\/[0-9a-f-]+\/stage)?|\/api\/crm\/offers)$/.test(path) || !["POST", "PATCH", "DELETE"].includes(method)) return perform(target, init);
+  if (!/^(?:\/api\/crm\/(?:contacts|tasks|projects|leads|deals|calendar-events)(?:\/[0-9a-f-]+\/stage)?|\/api\/crm\/offers)$/.test(path) || !["POST", "PATCH", "DELETE"].includes(method)) return perform(target, init);
   if (typeof init.body !== "string") throw new Error("CRM writes require a JSON body");
   const body = JSON.stringify(JSON.parse(init.body));
   const existing = pending.get(target);
