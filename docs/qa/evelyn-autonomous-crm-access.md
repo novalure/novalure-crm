@@ -245,8 +245,10 @@ Registration alone could not authorize the real `franz-personal` caller through
 the former production-only verifier and SQL bundle. The additive personal source
 now exists exclusively in the real delegated gateway; the original
 `crm-machine-auth.ts`, synthetic callers and original staged SQL remain byte-identical.
-The personal verifier requires server flag `CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED=1`
-on the production CRM target. Missing flag denies the personal source. The fixed
+The personal verifier requires both global `CRM_MACHINE_AUTH_ENABLED=1` and
+server flag `CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED=1` on the production CRM target.
+Missing/disabled global switch blocks every machine source before JWT verification;
+missing native flag denies the personal source. The fixed
 profile is:
 
 | Field | Exact value |
@@ -288,9 +290,18 @@ Local author evidence: one targeted composite case passed using actual RSA JWT
 bytes and disposable PostgreSQL: production registration before/after the staged
 upgrade, personal default-off/unregistered denial, own Describe/Read/Update/replay,
 native audit attribution, invalid signature/claims, cross-profile grant/key denial,
-seven-argument native denial, runtime registry isolation and revocation. CRM strict
-typecheck and affected lint passed. The earlier six Describe groups and original
-access/History/client evidence remain component evidence, not new full-suite runs.
+seven-argument native denial, runtime registry isolation and revocation. Global
+machine switch absent/disabled denies before any JWT verifier is called. CRM
+strict typecheck and affected lint passed.
+The composite runs in `scripts/crm-autonomous-personal-source-tests.ts` with its
+own disposable fixture. The old access test module is byte-identical to `c7121ce`;
+its registration/event/version assumptions cannot be changed by this new fixture.
+The existing `test:crm-autonomous-access` command composes both modules normally.
+Its final ordinary invocation passed 18/18, zero skipped: 17 unchanged access
+groups plus the isolated native case. This one affected-module composition run
+was required after independent review caught shared fixture interference; no
+unrelated regression suite was run. Earlier client/History evidence retains its
+original scope and is not a fresh hosted or production check.
 
 No actual target upgrade, native flag, registration, key custody, source deployment,
 provider/SSO role or production gate was activated by this implementation. These

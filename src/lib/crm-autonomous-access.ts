@@ -117,7 +117,8 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
     const token = getCrmMachineBearer(request.headers);
     if (!token) denied("ACCESS_DENIED", 401);
     const claims = await verifyCrmMachineToken(token, options.machineAuth).catch(error => {
-      if ((options.machineAuth?.env ?? process.env).CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED !== "1") throw error;
+      const env = options.machineAuth?.env ?? process.env;
+      if (env.CRM_MACHINE_AUTH_ENABLED !== "1" || env.CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED !== "1") throw error;
       return verifyPersonalAutonomousCrmToken(token, options.machineAuth);
     });
     const principalParams = [claims.issuer, claims.audience, claims.projectId, claims.ownerId,

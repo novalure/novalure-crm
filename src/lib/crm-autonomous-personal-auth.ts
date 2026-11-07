@@ -21,7 +21,8 @@ const denied = (): never => { throw new CrmMachineAuthError("ACCESS_DENIED", 401
  * and synthetic verifier is unchanged. An explicit server flag is not a grant. */
 export async function verifyPersonalAutonomousCrmToken(token: string, options: CrmMachineAuthOptions = {}): Promise<CrmPersonalSourceClaims> {
   const env = options.env ?? process.env, now = options.now ?? new Date();
-  if (env.CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED !== "1" || env.VERCEL_ENV !== "production" || !jwt.test(token)) return denied();
+  if (env.CRM_MACHINE_AUTH_ENABLED !== "1" || env.CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED !== "1" ||
+      env.VERCEL_ENV !== "production" || !jwt.test(token)) return denied();
   let result: Awaited<ReturnType<typeof verifyVercelOidcToken>>;
   try {
     result = await (options.verifier ?? verifyVercelOidcToken)(token, {
