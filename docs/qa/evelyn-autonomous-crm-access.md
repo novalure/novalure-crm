@@ -93,24 +93,24 @@ renew, reactivate or expand authority.
 
 ## Local evidence and remaining activation
 
-`npm run test:crm-autonomous-access` executes the 13 new groups. The final local
-run of these groups together with the unchanged five legacy machine-auth groups
-passed 18/18 with no skips. CI runs legacy authentication in its existing sales
+`npm run test:crm-autonomous-access` passed the 13 new groups with no skips.
+The preserved legacy machine-auth source passed its five groups. CI runs legacy authentication in its existing sales
 suite and adds only the new groups. The new groups use the
 real handler, Ed25519 signatures and a disposable PostgreSQL database with a
 separate non-superuser, non-BYPASSRLS bootstrap owner. They cover all departments,
 missing registration, wrong keys/actor selectors, private/foreign resources,
 project revocation, expired grants, four actual lock-wait expiry cases, concurrent
 and idempotent writes, immutable audit attribution and rejected owner metadata
-mutation. The extra metadata FORCE-RLS probe includes strict tenant/actor fixture
+mutation. Receipt replay is also denied after the source task moves outside its
+registered project. The extra metadata FORCE-RLS probe includes strict tenant/actor fixture
 views and is local evidence.
 
 The paired local acceptance used the actual compiled Evelyn connector at
 `c8fad7ea3b5f943cef25af285d3c1e06e81c4b46`, this real CRM handler and PostgreSQL.
 It confirmed a read, a committed write with a lost response, recovery of its
 original receipt and denial after grant revocation. The ignored local acceptance
-driver is `.npm-cache/qa/paired-autonomous-access-tests.mts`. Its 14 groups include
-the 13 new CRM groups and one cross-repository acceptance group.
+driver is `.npm-cache/qa/paired-autonomous-access-tests.mts`. Its one focused
+cross-repository acceptance group passed against the final handler source.
 
 No real workload/grant registration, key custody, actual provider token call or
 deployment is evidenced by these local results. The active release coordinator

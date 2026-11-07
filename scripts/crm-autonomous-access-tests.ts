@@ -137,12 +137,19 @@ test("nonce replay is durable and a fresh signed retry preserves exact write ide
   assert.equal((retry.body.data as {version:number}).version, 2);
   const conflict = { ...input, patch: { title: "SYNTHETIC conflicting update" } };
   assert.equal((await call(conflict)).status, 409);
-  assert.equal((await db.admin.query("select version from tasks where id=$1", [sourceId])).rows[0].version, "2");
+  const eventCount = (await db.admin.query("select count(*) from crm_autonomous_access_events")).rows[0].count;
+  await db.admin.query("update tasks set project_id=$2 where id=$1", [sourceId, foreignProject]);
+  try {
+    assert.equal((await call(input)).status, 403, "stored receipt cannot expose a task moved outside the grant");
+    assert.equal((await db.admin.query("select count(*) from crm_autonomous_access_events")).rows[0].count, eventCount);
+  } finally { await db.admin.query("update tasks set project_id=$2 where id=$1", [sourceId, projectId]); }
+  assert.equal((await db.admin.query("select version from tasks where id=$1", [sourceId])).rows[0].version, "4");
   const audit = (await db.admin.query("select after from audit_logs where id=$1", [first.body.auditReference])).rows[0].after;
   assert.equal(audit.actor.identityId, "EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY");
 });
 test("parallel writes preserve one effect and stale versions add no successful access event", async () => {
-  const input = body({ operation: "UpdateTask", expectedVersion: 2, patch: { title: "SYNTHETIC parallel retry" } });
+  const version = Number((await db.admin.query("select version from tasks where id=$1", [sourceId])).rows[0].version);
+  const input = body({ operation: "UpdateTask", expectedVersion: version, patch: { title: "SYNTHETIC parallel retry" } });
   const results = await Promise.all([call(input), call(input)]); assert.deepEqual(results.map(r => r.status), [200, 200]);
   assert.deepEqual(results.map(r => r.body.replayed).sort(), [false, true]);
   const count = (await db.admin.query("select count(*) from crm_autonomous_access_events")).rows[0].count;
@@ -168,8 +175,9 @@ test("workload/grant kill, role changes and revoked assignments are checked on e
 });
 test("expiry during nonce, command and resource lock waits denies output/effect without a success audit", async () => {
   for (const mode of ["nonce", "command", "write-row", "read-row"]) {
+    const version = Number((await db.admin.query("select version from tasks where id=$1", [sourceId])).rows[0].version);
     const input = mode === "nonce" || mode === "read-row" ? body()
-      : body({ operation: "UpdateTask", expectedVersion: 3, patch: { title: "SYNTHETIC must expire before effect" } });
+      : body({ operation: "UpdateTask", expectedVersion: version, patch: { title: "SYNTHETIC must expire before effect" } });
     const nonce = randomUUID(), now = Math.floor(Date.now() / 1000);
     const credential = delegation(input, grantId, key.privateKey, { nonce, issuedAt: now, expiresAt: now + 2 });
     const lock = await db.admin.connect();
@@ -191,7 +199,7 @@ test("expiry during nonce, command and resource lock waits denies output/effect 
       await lock.query("commit");
       assert.equal((await pending).status, 401, mode);
       assert.equal((await db.admin.query("select count(*) from crm_autonomous_access_events where nonce=$1", [nonce])).rows[0].count, "0");
-      assert.equal((await db.admin.query("select version from tasks where id=$1", [sourceId])).rows[0].version, "3");
+      assert.equal(Number((await db.admin.query("select version from tasks where id=$1", [sourceId])).rows[0].version), version);
     } finally { await lock.query("rollback"); lock.release(); }
   }
 });

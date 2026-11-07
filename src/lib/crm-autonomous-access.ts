@@ -168,6 +168,9 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
           if (!changed) denied("VERSION_CONFLICT", 409);
           return projection(commandTx, grant);
         }, options);
+        // Stored command replay skips its callback. Current source scope must
+        // still permit the historical result before that receipt is exposed.
+        await projection(tx, grant);
         data = command.data; auditReference = command.auditReference; replayed = command.replayed;
       }
       await revalidate();
