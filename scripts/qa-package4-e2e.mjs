@@ -6,6 +6,7 @@ import { access, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { createQaCaptureRelay, answerQaCaptureRequest } from "./lib/qa-server-response-capture.mjs";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const artifactPath = path.join(projectRoot, ".npm-cache/qa/package4-e2e-result.json");
@@ -13,6 +14,7 @@ const startTimeoutMs = 120_000;
 const stopTimeoutMs = 60_000;
 const suiteTimeoutMs = 20 * 60_000;
 const controller = new AbortController();
+const captureRelay = createQaCaptureRelay();
 const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   /^(path|home|systemroot|windir|temp|tmp|tmpdir|userprofile|localappdata|appdata|programfiles|programfiles\(x86\)|comspec|pathext|number_of_processors|lang|lc_all)$/i.test(key)));
 // Database, provider, authentication and deployment variables are never inherited.
@@ -29,7 +31,7 @@ const audit = {
   syntheticOnly: true,
   productionAccess: 0,
   startedAt: new Date().toISOString(),
-  fixture: { fresh: false, built: true, mode: "design-c-actual-predecessors" },
+  fixture: { fresh: false, built: true, mode: "design-c-current-application-originals" },
   suites,
   errors: [],
 };
@@ -142,7 +144,8 @@ try {
   environment.CRM_QA_CHROMIUM_PATH = chromiumPath;
   // Fail before creating a database if optimized application assets are missing.
   await access(path.join(projectRoot, ".next/BUILD_ID"), constants.R_OK);
-  server = launch(["scripts/qa-sales-browser-server.mjs", "--built", "--design-c"], ["pipe", "pipe", "inherit"]);
+  server = launch(["scripts/qa-sales-browser-server.mjs", "--built", "--design-c"], ["pipe", "pipe", "inherit", "ipc"]);
+  server.child.on("message", message => captureRelay.accept(message));
   // A closed startup pipe must not turn cleanup into an unhandled EPIPE.
   server.child.stdin.on("error", () => {});
   const ready = await awaitReady(server);
@@ -154,7 +157,15 @@ try {
     suite.status = "RUNNING";
     suite.startedAt = new Date().toISOString();
     try {
-      browser = launch([...suite.nodeArgs, suite.script], ["ignore", "inherit", "inherit"]);
+      browser = launch([...suite.nodeArgs, suite.script], ["ignore", "inherit", "inherit", "ipc"]);
+      const suiteChild = browser.child;
+      suiteChild.on("message", message => {
+        if (message?.type !== "crm.qa.capture-request/v1") return;
+        let reply;
+        try { reply = answerQaCaptureRequest(captureRelay, message); }
+        catch { return; }
+        if (suiteChild.connected) suiteChild.send(reply, () => {});
+      });
       const outcome = await abortable(within(Promise.race([
         browser.completion,
         server.completion.then(result => { throw result.error || new Error("Local package-4 QA server exited during browser tests"); }),
@@ -184,6 +195,8 @@ try {
   }
   process.off("SIGINT", onSigint);
   process.off("SIGTERM", onSigterm);
+  if (captureRelay.failure) recordFailure(new Error("Bounded server capture relay failed"));
+  captureRelay.clear();
   if (controller.signal.aborted && !audit.errors.includes(controller.signal.reason.message)) {
     recordFailure(controller.signal.reason);
   }

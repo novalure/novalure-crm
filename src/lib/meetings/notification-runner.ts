@@ -3,6 +3,7 @@ import {
   markMeetingNotificationJobFailed,
   markMeetingNotificationJobSent,
   renderMeetingNotificationTemplate,
+  meetingNotificationStillCurrent,
 } from "@/lib/db/meeting-repositories";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isBookingMessageQaRuntime, isBookingReminderRuntime, processDueBookingMessages, type BookingMessageProcessResult } from "@/lib/booking/messages";
@@ -94,6 +95,7 @@ export async function processDueMeetingNotifications(
 
     let emailResult: Awaited<ReturnType<typeof sendNewsletterEmail>>;
     try {
+      if(!await meetingNotificationStillCurrent(job.id,job.leaseOwner))continue;
       emailResult = await sendNewsletterEmail({
         html: textToEmailHtml(rendered),
         idempotencyKey: `meeting-notification-${job.id}`,

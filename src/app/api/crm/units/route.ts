@@ -5,7 +5,10 @@ import { loadPaginatedPropertyUnits } from "@/lib/db/crm-loaders";
 import {
   createPropertyBuildingRecord,
   createPropertyUnitRecord,
+  updatePropertyUnitDetailsRecord,
+  confirmPropertyUnitInvestorPriceRecord,
 } from "@/lib/db/property-inventory-repositories";
+import { UNIT_DETAIL_FIELDS } from "@/lib/property-unit-details";
 import { assertCrmFields, assertProjectGrant, crmCommandErrorResponse, crmRequestMetadata, withCrmRead } from "@/lib/crm-command";
 
 const propertyUnitStatuses: PropertyUnitStatus[] = ["available", "reserved", "sold", "blocked"];
@@ -94,10 +97,19 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   try {
-  assertCrmFields(input, ["operation","address","completionDate","floors","name","projectId","areaSqm","buildingId","floor","price","priceCents","rooms","status","unitNumber","unitId","expectedVersion","idempotencyKey","correlationId"]);
+  assertCrmFields(input, ["operation","address","completionDate","floors","name","projectId","areaSqm","buildingId","floor","price","priceCents","rooms","status","unitNumber","unitId","expectedVersion","idempotencyKey","correlationId","investorPriceCents","sourceReference",...UNIT_DETAIL_FIELDS.map(({key})=>key)]);
   const meta = crmRequestMetadata(request, input);
   const operation = typeof input.operation === "string" ? input.operation : "unit";
-  if (operation !== "unit" && operation !== "building") return NextResponse.json({ error: "Invalid operation", code: "INVALID_OPERATION" }, { status: 400 });
+  if (!["unit", "building", "unit_details", "investor_price"].includes(operation)) return NextResponse.json({ error: "Invalid operation", code: "INVALID_OPERATION" }, { status: 400 });
+  const detailInputs=Object.fromEntries(UNIT_DETAIL_FIELDS.filter(({key})=>Object.hasOwn(input,key)).map(({key})=>[key,input[key]]));
+  if(operation === "unit_details" || operation === "investor_price") {
+    assertCrmFields(input,["operation","projectId","unitId","expectedVersion","idempotencyKey","correlationId",...(operation === "unit_details" ? UNIT_DETAIL_FIELDS.map(({key})=>key) : ["investorPriceCents","sourceReference"])]);
+    const common={...meta,projectId:input.projectId,unitId:input.unitId,expectedVersion:input.expectedVersion,session:auth.session};
+    const result=operation === "unit_details"
+      ? await updatePropertyUnitDetailsRecord({...common,details:detailInputs})
+      : await confirmPropertyUnitInvestorPriceRecord({...common,investorPriceCents:input.investorPriceCents,sourceReference:input.sourceReference});
+    return NextResponse.json({...result,contractVersion:"1",correlationId:meta.correlationId});
+  }
   const result =
     operation === "building"
       ? await createPropertyBuildingRecord({
@@ -111,6 +123,8 @@ export async function POST(request: Request) {
         })
       : await createPropertyUnitRecord({
           ...meta,
+          ...detailInputs,
+          investorPriceCents: input.investorPriceCents,
           unitId: input.unitId,
           expectedVersion: input.expectedVersion,
           areaSqm: input.areaSqm,

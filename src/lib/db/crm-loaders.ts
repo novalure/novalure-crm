@@ -1,3 +1,6 @@
+import { INTERNAL_CALENDAR_REVISION_SQL } from "@/lib/db/internal-calendar-row";
+import { UNIT_DETAIL_SELECT, mapUnitDetails } from "@/lib/property-unit-details";
+import { websitePriceVisibilityReadValues } from "@/lib/property-website-price-visibility";
 import type {
   AppSession,
 } from "@/lib/auth/session";
@@ -235,6 +238,7 @@ type CalendarEventRow = {
   contactId: string | null;
   endsAt: string | Date;
   id: string;
+  revision: string;
   leadId: string | null;
   location: string;
   metadata: unknown;
@@ -386,7 +390,7 @@ type PropertyBuildingRow = {
   workspaceId: string;
 };
 
-type PropertyUnitRow = {
+type PropertyUnitRow = Record<string, unknown> & {
   version?: number | string;
   areaSqm: number | string;
   buildingId: string | null;
@@ -397,6 +401,7 @@ type PropertyUnitRow = {
   priceCents: number | string;
   projectId: string;
   reservationId: string | null;
+  sellerListingId: string | null;
   rooms: number | string;
   status: string;
   unitNumber: string;
@@ -1892,11 +1897,13 @@ async function loadPropertyUnitsForAssetSummaries(
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
+      pu.metadata ->> 'sellerListingId' as "sellerListingId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
@@ -2386,11 +2393,13 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
+      pu.metadata ->> 'sellerListingId' as "sellerListingId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
@@ -2406,6 +2415,7 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
 
 function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
   return {
+    ...mapUnitDetails(row),
     version: row.version === undefined ? undefined : Number(row.version),
     areaSqm: Number(row.areaSqm ?? 0),
     buildingId: row.buildingId ?? "",
@@ -2416,6 +2426,7 @@ function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
     priceCents: Number(row.priceCents ?? 0),
     projectId: row.projectId,
     reservationId: row.reservationId ?? undefined,
+    sellerListingId: row.sellerListingId ?? undefined,
     rooms: Number(row.rooms ?? 0),
     status: normalizePropertyUnitStatus(row.status),
     unitNumber: row.unitNumber,
@@ -2501,11 +2512,13 @@ export async function loadPaginatedPropertyUnits(
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
+      pu.metadata ->> 'sellerListingId' as "sellerListingId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
@@ -2836,9 +2849,11 @@ export async function loadCalendarEvents(workspaceId: string): Promise<CalendarE
       preparation,
       outcome_goal as "outcomeGoal",
       teams_join_url as "teamsJoinUrl",
-      metadata
+      metadata,
+      ${INTERNAL_CALENDAR_REVISION_SQL} as revision
     from calendar_events
     where workspace_id = $1
+      and not (metadata ? 'internalCalendarArchive')
     order by starts_at asc
     limit 500
   `,
@@ -2850,6 +2865,9 @@ export async function loadCalendarEvents(workspaceId: string): Promise<CalendarE
 
     return {
       calendarProvider: getCalendarProviderFromMetadata(metadata),
+      revision: row.revision,
+      archived: Object.hasOwn(metadata, "internalCalendarArchive"),
+      internalManual: metadata.source === "crm_internal_calendar_event" && !metadata.bookingId && !metadata.viewingId && !metadata.externalCalendarId && metadata.externalCommunication !== true,
       contactId: row.contactId ?? undefined,
       endsAt: toIso(row.endsAt),
       externalCalendarId:
@@ -3099,6 +3117,8 @@ export async function loadTasks(workspaceId: string): Promise<Task[]> {
   );
 
   return rows.map((row) => ({
+    origin: typeof row.metadata?.automationId === "string" ? "automation" : "crm",
+    actionType: row.metadata?.actionType === "callback" || row.metadata?.actionType === "follow_up" ? row.metadata.actionType : "task",
     version: Number(row.version),
     syntheticTest: (row.metadata?.websiteSales as { syntheticTest?: unknown } | undefined)?.syntheticTest === true,
     description: typeof row.metadata?.description === "string" ? row.metadata.description : undefined,
@@ -3179,6 +3199,7 @@ function normalizePropertyReservationStatus(value: string): PropertyReservation[
   if (value === "reserved") return "reserved";
   if (value === "expired") return "expired";
   if (value === "converted") return "converted";
+  if (value === "withdrawn") return "withdrawn";
   return "hold";
 }
 
@@ -3190,7 +3211,7 @@ function normalizePriceVisibility(value: unknown): PropertyPriceVisibility {
 
 function normalizePriceVisibilityMap(value: Record<string, unknown> | null | undefined) {
   const entries = Object.entries(asRecord(value)).map(([key, item]) => [key, normalizePriceVisibility(item)] as const);
-  return Object.fromEntries(entries);
+  return { ...Object.fromEntries(entries), ...websitePriceVisibilityReadValues(value) };
 }
 
 function normalizeContractMilestone(value: string): PropertyReservation["contractMilestone"] {
@@ -3222,6 +3243,7 @@ function normalizeCalendarLocation(value: string): CalendarEvent["location"] {
 }
 
 function normalizeCalendarStatus(value: string): CalendarEvent["status"] {
+  if(value==="abgesagt")return "abgesagt";
   if (value === "vorbereiten") return "vorbereiten";
   if (value === "bestätigt" || value === "besta\u0065tigt") return "bestätigt";
   if (value === "nachfassen") return "nachfassen";

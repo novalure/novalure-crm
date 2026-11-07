@@ -1,0 +1,17 @@
+PHASE owned local PostgreSQL and unchanged historical schema
+PHASE immutable app-byte capture and real local Next server
+PHASE actual password and rendered TOTP enrollment
+PASS actual password/TOTP flow issued opaque HttpOnly MFA session
+PHASE actual project wizard and single real create
+LOCAL_WIZARD_FAILURE Error: expect(locator).toBeVisible() failed
+
+Locator: getByRole('dialog', { name: 'Projekt-Wizard', exact: true })
+Expected: visible
+Timeout: 30000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" getByRole('dialog', { name: 'Projekt-Wizard', exact: true }) with timeout 30000ms
+  - waiting for getByRole('dialog', { name: 'Projekt-Wizard', exact: true })
+
+{"output":"C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\qa\\project-wizard-fields-20261105\\baseline","totals":{"checks":1,"passed":1,"failed":0},"failure":{"name":"Error","message":"expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'Projekt-Wizard', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" getByRole('dialog', { name: 'Projekt-Wizard', exact: true }) with timeout 30000ms\n  - waiting for getByRole('dialog', { name: 'Projekt-Wizard', exact: true })\n"}}

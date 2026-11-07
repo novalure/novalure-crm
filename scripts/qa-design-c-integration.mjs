@@ -2,12 +2,15 @@
 // Accounts and business rows are synthetic. Login, MFA, cookies, CSRF, RLS and
 // application APIs are real; no sessions, auth headers or provider IO are faked.
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from "./lib/qa-response-inspection.mjs";
+import { qaRequestFingerprint, qualifyQaServerBodies, requestQaCaptureSnapshot, createQaWireAudit } from "./lib/qa-server-response-capture.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
+import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
 import { createTextPdf } from "./lib/knowledge-document-fixtures.ts";
 import {
   seedDesignCIntegration,
@@ -43,8 +46,8 @@ const artifactPrefix = readersOnly ? "readers-" : "";
 const output = path.resolve(".npm-cache/qa/design-c-integration");
 assert.equal(
   fixture.fixtureMode,
-  "design-c-actual-predecessors",
-  "Start qa:sales:server with --built --design-c to preserve the actual 091–106 predecessor contracts and additive account-language schema",
+  "design-c-current-application-originals",
+  "Start qa:sales:server with --built --design-c to apply the current original application frontier and its actual predecessors",
 );
 assert.equal(fixture.database.database, "neondb");
 await mkdir(output, { recursive: true });
@@ -66,6 +69,81 @@ const results = [],
   readerMutations = [],
   authenticationProofs = [];
 const contexts = [];
+const wireAudits = [];
+const responseBarriers = new WeakMap();
+const fetchAudits = new WeakMap();
+const serverBodyResolutions = new Map();
+const serverMultisetPublicIds = new Map();
+const serverBodyQualificationDiagnostics = new Map();
+const capture = fixture.responseCapture;
+assert(capture?.syntheticOnly === true && capture.origin === base.origin && /^[a-f0-9]{32}$/.test(capture.runId) && /^[a-f0-9]{64}$/.test(capture.secret));
+async function serverBodyProofs(audit, timeoutMs = 1000) {
+  audit.boundWireNetwork = audit.wire.snapshot(audit.network);
+  const records = await requestQaCaptureSnapshot(capture.runId, { timeoutMs: Math.min(1000, timeoutMs) });
+  assert(records.length <= 20000 && records.every(row => row.runId === capture.runId));
+  assert(!records.some(row => row.foreign), "Actual server egress contains a foreign private sentinel");
+  const diagnostics = [];
+  const proofs = qualifyQaServerBodies(audit.boundWireNetwork, audit.observations, records, capture.runId, diagnostics);
+  for (const diagnostic of diagnostics) {
+    const prior = serverBodyQualificationDiagnostics.get(diagnostic.reference);
+    assert(serverBodyQualificationDiagnostics.size < 2000 || prior, "Bounded server qualification diagnostics exceeded");
+    const reasonCounts = { ...prior?.reasonCounts };
+    reasonCounts[diagnostic.reason] = (reasonCounts[diagnostic.reason] ?? 0) + 1;
+    serverBodyQualificationDiagnostics.set(diagnostic.reference, { ...diagnostic, observations: (prior?.observations ?? 0) + 1, reasonCounts });
+  }
+  for (const [id, proof] of proofs) {
+    if (!serverMultisetPublicIds.has(proof.requestKey)) serverMultisetPublicIds.set(proof.requestKey, randomBytes(16).toString("hex"));
+    serverBodyResolutions.set(id, { ...proof, publicServerId: serverMultisetPublicIds.get(proof.requestKey) });
+  }
+  return proofs;
+}
+const unresolvedInspectionErrors = () => responseInspectionErrors.filter(row => !serverBodyResolutions.has(`${row.documentId}/${row.id}`));
+function fetchAudit(page) {
+  let audit = fetchAudits.get(page);
+  if (!audit) { audit = { network: [], observations: [] }; fetchAudits.set(page, audit); }
+  return audit;
+}
+const fetchKey = request => createHash("sha256").update(request.method() + "\0" + new URL(request.url()).href).digest("hex");
+async function drainResponseInspections(page) {
+  const barrier = responseBarriers.get(page);
+  if (page.url() === "about:blank" && fetchAudit(page).network.length === 0) { await barrier?.drain(); return; }
+  const deadline = Date.now() + 15000;
+  let lastCoverageError = null;
+  while (Date.now() < deadline) {
+    const result = await page.evaluate(async remaining => {
+      const state = globalThis.__crmQaFetchBodies;
+      return state ? state.drain(remaining) : { ok: false, errors: ["fetch_observer_missing"] };
+    }, Math.max(1, deadline - Date.now()));
+    if (!result.ok && (result.timedOut || !result.errors?.length || result.errors.some(error => error !== "body_read_failed")))
+      throw new Error("Original API fetch lifecycle did not settle: " + JSON.stringify(safeQaFetchDiagnostic({ ...result, lastCoverageError })));
+    if (result.foreign) privateLeaks.push({ observation: "original-browser-body-clone" });
+    try { await barrier?.drain(Math.max(1, deadline - Date.now())); }
+    catch { throw new Error("Pending non-fetch API/body inspection before navigation timed out: " + JSON.stringify(barrier?.pendingInfo())); }
+    const audit = fetchAudit(page);
+    try {
+      const proofs = await serverBodyProofs(audit, Math.max(1, deadline - Date.now()));
+      if (Date.now() >= deadline) throw new Error("Original/native Fetch coverage deadline exceeded");
+      assertObservedFetchCoverage(audit.network, audit.observations, proofs, audit.boundWireNetwork); return;
+    }
+    catch (error) {
+      // A new original fetch may start between the browser snapshot and its
+      // native event delivery. Re-observe within the SAME budget, never refetch.
+      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY", "QA_SERVER_CAPTURE_PENDING", "QA_WIRE_PENDING", "QA_WIRE_NATIVE_REQUEST_MULTISET_MISMATCH", "QA_WIRE_NATIVE_RESPONSE_MULTISET_MISMATCH"].includes(error.message)) throw error;
+      lastCoverageError = { code: error.message, ...(error.coverage ?? {}) };
+      if (Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  throw new Error("Original/native Fetch coverage did not settle within its finite budget: " + JSON.stringify(lastCoverageError));
+}
+async function gotoAfterInspection(page, ...args) {
+  await drainResponseInspections(page);
+  return page.goto(...args);
+}
+async function reloadAfterInspection(page, ...args) {
+  await drainResponseInspections(page);
+  return page.reload(...args);
+}
 let browser, accounts, operatorPage, customerPage, viewerPage, areaId, sourceId;
 const operationalReaders = [
   {
@@ -147,15 +225,7 @@ async function readerPanel(
   reader,
   workspaceId = accounts.operator.workspaceId,
 ) {
-  const previousUrl = page.url();
   await open(page, workspaceId, reader.id === "calendar" ? "calendar" : "bots");
-  // An identical URL containing a fragment can be a same-document navigation.
-  // Repeated checks need a fresh request after their interceptor is installed.
-  if (previousUrl === page.url()) {
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.locator("[data-crm-content]")).toBeVisible();
-    await page.evaluate(() => document.fonts.ready);
-  }
   if (reader.tab)
     await page
       .getByRole("navigation", { name: "Bot-Arbeitsbereich", exact: true })
@@ -396,7 +466,8 @@ async function verifyOperationalReaders() {
       const details = workspaceSwitch.locator("xpath=ancestor::details[1]");
       if (!(await workspaceSwitch.isVisible()))
         await details.locator("summary").first().click();
-      await workspaceSwitch.selectOption(customer.workspaceId);
+      await drainResponseInspections(operatorPage);
+  await workspaceSwitch.selectOption(customer.workspaceId);
       await expect(workspaceSwitch).toHaveValue(customer.workspaceId);
       await expect(operatorPage.locator("[data-crm-content]")).toContainText(
         "SYNTHETIC CUSTOMER CONTACT",
@@ -427,8 +498,11 @@ async function verifyOperationalReaders() {
       operatorPage.on("request", requestListener);
       try {
         await operatorPage
+          .locator("[data-crm-sidebar] [data-crm-nav-group='knowledge']")
+          .click();
+        await operatorPage
           .locator(
-            "[data-crm-sidebar] [data-crm-nav-item][aria-label='KI-Bots']",
+            "[data-crm-section-entry='bots']",
           )
           .click();
         await expect(
@@ -646,7 +720,9 @@ async function verifyOperationalReaders() {
   await step(
     "Targeted reader traffic has no HTTP500, browser exception, mutation or observed foreign leak",
     async () => {
+      for (const page of [operatorPage, customerPage, viewerPage].filter(Boolean)) await drainResponseInspections(page);
       await Promise.all(responseChecks);
+      assert.deepEqual(unresolvedInspectionErrors(), [], "Every observed successful API body must be inspected");
       assert.deepEqual(serverErrors, []);
       assert.deepEqual(errors, []);
       assert.deepEqual(outbound, []);
@@ -740,7 +816,25 @@ async function newPage(label) {
     });
     return route.abort("blockedbyclient");
   });
+  await context.addInitScript(observeQaFetchBodies, { origin: base.origin, bindingTransport: "cdp" });
   const page = await context.newPage();
+  // The native binding event already owns its serialized metadata. Unlike
+  // Playwright exposeBinding it needs no surviving execution-context lookup.
+  const channel = await context.newCDPSession(page);
+  const audit = fetchAudit(page); audit.wire = createQaWireAudit({ origin: base.origin, secret: capture.secret });
+  audit.wire.install(channel); wireAudits.push({ context, audit });
+  await channel.send("Network.enable");
+  channel.on("Runtime.bindingCalled", message => {
+    if (message.name !== "__crmQaFetchReport") return;
+    try {
+    const event = parseQaFetchBindingMessage(message);
+    fetchAudit(page).observations.push({ ...event, role: label });
+    if (event.kind === "terminal" && event.foreign) privateLeaks.push({ role: label, path: event.path });
+    if (event.kind === "terminal" && event.bodyError) responseInspectionErrors.push({ role: label, documentId: event.documentId, id: event.id, path: event.path, status: event.status, error: event.bodyError });
+    } catch { responseInspectionErrors.push({ role: label, error: "native_fetch_metadata_binding_failed" }); }
+  });
+  await channel.send("Runtime.enable");
+  await channel.send("Runtime.addBinding", { name: "__crmQaFetchReport" });
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(90000);
   if (readersOnly)
@@ -760,8 +854,42 @@ async function newPage(label) {
     if (message.type() === "error")
       consoleErrors.push({ role: label, message: message.text() });
   });
+  const barrier = createResponseInspectionBarrier();
+  const requestInfo = new WeakMap();
+  responseBarriers.set(page, barrier);
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.origin === base.origin && url.pathname.startsWith("/api/")) {
+      const metadata = { path: url.pathname, method: request.method(), resourceType: request.resourceType(), responseReceived: false, finished: false };
+      requestInfo.set(request, metadata);
+      if (request.resourceType() === "fetch") {
+        const row = { kind: "request", key: fetchKey(request), ...metadata };
+        fetchAudit(page).network.push(row);
+        metadata.captureKeyPromise = request.allHeaders().then(headers => {
+          row.captureKey = qaRequestFingerprint(capture.secret, request.method(), url.href, headers);
+          return row.captureKey;
+        });
+        const check = metadata.captureKeyPromise.catch(() => responseInspectionErrors.push({ role: label, path: url.pathname, error: "native_request_binding_failed" }));
+        responseChecks.push(check); barrier.inspect(check);
+      }
+      else barrier.started(request, metadata);
+    }
+  });
+  page.on("requestfinished", request => { if (requestInfo.has(request)) requestInfo.get(request).finished = true; barrier.finished(request); });
+  page.on("requestfailed", request => barrier.finished(request));
   page.on("response", (response) => {
     const url = new URL(response.url());
+    const metadata = requestInfo.get(response.request());
+    if (metadata) { metadata.responseReceived = true; metadata.status = response.status(); }
+    if (url.origin === base.origin && url.pathname.startsWith("/api/") && response.request().resourceType() === "fetch") {
+      const row = { kind: "response", key: fetchKey(response.request()), path: url.pathname, method: response.request().method(),
+        ok: response.ok(), status: response.status(), json: (response.headers()["content-type"] ?? "").includes("application/json") };
+      fetchAudit(page).network.push(row);
+      const check = Promise.resolve(metadata?.captureKeyPromise).then(value => {
+        assert(/^[a-f0-9]{64}$/.test(value ?? "")); row.captureKey = value;
+      }).catch(() => responseInspectionErrors.push({ role: label, path: url.pathname, error: "native_response_binding_failed" }));
+      responseChecks.push(check); barrier.inspect(check);
+    }
     if (url.origin === base.origin && response.status() >= 500)
       serverErrors.push({
         role: label,
@@ -771,37 +899,26 @@ async function newPage(label) {
     if (
       url.origin === base.origin &&
       url.pathname.startsWith("/api/") &&
+      response.request().resourceType() !== "fetch" &&
       response.ok() &&
       (response.headers()["content-type"] || "").includes("application/json")
     ) {
       let timer;
-      responseChecks.push(
-        Promise.race([
-          response.text(),
-          new Promise((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("JSON response inspection timed out")),
-              15000,
-            );
-          }),
-        ])
-          .then((body) => {
-            if (
-              /SYNTHETIC FOREIGN PRIVATE SENTINEL|FOREIGN-PRIVATE-UNIT/.test(
-                body,
-              )
-            )
-              privateLeaks.push({ role: label, path: url.pathname });
-          })
-          .catch((error) =>
-            responseInspectionErrors.push({
-              role: label,
-              path: url.pathname,
-              error: error.message,
-            }),
-          )
-          .finally(() => clearTimeout(timer)),
-      );
+      const check = Promise.race([
+        response.text(),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("JSON response inspection timed out")), 15000);
+        }),
+      ])
+        .then(body => {
+          if (/SYNTHETIC FOREIGN PRIVATE SENTINEL|FOREIGN-PRIVATE-UNIT/.test(body))
+            privateLeaks.push({ role: label, path: url.pathname });
+        })
+        .catch(error => responseInspectionErrors.push({ role: label, path: url.pathname, method: response.request().method(), status: response.status(), requestFinished: metadata?.finished ?? false, error: error.message,
+        }))
+        .finally(() => clearTimeout(timer));
+      responseChecks.push(check);
+      barrier.inspect(check, response.request());
     }
   });
   return page;
@@ -846,7 +963,7 @@ async function api(
 }
 
 async function login(page, account, negatives = false) {
-  await page.goto(new URL("/login", base).href);
+  await gotoAfterInspection(page, new URL("/login", base).href);
   const consent = page.getByRole("button", {
     name: /^(Nur essenzielle|Only necessary)$/,
   });
@@ -854,6 +971,7 @@ async function login(page, account, negatives = false) {
   async function password(value) {
     await page.locator("#login-email").fill(account.email);
     await page.locator("#login-password").fill(value);
+    await drainResponseInspections(page);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       page.locator("form:has(#login-password) button[type=submit]").click(),
@@ -874,6 +992,7 @@ async function login(page, account, negatives = false) {
     ? page.getByRole("button", { name: account.name, exact: false })
     : null;
   if (workspaceChoice && (await workspaceChoice.isVisible())) {
+    await drainResponseInspections(page);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       workspaceChoice.click(),
@@ -901,6 +1020,7 @@ async function login(page, account, negatives = false) {
       for (let value = 0; accepted.has(wrong); value++)
         wrong = String(value + 1).padStart(6, "0");
       await page.locator("#login-mfa-code").fill(wrong);
+      await drainResponseInspections(page);
       await Promise.all([
         page.waitForNavigation({ waitUntil: "domcontentloaded" }),
         page
@@ -912,6 +1032,7 @@ async function login(page, account, negatives = false) {
       await page.locator("input[name=recoveryCodesSaved]").check();
     }
     await page.locator("#login-mfa-code").fill(totp(secret));
+    await drainResponseInspections(page);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       page
@@ -929,7 +1050,7 @@ async function login(page, account, negatives = false) {
   });
   assert.equal(language.status, 200, "The ordinary session must save its own account language");
   assert.equal(language.body.persisted, true);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await reloadAfterInspection(page, { waitUntil: "domcontentloaded" });
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await expect(page.locator(".crm-app")).toBeVisible();
   const cookie = (await page.context().cookies()).find(
@@ -979,9 +1100,19 @@ async function open(
   url.hash = section;
   // The real CRM can poll live modules; readiness is its rendered shell and
   // scoped content, rather than the absence of background network activity.
-  await page.goto(url.href, { waitUntil: "domcontentloaded" });
+  const needsDocument = requiresCrmDocumentReload(page.url(), url.href);
+  const profileSelect = page.locator("[data-crm-sidebar] [data-crm-profile-select]");
+  const selectedProfile = needsDocument && await profileSelect.count() ? await profileSelect.inputValue() : null;
+  await gotoAfterInspection(page, url.href, { waitUntil: "domcontentloaded" });
+  // An identical/fragment URL can dispatch into the preceding profile's hash
+  // listener. Recreate the document so its stored current profile is restored.
+  if (needsDocument) {
+    await reloadAfterInspection(page, { waitUntil: "domcontentloaded" });
+    if (selectedProfile) await expect(profileSelect).toHaveValue(selectedProfile);
+  }
   await expect(page.locator(".crm-app")).toBeVisible();
   await expect(page.locator("[data-crm-content]")).toBeVisible();
+  await waitForCrmSection(page, section, projectId);
   if (workspaceId === accounts?.customer.workspaceId && section === "knowledge")
     await expect(
       page.getByRole("button", { name: /^Wissensquellen \(/ }),
@@ -989,7 +1120,24 @@ async function open(
   await page.evaluate(() => document.fonts.ready);
 }
 
+async function waitForCrmSection(page, section, projectId = "all") {
+  await expect(page.locator("[data-crm-eyebrow]")).not.toHaveText(/Projektscope wird geladen|Loading project scope|Ungültiger Projektscope|Invalid project scope/);
+  await expect(page.locator("[data-crm-header] [data-crm-project-select]")).toHaveValue(projectId);
+  // #bots shares a section with AI self-service. Choose the existing Bots tab
+  // explicitly, so the bot workflow exercises Bots rather than the AI assistant.
+  if (section === "bots") {
+    const bots = page.locator('[data-crm-section-entry="bots"]');
+    await expect(bots).toBeVisible();
+    await drainResponseInspections(page);
+    await bots.click();
+    await expect(bots).toHaveAttribute("aria-current", "page");
+  }
+  const selected = page.locator('[data-crm-sidebar] [data-crm-nav-item][aria-current="page"]');
+  await expect(selected).toHaveAttribute("data-crm-nav-target", section === "meetings" ? "calendar" : section);
+}
+
 async function chooseProfile(page, profile) {
+  await drainResponseInspections(page);
   // Initial hash/profile hydration can reset the focused sidebar. Perform the
   // actual toggle and observe its state before operating its conditional form.
   await expect(async () => {
@@ -999,9 +1147,13 @@ async function chooseProfile(page, profile) {
     await expect(sidebar).toHaveAttribute("data-collapsed", "false", {
       timeout: 1500,
     });
-    const select = page.locator("[data-crm-profile-card] select");
+    const select = page.locator("[data-crm-sidebar] [data-crm-profile-select]");
     await select.selectOption(profile, { timeout: 1500 });
     await expect(select).toHaveValue(profile, { timeout: 1500 });
+    const account = page === operatorPage ? accounts.operator : page === customerPage ? accounts.customer : accounts.viewer;
+    const workspaceId = new URL(page.url()).searchParams.get("workspaceId") ?? account.workspaceId;
+    const key = getStudioNavigationPreferenceKey("novalure-crm-navigation-preset-v1", account.userId, workspaceId);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), key), profile, "Actual profile handler must persist the selected profile at its real key");
   }).toPass({ timeout: 15000, intervals: [100, 250, 500] });
 }
 
@@ -1012,6 +1164,7 @@ async function themeAndLayout(page) {
     theme: element.getAttribute("data-design"),
     background: getComputedStyle(element).backgroundColor,
     accent: getComputedStyle(element).getPropertyValue("--dc-accent").trim(),
+    rail: getComputedStyle(element).getPropertyValue("--dc-rail").trim(),
     sidebar: getComputedStyle(element.querySelector("[data-crm-sidebar]"))
       .backgroundColor,
     viewport: innerWidth,
@@ -1024,9 +1177,10 @@ async function themeAndLayout(page) {
   );
   assert.equal(
     styles.sidebar,
-    "rgb(23, 29, 48)",
-    "Actual CRM navigation must use Design C navy",
+    "rgb(30, 79, 194)",
+    "Actual CRM navigation must render the authenticated blue brand rail",
   );
+  assert.equal(styles.rail, "#1e4fc2", "Authenticated CRM brand token must be present");
   assert(styles.accent, "Design C token sheet must be present");
   assert(
     styles.document <= styles.viewport + 1,
@@ -1100,6 +1254,7 @@ async function verifyWorkspaceSwitch() {
   const details = workspaceSwitch.locator("xpath=ancestor::details[1]");
   if ((await details.count()) && !(await workspaceSwitch.isVisible()))
     await details.locator("summary").first().click();
+  await drainResponseInspections(operatorPage);
   await workspaceSwitch.selectOption(accounts.customer.workspaceId);
   await expect(workspaceSwitch).toHaveValue(accounts.customer.workspaceId);
   // Workspace changes preserve the user's current section. The existing
@@ -1130,6 +1285,7 @@ async function verifyWorkspaceSwitch() {
   );
   // The existing controller changes managed workspaces through its authorized
   // dropdown; a URL scope alone does not change the server login membership.
+  await drainResponseInspections(operatorPage);
   await workspaceSwitch.selectOption(accounts.studio.workspaceId);
   await expect(workspaceSwitch).toHaveValue(accounts.studio.workspaceId);
   await expect(operatorPage.locator("[data-crm-content]")).toContainText(
@@ -1202,7 +1358,7 @@ async function runIntegration() {
       ? "Anonymous operational readers deny access"
       : "Anonymous CRM, booking page and Knowledge APIs deny access",
     async () => {
-      await operatorPage.goto(new URL("/login", base).href);
+      await gotoAfterInspection(operatorPage, new URL("/login", base).href);
       for (const endpoint of [
         "/api/crm/core",
         "/api/knowledge-center",
@@ -1211,7 +1367,7 @@ async function runIntegration() {
       ])
         assert.equal((await api(operatorPage, endpoint)).status, 401);
       if (!readersOnly) {
-        await operatorPage.goto(new URL("/booking", base).href);
+        await gotoAfterInspection(operatorPage, new URL("/booking", base).href);
         await expect(operatorPage).toHaveURL(/\/login(?:\?|$)/);
         await expect(operatorPage.getByRole("heading", { name: "Terminbuchung", exact: true })).toHaveCount(0);
       }
@@ -1304,6 +1460,7 @@ async function runIntegration() {
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
       const nav = operatorPage.locator("[data-crm-sidebar] [data-crm-nav]");
+      await expect.poll(() => nav.locator("[data-crm-nav-item]").count()).toBeGreaterThanOrEqual(6);
       const entries = await nav
         .locator("[data-crm-nav-item]")
         .evaluateAll((elements) =>
@@ -1357,12 +1514,14 @@ async function runIntegration() {
           assert.equal(href, "/booking");
           for (let roundTrip = 1; roundTrip <= 3; roundTrip++) {
             await captureBookingNavigation("Before booking link");
+            await drainResponseInspections(operatorPage);
             await nav.getByRole("link", { name: label, exact: true }).click();
             await captureBookingNavigation("After booking link");
             await expectBookingUrl("Booking link opens exact authenticated /booking route", new URL("/booking", base).href);
             await expect(operatorPage.getByRole("heading", { name: "Terminbuchung", exact: true })).toBeVisible();
             const back = operatorPage.getByRole("link", { name: "Zurück zum CRM", exact: true });
             await expect(back).toHaveAttribute("href", "/#meetings");
+            await drainResponseInspections(operatorPage);
             await back.click();
             await captureBookingNavigation("After CRM backlink");
             // The CRM may add its current scope query during hydration; the
@@ -1379,6 +1538,7 @@ async function runIntegration() {
           continue;
         }
         assert.equal(tag, "button", `Unsupported role-authorized navigation element: ${label}`);
+        await drainResponseInspections(operatorPage);
         await nav.getByRole("button", { name: label, exact: true }).click();
         await expect(
           nav.getByRole("button", { name: label, exact: true }),
@@ -1394,6 +1554,9 @@ async function runIntegration() {
     "Authorized search uses a native modal and never reveals another tenant",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
+      await expect(operatorPage.locator("[data-crm-eyebrow]")).toHaveText(
+        "Alle Projekte",
+      );
       const trigger = operatorPage.getByRole("button", {
         name: "CRM durchsuchen",
         exact: true,
@@ -1546,31 +1709,52 @@ async function runIntegration() {
     "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId, "contacts");
-      const handler = async (route) => {
-        const response = await route.fetch();
-        const payload = await response.json();
-        assert.equal(response.status(), 200);
-        payload.source = "mock";
-        payload.data.source = "mock";
-        payload.data.moduleSources = Object.fromEntries(
-          Object.keys(payload.data.moduleSources).map((key) => [key, "mock"]),
-        );
-        payload.data.contacts = [
-          {
-            ...payload.data.contacts[0],
-            name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
-          },
-        ];
-        await route.fulfill({ response, json: payload });
-      };
-      await operatorPage.route("**/api/crm/core**", handler);
+      // Refresh in the operator's own session uses this exact implicit scope.
+      // Fetch its real authenticated snapshot before intercepting: a pending
+      // route.fetch must not outlive navigation and try to fulfill a handled route.
+      const coreUrl = new URL("/api/crm/core", base).href;
+      const [response] = await Promise.all([
+        operatorPage.waitForResponse(
+          (response) => response.url() === coreUrl && response.request().method() === "GET",
+        ),
+        operatorPage.evaluate(async (url) => {
+          const response = await fetch(url, { cache: "no-store" });
+          await response.arrayBuffer();
+        }, coreUrl),
+      ]);
+      assert.equal(response.status(), 200, "The real browser-session core snapshot must be authorized");
+      const payload = await response.json();
+      assert.equal(payload.source, "database", "The real core snapshot must have database provenance");
+      assert.equal(payload.data.source, "database", "The real core data must have database provenance");
+      assert.equal(payload.activeWorkspaceId, accounts.operator.workspaceId, "The real core snapshot must use the operator's own workspace");
+      assert.ok(payload.data.contacts.every(contact => contact.workspaceId === accounts.operator.workspaceId), "The real core contacts must belong to the operator's own workspace");
+      const headers = await response.allHeaders();
+      // The fixture changes the body; retain the response's security/cache
+      // headers while allowing Playwright to encode and size the new JSON.
+      delete headers["content-length"];
+      delete headers["content-encoding"];
+      payload.source = "mock";
+      payload.data.source = "mock";
+      payload.data.moduleSources = Object.fromEntries(
+        Object.keys(payload.data.moduleSources).map((key) => [key, "mock"]),
+      );
+      payload.data.contacts = [
+        {
+          ...payload.data.contacts[0],
+          name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
+        },
+      ];
+      const handler = route => route.fulfill({ status: response.status(), headers, json: payload });
+      await operatorPage.route(coreUrl, handler);
       try {
         const refresh = operatorPage
           .locator("[data-crm-header]")
           .getByRole("button", { name: "Aktualisieren", exact: true });
+        await expect(refresh).toBeEnabled();
+        await drainResponseInspections(operatorPage);
         await Promise.all([
           operatorPage.waitForResponse(
-            (response) => new URL(response.url()).pathname === "/api/crm/core",
+            (response) => response.url() === coreUrl && response.request().method() === "GET",
           ),
           refresh.click(),
         ]);
@@ -1582,8 +1766,7 @@ async function runIntegration() {
           operatorPage.locator("[data-crm-content]"),
         ).not.toContainText("Synthetic developer representative");
         await operatorPage
-          .locator("[data-crm-sidebar] [data-crm-nav-item]")
-          .first()
+          .locator('[data-crm-sidebar] [data-crm-nav-group="overview"][data-crm-nav-target="dashboard"]')
           .click();
         await expect(
           operatorPage.locator("[data-evelyn-command-center]"),
@@ -1596,7 +1779,7 @@ async function runIntegration() {
             "Unknown data was presented as a numeric business result",
           );
       } finally {
-        await operatorPage.unroute("**/api/crm/core**", handler);
+        await operatorPage.unroute(coreUrl, handler);
         await open(operatorPage, accounts.operator.workspaceId);
       }
     },
@@ -1692,9 +1875,9 @@ async function runIntegration() {
       await expect(
         customerPage.locator("[data-crm-content]"),
       ).not.toContainText(/FOREIGN PRIVATE|SECOND PROJECT CONTACT/);
-      const navText = await customerPage
+      const navText = (await customerPage
         .locator("[data-crm-sidebar] [data-crm-nav]")
-        .innerText();
+        .allTextContents()).join("\n");
       assert(
         !/Mandantenverwaltung|Customer Access|Kundenzugänge|Managed Service|Novalure Studio/.test(
           navText,
@@ -2074,6 +2257,7 @@ async function runIntegration() {
   );
 
   for (const width of [1440, 768, 390, 360]) {
+    await drainResponseInspections(customerPage);
     await customerPage.setViewportSize({
       width,
       height: width < 768 ? 844 : 1000,
@@ -2209,8 +2393,10 @@ async function runIntegration() {
   await step(
     "No browser exceptions, server failures, browser outbound requests or preview UI",
     async () => {
+      for (const page of [operatorPage, customerPage, viewerPage].filter(Boolean)) await drainResponseInspections(page);
       await Promise.all(responseChecks);
       assert.deepEqual(errors, []);
+      assert.deepEqual(unresolvedInspectionErrors(), [], "Every observed successful API body must be inspected");
       assert.deepEqual(serverErrors, []);
       assert.deepEqual(outbound, []);
       assert.deepEqual(
@@ -2248,9 +2434,28 @@ try {
       error: error.stack || error.message,
     });
 } finally {
-  for (const context of contexts) await context.close().catch(() => {});
+  for (const context of contexts) {
+    for (const { audit } of wireAudits.filter(row => row.context === context)) {
+      try { audit.wire.beginOwnerClose(audit.network); }
+      catch (error) {
+        audit.wire.cleanupAfterFailure(); results.push({ name: "Complete native wire audit before owned close", status: "FAIL",
+          error: error.message + ": " + JSON.stringify(safeQaFetchDiagnostic(error.coverage ?? null)) });
+      }
+    }
+    await context.close().catch(() => {});
+  }
   await browser?.close();
   await admin.end();
+  const finalFetchAudits = [operatorPage, customerPage, viewerPage].filter(Boolean).map(fetchAudit);
+  // Closing the contexts can publish the final real pagehide records. Preserve
+  // every historical/native obligation after that last lifecycle transition.
+  for (const audit of finalFetchAudits) {
+    try { assertObservedFetchCoverage(audit.network, audit.observations, await serverBodyProofs(audit), audit.boundWireNetwork); }
+    catch (error) { results.push({ name: "Final original/native Fetch audit", status: "FAIL", error: error.message + ": " + JSON.stringify(error.coverage ?? null) }); }
+  }
+  const { events: fetchLifecycle, ...fetchLifecycleDiagnostics } = collectFetchLifecycleDiagnostics(finalFetchAudits);
+  if (!fetchLifecycleDiagnostics.complete)
+    results.push({ name: "Complete bounded original Fetch diagnostics", status: "FAIL", error: "FETCH_LIFECYCLE_DIAGNOSTIC_LIMIT_EXCEEDED" });
   const failed = results.filter((result) => result.status === "FAIL");
   const report = {
     syntheticOnly: true,
@@ -2280,11 +2485,21 @@ try {
     privateLeaks,
     ...(readersOnly ? { readerMutations } : {}),
     responseInspectionErrors,
+    serverBodyResolutions: [...serverBodyResolutions].map(([id, proof]) => ({ id, source: proof.source, proofGroupId: proof.publicServerId,
+      status: proof.status, nativeRequestCount: proof.nativeRequestCount, successfulJsonBodyCount: proof.successfulJsonBodyCount,
+      resolvedBodyCount: proof.resolvedBodyCount, fingerprintGroupCount: proof.authGroups.length,
+      originalCandidateCount: proof.originalCandidateCount, receivedBodyErrorCount: proof.receivedBodyErrorCount,
+      preHeaderAbortedReadCount: proof.preHeaderAbortedReadCount,
+      actualEgressEofAndBodiesInspected: true, exactIndividualRequestClaim: false, successfulStatusAssignedToOriginalTerminal: false })),
+    serverBodyQualificationDiagnostics: [...serverBodyQualificationDiagnostics.values()],
+    nativeWireDiagnostics: wireAudits.map(({ audit }) => audit.wire.diagnostics()),
+    fetchLifecycle,
+    fetchLifecycleDiagnostics,
     consoleErrors,
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
       "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
-      "The isolated fixture applies unchanged pinned 091–096 and 100–106, including package-3 workflow/monitoring and operational readers, plus additive account-language migration 110 for the current browser runtime; optional pgvector, historical manual media migration 062 and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
+      "The explicit current fixture applies its complete124-entry original application manifest through201, including original manual prerequisites; its existing portable001 RAG substitution, manual062 exclusion and unused preview097–099 exclusions remain. No production migration or restore equivalence is claimed.",
       "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
     ],
   };

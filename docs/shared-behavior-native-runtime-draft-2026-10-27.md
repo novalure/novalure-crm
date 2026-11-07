@@ -1,0 +1,281 @@
+# Paket3: native CRM-Chatanschlüsse – geprüfter Quellstand, Aktivierung ausstehend
+
+Dieser getrennte PR117-Quellstand baut auf CRM116/c1a9c2d535d5b46c77c81d77dd5ec43baac145b3
+und dem historischen Hooksstand d3cc3bcf7892aab25425b2f88b015a9a9bdd3460 auf.
+Die abschließende Widerrufsbehandlung ist implementiert und gezielt lokal geprüft;
+die native und produktive Abnahme bleiben ausstehend. Die Hooks bleiben
+standardmäßig ausgeschaltet. Keine Bereitstellung,
+Konfiguration, Migration, Methodenveröffentlichung, Botaktivierung oder produktive
+Signalaufzeichnung wurde hierfür ausgeführt. Die persönliche Evelyn-Abnahme geht
+einer späteren Aktivierung voraus. Studio und Telefonie bleiben gesonderter Scope.
+
+## Tatsächliche Ausgangslage
+
+Ein ausschließlich aggregierter Productionread am27.10.2026 um20:13:29 UTC ergab
+drei aktive chatfähige Integrationen mit drei gültigen gespeicherten Assistenten-
+und Projektzuordnungen. Sie verwenden drei verschiedene Bots; eine vorhandene
+PublicActor-Identität wird von mehreren Assistenten geteilt. Die konfigurierten
+Bots haben zweimal Status inactive, einmal draft.126 nichtsynthetische öffentliche
+Chatsessions entstanden in den letzten sieben Tagen. Der Read enthielt keine
+Namen, Schlüssel, Ursprünge, Besucher-/Kunden-IDs, Nachrichten oder Inhalte.
+
+Der vorhandene öffentliche Runtimepfad ist `answerWebsiteChat` über
+`/api/public/integrations/chat/answers`. Er verlangt Origin, Sitekey und aktive
+Besuchersession; Workspace, Projekt, PublicActor und Bot stammen aus dem aktuellen
+Registryeintrag. Derselbe PublicActor ist deshalb **kein** pro Assistent privater
+Lernactor. Der vorhandene Botstatus wird durch diesen Quellstand nicht umgedeutet.
+
+`runBotChat` bedient `/api/bots/chat` und bestehende Kanalwebhooks. Sein eingeloggter
+oder bereits verifizierter Kanalcaller bleibt unverändert. `/api/bots/agent` ist
+der vorhandene Tool-/Knowledgeaufruf und besitzt keinen eigenen Modellchat.
+Ihm wird kein fingierter Modellinstruction-Verbrauch zugeschrieben.
+
+## Implementierter Gesprächsanschluss
+
+`native-assistant.ts` verwendet den vorhandenen `loadSharedBehavior` mit konstantem
+Ziel webchat beziehungsweise agent. Die veröffentlichte unveränderliche Auswahl
+und der vorhandene Compiler bestimmen die Instruction. Browser und Modell können
+keine Auswahl, Version, Abteilung, Rechte oder privaten Zugangswerte vorgeben.
+
+Im öffentlichen Pfad wird die Instruction erst innerhalb der bisherigen gültigen
+Autorisierung geladen und an den bestehenden Systemprompt angehängt. Keine zweite
+Wissensabfrage, keine veränderten Quellen oder Tools. Der authentifizierte
+`runBotChat`-Antwortpfad prüft sein gespeichertes Botprojekt und den aktuellen
+Caller erneut und hängt dann dieselben veröffentlichten Katalogregeln für agent
+an. Vorhandene Sperren/Knowledgechecks greifen davor. voice und telephone laden
+keine neue Instruction. Bestehende Tool-/Buchungs-/Dokumentpfade erhalten keine
+neuen Berechtigungen aus diesen Methoden.
+
+Production-v1 ist gegenwärtig nur für ceo veröffentlicht. Für webchat/agent
+liefert dieser Stand Versionsmetadaten1 und lediglich die drei Basisregeln.
+Die sechs Methoden für neue Ziele verlangen später eine eigene bewertete Auswahl
+über den vorhandenen Lifecycle. Diese Implementierung veröffentlicht keine Version2;
+synthetische Headfixtures in den Consumptiontests sind keine Releasezulassung.
+
+## Enges privates Signal
+
+Der tatsächliche Publicantwortpfad ist sowohl für grounded Modellantworten als
+auch seine unveränderten festen Ersatzantworten verdrahtet. Die reine Formatmetrik
+prüft ausschließlich das Vorhandensein des Labels „Nächster Schritt:“, „Next step:“
+oder „Siguiente paso:“ und schreibt `unclear_next_step/pass` beziehungsweise fail.
+Die festen Ersatzantworten ohne Label ergeben damit korrekt fail, obwohl sie
+inhaltlich einen sicheren Kontakt-/Wiederholungsschritt nennen. Das ist ausdrücklich
+**kein** Beleg fehlender semantischer Klarheit oder schlechter Gesprächsqualität.
+Auch ein vorhandenes Label beweist weder Qualität, Nutzerzufriedenheit, tatsächliche
+Übergabe oder Behebung eines Wissensmangels. Kein Modell bewertet diese Metrik.
+
+Pro erfasster Antwort wird eine neue zufällige eventId erzeugt. Sie ist weder
+Session-, Nachrichten-, Conversation-, Kontakt- noch Kunden-ID. Gespeichert werden
+ausschließlich die bereits vorhandenen kategorialen Felder in
+`behavior_learning_signals`. Nachrichtentexte, Quellen, Zusammenfassungen und
+Wissensimporte werden nicht an den Signaladapter übergeben. Regelmäßige Analyse,
+Retention und automatische Auswertung bleiben Paket4. Wiederholte Anfragen sind
+eigene Formatereignisse; eine deduplizierte semantische Konversation wird nicht
+behauptet. Die bestehende Gateway-Ratenbegrenzung bleibt erhalten.
+
+Der Signaladapter verwendet `recordEvelynRuntimeSignal` und damit `withRuntime`
+ausschließlich für das Schreiben des privaten Signals. Der öffentliche Wissens-
+und Queryactor bleibt derselbe. Es gibt keinen CEO-Capability-Reuse und keinen
+öffentlichen Signalendpunkt.
+
+Jeder tatsächlich anzuschließende Bot braucht eine **eigene** neue private
+agent-Workspaceidentität und eine eigene neue32-Byte-Capability. Seine neue
+`behavior_runtime_bindings`-Zeile bindet den vorhandenen aktuell vom Gateway
+verifizierten PublicActor nur als Broker an diesen Bot und diesen privaten Actor.
+Credentialidentität disabled, password_hash NULL, keine Sessions oder anderen
+Loginmittel. Bindung zunächst disabled, mit expliziter Frist und Widerrufspfad.
+Die vorhandene eindeutige Bot-/Actorbindung bleibt maßgeblich. Keine Identität
+eines anderen Assistenten, Eigentümers, persönlichen Evelyn-Callers oder Studios
+übernehmen; keine bestehenden Rows löschen oder still ersetzen.
+
+Für einen customer-Tenant muss der private project_sales_member den exakten
+Botprojekt-Metadatensatz lesen dürfen. Der synthetische Test qualifiziert eine
+Read-only-Projektzuordnung ohne can_edit_deals. Ohne diese Sichtbarkeit bleibt
+das Signal aus; der Adapter leiht keine Ownerrechte. Für interne Workspaces ist
+wie bisher eine interne Mitgliedschaft nötig; deren bestehender Rollen-Scope
+ist ausdrücklich kein pauschaler SQL-Deny aller übrigen CRMtabellen. Die
+Identität wird allein im privaten Signalpfad verwendet, nie für Tools/Wissen.
+Keine internen Knowledge-Areagrants anlegen: die117-Policies sperren damit für
+diese Signalidentität auch generische Quellenabfragen. Öffentliche bestehende
+Knowledgegrants und ihre Widerrufslogik bleiben vollständig erhalten.
+
+Unmittelbar vor der privaten Aufzeichnung prüft derselbe Publicpfad seine
+Besucher-/Bot-/Projekt-/Entitlement-Autorisierung erneut. Im `withRuntime`-Fence
+prüft/lockt der bestehende `crm_external_integration_resolve` erneut die feste
+Integration, den Projekt-/Bot-/Brokerbezug und chatEnabled. Der vorhandene
+`behavior_lock_runtime` prüft Capability, gültige aktive Mitglieder, enabled,
+Frist und Widerruf und hält auch den Botrowlock. Der zusätzliche Projektvergleich
+benötigt deshalb nur SELECT und kein Botedit. Die zusätzliche Signaltransaktion
+hat2s Statement-/Lockbudget. Fehler oder unklare Zuordnung unterdrücken dieses
+optionale Signal und verändern keine bisherige sichere Antwort; keine Rohfehler
+oder Konfigurationen werden geloggt. Das interne Receipt unterscheidet disabled,
+not_configured, not_requested, recorded, unconfirmed und authority_changed. Ein
+explizit ungültiger abschließender Knowledge-/Methodencheck oder die ausdrücklich
+ungültige Website-Integration am Workloadfence ergibt authority_changed: Die
+aktuelle Ausgabe verwirft Modellwissen und Quellen; bestätigte Buchungs- und
+Versandergebnisse bleiben erhalten. Andere private Capability-/Actor-/DBfehler
+bleiben optional unconfirmed und löschen keine autorisierte Antwort. Auch ein tatsächlicher
+Commit mit verlorener Bestätigung heißt unconfirmed und wird nie als abwesend
+behauptet oder automatisch wiederholt. Ein optionaler Hostobserver erhält nur
+Methodenversion, Bestätigungsstatus und diese feste Kategorie; keine privaten IDs,
+Capabilities, Gesprächsinhalte oder Rohfehler. Ohne injizierten Observer schreibt
+der aktive tatsächliche Serverpfad standardmäßig ausschließlich das geschlossene
+Metadatenereignis native_shared_behavior_runtime: target (webchat/agent),
+methodVersion (Integer/NULL), methodCheck (not_loaded/confirmed/unconfirmed) und
+signalStatus aus der festen Liste. Keine IDs, Texte, Outcomeinhalte oder Rohfehler.
+Unbekannte Felder/Targets werden nicht geloggt; bei ausgeschalteten Hooks entsteht
+kein Ereignis. Die Publicresponse und das Widget bleiben unverändert. Dies erlaubt
+eine spätere echte Endpoint-/Methodenversionprüfung zusätzlich zum privaten DB-
+Signalreadback; ein Head-/Envread allein wird nicht als Verbrauchsnachweis gewertet.
+
+Die Methoden werden um den Modellaufruf erneut geladen und Version/Instruction
+verglichen. Veränderte Methoden geben keine veraltete gelernte Antwort frei. Der
+bisherige vollständige öffentliche Knowledge-/Authoritycheck bleibt erhalten.
+
+## Konfiguration und unveränderte Grenzen
+
+Alle drei neuen Keys sind serverseitig und bleiben zunächst abwesend:
+
+| Key | Wirkung bei später gesondert geprüfter Konfiguration |
+| --- | --- |
+| NOVALURE_SHARED_NATIVE_METHODS_ENABLED | Nur exaktes1 unter VERCEL_ENV=production lädt veröffentlichte Methoden. |
+| NOVALURE_SHARED_NATIVE_SIGNALS_ENABLED | Nur exaktes1 unter Production erlaubt den privaten kategorialen Hook. |
+| NOVALURE_SHARED_NATIVE_SIGNAL_BINDINGS | Sensitiver serverseitiger JSONmap, keine NEXT_PUBLIC-Variable, nie Prompt/Browser/Log. |
+
+Der Map ist ein geschlossenes Objekt mit version1 und1–16 bindings. Jeder Eintrag
+enthält exakt workspaceId, projectId (UUID oder NULL), botId, integrationId (UUID
+oder für ausschließlich internen Scope NULL),
+brokerActorId, actorId und capability. Alle IDs werden validiert; Bot-, Actor-
+und Capabilitywiederverwendung im Map wird abgelehnt. Der Lookup benötigt den
+vollständigen serververifizierten Integration-/Workspace-/Projekt-/Bot-/Broker-
+Tuple. Ein erwarteter privater Actor wird zusätzlich mit dem tatsächlichen
+gesperrten Runtimebinding verglichen. Keine beliebigen Dienste, Routen oder
+Dispatcheraktionen. Der optionale nativeBehaviorEnv-Parameter ist ein reiner
+Hosttestport wie pool/model; HTTPrequestfelder werden ihm nicht zugeführt.
+
+Auch der konkrete `runBotChat`-Antwortpfad zeichnet dieselbe feste Formatmetrik
+auf, nachdem seine bestehenden Geschäfts-/Archivoperationen abgeschlossen sind.
+Der authentifizierte Caller kann vom privaten festen Broker abweichen. Er wird
+als er selbst über `resolveBotConversationContext`, frische Mitgliedschaft,
+Sessionsperre falls vorhanden, Bot-/Projekt-/Conversation-/Channelbezug und
+vorhandene Projektberechtigung geprüft. Alle dem Modell gezeigten Source-/Version-
+Referenzen, Channelgrants, Entitlement/Modulstatus und Methodenversion werden ohne
+zweite Quotaabfrage revalidiert. Erst danach wird aus dem serververifizierten
+Bot-/Workspace-/Projekttuple der feste private Broker/Actor gewählt. Es gibt keine
+Umsetzung einer Benutzer-/Modellrolle auf die Knowledge- oder Toolsession.
+Die Knowledge-/Entitlementprüfung und ihr Knowledge-Lock gelten nur, wenn
+tatsächlich Source-/Versionreferenzen an das Modell übergeben wurden. Bestehende
+generische Gespräche mit strictKnowledge=false und leerem Kontext erhalten durch
+die gemeinsamen Codekonstanten keine zusätzliche Knowledge-Center-Vertragspflicht.
+Caller-, Bot-, Projekt- und Methodenprüfung gelten weiterhin für diese Antworten.
+
+`withRuntime` sperrt weiterhin Broker, Actor, Binding und den exakten Bot. Der
+private Actor muss den eigenen Botprojekt-Metadatensatz sehen; er erhält keine
+Knowledgegrants oder Toolausführung. Eine fehlende Sichtbarkeit ergibt unconfirmed.
+Öffentliche Requests verlangen zusätzlich den passenden nicht-NULL-Integration-
+Tuple und die vorhandene Gatewayautorisierung; sie können keinen internen Eintrag
+auswählen. Die bestehende eindeutige perBot-Bindung kann dieselben privaten
+kategorialen Signale aus den zwei autorisierten Pfaden desselben Assistenten halten.
+
+Widerrufene Quellen oder Methoden ersetzen den Modelltext durch die bestehende
+sichere Antwort; auch CompatibilitytoolResults und Quellenangaben enthalten dann
+keine widerrufenen Auszüge. Bereits bestätigte Buchungs-/Geschäftsergebnisse werden
+dadurch nicht als fehlgeschlagen umetikettiert. Telemetriefehler lassen eine gültige
+Geschäftsantwort erhalten. Verschachtelte fremde Tenanttransaktionen werden durch
+die vorhandene Grenze abgewiesen und ergeben unconfirmed; es gibt keinen neuen
+Contextwechsel-/Dispatcherbypass.
+
+`/api/bots/agent` ist nach Prüfung seiner tatsächlichen Returns ein Toolaufruf
+mit Status, Entscheidung und strukturierten Toolresultaten beziehungsweise
+Source-Referenzen. Er erzeugt keinen eigenen menschlichen Modellantworttext.
+Eine Gesprächsinstruction oder Next-step-Labelwertung wäre dort fingiert und
+wird deshalb nicht eingebaut. Der tatsächliche Gesprächspfad ist `runBotChat`.
+
+## Lokale Nachweise
+
+- Historischer d3-Nachweis: bestehende Websiteantworttests und Hooks12/12 PASS
+  auf ausschließlich lokalem eingebettetem PostgreSQL, mit AI-SDK-Mockmodell.
+  Kein externer Modellaufruf, kein Neon-/Providerwrite.
+- Neue Fälle: defaultOFF-Prompt unverändert; CEO-only-v1 liefert keine sechs
+  Webchatregeln; synthetischer Head für neue Ziele wird tatsächlich konsumiert;
+  kein Tool; keine Telefonieinstruction; falscher Tenant/Projekt abgelehnt.
+- Grounded Antworten erzeugen ausschließlich labelbasiertes pass/fail. Eine
+  Methodenänderung während der synthetischen Generierung verwirft die Antwort
+  und erzeugt kein Signal. Keine zusätzliche Modellanfrage.
+- Zwei Assistenten hinter demselben Ownerbroker schreiben auf zwei private
+  Actors. Owner sieht keine Signale, Actor1 nur sein eigenes. Generischer
+  Quellenread des privaten Actors liefert null. Bestehende private Archive/
+  Leads bleiben durch den Signalhook unverändert.
+- Falsche Actor-ID, fremde Capability, anderes Projekt, leere/duplizierte Map,
+  disabled Runtimebinding, fehlender privater Projektread und widerrufene
+  Integration erzeugen kein Signal; die gültige feste Ersatzantwort bleibt sicher.
+- Ein tatsächlicher lokaler Signal-COMMIT mit anschließend künstlich verlorener
+  Commitantwort bleibt als eine Row bestehen, wird intern unconfirmed gemeldet
+  und nicht erneut ausgeführt; die grounded Antwort bleibt erhalten.
+- Der tatsächliche `runBotChat` mit anderem angemeldeten Caller als dem festen
+  Broker schreibt ausschließlich auf den eigenen privaten Assistantactor. Der
+  Caller hat null private Signale. Ein Quellenwiderruf während der Generierung
+  verwirft Modelltext und Compatibilityauszüge. Fehlendes Caller-Projektrecht
+  verhindert den Aufruf; keine privaten Rechte werden geliehen.
+- Ein tatsächlicher Baseline-/Hookvergleich bei deaktiviertem Knowledge Center,
+  strictKnowledge=false und refs=[] erhält dieselbe erlaubte generische Antwort.
+  Gemeinsame Methoden und die private reine Formatmetrik verlangen dort keinen
+  zusätzlichen Knowledgevertrag.
+- Der tatsächliche grounded Endpointpfad erzeugt ohne Testobserver das feste
+  Methodenversion2-/targetwebchat-Ereignis. Künstliche Besucherdaten/IDs/Capability
+  erscheinen nicht darin; zusätzliche private Felder und ein falscher Targetwert
+  werden vor der Ausgabe abgewiesen. Publicresponsefelder bleiben identisch.
+- TypeScript und gezielter ESLint-/Whitespacecheck sind Teil der lokalen Prüfung.
+  Kein unabhängiger Review-, CI-, Merge-, Release- oder Liveabnahme-PASS wird aus
+  diesen lokalen Tests abgeleitet.
+
+## Abschließender Widerrufsfix und gezielte Regression
+
+Ein ausdrücklich negativer letzter Autoritätscheck ist von einem optionalen
+Signalfehler getrennt. `authority_changed` entfernt die aktuelle Knowledgeantwort
+und deren Quellen auch dann, wenn der erste Postmodellcheck noch bestanden war.
+Der öffentliche Kanal verwirft außerdem eine Antwort, wenn erst der anschließende
+Integrationfence `NATIVE_INTEGRATION_DENIED` bestätigt. Nur dieser ausdrücklich
+bekannte geschäftliche Fencefehler wird entsprechend klassifiziert; ein privates
+Runtimebinding-/Actorproblem oder ein DB-/Commitfehler bleibt `unconfirmed`.
+Beim Bot bleiben bereits bestätigte Buchungs-/Versandergebnisse erhalten. Die
+bestehenden Geschäfts-/Archivoperationen werden nicht neu ausgeführt oder gelöscht.
+
+`scripts/native-assistant-late-authority-tests.ts` benutzt tatsächliche Handler und
+einen isolierten lokalen PostgreSQL-Cluster mit synthetischen Daten und Mockmodell:
+
+- Website und Bot: Quellen- sowie Methodenwiderruf erst beim letzten Signalcheck,
+  nachdem die erste Postmodellprüfung erfolgreich war; keine Knowledgeausgabe,
+  Quellen oder privaten Erfolgssignale.
+- Website: gültiger Completed-turn-Callback einschließlich tatsächlichem Commit,
+  danach ungültiger Integrationfence; ebenfalls kein Groundedinhalt oder Signal.
+- Optional nicht verfügbarer später Bot-Signalread bewahrt die autorisierte Antwort.
+- Tatsächlich committete Signale mit künstlich verlorener Commitantwort bewahren
+  die Website-/Botantwort; genau eine Signalrow, kein Retry oder Abwesenheitsclaim.
+
+Der erste gezielte Lauf bestand8/8 einschließlich Elternfall. Nach der ergänzten
+Fencekorrektur bestand der gezielte Integrationfence-Lauf2/2 einschließlich
+Elternfall; die vorherigen Fälle wurden nicht als neue Gesamtrunde ausgeführt.
+Aktuelle TypeScript-, gezielte ESLint- und Whitespaceprüfungen sind bestanden.
+Der neue Test ist in `test:website-self-service` eingebunden und wird damit vom
+normalen Linux-CI-Aufruf erfasst. Die d3-CI-/Rohbelege bleiben historische Belege;
+die neue commitgenaue CI und die tatsächliche native/produktive Abnahme sind
+gesonderte Nachweise und werden hier nicht vorweggenommen.
+
+## Strikte Webchat-Featureparität
+
+Der vorhandene Knowledge-Center-Guard `assistantChannelEnabled` verlangt
+`contract.features?.[feature] === true`. Die erneuten Website- und Botprüfungen
+vergleichen deshalb den JSONB-Wert mit `'true'::jsonb`; der JSON-Text `"true"`
+erteilt keinen Zugriff. Das gleicht die spätere Prüfung an den ursprünglichen
+Wissensabruf an und führt keine neue Berechtigungspolitik ein.
+
+Zwei gezielte tatsächliche Handlerfälle beginnen mit Boolean `true`, durchlaufen
+den Wissensabruf und die erste Postmodellprüfung und ersetzen erst vor dem letzten
+Signalcheck das Feature durch den JSON-String `"true"`. Beide müssen Knowledge,
+Quellen und privates Signal verwerfen. Auf `61d167` meldeten diese Fälle unerlaubt
+`recorded` und schlugen fehl; nach den beiden JSONB-Vergleichen bestanden 3/3
+einschließlich Elternfall. Nur diese zwei neuen Fälle wurden lokal ausgeführt.
+Die übrigen lokalen Fälle und die grüne `61d167`-CI bleiben historische Belege;
+der neue Quellstand benötigt eine eigene commitgenaue CI. Tatsächliche native
+und produktive Abnahme bleiben ausstehend.

@@ -79,6 +79,11 @@ async function bindingLock(tx: TenantTransaction, scope: TenantScope) {
 async function assertBindingChangeAllowed(tx: TenantTransaction, scope: TenantScope, previous: ConnectionRow | null,
   accountId: string | null, calendarId: string | null) {
   if (!previous || (previous.accountId === accountId && previous.writeCalendarId === calendarId)) return;
+  const installed=await tx.queryOne<{installed:boolean}>(`select to_regclass('public.crm_personal_calendar_events') is not null as installed`);
+  if(installed?.installed){
+    const personal=await tx.queryOne<{active:boolean}>(`select exists(select 1 from crm_personal_calendar_binding_locks where workspace_id=$1 and actor_id=$2 and connection_id=$3 and (state in ('processing','uncertain','conflict','failed') or (state='synced' and ends_at>now()))) as active`,[scope.workspaceId,scope.actorId,previous.id]);
+    if(personal?.active)throw new BookingConnectionError("calendar_binding_in_use");
+  }
   const active = await tx.queryOne<{active:boolean}>(`select exists(select 1 from booking_reservations
     where workspace_id=$1 and organizer_id=$2 and connection_id=$3 and (
       state in ('processing','uncertain') or (state='held' and expires_at>now()) or
@@ -326,21 +331,22 @@ export async function disconnectBookingConnection(scope: TenantScope, provider: 
     return {ok:true};
   });
 }
-export async function createBookingOAuthState(scope: TenantScope, provider: BookingProvider) {
+export async function createBookingOAuthState(scope: TenantScope, provider: BookingProvider, personal=false) {
   if (process.env.VERCEL_ENV === "production") assertBookingOAuthConfiguration(provider);
-  const signed = createSignedOAuthState({provider,returnTo:"/booking",userId:scope.actorId,workspaceId:scope.workspaceId});
+  const returnTo=personal?"/calendar-personal":"/booking";
+  const signed = createSignedOAuthState({provider,returnTo,userId:scope.actorId,workspaceId:scope.workspaceId});
   await withTenantTransaction(scope,tx => tx.execute(`insert into booking_oauth_authorization_states
     (state_hash,nonce_hash,provider,workspace_id,user_id,return_to,code_verifier_encrypted,expires_at)
-    values($1,$2,$3,$4,$5,'/booking',$6,to_timestamp($7))`,[hashOAuthState(signed.state),hashOAuthState(signed.nonce),provider,
-      scope.workspaceId,scope.actorId,encryptOAuthStateSecret(signed.codeVerifier),signed.expiresAt]));
+    values($1,$2,$3,$4,$5,$8,$6,to_timestamp($7))`,[hashOAuthState(signed.state),hashOAuthState(signed.nonce),provider,
+      scope.workspaceId,scope.actorId,encryptOAuthStateSecret(signed.codeVerifier),signed.expiresAt,returnTo]));
   return {state:signed.state,codeChallenge:signed.codeChallenge};
 }
 export async function consumeBookingOAuthState(scope: TenantScope, provider: BookingProvider, value: string | null) {
   const parsed = parseSignedOAuthState(value,provider);
-  if (!parsed || !value || parsed.returnTo !== "/booking" || parsed.userId !== scope.actorId || parsed.workspaceId !== scope.workspaceId) return null;
+  if (!parsed || !value || !["/booking","/calendar-personal"].includes(parsed.returnTo) || parsed.userId !== scope.actorId || parsed.workspaceId !== scope.workspaceId) return null;
   const row = await withTenantTransaction(scope,tx => tx.queryOne<{encrypted:string}>(`update booking_oauth_authorization_states
     set consumed_at=now() where state_hash=$1 and nonce_hash=$2 and provider=$3 and workspace_id=$4 and user_id=$5
-    and return_to='/booking' and consumed_at is null and expires_at>now() returning code_verifier_encrypted as encrypted`,
-  [hashOAuthState(value),hashOAuthState(parsed.nonce),provider,scope.workspaceId,scope.actorId]));
-  return row ? {codeVerifier:decryptOAuthStateSecret(row.encrypted),returnTo:"/booking",userId:scope.actorId,workspaceId:scope.workspaceId} : null;
+    and return_to=$6 and consumed_at is null and expires_at>now() returning code_verifier_encrypted as encrypted`,
+  [hashOAuthState(value),hashOAuthState(parsed.nonce),provider,scope.workspaceId,scope.actorId,parsed.returnTo]));
+  return row ? {codeVerifier:decryptOAuthStateSecret(row.encrypted),returnTo:parsed.returnTo,userId:scope.actorId,workspaceId:scope.workspaceId} : null;
 }

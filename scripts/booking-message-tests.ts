@@ -10,7 +10,7 @@ import { bookingResourceLock, readBooking } from "../src/lib/booking/repository"
 import { defaultBookingRules } from "../src/lib/booking/rules";
 import { defaultBookingCommunication } from "../src/lib/booking/templates";
 import { saveBookingSetup } from "../src/lib/booking/configuration";
-import { processDueBookingMessages, syncBookingMessages } from "../src/lib/booking/messages";
+import { bookingCalendarInvitation, processDueBookingMessages, syncBookingMessages } from "../src/lib/booking/messages";
 import { recordBookingMailProviderEvent } from "../src/lib/booking/message-webhooks";
 import { createBookingActionLinks, readBookingAction } from "../src/lib/booking/message-actions";
 import type { TransactionalEmailResult } from "../src/lib/integrations/resend";
@@ -131,6 +131,22 @@ test("Auftrag 2 durable versioned messages and reminder race boundaries", { time
       const foreignRows=await withTenantTransaction({workspaceId:b.workspaceId,actorId:b.userId},tx=>tx.query("select id from booking_message_jobs"),options);assert.equal(foreignRows.length,0);
       await assert.rejects(withTenantTransaction({workspaceId:b.workspaceId,actorId:b.userId},tx=>tx.execute("update booking_message_jobs set status='planned' where booking_id=$1",[id]).then(async()=>readBooking(tx,foreign,id)),options));
       const languageId=await seedBooking();await db.admin.query("update booking_reservations set communication_language='de' where id=$1",[languageId]);await processDueBookingMessages({...options,now:()=>now,send});assert.equal(calls,0);assert.equal((await jobs(languageId))[0].status,"cancelled");
+    });
+    await check("calendar invitation uses the current scoped recipient and existing communication authority",async()=>{
+      const id=await seedBooking();
+      await db.admin.query("update booking_calendar_connections set provider='microsoft' where id=$1",[a.connectionId]);
+      await db.admin.query("update booking_reservations set provider='microsoft',state='processing',operation_kind='create',operation_id=$2 where id=$1",[id,randomUUID()]);
+      const invited=()=>withOwner(async tx=>bookingCalendarInvitation(tx,owner,await readBooking(tx,owner,id)));
+      assert.deepEqual(await invited(),{email:"hello@novalure.eu",name:"Synthetic recipient"});
+      const ownRow=await withOwner(tx=>readBooking(tx,owner,id));
+      assert.equal(await withTenantTransaction({workspaceId:b.workspaceId,actorId:b.userId},tx=>bookingCalendarInvitation(tx,foreign,ownRow),options),null);
+      await saveBookingSetup(owner,{scope:"employee",kind:"*",section:"communication",value:{enabled:false}},options);
+      assert.equal(await invited(),null);await config();
+      await db.admin.query("update booking_reservations set recipient_email='foreign@example.invalid' where id=$1",[id]);assert.equal(await invited(),null);
+      await db.admin.query("update booking_reservations set recipient_email='hello@novalure.eu' where id=$1",[id]);
+      process.env.BOOKING_MESSAGES_ENABLED="0";assert.equal(await invited(),null);process.env.BOOKING_MESSAGES_ENABLED="1";
+      await db.admin.query("update booking_reservations set operation_kind='cancel' where id=$1",[id]);assert.equal(await invited(),null);
+      assert.deepEqual(await withOwner(async tx=>bookingCalendarInvitation(tx,owner,await readBooking(tx,owner,id),true)),{email:"hello@novalure.eu",name:"Synthetic recipient"});
     });
   }finally{await db.stop();for(const name of envNames){const old=previousEnv[name];if(old===undefined)delete process.env[name];else process.env[name]=old;}}
 });

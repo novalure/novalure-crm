@@ -28,12 +28,12 @@ import {
   languageOptionsByCode,
   type LanguageCode,
 } from "@/lib/i18n";
+import { taskDueState, formatTaskDue } from "@/lib/task-due";
+import { useTaskClock } from "@/lib/use-task-clock";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
 
 const NOW = new Date();
-const COMMISSION_RATE = 0.03;
-const MONTH_TARGET_COMMISSION = 120000;
 const VIEW_STORAGE_KEY = "novalure-dashboard-views-v4";
 const LAST_VIEW_STORAGE_KEY = "novalure-dashboard-last-view-v4";
 const CLOSED_DEAL_STAGES = new Set<string>(["Gewonnen", "Verloren", "Disqualifiziert", "Abschluss"]);
@@ -177,6 +177,7 @@ type DashboardOverviewProps = {
   sellerListings: SellerListing[];
   tasks: Task[];
   users: WorkspaceUser[];
+  timeZone?: string;
 };
 
 const widgetCatalog: Record<WidgetId, { kind: "KPI" | "Diagramm" | "Liste" }> = {
@@ -456,7 +457,9 @@ export function DashboardOverview({
   sellerListings,
   tasks,
   users,
+  timeZone = "Europe/Vienna",
 }: DashboardOverviewProps) {
+  const taskClock = useTaskClock();
   const locale = languageOptionsByCode[language].locale;
   const copy = getDashboardOverviewCopy(language);
   const periodLabels = copy.periods as Record<string, string>;
@@ -570,17 +573,18 @@ export function DashboardOverview({
   const activeLeadsByType = leadTypeOptions.map((type) => ({ type, count: filteredLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === type).length }));
   const forecastOpenPipelineValue = forecastOpenDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value), 0);
   const forecastWeightedPipelineValue = forecastOpenDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100), 0);
-  const forecastCommission = forecastWeightedPipelineValue * COMMISSION_RATE;
-  const monthClosings = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && isInPeriod(deal.expectedCloseDate, "Monat"));
-  const monthClosingCommission = monthClosings.reduce((sum, deal) => sum + parseEuroValue(deal.value) * COMMISSION_RATE, 0);
-  const stageVisits = Math.max(1, filteredLeads.length);
-  const viewingDeals = filteredDeals.filter((deal) => VIEWING_DEAL_STAGES.has(deal.stage)).length;
-  const closingDeals = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage)).length;
-  const conversionRate = Math.round((closingDeals / stageVisits) * 100);
-  const avgClosingDays = Math.round(filteredDeals.reduce((sum, deal) => {
+  const monthClosings = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && deal.closedAt && isInPeriod(deal.closedAt, "Monat"));
+  const monthClosingValue = monthClosings.reduce((sum, deal) => sum + parseEuroValue(deal.value), 0);
+  const cohortIds = new Set(filteredLeads.map((lead) => lead.id));
+  const cohortCount = (stages: Set<string>) => new Set(filteredDeals.filter((deal) => stages.has(deal.stage)).map((deal) => getDealLead(deal, leads)?.id).filter((id): id is string => Boolean(id && cohortIds.has(id)))).size;
+  const viewingDeals = cohortCount(VIEWING_DEAL_STAGES);
+  const closingDeals = cohortCount(WON_DEAL_STAGES);
+  const conversionRate = filteredLeads.length ? Math.round((closingDeals / filteredLeads.length) * 100) : null;
+  const closingDurations = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && deal.closedAt).map((deal) => {
     const lead = getDealLead(deal, leads);
-    return sum + (lead ? daysBetween(lead.receivedAt, deal.expectedCloseDate) : 34);
-  }, 0) / Math.max(1, filteredDeals.length));
+    return lead && deal.closedAt ? daysBetween(lead.receivedAt, deal.closedAt) : Number.NaN;
+  }).filter((days) => Number.isFinite(days) && days >= 0);
+  const avgClosingDays = closingDurations.length ? Math.round(closingDurations.reduce((sum, days) => sum + days, 0) / closingDurations.length) : null;
   const weekRequests = filteredLeads.filter((lead) => isInPeriod(lead.receivedAt, "Woche"));
 
   const sourceRows = sourceOptions.map((source) => {
@@ -604,11 +608,10 @@ export function DashboardOverview({
   const todayItems = [
     ...tasks
       .filter((task) => {
-        const due = task.due.toLowerCase();
-        return task.status === "open" && (due.includes("heute") || due.includes("today") || isSameLocalDay(task.due));
+        return task.status === "open" && taskDueState(task.due,new Date(taskClock),timeZone).group === "today";
       })
-      .map((task) => ({ id: task.id, title: task.title, meta: task.due, priority: task.priority })),
-    ...calendarEvents.filter((event) => isSameLocalDay(event.startsAt)).map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(event.startsAt)), priority: event.location })),
+      .map((task) => ({ id: task.id, title: task.title, meta: formatTaskDue(task.due, language, timeZone, new Date(taskClock)), priority: task.priority })),
+    ...calendarEvents.filter((event) => event.status!=="abgesagt" && isSameLocalDay(event.startsAt)).map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(event.startsAt)), priority: event.location })),
   ];
   const mandateRows = sellerListings.filter((listing) => listing.mandateEndsAt).map((listing) => ({ listing, daysLeft: daysBetween(NOW.toISOString(), listing.mandateEndsAt) })).filter((item) => item.daysLeft <= 60).sort((a, b) => a.daysLeft - b.daysLeft);
   const matchRows = sellerListings.flatMap((listing) => filteredLeads.filter((lead) => {
@@ -750,17 +753,17 @@ export function DashboardOverview({
       case "activeLeads":
         return renderKpi(copy.kpis.activeLeads, String(filteredLeads.length), activeLeadsByType.map((item) => getCrmLeadTypeLabel(item.type, language) + ": " + item.count).join(" | "), "bg-emerald-50");
       case "pipelineValue":
-        return renderKpi(copy.kpis.pipelineValue, formatEuro(forecastCommission, locale), copy.kpis.expectedCommission(forecastOpenDeals.length, formatEuro(forecastOpenPipelineValue, locale), formatEuro(forecastWeightedPipelineValue, locale)), "bg-blue-50");
+        return renderKpi(language === "de" ? "Gewichteter Pipelinewert" : "Weighted pipeline value", formatEuro(forecastWeightedPipelineValue, locale), language === "de" ? `${forecastOpenDeals.length} offene Deals · ungewichtet ${formatEuro(forecastOpenPipelineValue, locale)}. Dealwert × Wahrscheinlichkeit; keine Provision.` : `${forecastOpenDeals.length} open deals · unweighted ${formatEuro(forecastOpenPipelineValue, locale)}. Deal value × probability; no commission assumed.`, "bg-blue-50");
       case "monthlyClosings":
-        return renderKpi(copy.kpis.monthlyClosings, formatEuro(monthClosingCommission, locale), copy.kpis.target + ": " + formatEuro(MONTH_TARGET_COMMISSION, locale) + " | " + Math.round((monthClosingCommission / MONTH_TARGET_COMMISSION) * 100) + "%", "bg-violet-50");
+        return renderKpi(language === "de" ? "Gewonnener Dealwert (Monat)" : "Won deal value (month)", formatEuro(monthClosingValue, locale), language === "de" ? `${monthClosings.length} gewonnene Deals mit gespeichertem Abschlussdatum. Monatliche Ziele werden im Projektbericht gepflegt; keine Provision angenommen.` : `${monthClosings.length} won deals with a recorded closing date. Monthly targets are configured in the project report; no commission assumed.`, "bg-violet-50");
       case "overdueFollowupsKpi":
         return renderKpi(copy.kpis.overdueFollowups, String(overdueLeads.length), overdueLeads.slice(0, 2).map((lead) => getLeadName(lead, contacts, language)).join(" | ") || copy.kpis.noCriticalFollowups, overdueLeads.length ? "bg-red-50" : "bg-emerald-50");
       case "hotLeadsKpi":
         return renderKpi(copy.kpis.hotLeads, String(hotLeads.length), copy.kpis.hotLeadRule, "bg-amber-50");
       case "conversionRate":
-        return renderKpi(copy.kpis.conversionRate, conversionRate + "%", copy.kpis.conversionDetail(filteredLeads.length, viewingDeals, closingDeals), "bg-white");
+        return renderKpi(copy.kpis.conversionRate, conversionRate === null ? "—" : conversionRate + "%", copy.kpis.conversionDetail(filteredLeads.length, viewingDeals, closingDeals), "bg-white");
       case "averageClosingDays":
-        return renderKpi(copy.kpis.averageClosingDays, String(avgClosingDays), copy.kpis.averageClosingDetail, "bg-white");
+        return renderKpi(copy.kpis.averageClosingDays, avgClosingDays === null ? "—" : String(avgClosingDays), `${copy.kpis.averageClosingDetail} · ${closingDurations.length} ${language === "de" ? "Fälle mit bekanntem Beginn und Abschluss" : "records with known start and closing dates"}`, "bg-white");
       case "newRequestsWeek":
         return renderKpi(copy.kpis.newRequestsWeek, String(weekRequests.length), weekRequests.map((lead) => getCrmSourceLabel(lead.source, language)).slice(0, 3).join(" | "), "bg-white");
       case "funnel":

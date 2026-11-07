@@ -1,11 +1,25 @@
 import { hasProductCapability, type ProductRole } from "@/lib/product-model";
 
 /** Presets organize work; they must not hide the existing customer self-service. */
-type SelfServiceEntry = "dashboard" | "projects" | "knowledge" | "bots" | "settings";
+type SelfServiceEntry = "dashboard" | "projects" | "knowledge" | "bots" | "settings" | "billing" | "aiBillingAdmin" | "aiAssistant";
+
+export function canAccessCrmBilling(role: ProductRole) {
+  return role !== "viewer" && role !== "external_partner";
+}
 
 export function getCrmSelfServiceEntries<T extends string>(entries: readonly T[], role: ProductRole): Array<T | SelfServiceEntry> {
-  if (hasProductCapability(role, "novalure:internal")) return [...entries];
-  const result = new Set<T | SelfServiceEntry>([...entries, "dashboard", "projects", "knowledge"]);
+  if (hasProductCapability(role, "novalure:internal")) {
+    const internal = new Set<T | SelfServiceEntry>(["aiAssistant", ...entries]);
+    if (canAccessCrmBilling(role)) internal.add("billing");
+    else internal.delete("billing");
+    if (role === "platform_admin" || role === "novalureAdmin") internal.add("aiBillingAdmin");
+    else internal.delete("aiBillingAdmin");
+    return [...internal];
+  }
+  const result = new Set<T | SelfServiceEntry>(["aiAssistant", ...entries, "dashboard", "projects", "knowledge", "billing"]);
+  result.delete("aiBillingAdmin");
+  if (!canAccessCrmBilling(role)) result.delete("billing");
+  if (role === "viewer" || role === "external_partner") result.delete("aiAssistant");
   if (hasProductCapability(role, "bots:publish")) result.add("bots");
   else result.delete("bots");
   if (hasProductCapability(role, "settings:manage")) result.add("settings");

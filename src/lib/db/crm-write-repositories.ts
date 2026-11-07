@@ -1,6 +1,7 @@
 import type { TenantTransactionOptions } from "@/lib/db/tenant-client";
+import { INTERNAL_CALENDAR_REVISION_SQL } from "@/lib/db/internal-calendar-row";
 import { createHash, randomUUID } from "node:crypto";
-import { CrmCommandError, executeCrmCommand, withCrmRead } from "@/lib/crm-command";
+import { assertProjectGrant, CrmCommandError, executeCrmCommand, withCrmRead } from "@/lib/crm-command";
 import { assertLegacyOfferDealWrite } from "@/lib/db/offer-repositories";
 import type { AppSession } from "@/lib/auth/session";
 import { canArchiveCrmObject } from "@/lib/auth/delete-permissions";
@@ -28,11 +29,15 @@ import {
 } from "@/lib/contact-access";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { syncBrokerEntityForLead } from "@/lib/db/broker-entity-repositories";
+import { recordSourceAutomationEvent } from "@/lib/automation/source-events";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { queueDealStageChangeGoogleNotification } from "@/lib/db/google-notification-repositories";
 import { ensureProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
+import { persistProjectWizard, validateProjectDefaultPipeline, validateProjectWizardCreate } from "@/lib/db/project-wizard-repository";
+import type { ProjectWizardInput } from "@/lib/project-wizard";
+import { currentTenantTransaction } from "@/lib/db/transaction-context";
 import { queueDealStageChangeTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import { isCrmDivision } from "@/lib/crm-division";
@@ -219,6 +224,7 @@ type CalendarEventWriteRow = {
   contactId: string | null;
   endsAt: string | Date;
   id: string;
+  revision: string;
   leadId: string | null;
   location: string;
   metadata: Record<string, unknown> | null;
@@ -324,7 +330,7 @@ async function hasProjectEditPermission(input: { projectId: string | null | unde
   }
 }
 
-async function assertRecordWriteAccess(input: {
+export async function assertRecordWriteAccess(input: {
   entityLabel: string;
   existingOwnerUserId?: string | null;
   ownerUserId?: string | null;
@@ -1259,10 +1265,13 @@ async function upsertTaskRecordInTransaction(input: {
 
   const existingMetadata = asObject(existing?.metadata);
   const inputMetadata = asObject(input.task.metadata);
+  const actionType = input.task.actionType ?? inputMetadata.actionType ?? existingMetadata.actionType ?? "task";
+  if (!["task", "callback", "follow_up"].includes(String(actionType))) return { persisted: false, reason: "Invalid task actionType" };
   const description = cleanString(input.task.description) || cleanString(inputMetadata.description);
   const taskMetadata = {
     ...existingMetadata,
     ...inputMetadata,
+    actionType,
     ...(description ? { description } : {}),
     updatedFrom: "crm_tasks",
     updatedByUserId: input.session.userId,
@@ -1663,9 +1672,11 @@ async function listCalendarEventRecordsInTransaction(input: {
         preparation,
         outcome_goal as "outcomeGoal",
         teams_join_url as "teamsJoinUrl",
-        metadata
+        metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
       from calendar_events
       where workspace_id = $1
+        and not (metadata ? 'internalCalendarArchive')
         and ($2::uuid is null or lead_id = $2::uuid)
         and ($3::uuid is null or contact_id = $3::uuid)
       order by starts_at asc
@@ -1679,6 +1690,8 @@ async function listCalendarEventRecordsInTransaction(input: {
 
 async function upsertCalendarEventRecordInTransaction(input: {
   event: Record<string, unknown>;
+  expectedRevision?: unknown;
+  enforceInternalCommand?: boolean;
   session: AppSession;
 }): Promise<RepositoryWriteResult<CalendarEvent>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -1708,14 +1721,21 @@ async function upsertCalendarEventRecordInTransaction(input: {
             preparation,
             outcome_goal as "outcomeGoal",
             teams_join_url as "teamsJoinUrl",
-            metadata
+            metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
           from calendar_events
           where id = $1 and workspace_id = $2
-          limit 1
+          limit 1 for update
         `,
         [input.event.id, input.session.workspaceId],
       )
     : null;
+
+  if (input.enforceInternalCommand && input.event.id && !existing) throw new CrmCommandError("NOT_FOUND", "Calendar event not found", 404);
+  if (existing?.metadata && Object.hasOwn(existing.metadata, "internalCalendarArchive")) throw new CrmCommandError("CONFLICT", "Calendar event was removed; reload before editing", 409);
+  if (input.enforceInternalCommand && existing && (typeof input.expectedRevision !== "string" || input.expectedRevision !== existing.revision)) {
+    throw new CrmCommandError("CONFLICT", "Calendar event changed; reload before editing", 409);
+  }
 
   const leadId = normalizeWriteProjectId(input.event.leadId) ?? existing?.leadId ?? null;
   const lead = leadId
@@ -1788,14 +1808,18 @@ async function upsertCalendarEventRecordInTransaction(input: {
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const inputMetadata = asObject(input.event.metadata);
-  const notes = cleanString(input.event.notes) || cleanString(inputMetadata.notes);
+  if (existing?.metadata?.source === "personal_standalone_calendar" || inputMetadata.source === "personal_standalone_calendar" || Object.hasOwn(inputMetadata,"personalCalendarState")) {
+    return { persisted: false, reason: "Personal calendar event must only be changed through its personal calendar workflow" };
+  }
+  const notesProvided = Object.hasOwn(input.event, "notes") || Object.hasOwn(inputMetadata, "notes");
+  const notes = Object.hasOwn(input.event, "notes") ? cleanString(input.event.notes) : cleanString(inputMetadata.notes);
   const metadata = {
     ...(existing?.metadata ?? {}),
     ...inputMetadata,
     calendarProvider: "manual",
     externalCommunication: false,
     meetingProvider: cleanString(input.event.meetingProvider) || "manual-link",
-    ...(notes ? { notes } : {}),
+    ...(notesProvided ? { notes: notes ?? "" } : {}),
     source: "crm_internal_calendar_event",
     updatedByUserId: input.session.userId,
   };
@@ -1835,7 +1859,8 @@ async function upsertCalendarEventRecordInTransaction(input: {
             preparation,
             outcome_goal as "outcomeGoal",
             teams_join_url as "teamsJoinUrl",
-            metadata
+            metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
         `,
         [
           existing.id,
@@ -1888,7 +1913,8 @@ async function upsertCalendarEventRecordInTransaction(input: {
             preparation,
             outcome_goal as "outcomeGoal",
             teams_join_url as "teamsJoinUrl",
-            metadata
+            metadata,
+        ${INTERNAL_CALENDAR_REVISION_SQL} as revision
         `,
         [
           input.session.workspaceId,
@@ -1921,6 +1947,53 @@ async function upsertCalendarEventRecordInTransaction(input: {
   });
 
   return { data: event, persisted: true };
+}
+
+/** Rechecked before both command execution and read-only receipt reconciliation. */
+export async function assertInternalCalendarHttpAccess(input: {
+  session: AppSession; resourceId?: string; requestedProjectId?: string; archive: boolean;
+}) {
+  const { session } = input;
+  if (!currentTenantTransaction()) throw new CrmCommandError("SCOPED_TRANSACTION_REQUIRED", "A current scoped transaction is required", 403);
+  if (input.archive && !canArchiveCrmObject(session, "calendar_event")) throw new CrmCommandError("FORBIDDEN", "Calendar removal requires workspace admin permission", 403);
+  if (!input.resourceId) {
+    if (!input.requestedProjectId) throw new CrmCommandError("PROJECT_REQUIRED", "An explicit authorized project is required", 403);
+    return;
+  }
+  const row = await queryOne<CalendarEventWriteRow>(`select id,workspace_id as "workspaceId",project_id as "projectId",owner_user_id as "ownerUserId",metadata
+    from calendar_events where workspace_id=$1::uuid and id=$2::uuid for update`, [session.workspaceId, input.resourceId]);
+  if (!row) throw new CrmCommandError("NOT_FOUND", "Calendar event not found", 404);
+  const metadata = row.metadata ?? {};
+  if (metadata.source !== "crm_internal_calendar_event" || metadata.calendarProvider !== "manual" || metadata.externalCommunication !== false
+    || metadata.bookingId || metadata.viewingId || metadata.propertyId || metadata.externalCalendarId || metadata.personalCalendarState) {
+    throw new CrmCommandError("ORIGINATING_WORKFLOW_REQUIRED", "Use this event's originating calendar or booking workflow", 403);
+  }
+  if (!row.projectId || (input.requestedProjectId && input.requestedProjectId !== row.projectId)) throw new CrmCommandError("PROJECT_IMMUTABLE", "Calendar project cannot be changed through this workflow", 409);
+  await assertProjectGrant(currentTenantTransaction()!.transaction, session, row.projectId, true);
+  const access = await assertRecordWriteAccess({ entityLabel: "Calendar event", existingOwnerUserId: row.ownerUserId, projectId: row.projectId, session });
+  if (!access.ok) throw new CrmCommandError("FORBIDDEN", access.reason, 403);
+  const viewing = await queryOne(`select id from property_viewing_slots where workspace_id=$1::uuid and calendar_event_id=$2::uuid limit 1`, [session.workspaceId, row.id]);
+  if (viewing) throw new CrmCommandError("ORIGINATING_WORKFLOW_REQUIRED", "Use the linked property viewing workflow", 403);
+  if (input.archive) {
+    const check = await queryOne<{ allowed: boolean }>("select crm_internal_calendar_archive_unlinked($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid) as allowed", [session.workspaceId, session.userId, row.id, session.authSessionId ?? null, session.authIdentityId ?? null]);
+    if (!check?.allowed) throw new CrmCommandError("CALENDAR_ARCHIVE_DENIED", "This calendar event has dependencies or its current removal scope cannot be verified", 403);
+  }
+}
+
+export async function archiveInternalCalendarEvent(input: { session: AppSession; eventId: string; expectedRevision?: unknown }) {
+  return withCrmRead(input.session, async (_tx, session) => {
+    await assertInternalCalendarHttpAccess({ session, resourceId: input.eventId, archive: true });
+    const row = await queryOne<CalendarEventWriteRow & { snapshot: Record<string, unknown> }>(`select to_jsonb(calendar_events) as snapshot,id,workspace_id as "workspaceId",project_id as "projectId",owner_user_id as "ownerUserId",metadata,
+      ${INTERNAL_CALENDAR_REVISION_SQL} as revision from calendar_events where workspace_id=$1::uuid and id=$2::uuid for update`, [session.workspaceId, input.eventId]);
+    if (!row || Object.hasOwn(row.metadata ?? {}, "internalCalendarArchive") || typeof input.expectedRevision !== "string" || input.expectedRevision !== row.revision) throw new CrmCommandError("CONFLICT", "Calendar event changed or was removed; reload before removing", 409);
+    const archive = { archivedAt: new Date().toISOString(), archivedByUserId: session.userId, authSessionId: session.authSessionId, authIdentityId: session.authIdentityId };
+    const archived = await queryOne<{ snapshot: Record<string, unknown> }>(`update calendar_events set status='abgesagt',metadata=metadata || jsonb_build_object('internalCalendarArchive',$3::jsonb),updated_at=now()
+      where workspace_id=$1::uuid and id=$2::uuid returning to_jsonb(calendar_events) as snapshot`, [session.workspaceId, row.id, JSON.stringify(archive)]);
+    if (!archived) throw new CrmCommandError("SAVE_UNCONFIRMED", "Calendar removal was not confirmed", 503);
+    await writeAuditLog({ session, action: "calendar_event.archived", entityType: "calendar_event", entityId: row.id, projectId: row.projectId,
+      before: row.snapshot, after: archived.snapshot });
+    return { id: row.id, archived: true };
+  });
 }
 
 async function upsertLeadRecordInTransaction(input: {
@@ -2268,6 +2341,9 @@ async function upsertLeadRecordInTransaction(input: {
 
   if (!idempotentReplay) {
     await syncBrokerEntityForLead({ lead: savedLead, session: input.session });
+    if(leadWasInserted)await recordSourceAutomationEvent(input.session,{projectId:row.projectId,leadId:row.id,eventId:`lead-created:${row.id}`,trigger:"new_lead"});
+    if(existing&&existing.status!==row.status)await recordSourceAutomationEvent(input.session,{projectId:row.projectId,leadId:row.id,eventId:`lead-phase:${row.id}:${savedLead.version}`,trigger:"lead_phase_changed"});
+    if(existing&&manualFirstResponseAt&&manualFirstResponseAt!==toNullableIso(existing.lastContactAt))await recordSourceAutomationEvent(input.session,{projectId:row.projectId,leadId:row.id,eventId:`lead-personal-contact:${row.id}:${manualFirstResponseAt}`,trigger:"personal_contact",occurredAt:manualFirstResponseAt});
   }
 
   return { data: savedLead, persisted: true };
@@ -3139,7 +3215,7 @@ async function getLatestBotPublishEvaluation(input: {
 }
 
 async function createProjectRecordInTransaction(input: {
-  project: Partial<Project>;
+  project: Partial<Project> & { wizard?: ProjectWizardInput };
   session: AppSession;
 }): Promise<RepositoryWriteResult<Project>> {
   if (input.project.workspaceId !== undefined && input.project.workspaceId !== input.session.workspaceId) {
@@ -3162,6 +3238,21 @@ async function createProjectRecordInTransaction(input: {
     ? input.project.defaultOperatingModel
     : input.session.workspaceOperatingModel ?? null;
   const rawSetupDefaults = asObject(input.project.setupDefaults);
+  const wizard = input.project.wizard === undefined ? null : await validateProjectWizardCreate(input.session, input.project.wizard, {
+    customerType: input.project.customerType ?? customerType,
+    operatingModel: input.project.defaultOperatingModel ?? defaultOperatingModel,
+  });
+  if (wizard) {
+    if (input.project.type !== wizard.typeKey) throw new CrmCommandError("INVALID_PROJECT_TYPE", "Der Projekttyp muss dem gewählten stabilen Typ entsprechen.");
+    if (input.project.defaultPipelineId !== undefined && input.project.defaultPipelineId !== "") throw new CrmCommandError("INVALID_PIPELINE_TEMPLATE", "Die neue Projektpipeline wird aus der gewählten Vorlage erstellt.");
+    if (Object.keys(rawSetupDefaults).some(key => !["calendarProvider", "meetingProvider", "teamStructure"].includes(key))) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Nur Kalender-, Meeting- und Teameinstellungen sind als Projektvorgaben zulässig.");
+    if (input.project.setupDefaults !== undefined && (!input.project.setupDefaults || typeof input.project.setupDefaults !== "object" || Array.isArray(input.project.setupDefaults))) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Projektvorgaben als Objekt angeben.");
+    if (rawSetupDefaults.calendarProvider !== undefined && !isCalendarProviderChoice(rawSetupDefaults.calendarProvider)) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Kalenderanbieter prüfen.");
+    if (rawSetupDefaults.teamStructure !== undefined && !isWorkspaceTeamStructure(rawSetupDefaults.teamStructure)) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Teamstruktur prüfen.");
+    if (typeof rawSetupDefaults.meetingProvider !== "undefined" && !["microsoft-teams", "google-meet", "manual-link"].includes(String(rawSetupDefaults.meetingProvider))) throw new CrmCommandError("INVALID_PROJECT_DEFAULTS", "Meetinganbieter prüfen.");
+  } else if (isUuid(input.project.defaultPipelineId)) {
+    throw new CrmCommandError("PROJECT_PIPELINE_FORBIDDEN", "Ein neues Projekt kann keine bestehende Projektpipeline übernehmen.", 403);
+  }
   const setupDefaults = {
     ...createModeSetupDefaults(customerType, defaultOperatingModel),
     ...rawSetupDefaults,
@@ -3221,9 +3312,20 @@ async function createProjectRecordInTransaction(input: {
       projectId: row.id,
       session: input.session,
       setupDefaults: row.setupDefaults,
+      pipelineTemplateKey: wizard?.pipelineTemplateKey,
     });
-  } catch {
+  } catch (error) {
+    if (wizard) throw error;
     pipelineSetup = { defaultPipelineId: row.defaultPipelineId, pipelineIds: [], stageCount: 0 };
+  }
+
+  let wizardReceipt: Project["wizard"];
+  if (wizard) {
+    const actualPipeline = await queryOne<{ id: string }>(`select cp.id from projects p join crm_pipelines cp on cp.workspace_id=p.workspace_id and cp.project_id=p.id and cp.id=p.default_pipeline_id where p.workspace_id=$1::uuid and p.id=$2::uuid and cp.id=$3::uuid and cp.key=$4 and exists(select 1 from crm_pipeline_stages s where s.workspace_id=cp.workspace_id and s.project_id=cp.project_id and s.pipeline_id=cp.id)`, [input.session.workspaceId, row.id, pipelineSetup.defaultPipelineId, wizard.pipelineTemplateKey]);
+    if (!actualPipeline) throw new CrmCommandError("PROJECT_PIPELINE_UNCONFIRMED", "Die gewählte Projektpipeline wurde nicht vollständig erstellt.", 503);
+    const transaction = currentTenantTransaction();
+    if (!transaction) throw new CrmCommandError("PROJECT_WIZARD_TRANSACTION_REQUIRED", "Projektkonfiguration erfordert eine gemeinsame Transaktion.", 503);
+    wizardReceipt = await persistProjectWizard(transaction.transaction, input.session, row.id, wizard);
   }
 
   // Default-pipeline initialization can update the project; return its final version.
@@ -3238,7 +3340,7 @@ async function createProjectRecordInTransaction(input: {
   });
 
   return {
-    data: toProjectWriteResult(row, pipelineSetup.defaultPipelineId),
+    data: { ...toProjectWriteResult(row, pipelineSetup.defaultPipelineId), ...(wizardReceipt ? { wizard: wizardReceipt } : {}) },
     persisted: true,
   };
 }
@@ -3307,7 +3409,9 @@ async function updateProjectRecordInTransaction(input: {
       ? rawSetupDefaults.teamStructure
       : existing.setupDefaults?.teamStructure ?? input.session.workspaceTeamStructure ?? undefined,
   };
-  const defaultPipelineId = normalizeWriteProjectId(input.project.defaultPipelineId) ?? existing.defaultPipelineId;
+  const defaultPipelineId = input.project.defaultPipelineId === undefined
+    ? existing.defaultPipelineId
+    : await validateProjectDefaultPipeline(input.session, existing.id, input.project.defaultPipelineId);
 
   const row = await queryOne<ProjectWriteRow>(
     `
@@ -4087,6 +4191,8 @@ function toTask(row: TaskRow): Task {
   const metadata = asObject(row.metadata);
 
   return {
+    origin: typeof metadata.automationId === "string" ? "automation" : "crm",
+    actionType: metadata.actionType === "callback" || metadata.actionType === "follow_up" ? metadata.actionType : "task",
     version: Number(row.version),
     contactId: row.contactId ?? undefined,
     description: typeof metadata.description === "string" ? metadata.description : undefined,
@@ -4130,7 +4236,7 @@ function normalizeCalendarEventLocation(value: unknown): CalendarEvent["location
 }
 
 function normalizeCalendarEventStatus(value: unknown): CalendarEvent["status"] {
-  if (value === "geplant" || value === "vorbereiten" || value === "bestätigt" || value === "nachfassen") {
+  if (value === "geplant" || value === "vorbereiten" || value === "bestätigt" || value === "nachfassen" || value === "abgesagt") {
     return value;
   }
   return "geplant";
@@ -4155,6 +4261,9 @@ function toCalendarEventRecord(row: CalendarEventWriteRow): CalendarEvent {
 
   return {
     calendarProvider,
+    revision: row.revision,
+    archived: Object.hasOwn(metadata, "internalCalendarArchive"),
+    internalManual: metadata.source === "crm_internal_calendar_event" && !metadata.bookingId && !metadata.viewingId && !metadata.externalCalendarId && metadata.externalCommunication !== true,
     contactId: row.contactId ?? undefined,
     endsAt: toIso(row.endsAt),
     externalCalendarId: typeof metadata.externalCalendarId === "string" ? metadata.externalCalendarId : undefined,

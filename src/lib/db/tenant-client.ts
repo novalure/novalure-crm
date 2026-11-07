@@ -32,6 +32,8 @@ export type TenantTransactionOptions = Readonly<{
   pool?: TenantPool;
   /** Optional server-controlled statement/lock budget; cleared with the transaction. */
   statementTimeoutMs?: number;
+  /** Optional bounded checkout for server-only operations using nested leases. */
+  poolAcquireTimeoutMs?: number;
 }>;
 
 const uuidPattern =
@@ -146,10 +148,29 @@ async function assertSafeTenantDatabaseRole(client: PoolClient) {
 }
 
 function assertStatementBudget(options: TenantTransactionOptions) {
+  if (options.poolAcquireTimeoutMs !== undefined &&
+    (!Number.isSafeInteger(options.poolAcquireTimeoutMs) || options.poolAcquireTimeoutMs < 100 || options.poolAcquireTimeoutMs > 5000)) {
+    throw new Error("Tenant pool acquire timeout must be between 100 and 5000 milliseconds");
+  }
   if (options.statementTimeoutMs !== undefined &&
     (!Number.isSafeInteger(options.statementTimeoutMs) || options.statementTimeoutMs < 100 || options.statementTimeoutMs > 30_000)) {
     throw new Error("Tenant statement timeout must be an integer between 100 and 30000 milliseconds");
   }
+}
+
+async function acquireTenantClient(pool: TenantPool, timeoutMs?: number) {
+  if (timeoutMs === undefined) return pool.connect();
+  let expired = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const pending = pool.connect().then(client => {
+    if (expired) { client.release(); throw new Error("TENANT_POOL_ACQUIRE_TIMEOUT"); }
+    return client;
+  });
+  try {
+    return await Promise.race([pending, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { expired = true; reject(new Error("TENANT_POOL_ACQUIRE_TIMEOUT")); }, timeoutMs);
+    })]);
+  } finally { if (timer) clearTimeout(timer); }
 }
 
 async function setStatementBudget(client: PoolClient, options: TenantTransactionOptions) {
@@ -171,7 +192,7 @@ export async function withTenantTransaction<Result>(
   assertTenantScope(scope);
   assertStatementBudget(options);
   const pool = options.pool ?? await getTenantPool();
-  const client = await pool.connect();
+  const client = await acquireTenantClient(pool, options.poolAcquireTimeoutMs);
   let active = false;
   let released = false;
   let queryFailure: unknown;

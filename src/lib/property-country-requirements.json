@@ -1,0 +1,804 @@
+{
+  "version": "2026-10-30",
+  "purpose": "Versioned product review requirements; individual legal and portal checks remain explicit",
+  "countries": [
+    {
+      "country": "AT",
+      "country_name": "Österreich",
+      "locale_proposal": "de-AT",
+      "currency_proposal": "EUR",
+      "requirements": [
+        {
+          "id": "AT-01",
+          "title": "Länderspezifische Felder und Sprache",
+          "scope": "alle Vermarktungsarten",
+          "verification_kind": "product_decision",
+          "verified_fact": "Für diesen Punkt wird keine eigenständige gesetzliche Pflicht behauptet.",
+          "product_requirement": "de-AT als Vorgabe, freie weitere Sprachversionen und getrennte Standortfelder für Bundesland, Bezirk, Gemeinde, PLZ, Straße, Haus-/Türnummer. Preise und Flächen als Zahlen speichern, erst bei Ausgabe lokal formatieren.",
+          "acceptance_criterion": "Dasselbe Objekt kann Deutsch/Englisch ausgeben; Zahlen werden nicht als formatierte Zeichenketten importiert. Ein spanischsprachiger Käufer ändert nicht das Objektland.",
+          "sources": [],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-02",
+          "title": "Energieangaben im Inserat nach aktueller Fassung",
+          "scope": "Kauf und In-Bestand-Nahme",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Der aktuell geöffnete EAVG § 3 verlangt seit 01.07.2026 Heizwärmebedarf und Endenergiebedarf einschließlich Gesamtenergieeffizienzklasse. Die ältere Fassung nannte HWB und Gesamtenergieeffizienz-Faktor.",
+          "product_requirement": "Energie-Modell um Ausweistyp/-version, Kennzahlen und Klasse erweitern. Aktuellen Anzeigen-Preflight nicht ausschließlich auf HWB/fGEE aus alten Vorlagen aufbauen.",
+          "acceptance_criterion": "Neue Veröffentlichung nach dem 01.07.2026 wird gegen das aktuelle AT-Regelpaket geprüft. Ein übernommener alter Datensatz zeigt fehlende aktuelle Angaben und behält seine Herkunft.",
+          "sources": [
+            "AT_ENERGY_AD"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-03",
+          "title": "Energieausweis als Dokument mit Frist und Zustellung",
+          "scope": "Kauf und Bestand",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "EAVG § 4 nennt rechtzeitige Vorlage vor der Vertragserklärung, einen höchstens zehn Jahre alten Ausweis und Aushändigung binnen 14 Tagen nach Vertragsabschluss; auf Verlangen auch auf Papier.",
+          "product_requirement": "Ausstellungsdatum, Objektbezug und Dokumentversion erfassen. Vorlage und spätere Aushändigung als gesonderte nachvollziehbare Vorgänge mit Verantwortlichem führen; lesbare Druckfassung anbieten.",
+          "acceptance_criterion": "Der Vorgang zeigt fällige Aushändigung mit Datum sowie die konkret bereitgestellte Version. Ein bloßer Exposé-Klick wird nicht als Nachweis einer Aushändigung behauptet.",
+          "sources": [
+            "AT_ENERGY_DELIVERY"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-04",
+          "title": "Provision nach Auftrag und Vermarktungsart",
+          "scope": "Wohnraummiete; Kauf und Gewerbe getrennt",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Das Behördenportal erläutert das Bestellerprinzip für Wohnungsmiete: Wohnungssuchende zahlen grundsätzlich nur bei eigener Beauftragung. Daraus folgt keine identische Pauschalregel für jeden Kauf- oder Gewerbefall.",
+          "product_requirement": "Erstauftraggeber, Auftragdatum, Objekt-/Suchauftrag und zahlende Partei speichern. Miet- und Kaufprovisionsvorlagen getrennt versionieren; keinen pauschalen Käufer-/Mieter-Provisionshaken aus Livelisted kopieren.",
+          "acceptance_criterion": "Ein bereits vermieterseitig gelistetes Wohnungsangebot führt im Standardfall nicht automatisch zu einer Mieterprovisionsforderung. Abweichungen werden bewusst begründet und geprüft.",
+          "sources": [
+            "AT_RENT_COMMISSION"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-05",
+          "title": "Mietkosten und Berechnungsbasis nicht vermischen",
+          "scope": "Miete",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Das Behördenportal unterscheidet bei der Provisionsbemessung Hauptmietzins und Betriebskosten von Umsatzsteuer und Heizkosten.",
+          "product_requirement": "Hauptmietzins, Betriebskosten, Heizkosten, Umsatzsteuer, Gesamtzahlung, Kaution und Vermittlungsentgelt getrennt speichern. Anzeige und etwaige Provisionsberechnung dürfen nicht unbemerkt dieselbe unpräzise Gesamtsumme verwenden.",
+          "acceptance_criterion": "Preisänderung zeigt alle Komponenten und berechnete Gesamtsumme; ein Exportadapter benennt die tatsächlich übertragenen Werte und die verwendete Berechnungsbasis.",
+          "sources": [
+            "AT_RENT_COMMISSION"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-06",
+          "title": "Projektvertrieb mit Sicherungs- und Baufortschrittskontext",
+          "scope": "Bauträger / Verkauf vor Fertigstellung",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Das Behördenportal beschreibt bei vor Fertigstellung verkauften frei finanzierten Eigentumswohnungen regelmäßig BTVG-Schutz, Sicherungsmechanismen und Zahlung nach Baufortschritt.",
+          "product_requirement": "Projekt-/Einheitsvertrieb braucht Freigaben für Vertragsstand, zuständige Treuhandstelle, Sicherungsunterlagen und Zahlungsmeilensteine. CRM darf nicht allein aus einer Leadphase eine Zahlung oder treuhändige Freigabe auslösen.",
+          "acceptance_criterion": "Reserviert, Kaufvertrag unterzeichnet, gesicherter Zahlungsmeilenstein und übergeben sind getrennte Zustände mit eigenem Nachweis. Finanzfunktionen werden nicht als Ersatz der Treuhandabwicklung dargestellt.",
+          "sources": [
+            "AT_BTVG"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-07",
+          "title": "willhaben und ImmoScout24 AT als eigene geprüfte Adapter",
+          "scope": "Portalvermarktung",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "willhaben bewirbt Übertragung aus Maklersoftware. Die gelesenen ImmoScout24-AT-B2B-AGB behandeln individuelle Zusammenarbeit und Softwareeinsatz; sie belegen keinen universellen frei verfügbaren Uploadzugang.",
+          "product_requirement": "AT-Adapter priorisieren, technische Spezifikation und Berechtigung direkt mit dem Portal verifizieren. Deutsche Scout24-REST-API und generisches OpenImmo nicht automatisch auf Österreich übertragen.",
+          "acceptance_criterion": "Pilot erstellt, aktualisiert und entfernt ein autorisiertes Testinserat; Remote-ID, letzter erfolgreicher Stand und Portalfehler sind sichtbar. Ohne Freischaltung bleibt der Adapter als geplant markiert.",
+          "sources": [
+            "AT_WILLHABEN",
+            "AT_IS24"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "AT-08",
+          "title": "Personalisierte Exposé-Links ohne Tracking-Zwang",
+          "scope": "Website-Exposé und Anfrage",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die Datenschutzbehörde verlangt Einwilligung vor nicht notwendigen Cookies und vergleichbarem Endgerätezugriff; notwendige Funktionen werden davon unterschieden.",
+          "product_requirement": "Anfrage und notwendige Sitzung ermöglichen, ohne Werbe-/Analysezustimmung zu erzwingen. Personenbezogene Lesezeit und Marketingmessung nur mit passendem geprüftem Zweck/Status erfassen; Karten, Videos und Werbedienste entsprechend steuern.",
+          "acceptance_criterion": "Ablehnung nicht notwendigen Trackings verhindert keine normale Objektanfrage. Einwilligung lässt sich widerrufen; danach laufen entsprechende Mess- und Marketingaktionen nicht weiter.",
+          "sources": [
+            "AT_COOKIES"
+          ],
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "country": "DE",
+      "country_name": "Deutschland",
+      "locale_proposal": "de-DE",
+      "currency_proposal": "EUR",
+      "requirements": [
+        {
+          "id": "DE-01",
+          "title": "Fachliches Objektmodell statt kopierter Portaltexte",
+          "scope": "alle Vermarktungsarten",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die Scout24-API trennt Objekttypen und führt unter anderem Adresse, Flächen, Preis-/Mietkomponenten und Anzeige der Adresse als strukturierte Felder.",
+          "product_requirement": "de-DE als Standard vorschlagen; Objekt- und Geschäftsart getrennt halten. Straße, Hausnummer, PLZ und Ort strukturiert, vollständige Adresse aber konfigurierbar öffentlich ausgeben.",
+          "acceptance_criterion": "Portal-Mapping validiert je Objekttyp; ein ausgeblendeter Hausstandort bleibt intern erhalten und wird nicht versehentlich im öffentlichen Exposé oder PDF enthüllt.",
+          "sources": [
+            "DE_IS24_API"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-02",
+          "title": "Energieangaben nach § 87 mit Wohn-/Nichtwohn-Unterscheidung",
+          "scope": "Verkauf, Vermietung, Verpachtung, Leasing",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Bei vorliegendem Energieausweis nennt § 87 Ausweisart, Endenergiebedarf/-verbrauch, wesentliche Heizenergieträger sowie bei Wohngebäuden Baujahr und Effizienzklasse. Bei Nichtwohngebäuden sind Wärme und Strom getrennt anzugeben.",
+          "product_requirement": "Wohn- und Gewerbeobjekte über unterschiedliche Prüfregeln veröffentlichen. Energiebedarf und -verbrauch nicht in einem unklaren Freitextfeld vermischen; Quelle und Ausgabeversion des Ausweises behalten.",
+          "acceptance_criterion": "Ein Wohnungsinserat mit Ausweis bekommt die passenden Felder; ein Gewerbeobjekt unterstützt getrennte Energiekennwerte. Fehlende oder nicht anwendbare Daten werden nachvollziehbar behandelt.",
+          "sources": [
+            "DE_ENERGY_AD"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-03",
+          "title": "Maklerbeauftragung in Textform als eigener Vorgang",
+          "scope": "Maklervertrag zu Wohnung / Einfamilienhaus-Kauf",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "BGB § 656a fordert für die dort genannten Kauf-Maklerverträge Textform.",
+          "product_requirement": "Maklerbeauftragung und Exposé-Anfrage trennen; Textversion, übermittelte Informationen, Erklärung und Zeitpunkt nachvollziehbar speichern. Ein Kontaktformular oder Öffnungssignal darf nicht stillschweigend als jede Art Vertragsschluss gelten.",
+          "acceptance_criterion": "Die Akte unterscheidet Anfrage, erteilten Auftrag, Dokumentversion und spätere Kaufentscheidung; die konkrete Textform-Umsetzung wird vor produktiver Nutzung geprüft.",
+          "sources": [
+            "DE_BROKER_FORM"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-04",
+          "title": "Provisionsmodell abhängig von Partei und Objektfall",
+          "scope": "Wohnung / Einfamilienhaus-Kauf, Käufer als Verbraucher",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "BGB § 656b begrenzt §§ 656c/656d auf Verbraucher als Käufer; § 656c regelt bei beiderseitiger Beauftragung gleich hohe Verpflichtungen.",
+          "product_requirement": "Auftraggeber, Käuferrolle und betroffene Objektklasse erheben, soweit fachlich notwendig. Beiderseitige Verpflichtungen getrennt dokumentieren; keinen pauschalen Satz wie 3,57 % als universelle Länderregel verwenden.",
+          "acceptance_criterion": "Eine Provisionsvorlage wird nur für ihren benannten Anwendungsfall angeboten. Änderungen an einer Seite markieren mögliche Auswirkungen auf die andere Seite zur menschlichen Prüfung.",
+          "sources": [
+            "DE_BROKER_SCOPE",
+            "DE_BROKER_FEE"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-05",
+          "title": "Wohnraummiete getrennt vom Kauf abwickeln",
+          "scope": "Mietvermittlung",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "WoVermRG § 2 verlangt Textform für den Vermittlungsvertrag und begrenzt ein Entgelt vom Wohnungssuchenden auf den gesetzlich beschriebenen Sonderfall.",
+          "product_requirement": "Mietauftrag und Auftraggeberhistorie eigenständig führen. Kauf-Vorlagen, Mietprovisionsfelder und automatische Rechnungs-/Vertragsaktionen nicht unverändert teilen.",
+          "acceptance_criterion": "Ein allgemeiner Mietinteressent wird nicht allein durch eine Exposé-Anfrage mit einer Provision belastet; Auftrag und Ausnahmegrund bleiben explizite Prüfpunkte.",
+          "sources": [
+            "DE_RENT_BROKER"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-06",
+          "title": "Mieterselbstauskunft phasenabhängig statt Bonitätsgate",
+          "scope": "Wohnraummiete / Website-Anfrage / Besichtigung",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "DSK Version 2.0 Januar 2026 trennt Besichtigung, konkretes Anmietungsinteresse und Auswahl einer Person. Vor einer ersten Besichtigung sind wirtschaftliche Angaben in der Regel nicht erforderlich; Einwilligung ersetzt keine passende Rechtsgrundlage.",
+          "product_requirement": "Kleine Erstanfrage und gestufte Formulare verwenden. Livelisteds Kaufkraftnachweis-Schritt nicht pauschal vor Mietbesichtigungen erzwingen. Zweck, Phase, benötigte Unterlagen und Zugriff werden pro Anforderung festgelegt.",
+          "acceptance_criterion": "Erstes Anfrageformular verlangt keine pauschalen Einkommensnachweise. Nachweis-Uploads sind erst in der konfigurierten späteren Phase verfügbar und nicht als allgemeiner Marketing-Opt-in formuliert.",
+          "sources": [
+            "DE_TENANT_DATA",
+            "DE_TENANT_FORM"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-07",
+          "title": "Scout24-Import und tatsächliche Publikation getrennt",
+          "scope": "Portaladapter Deutschland",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die offizielle Import/Export-API unterstützt Objektanlage, Änderung, Löschung und Veröffentlichung; Kontaktadressen, Medien und Publikationskanäle sind separate Ressourcen.",
+          "product_requirement": "Einen eigenen API-Adapter mit autorisierten Anbieterzugängen, externen IDs, Medienabgleich und separatem Veröffentlichungsstatus bauen. Objektimport nicht als Online-Veröffentlichung anzeigen.",
+          "acceptance_criterion": "Pilot belegt Anlage, Publikation, Änderung und Entfernung sowie Wiederholung ohne Duplikate. Remote-Fehler und der zugehörige Datenstand erscheinen im CRM.",
+          "sources": [
+            "DE_IS24_API"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "DE-08",
+          "title": "Immowelt-Lesen, Website-Ausgabe und Portal-Schreiben unterscheiden",
+          "scope": "Website und weiterer Portaladapter",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die offizielle immowelt.de-API-FAQ beschreibt Objektdaten für den eigenen Internetauftritt und gemeinsame Marktplätze. Das ist kein Nachweis eines Veröffentlichungsschreibzugangs.",
+          "product_requirement": "Immowelt als sinnvollen Kandidaten mit getrennten Fähigkeiten kennzeichnen: Daten lesen, eigene Website beliefern, Inserate schreiben. Uploadformat, Vertrag und Rechte vor Implementierungszusage klären.",
+          "acceptance_criterion": "Der Integrationskatalog zeigt nur nachgewiesene Fähigkeiten als verfügbar. Eine erfolgreiche API-Liste aktiviert keinen behaupteten OpenImmo-/Inserats-Export.",
+          "sources": [
+            "DE_IMMOWELT_API"
+          ],
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "country": "ES",
+      "country_name": "Spanien",
+      "locale_proposal": "es-ES",
+      "currency_proposal": "EUR",
+      "requirements": [
+        {
+          "id": "ES-01",
+          "title": "Mehrsprachiges Objektmodell mit getrennten Länderregeln",
+          "scope": "Kauf, Miete und Projektvertrieb",
+          "verification_kind": "product_decision",
+          "verified_fact": "Für diesen Punkt wird keine allgemeine gesetzliche Pflicht zur Bereitstellung sämtlicher Sprachfassungen behauptet.",
+          "product_requirement": "Spanisch und Englisch als vorgeschlagene Exposé-Vorlagen anbieten; regionale Sprachen optional je Organisation und Region. Autonome Region, Provinz, Gemeinde, Postleitzahl, Lagefreigabe, Nutzfläche, bebaute Fläche und Außenflächen getrennt speichern. Zahlen erst bei Ausgabe lokalisieren.",
+          "acceptance_criterion": "Ein englisches Exposé eines Objekts in Katalonien verwendet weiterhin das ES-/Katalonien-Regelpaket. Übersetzung und Veröffentlichung sind je Sprachversion überprüfbar.",
+          "sources": [],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-02",
+          "title": "Energieklasse und Zertifikatstufe öffentlich korrekt ausgeben",
+          "scope": "Verkauf, Vermietung und Neubau; Ausnahmen gesondert prüfen",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "RD 390/2021 verlangt Energieinformationen in Verkaufs- und Vermietungswerbung. Die Kennzeichnung unterscheidet Projekt, fertiggestelltes Gebäude und Bestandsgebäude; beim Verkauf und bei Vermietung gelten zusätzlich Dokumentbereitstellungsregeln.",
+          "product_requirement": "Energieklasse, Kennzahlen, Zertifikatsstufe, Ausstellungsdatum, Registrierung, Dokument und begründete Ausnahme strukturiert führen. Web-Exposé, PDF und Portal erhalten eine eigene Ausgabeprüfung. Ein Projektzertifikat darf nicht stillschweigend als finales Zertifikat erscheinen.",
+          "acceptance_criterion": "Bei einem Neubau zeigt der Entwurf die Projektstufe; die spätere Fertigstellung erzeugt eine nachvollziehbare neue Zertifikatsversion. Fehlende Angaben oder unbestätigte Ausnahmen erscheinen vor Veröffentlichung als Prüfpunkt.",
+          "sources": [
+            "ES_ENERGY"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-03",
+          "title": "Nutzfläche, Gesamtpreis und Nebenleistungen getrennt führen",
+          "scope": "Wohnungsverkauf und Wohnungsvermietung",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Art. 4 RD 515/1989 nennt unter anderem Nutzfläche, Pläne, Registeridentifikation sowie Gesamtpreis beziehungsweise Miete mit Nebenleistungen und Zahlungsbedingungen als bereitzuhaltende Informationen.",
+          "product_requirement": "Nutzfläche und bebaute Fläche nicht in ein einziges Quadratmeterfeld mischen. Gesamtpreis beziehungsweise Mietpreis, weitere Kosten, enthaltene Leistungen und Zahlungsplan getrennt speichern. Feldherkunft und sichtbarer Preisumfang gehören in das Exposé und die Portalzuordnung.",
+          "acceptance_criterion": "Ein Import mit bebauter Fläche überschreibt keine Nutzfläche. Eine Preisänderung aktualisiert die ausgewiesenen Komponenten und den dazugehörigen Stand in jeder Sprachfassung.",
+          "sources": [
+            "ES_HOUSING_INFO"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-04",
+          "title": "Projektunterlagen und Übergabeinformationen als kontrollierte Checkliste",
+          "scope": "Wohnungskauf, besonders Neubau und Projektvertrieb",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Art. 5 RD 515/1989 nennt bei Verkäufen zusätzliche Unterlagen und Informationen, unter anderem Genehmigungen und bei noch nicht fertiggestellten Wohnungen Baufortschritt und vorgesehenen Übergabetermin.",
+          "product_requirement": "Je Projekt und Einheit eine versionierte Dokumentenliste, Genehmigungsstatus, Bauphase und geplante Übergabe führen. Öffentliche Marketingunterlagen von geschützten Vertrags- und Eigentümerdokumenten trennen; Freigaben und bereitgestellte Versionen protokollieren.",
+          "acceptance_criterion": "Die Einheit verweist auf die richtige Projektunterlage. Der öffentliche Link gibt nur freigegebene Dateien aus; ein überholter Übergabetermin wird als Änderung nachvollziehbar.",
+          "sources": [
+            "ES_HOUSING_INFO"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-05",
+          "title": "Regionale Maklerregistrierung am Beispiel Katalonien berücksichtigen",
+          "scope": "Regionale Organisations- und Exposé-Vorlagen",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die Generalitat beschreibt das Immobilienmaklerregister Kataloniens als verpflichtend und nennt die Registerkennzeichnung beziehungsweise eindeutige Nummer auch für Werbung.",
+          "product_requirement": "Registrierungen und Gültigkeit je Organisation, verantwortlicher Einheit und Region speichern. Katalanische Vorlagen können AICAT-Kennzeichnung ausgeben. Diese Vorgabe darf nicht ungeprüft als identische Regel für ganz Spanien gelten.",
+          "acceptance_criterion": "Ein Objekt in Katalonien erhält die freigegebene regionale Kennzeichnung; eine Veröffentlichung in einer anderen Region verwendet deren eigenes Regelpaket und offene Prüfhinweise.",
+          "sources": [
+            "ES_CATALONIA_AGENTS"
+          ],
+          "unknowns": [
+            "Weitere autonome Regionen und kommunale Sonderregeln wurden nicht flächendeckend rechtlich geprüft."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-06",
+          "title": "Kurzzeit- und Ferienvermietung nach aktuellem Regional- und Zeitstand prüfen",
+          "scope": "Saisonale, touristische und sonstige kurzfristige Vermietung",
+          "verification_kind": "verified_change_plus_unresolved_scope",
+          "verified_fact": "Die aktuelle BOE-Konsolidierung von RD 1312/2024 weist auf Teilaufhebungen durch Urteile des Tribunal Supremo 2026 hin; der Stand ist 18.07.2026. Aus der ursprünglichen Fassung von 2024/2025 darf deshalb keine unveränderte universelle Registrierungspflicht übernommen werden.",
+          "product_requirement": "Mietzweck, Laufzeitart, Region, lokale Genehmigung und gegebenenfalls Registrierungsstatus separat modellieren. Anforderungen nach Datum versionieren und nur nach aktueller Prüfung aktivieren. Dauerwohnen und Ferienvermietung dürfen nicht automatisch dasselbe Inseratsprofil verwenden.",
+          "acceptance_criterion": "Eine alte NRA-Regel löst ohne bestätigtes aktuelles Länderpaket keinen pauschalen Veröffentlichungsblock aus. Ungeklärte regionale Fälle erhalten eine konkrete manuelle Prüfliste.",
+          "sources": [
+            "ES_SHORT_TERM"
+          ],
+          "unknowns": [
+            "Verbleibender aktueller Regelumfang nach den Urteilen sowie konkrete autonome und kommunale Genehmigungen müssen je Anwendungsfall geprüft werden. Keine vollständige Rechtsanalyse der Urteile erfolgt."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-07",
+          "title": "Fotocasa als vertraglich freigeschalteten JSON-Ausgang modellieren",
+          "scope": "Portalexport; Tarif und Objektart beachten",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Fotocasa Pro Basic beschreibt eine gesondert vereinbarte CRM-Pasarela mit JSON-Dateien. Sie überträgt nur in Richtung Fotocasa; JSON-Bestätigungen und Fehler sind auszuwerten. Das beschriebene Basic-Paket schließt den Neubauverkauf aus.",
+          "product_requirement": "Upload, Bestätigung, Fehler, veröffentlichte Portal-ID und Löschbestätigung als getrennte Zustände führen. Vertrag und Paket steuern unterstützte Objektarten. Einen Lead-Rückkanal oder Rückimport nicht aus diesem Gateway ableiten.",
+          "acceptance_criterion": "Ein fehlerhaftes Portalobjekt bleibt sichtbar in der Fehlerliste; 'exportiert' gilt nicht als Veröffentlichung. Neubauvertrieb wird erst mit passender vertraglicher Fähigkeit freigeschaltet.",
+          "sources": [
+            "ES_FOTOCASA"
+          ],
+          "unknowns": [
+            "Aktueller Partnerzugang, vollständiges JSON-Schema, Medienlimits, Löschverfahren und separater Lead-Eingang sind mit Fotocasa zu klären und in einem Pilot zu prüfen."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-08",
+          "title": "Idealista-Publikation nicht mit einer offenen Schreib-API gleichsetzen",
+          "scope": "Portaladapter idealista",
+          "verification_kind": "source_fact_with_access_unverified",
+          "verified_fact": "Die offizielle idealista/tools-Hilfe beschreibt Publikation aktiver Objekte zu idealista, der eigenen Website und je Paket weiteren Kanälen. Dies belegt Funktionen von idealista/tools, keinen frei verfügbaren Drittanbieter-Schreibzugang für Novalure.",
+          "product_requirement": "Idealista als Adapterkandidat mit Status 'Partnerzugang und Spezifikation zu klären' führen. Lesen, Veröffentlichen, Slots, Medien und Anfragen getrennt freigeben. Weder OpenImmo noch eine Such-API als Nachweis eines funktionierenden Inserats-Uploads verwenden.",
+          "acceptance_criterion": "Der Integrationskatalog nennt den tatsächlichen Vertrags- und Teststand. Erst ein nachweislich publiziertes und wieder entferntes Testobjekt schaltet den Ausgang für einen Kunden frei.",
+          "sources": [
+            "ES_IDEALISTA"
+          ],
+          "unknowns": [
+            "Freigabeprozess, aktuelles Feed-/API-Format, Zugangsdaten, Kontingente, Änderungs- und Löschbestätigung sowie Lead-Eingang wurden nicht am Kundenkonto geprüft."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-09",
+          "title": "Anfrageformular mit eigener Information und getrennter Zweckwahl",
+          "scope": "Öffentliches oder persönliches Web-Exposé",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die AEPD erläutert Informationen bei Datenerhebung in einer ersten und einer ausführlichen Ebene, unter anderem Verantwortlicher, Zweck, Rechtsgrundlage und Rechte. Bei Einwilligung verlangt sie eine aktive, informierte und nachweisbare Willensäußerung; unterschiedliche Zwecke sind unterscheidbar zu behandeln.",
+          "product_requirement": "Am Formular kurze lokalisierte Datenschutzinformation und vollständige Fassung verlinken. Anfragebearbeitung, optionale Werbung und optionale Verhaltensanalyse getrennt konfigurieren. Nicht jede notwendige Anfragebearbeitung pauschal mit einem Werbe-Einwilligungshaken begründen. Quelle, Objekt, Formular- und Informationstextversion speichern.",
+          "acceptance_criterion": "Eine Besichtigungsanfrage ist ohne Zustimmung zu Werbung oder optionaler Analyse möglich. Nicht vorausgewählte Optionen und nachvollziehbare Widerrufe wirken auf die entsprechenden Zwecke.",
+          "sources": [
+            "ES_AEPD_INFORMATION",
+            "ES_AEPD_CONSENT"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "ES-10",
+          "title": "Identifizierte Exposé-Nutzung von anonymer Statistik abgrenzen",
+          "scope": "Abschnittszeit, Klicks, Downloads und persönliche Lead-Timeline",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die AEPD-Ausnahme für bestimmte Reichweitenmessung setzt eng begrenzte Messzwecke und ausschließlich anonyme Statistiken voraus; eine Verknüpfung mit anderen Verarbeitungen beziehungsweise websiteübergreifenden Kennungen ist ausgeschlossen. Genannte Zeit-, Scroll- und Klickstatistiken sind aggregiert. Daraus folgt keine Ausnahme für eine namentliche Lead-Timeline.",
+          "product_requirement": "Identifizierte Abschnittszeiten und Klicks als separate optionale Analysefunktion mit geprüfter Konfiguration und Einwilligung behandeln, soweit die eingesetzten Trackingtechnologien dies erfordern. Anfragebearbeitung bleibt verfügbar. Persönliche Link-Tokens vor Crawlern und Weitergabe schützen; Zuordnungssicherheit anzeigen. Rohereignisse und Aufbewahrung zweckbezogen begrenzen.",
+          "acceptance_criterion": "Ohne Analysefreigabe entsteht keine optionale benannte Verhaltens-Timeline. Ein Widerruf stoppt zukünftige Tracking-Ereignisse und verhindert darauf beruhende noch nicht ausgeführte Aktionen. Ein Linkaufruf beweist weder die tatsächliche Person noch Kaufabsicht.",
+          "sources": [
+            "ES_AEPD_ANALYTICS"
+          ],
+          "unknowns": [
+            "Konkrete technische Messung, Gerätezugriffe, Rechtsgrundlagen, Weitergaben, Profilbildung und Aufbewahrung sind vor Auslieferung zu prüfen. 'Ohne Cookies' ist keine pauschale Ausnahme."
+          ],
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "country": "IE",
+      "country_name": "Irland",
+      "locale_proposal": "en-IE",
+      "currency_proposal": "EUR",
+      "requirements": [
+        {
+          "id": "IE-01",
+          "title": "Irische Adressen und Eircode ohne deutsche Pflichtstruktur erfassen",
+          "scope": "Alle Objektarten einschließlich neuer Projekte",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Eircode ist ein siebenstelliger eindeutiger Adresscode. Das Behördenportal weist auf viele nicht eindeutige Adressen sowie Adressen ohne Hausname oder Hausnummer hin. Neue Adressen erhalten ihren Eircode erst nach Aufnahme in die zuständige Datenbasis.",
+          "product_requirement": "Mehrzeilige Adresse, Townland, County, Lage und Eircode unterstützen. Hausnummer nicht generell erzwingen. Für Neubauten ist 'Eircode noch nicht zugeteilt' ein eigener Status. Formatprüfung von einer autoritativen Adressverifikation unterscheiden.",
+          "acceptance_criterion": "Ein Objekt mit Townland-Adresse ohne Hausnummer lässt sich korrekt anlegen; ein Neubau ohne bereits zugeteilten Eircode bleibt als Entwurf möglich.",
+          "sources": [
+            "IE_EIRCODE_GOV",
+            "IE_EIRCODE_NEW"
+          ],
+          "unknowns": [
+            "Lizenz und Schnittstelle einer professionellen Eircode-Adressprüfung sind gesondert zu klären; die öffentliche Suche belegt keinen frei nutzbaren API-Zugang."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-02",
+          "title": "Neue und ältere BER-Schemata parallel abbilden",
+          "scope": "Energiezertifikate für Wohn- und Gewerbeobjekte",
+          "verification_kind": "verified_current_change_plus_product_inference",
+          "verified_fact": "SEAI bestätigt eine vereinfachte BER-Skala A0–G ab 24.05.2026. Für zuvor ausgestellte BERs gelten die bisherigen Werbevorgaben während ihrer verbleibenden zehnjährigen Gültigkeit weiter.",
+          "product_requirement": "Bewertungsschema, Ausstellungsdatum, Rating, neunstellige BER-Nummer, EPI und Dokument getrennt speichern. Alte Unterklassen nicht in die neue Skala umdeuten. Ausnahmen dokumentieren und nicht mit einem fehlenden Zertifikat verwechseln.",
+          "acceptance_criterion": "Ein älteres A2-Zertifikat und ein neues A0-Zertifikat lassen sich gleichzeitig korrekt importieren und anzeigen; eine starre alte A1/A2-Auswahlliste blockiert keine neuen Daten.",
+          "sources": [
+            "IE_BER"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-03",
+          "title": "BER-Ausgabe und Zertifikatsbereitstellung kanalabhängig prüfen",
+          "scope": "Verkauf, Vermietung, Neubau; Ausnahmen prüfen",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "SEAI nennt gültiges BER-Zertifikat und Beratungsbericht für erfasste Bau-, Verkaufs- und Vermietungsfälle sowie BER-Angaben in Werbung; Details hängen vom Medium ab. Ausnahmen sind vorgesehen und die BER-Nummer lässt sich im Register prüfen.",
+          "product_requirement": "Web-Exposé, PDF und Portal gegen das passende BER-Schema und die Ausgabevorgaben prüfen. Zertifikat und Beratungsbericht als Dokumente hinterlegen; Registerprüfung, Dokumentstand und Ausnahmegrund festhalten.",
+          "acceptance_criterion": "Jeder Kanal zeigt seine erforderliche BER-Ausgabe. Ein bloßes 'Energieklasse vorhanden' im CRM reicht nicht als Bestätigung des öffentlichen Inserats.",
+          "sources": [
+            "IE_BER"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-04",
+          "title": "PSRA-Lizenz der zuständigen Organisation sichtbar halten",
+          "scope": "Maklerorganisation, Web-Exposé und Geschäftskommunikation",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Der offizielle PSRA-Auditleitfaden nennt die sechsstellige Lizenznummer des Arbeitgebers beziehungsweise selbständigen Anbieters unter anderem für Webseiten und Werbung; das aktuelle Register ermöglicht die Prüfung lizenzierter Anbieter.",
+          "product_requirement": "Organisation, zuständige Niederlassung, Lizenznummer, Laufzeit und freigegebene Dienstleistungen führen. Passende Nummer in Exposé, Website und entsprechenden Kommunikationsvorlagen ausgeben. Lizenzgültigkeit als Veröffentlichungskontrolle vorsehen.",
+          "acceptance_criterion": "Die veröffentlichende Organisation ist eindeutig zugeordnet; abgelaufene oder ungeklärte Lizenzdaten erzeugen einen Prüffall. Die Kontaktnummer eines Mitarbeiters ersetzt nicht automatisch die Organisationslizenz.",
+          "sources": [
+            "IE_PSRA_AUDIT",
+            "IE_PSRA_REGISTER"
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-05",
+          "title": "Kaufangebote als nachvollziehbaren Angebotsverlauf führen",
+          "scope": "Immobilienverkauf und Projektvertrieb",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die PSRA-Erläuterung der Mindeststandards nennt die Weitergabe von Angeboten samt Bedingungen an den Auftraggeber, soweit keine abweichende schriftliche Weisung vorliegt, und schriftliche Bestätigungen gegenüber Bietern außerhalb der Auktion. Die aktuelle PSRA-Ressourcenseite bietet einen Record-of-Offers-Vordruck mit Stand 08/2026.",
+          "product_requirement": "Bieter, Angebot, Bedingungen, Zeit, Version und Entscheidungen in einem Änderungsprotokoll führen. Bestätigung und Mitteilung an den Auftraggeber als getrennte Aufgaben mit Nachweis modellieren. Neue Beträge ergänzen den Verlauf; alte Angebote werden nicht überschrieben.",
+          "acceptance_criterion": "Ein geändertes Angebot zeigt seinen Vorgänger und die zugehörigen Bestätigungen. Bots oder Exposé-Klicks erzeugen kein fiktives Angebot. Auktionen erhalten einen gesonderten Ablauf.",
+          "sources": [
+            "IE_PSRA_MINIMUM",
+            "IE_PSRA_FORMS"
+          ],
+          "unknowns": [
+            "Der aktuelle DOCX-Vordruck wurde als offizieller Link bestätigt, jedoch nicht vollständig feldweise ausgewertet. Vollständige gesetzliche Aufbewahrungs- und Sonderregeln bleiben vor Umsetzung zu prüfen."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-06",
+          "title": "Sale agreed, sold und Portalstatus ausdrücklich trennen",
+          "scope": "Verkauf, Vermietung und Auftragsende",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die PSRA-Mindeststandard-Erläuterung unterscheidet vereinbart, vermietet und verkauft sowie Auftragsende. Für bestimmte Statuskorrekturen und die Entfernung von Werbung nennt sie Zehn-Arbeitstage-Fristen mit unterschiedlichen Auslösern.",
+          "product_requirement": "Sale agreed, Vertragsabschluss, sold, let und Auftrag beendet getrennt speichern. Je Ereignis Verantwortliche, Frist und Kanalabgleich konfigurieren. Portalübertragung und tatsächliche öffentliche Statusänderung benötigen einen eigenen Nachweis.",
+          "acceptance_criterion": "Ein vereinbarter Verkauf gilt nicht automatisch als abgeschlossen. Jeder offene Kanalabgleich hat eine fällige Aufgabe; ein fehlgeschlagener Export lässt die Fristwarnung bestehen.",
+          "sources": [
+            "IE_PSRA_MINIMUM"
+          ],
+          "unknowns": [
+            "Die Fristen sind aus dem offiziellen erläuternden Leitfaden abgeleitet; exakte Auslöser, Vertragssonderfälle und aktuelle Gesetzesfassung vor endgültiger Regelaktivierung prüfen."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-07",
+          "title": "Daft-Suchzugang und Inseratsveröffentlichung unterscheiden",
+          "scope": "Portaladapter Daft.ie",
+          "verification_kind": "source_fact_with_access_unverified",
+          "verified_fact": "Die öffentlich geöffnete Daft-API-v3-Dokumentation beschreibt einen Zugang zu einem Teil der Objektdaten über SOAP/HTTP mit API-Schlüssel vom Account Manager, insbesondere Such- und Leseoperationen. Dies belegt keinen Drittanbieter-Upload von Inseraten.",
+          "product_requirement": "Daft als Portaladapter mit separat zu bestätigenden Publikations- und Lead-Fähigkeiten führen. Zugang, Mapping, BER-Schemata, Medien, Adressfreigabe, Portal-ID, Bestätigungen und Löschung in einem Pilot prüfen.",
+          "acceptance_criterion": "Eine erfolgreiche Suchabfrage aktiviert keinen Schreibzugang. Der Katalog benennt offen, ob Veröffentlichung, Änderungen, Rücknahme und Anfragen tatsächlich getestet sind.",
+          "sources": [
+            "IE_DAFT_API",
+            "IE_DAFT_PLACING"
+          ],
+          "unknowns": [
+            "Aktuelle vertragliche Upload-/Feed-Spezifikation, Partnerfreigabe, Limits, BER-Änderungen 2026 und Lead-Rückkanal sind mit Daft zu klären. Kein OpenImmo-Nachweis."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-08",
+          "title": "MyHome-Automatik als vorhandene Möglichkeit mit offenem Partnerzugang planen",
+          "scope": "Portaladapter MyHome.ie",
+          "verification_kind": "source_fact_with_access_unverified",
+          "verified_fact": "Die offizielle MyHome-Hilfe nennt Agentenverwaltung, Berichte, Account Manager und automatischen Immobilien-Upload. Sie nennt mehrere Vermarktungsbereiche einschließlich Neubau; ein konkretes frei verfügbares Feed-Schema wurde damit nicht verifiziert.",
+          "product_requirement": "MyHome als Adapterkandidat mit Vertrag und Partnerfreigabe führen. Objektart, Projekt-/Einheitenstruktur, Medien und Ausgabestatus separat abbilden. Uploadprotokoll und Rückkanäle erst nach bestätigter Spezifikation implementieren.",
+          "acceptance_criterion": "Ein Test umfasst Anlage, Änderung, Statuswechsel und Rücknahme eines freigegebenen Testobjekts. Der Integrationskatalog behauptet vor dieser Abnahme keine einsatzbereite Verbindung.",
+          "sources": [
+            "IE_MYHOME"
+          ],
+          "unknowns": [
+            "Schema, Transport, Berechtigungen, Veröffentlichungslimits, Quittierungen, Neubauvertragsumfang und Lead-Eingang sind mit dem Portal zu klären. Kein pauschaler OpenImmo-Nachweis."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-09",
+          "title": "Anfrageabwicklung und identifiziertes Exposé-Tracking getrennt freigeben",
+          "scope": "Web-Exposé mit Abschnittszeiten, Klicks und Lead-Timeline",
+          "verification_kind": "source_fact_plus_product_inference",
+          "verified_fact": "Die irische DPC verlangt Einwilligung für Analytics-Cookies. Bei Speicherung oder Zugriff auf Informationen im Endgerät gilt grundsätzlich das Einwilligungserfordernis mit begrenzter Ausnahme für die ausdrücklich angeforderte notwendige Leistung. Personenbeziehbare Onlinekennungen lösen zusätzlich Datenschutzpflichten aus.",
+          "product_requirement": "Notwendige Formularfunktion ohne optionale Analyse ermöglichen. Trackingfreigabe, Widerruf und Informationstextversion speichern. Eine identifizierte Timeline und darauf beruhende Automationen erhalten einen eigenen Zweck und Freigabestatus. Persönliche Links sind keine automatische Einwilligung und keine sichere Identitätsbestätigung.",
+          "acceptance_criterion": "Ablehnung optionaler Analyse verhindert weder Anfrage noch Terminwunsch. Vor Freigabe entsteht keine optionale benannte Nutzungsmessung; Widerruf beendet künftige Messung und verhindert noch ausstehende darauf gestützte Aktionen.",
+          "sources": [
+            "IE_DPC_ANALYTICS",
+            "IE_DPC_TRACKING",
+            "IE_DPC_NECESSARY"
+          ],
+          "unknowns": [
+            "Konkrete Gerätezugriffe, transparente Profilbildung, Rechtsgrundlagen, Aufbewahrung, Empfänger und technische Umsetzung sind vor Auslieferung gesondert zu beurteilen."
+          ],
+          "priority": "P1"
+        },
+        {
+          "id": "IE-10",
+          "title": "Irische Sprach-, Projekt- und Vertriebsdarstellung konfigurierbar machen",
+          "scope": "Kauf, Miete und Neubauvertrieb",
+          "verification_kind": "product_decision",
+          "verified_fact": "Für diese Gestaltung wird keine gesetzliche Pflicht zu einer irischen Sprachfassung oder zu einem bestimmten Projekt-Dashboard behauptet.",
+          "product_requirement": "en-IE und EUR als Vorschlag; weitere Sprachfassungen optional. Termine in der konfigurierten Ortszeitzone ausgeben. Projekt, Phase und Einheit getrennt führen; Preis, Verfügbarkeit, Reservierung, Angebot und Vertragsabschluss je Einheit verfolgen. Lokale Bezeichnungen sind von intern stabilen Statuscodes getrennt.",
+          "acceptance_criterion": "Ein Phasenwechsel kann einzelne Einheiten aktualisieren, ohne andere als verkauft zu markieren. Ein Termin zeigt Ort und Zeitzone; die Sprache des Interessenten verändert keine Vertrags- oder Publikationsregel.",
+          "sources": [],
+          "priority": "P1"
+        }
+      ]
+    }
+  ],
+  "sources": {
+    "AT_ENERGY_AD": {
+      "title": "RIS: EAVG 2012 § 3, Fassung gültig ab 01.07.2026",
+      "url": "https://ris.bka.gv.at/eli/bgbl/i/2012/27/P3/NOR40278044",
+      "authority": "Bundeskanzleramt / RIS",
+      "verified": "opened_current_text",
+      "effective_from": "2026-07-01"
+    },
+    "AT_ENERGY_DELIVERY": {
+      "title": "RIS: EAVG 2012 § 4, Fassung gültig ab 01.07.2026",
+      "url": "https://ris.bka.gv.at/eli/bgbl/i/2012/27/P4/NOR40278045",
+      "authority": "Bundeskanzleramt / RIS",
+      "verified": "opened_current_text",
+      "effective_from": "2026-07-01"
+    },
+    "AT_RENT_COMMISSION": {
+      "title": "oesterreich.gv.at: Provision",
+      "url": "https://www.oesterreich.gv.at/de/themen/bauen_und_wohnen/wohnen/3/1/Seite.210222",
+      "authority": "Bundesministerium für Justiz",
+      "verified": "primary_page_read",
+      "page_updated": "2026-01-01"
+    },
+    "AT_BTVG": {
+      "title": "oesterreich.gv.at: Frei finanzierte Eigentumswohnungen",
+      "url": "https://www.oesterreich.gv.at/de/themen/bauen_und_wohnen/wohnen/8/Seite.210190",
+      "authority": "Österreichisches Behördenportal",
+      "verified": "primary_page_read"
+    },
+    "AT_WILLHABEN": {
+      "title": "willhaben: Leistungen für Immobilienmakler",
+      "url": "https://immo.willhaben.at/makler/",
+      "authority": "willhaben / Portalbetreiber",
+      "verified": "primary_page_read",
+      "limits": "Bestätigt Übertragung aus Maklersoftware, nicht ein öffentlich verfügbares konkretes Protokoll, Vertragszugang oder unsere erfolgreiche Integration."
+    },
+    "AT_IS24": {
+      "title": "ImmoScout24 Österreich: AGB für gewerbliche Anbieter",
+      "url": "https://www.immobilienscout24.at/unternehmen/AGB/agb-fuer-gewerbliche-anbieter.html",
+      "authority": "Immobilien Scout Österreich GmbH",
+      "verified": "primary_page_read",
+      "limits": "Kein Beleg dafür, dass der deutsche API-Zugang oder ein generischer OpenImmo-Export ohne länderspezifischen Vertrag in Österreich funktioniert."
+    },
+    "AT_COOKIES": {
+      "title": "Österreichische Datenschutzbehörde: Datenschutz & Cookies",
+      "url": "https://dsb.gv.at/faqs/datenschutz-cookies",
+      "authority": "Österreichische Datenschutzbehörde",
+      "verified": "primary_page_opened"
+    },
+    "DE_ENERGY_AD": {
+      "title": "Gesetze im Internet: § 87, Pflichtangaben in Immobilienanzeigen",
+      "url": "https://www.gesetze-im-internet.de/geg/__87.html",
+      "authority": "Bundesministerium der Justiz / Bundesamt für Justiz",
+      "verified": "opened_current_text",
+      "limits": "Die aktuelle Seite wird als Gebäudemodernisierungsgesetz (GModG) betitelt, obwohl der URL-Pfad /geg/ lautet. Nicht blind einen älteren Gesetzesnamen in Vorlagen festschreiben."
+    },
+    "DE_BROKER_FORM": {
+      "title": "BGB § 656a: Textform",
+      "url": "https://www.gesetze-im-internet.de/bgb/__656a.html",
+      "authority": "Bundesministerium der Justiz / Bundesamt für Justiz",
+      "verified": "opened_current_text"
+    },
+    "DE_BROKER_SCOPE": {
+      "title": "BGB § 656b: Persönlicher Anwendungsbereich",
+      "url": "https://www.gesetze-im-internet.de/bgb/__656b.html",
+      "authority": "Bundesministerium der Justiz / Bundesamt für Justiz",
+      "verified": "opened_current_text"
+    },
+    "DE_BROKER_FEE": {
+      "title": "BGB § 656c: Lohnanspruch bei Tätigkeit für beide Parteien",
+      "url": "https://www.gesetze-im-internet.de/bgb/__656c.html",
+      "authority": "Bundesministerium der Justiz / Bundesamt für Justiz",
+      "verified": "opened_current_text"
+    },
+    "DE_RENT_BROKER": {
+      "title": "WoVermRG § 2",
+      "url": "https://www.gesetze-im-internet.de/wovermrg/__2.html",
+      "authority": "Bundesministerium der Justiz / Bundesamt für Justiz",
+      "verified": "opened_current_text"
+    },
+    "DE_TENANT_DATA": {
+      "title": "DSK: Orientierungshilfe Mietinteressenten, Version 2.0, Januar 2026",
+      "url": "https://www.datenschutzkonferenz-online.de/media/oh/OH_Einholung_von_Selbstauskuenften_Mietinteressenten_V2.pdf",
+      "authority": "Konferenz der unabhängigen Datenschutzaufsichtsbehörden des Bundes und der Länder",
+      "verified": "primary_pdf_opened",
+      "page_updated": "2026-01"
+    },
+    "DE_TENANT_FORM": {
+      "title": "DSK: Musterfragebogen, Januar 2026",
+      "url": "https://www.datenschutzkonferenz-online.de/media/oh/OH_Einholung_von_Selbstauskuenften_Mietinteressenten_V2_Anhang.pdf",
+      "authority": "Datenschutzkonferenz",
+      "verified": "primary_pdf_read"
+    },
+    "DE_IS24_API": {
+      "title": "ImmoScout24: Real Estate Listings APIs",
+      "url": "https://api.immobilienscout24.de/api-docs/import-export/introduction/",
+      "authority": "ImmobilienScout24 / offizielles Developer Portal",
+      "verified": "primary_api_documentation_opened",
+      "limits": "Vertragliche Freischaltung, Berechtigungen und tatsächliche Publikation müssen im Pilot nachgewiesen werden."
+    },
+    "DE_IMMOWELT_API": {
+      "title": "immowelt.de: API-FAQ",
+      "url": "https://www.immowelt.de/anbieten/gewerbe/apifaq",
+      "authority": "immowelt / Portalbetreiber",
+      "verified": "primary_page_opened",
+      "limits": "Beschreibt Daten zur eigenen Homepage. Kein Beleg eines Schreib-/Veröffentlichungszugangs und keine Garantie für einen aktuellen OpenImmo-Uploadvertrag."
+    },
+    "ES_ENERGY": {
+      "title": "BOE: Real Decreto 390/2021, insbesondere Art. 15 und 17",
+      "url": "https://www.boe.es/buscar/act.php?id=BOE-A-2021-9176",
+      "authority": "Agencia Estatal Boletín Oficial del Estado",
+      "verified": "opened_current_consolidated_text",
+      "page_updated": "2025-07-23"
+    },
+    "ES_HOUSING_INFO": {
+      "title": "BOE: Real Decreto 515/1989, insbesondere Art. 4 und 5",
+      "url": "https://www.boe.es/eli/es/rd/1989/04/21/515/con",
+      "authority": "Agencia Estatal Boletín Oficial del Estado",
+      "verified": "primary_consolidation_and_relevant_articles_read",
+      "limits": "Der konkret anwendbare Umfang und ergänzende regionale Vorschriften wurden nicht umfassend rechtlich ausgelegt. Bereithaltungspflichten bedeuten nicht, dass jede personenbezogene Vertragsunterlage öffentlich ins Exposé gehört."
+    },
+    "ES_CATALONIA_AGENTS": {
+      "title": "Generalitat de Catalunya: Registre d'Agents Immobiliaris de Catalunya",
+      "url": "https://tramits.gencat.cat/ca/tramits/tramits-temes/Registre_Agents_Immobiliaris_Catalunya",
+      "authority": "Generalitat de Catalunya",
+      "verified": "official_page_content_read",
+      "limits": "Regionale Regel Kataloniens; kein Beleg identischer Vorgaben für ganz Spanien."
+    },
+    "ES_SHORT_TERM": {
+      "title": "BOE: Real Decreto 1312/2024, konsolidierter Stand und Hinweise auf Teilaufhebungen 2026",
+      "url": "https://www.boe.es/buscar/act.php?id=BOE-A-2024-26931",
+      "authority": "Agencia Estatal Boletín Oficial del Estado",
+      "verified": "opened_current_consolidated_text_and_annulment_notice",
+      "page_updated": "2026-07-18",
+      "limits": "Die BOE-Konsolidierung ist eine Informationsfassung. Sie verweist unter anderem auf die Urteile vom 19.05.2026 und 01.06.2026. Der verbleibende gesamte Rechtsumfang wurde nicht abschließend geprüft."
+    },
+    "ES_FOTOCASA": {
+      "title": "Fotocasa Pro: Cláusulas Fotocasa Pro Basic v5 365",
+      "url": "https://pro.fotocasa.es/condiciones/clausulas-basic/",
+      "authority": "Fotocasa / Portalbetreiber",
+      "verified": "official_contract_page_read",
+      "limits": "Bestätigt vertragliche JSON-Pasarela und deren Richtung. Keine Prüfung eines realen Partnerkontos oder eines vollständigen Integrationsschemas. Paketbedingungen nicht ungeprüft auf andere Fotocasa-Verträge übertragen."
+    },
+    "ES_IDEALISTA": {
+      "title": "idealista/tools Hilfe: Todo sobre publicación",
+      "url": "https://www.idealista.com/tools/centrodeayuda/articulos/todo-sobre-publicacion/",
+      "authority": "idealista / Portalbetreiber",
+      "verified": "official_help_content_read",
+      "limits": "Beschreibt Funktionen von idealista/tools. Kein Nachweis frei verfügbarer Drittanbieter-Schreib-API, eines OpenImmo-Formats oder einer für Novalure freigeschalteten Verbindung."
+    },
+    "ES_AEPD_INFORMATION": {
+      "title": "AEPD: Derecho de información",
+      "url": "https://www.aepd.es/derechos-y-deberes/conoce-tus-derechos/derecho-de-informacion",
+      "authority": "Agencia Española de Protección de Datos",
+      "verified": "official_page_opened_and_read",
+      "page_updated": "2023-11-10"
+    },
+    "ES_AEPD_CONSENT": {
+      "title": "AEPD: Cómo solicitar el consentimiento según el RGPD",
+      "url": "https://www.aepd.es/preguntas-frecuentes/2-tus-obligaciones-como-responsable-del-tratamiento/5-bases-legitimadoras-del-tratamiento/FAQ-0211-segun-el-rgpd-como-debe-solicitarse-el-consentimiento-de-los-interesados-para-tratar-sus-datos-personales",
+      "authority": "Agencia Española de Protección de Datos",
+      "verified": "official_faq_read"
+    },
+    "ES_AEPD_ANALYTICS": {
+      "title": "AEPD: Guía sobre el uso de cookies para herramientas de medición de audiencia",
+      "url": "https://www.aepd.es/guias/guia-cookies-analiticas-externas.pdf",
+      "authority": "Agencia Española de Protección de Datos",
+      "verified": "primary_pdf_opened_and_relevant_pages_read",
+      "page_updated": "2024-01",
+      "limits": "Enge Ausnahme für bestimmte anonyme Reichweitenmessung. Kein pauschaler Freibrief für die Verknüpfung von Klicks oder Aufenthaltszeit mit namentlichen CRM-Leads."
+    },
+    "IE_EIRCODE_GOV": {
+      "title": "gov.ie: Eircode",
+      "url": "https://www.gov.ie/en/department-of-culture-communications-and-sport/policy-information/eircode/",
+      "authority": "Government of Ireland",
+      "verified": "official_page_opened_and_read",
+      "page_updated": "2025-09-11"
+    },
+    "IE_EIRCODE_NEW": {
+      "title": "Eircode: Getting an Eircode",
+      "url": "https://www.eircode.ie/getting-an-eircode",
+      "authority": "Eircode / offizieller Betreiber",
+      "verified": "official_page_read"
+    },
+    "IE_BER": {
+      "title": "SEAI: BER sales and rental guidelines",
+      "url": "https://www.seai.ie/ber/ber-advertising",
+      "authority": "Sustainable Energy Authority of Ireland",
+      "verified": "official_page_opened_and_read",
+      "effective_from_new_scale": "2026-05-24",
+      "limits": "Die Seite verweist auf getrennte alte und neue Werbevorgaben. Ein vorhandener Altcode aus einer alten Portal-API ist deshalb kein hinreichendes aktuelles vollständiges BER-Datenmodell."
+    },
+    "IE_PSRA_AUDIT": {
+      "title": "PSRA: Audit Guide June 2022",
+      "url": "https://www.psr.ie/wp-content/uploads/2022/06/Audit-Guide-June-2022.pdf",
+      "authority": "Property Services Regulatory Authority",
+      "verified": "official_pdf_relevant_content_read",
+      "page_updated": "2022-06"
+    },
+    "IE_PSRA_REGISTER": {
+      "title": "PSRA: Register of Licensed Property Services Providers",
+      "url": "https://www.psr.ie/psra-registers/register-of-licensed-property-services-providers/",
+      "authority": "Property Services Regulatory Authority",
+      "verified": "official_register_page_read",
+      "limits": "Es wurde kein konkreter Makler oder dessen tatsächlicher Lizenzstatus geprüft."
+    },
+    "IE_PSRA_MINIMUM": {
+      "title": "PSRA: Minimum Standards Regulations, Plain English Guide",
+      "url": "https://www.psr.ie/wp-content/uploads/2022/03/SI-Minimum-Standards-Regulation-Plain-English-Guide.pdf",
+      "authority": "Property Services Regulatory Authority",
+      "verified": "official_pdf_opened_and_relevant_pages_read",
+      "limits": "Offizielle Erläuterung der Mindeststandards, kein Ersatz der vollständigen aktuellen Rechtsnorm. Sonderfälle und konkrete Fristauslöser vor Regelaktivierung prüfen."
+    },
+    "IE_PSRA_FORMS": {
+      "title": "PSRA: Forms and Resources for Licensees",
+      "url": "https://www.psr.ie/licensees/forms-and-resources-for-licensees/",
+      "authority": "Property Services Regulatory Authority",
+      "verified": "official_page_opened; current_Record_of_Offers_link_confirmed",
+      "page_updated": "2026-08-12",
+      "document_link": "https://www.psr.ie/wp-content/uploads/2026/08/Record-of-Offers-S61-08-2026-.docx",
+      "limits": "Aktueller DOCX-Vordruck nur als offizieller Download bestätigt, nicht vollständig feldweise ausgelesen."
+    },
+    "IE_DAFT_API": {
+      "title": "Daft.ie API v3 documentation",
+      "url": "https://api.daft.ie/doc/v3/",
+      "authority": "Daft.ie / offizieller Portalbetreiber",
+      "verified": "official_api_documentation_opened_and_read",
+      "limits": "Öffentliche Dokumentation für einen Teil der Objektdaten mit Such-/Leseoperationen. Kein Nachweis des aktuellen Publikationsvertrags, Uploadschemas oder einer neuen BER-Skala in allen Beispielwerten."
+    },
+    "IE_DAFT_PLACING": {
+      "title": "Daft.ie Support: Placing an Ad",
+      "url": "https://support.daft.ie/hc/en-ie/articles/360002997078-Placing-an-Ad",
+      "authority": "Daft.ie / offizieller Portalbetreiber",
+      "verified": "official_help_content_read",
+      "limits": "Beschreibt manuelle Inseratserstellung; belegt keine externe Publishing-Schnittstelle."
+    },
+    "IE_MYHOME": {
+      "title": "MyHome.ie: Help",
+      "url": "https://www.myhome.ie/help",
+      "authority": "MyHome.ie / offizieller Portalbetreiber",
+      "verified": "official_help_content_read",
+      "limits": "Bestätigt automatische Uploadmöglichkeit und Account-Manager-Modell. Konkreter Transport, Feedformat, Vertrag und erfolgreiche Verbindung bleiben offen."
+    },
+    "IE_DPC_ANALYTICS": {
+      "title": "DPC: Do I need consent for analytics cookies?",
+      "url": "https://www.dataprotection.ie/en/faqs/cookies/do-i-need-consent-analytics-cookies",
+      "authority": "Data Protection Commission Ireland",
+      "verified": "official_faq_opened_and_read"
+    },
+    "IE_DPC_TRACKING": {
+      "title": "DPC: Lawful basis for cookies and other tracking technologies",
+      "url": "https://www.dataprotection.ie/en/faqs/cookies/can-i-rely-lawful-basis-other-consent-storage-cookies-or-use-other-tracking-technologies",
+      "authority": "Data Protection Commission Ireland",
+      "verified": "official_faq_opened_and_read"
+    },
+    "IE_DPC_NECESSARY": {
+      "title": "DPC: Cookies and other tracking, consent and necessary-service exception",
+      "url": "https://www.dataprotection.ie/en/faqs/cookies/my-website-or-app-uses-cookies-and-other-tracking-do-i-have-get-consent-users",
+      "authority": "Data Protection Commission Ireland",
+      "verified": "official_faq_read"
+    }
+  }
+}

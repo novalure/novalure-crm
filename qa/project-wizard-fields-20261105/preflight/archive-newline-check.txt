@@ -1,0 +1,7 @@
+LOCAL_WIZARD_FAILURE AssertionError: baseline app must be captured from exact 349 commit
++ actual - expected
+
++ '3bb6f6d2577aeffda4b32fcfee3baad15e91656b91a96043f52a791340cae388'
+- '4fa6326dc7dbf5b093f4da2adef670806e2a17b2c2bd6d8385a624d8d8d72900'
+
+{"output":"C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\qa\\project-wizard-fields-20261105\\baseline","totals":{"checks":0,"passed":0,"failed":0},"failure":{"name":"AssertionError","message":"baseline app must be captured from exact 349 commit\n+ actual - expected\n\n+ '3bb6f6d2577aeffda4b32fcfee3baad15e91656b91a96043f52a791340cae388'\n- '4fa6326dc7dbf5b093f4da2adef670806e2a17b2c2bd6d8385a624d8d8d72900'\n"}}

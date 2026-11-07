@@ -1,6 +1,8 @@
 "use client";
+import { PropertyCostWorkspace } from "@/components/property-cost-workspace";
+import { PropertyTextWorkspace } from "@/components/property-text-workspace";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -23,9 +25,9 @@ import {
   buildPropertyAssets,
   buildPropertyDataQualityIssues,
   buildPropertyMatches,
+  createPropertyUnitBoardScope,
   getPropertyDepartmentTabs,
   getPropertyActionStates,
-  getPropertyFieldSections,
   PROPERTY_CHANNEL_TYPES,
   PROPERTY_CHANNEL_PRICE_KEYS,
   PROPERTY_COST_GROUPS,
@@ -49,9 +51,27 @@ import { PropertyCoreEditor } from "@/components/property-core-editor";
 import { PropertyRelationshipEditor } from "@/components/property-relationship-editor";
 import { PropertyMediaGallery } from "@/components/property-media-gallery";
 import { PropertyDocumentReview } from "@/components/property-document-review";
+import { PropertyPortalWorkspace } from "@/components/property-portal-workspace";
+import { WebExposeCommandCenter } from "@/components/web-expose-command-center";
+import { PropertyInquiryList } from "@/components/property-inquiry-list";
+import { PropertyInquiryAssignment } from "@/components/property-inquiry-assignment";
+import { PropertyBookingWorkspace } from "@/components/property-booking-workspace";
+import { GuidedPropertyCreateWorkspace } from "@/components/guided-property-create-workspace";
+import type { PropertyInquiryState } from "@/lib/property-inquiries";
 import { PropertyExposeWorkspace } from "@/components/property-expose-workspace";
-import { createPropertyDraftStore } from "@/lib/property-draft-store";
+import { createPropertyDraftStore, propertyDraftScopeKey, protectPropertyDraftUnload, type PropertyDraftStore, type PropertyDraft, type PropertyCostDraft } from "@/lib/property-draft-store";
+import { usePropertyDraft } from "@/lib/use-property-draft";
 import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
+import { createPropertyGeography } from "@/lib/property-country";
+import { PropertyGeographyFields } from "@/components/property-geography-fields";
+import { PropertyEnergyFields } from "@/components/property-energy-fields";
+import { PropertyDetailsEditor } from "@/components/property-details-editor";
+import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput } from "@/lib/property-details";
+import { confirmedPropertyCreation, propertyWorkspaceEndpoint } from "@/lib/property-interactions";
+import { PROPERTY_AREA_MAX_SQM } from "@/lib/property-area-input";
+import { propertyCoreNumberIsKnown } from "@/lib/property-core-numbers";
+import { DirectPropertyNumericDraftError, normalizeDirectPropertyNumericDraft } from "@/lib/property-direct-numeric";
+import { applyPropertyChannelPriceEdits, propertyChannelPriceValue, type PropertyChannelPriceEdits, type PropertyChannelPriceState } from "@/lib/property-channel-price-draft";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -64,6 +84,7 @@ type PropertyCommandCenterProps = {
   leads: Lead[];
   initialSelectedAssetId?: string;
   onOpenLeadInbox: () => void;
+  onOpenLead?: (leadId: string) => void;
   onOpenReservations: () => void;
   onOpenUnits: (scope?: PropertyUnitBoardScope) => void;
   onClearPropertyFocus?: () => void;
@@ -81,55 +102,7 @@ type PropertyCommandCenterProps = {
   units: PropertyUnit[];
   users?: WorkspaceUser[];
   draftUserId?: string;
-};
-
-type PropertyDraft = {
-  address: string;
-  areaSqm: string;
-  availableFrom: string;
-  availableFromText: string;
-  availabilityNote: string;
-  channelPriceVisibility: Record<string, PropertyPriceVisibility>;
-  contactEmail: string;
-  contactName: string;
-  contactPhone: string;
-  costItems: PropertyCostDraft[];
-  fieldValues: Record<string, string>;
-  gdprStatus: string;
-  internalReference: string;
-  marketingType: string;
-  monthlyCostsGross: string;
-  objectType: string;
-  objectNumber: string;
-  portalMappingStatus: string;
-  postalCode: string;
-  price: string;
-  priceVisibility: PropertyPriceVisibility;
-  projectId: string;
-  publicPrice: string;
-  purchaseAncillaryCosts: string;
-  region: string;
-  rentNet: string;
-  rentPrice: string;
-  rooms: string;
-  subObjectType: string;
-  textBlocks: Record<string, string>;
-  title: string;
-  usageType: string;
-  yearBuilt: string;
-};
-
-type PropertyCostDraft = {
-  costKey: string;
-  groupKey: string;
-  label: string;
-  monthlyGross: string;
-  monthlyNet: string;
-  monthlyVat: string;
-  oneTimeGross: string;
-  oneTimeNet: string;
-  oneTimeVat: string;
-  exposeVisible: boolean;
+  draftStore?: PropertyDraftStore;
 };
 
 const statusStyles: Record<PropertyAssetStatus, string> = {
@@ -172,10 +145,6 @@ function ActionButton({
       ) : null}
     </div>
   );
-}
-
-function fieldKey(sectionId: string, label: string) {
-  return `${sectionId}.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
 function parseMoney(value: string | undefined) {
@@ -238,7 +207,6 @@ const propertyFieldClass = "grid min-w-0 gap-2 text-sm font-semibold text-slate-
 const propertyInputClass = "min-h-12 w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-base font-medium leading-6 text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 const propertySelectClass = `${propertyInputClass} pr-9`;
 const propertyTextareaClass = `${propertyInputClass} min-h-[168px] resize-y align-top`;
-const defaultOpenPropertyDetailSections = new Set(["location", "areas", "costs", "energy"]);
 
 function PropertyFormSection({
   children,
@@ -289,16 +257,7 @@ function listingIdFromAssetId(assetId: string | undefined) {
 }
 
 function createUnitBoardScope(asset: PropertyAssetSummary | undefined): PropertyUnitBoardScope | undefined {
-  if (!asset || (!asset.projectId && asset.unitIds.length === 0)) return undefined;
-
-  const unitKey = asset.unitIds.length ? asset.unitIds.join("|") : asset.projectId ?? asset.id;
-  return {
-    key: `${asset.id}:${unitKey}`,
-    label: asset.title,
-    originAssetId: asset.id,
-    projectId: asset.projectId,
-    unitIds: asset.unitIds.length ? asset.unitIds : undefined,
-  };
+  return createPropertyUnitBoardScope(asset);
 }
 
 export function PropertyCommandCenter({
@@ -312,6 +271,7 @@ export function PropertyCommandCenter({
   language,
   leads,
   onOpenLeadInbox,
+  onOpenLead,
   onOpenReservations,
   onOpenUnits,
   onClearPropertyFocus,
@@ -329,10 +289,10 @@ export function PropertyCommandCenter({
   units,
   users = [],
   draftUserId = "current-user",
+  draftStore: suppliedDraftStore,
 }: PropertyCommandCenterProps) {
   const copy = getPropertyDepartmentCopy(language);
   const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
-  const localizedFieldSections = useMemo(() => getPropertyFieldSections(language), [language]);
   const assets = useMemo(
     () => buildPropertyAssets({
       brokerMandates,
@@ -360,15 +320,31 @@ export function PropertyCommandCenter({
   const [query, setQuery] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState(() => assets[0]?.id ?? "");
   const [selectedChannel, setSelectedChannel] = useState<(typeof PROPERTY_CHANNEL_TYPES)[number]>("Immobilienportal");
-  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [channelPriceDrafts, setChannelPriceDrafts] = useState<Record<string, { revision: string; edits: PropertyChannelPriceEdits }>>({});
+  const [channelPriceReload, setChannelPriceReload] = useState(0);
+  const [storedChannelPrices, setStoredChannelPrices] = useState<Record<string, { state?: PropertyChannelPriceState; error?: string }>>({});
+  const [storedNotice, setStoredNotice] = useState<{ scopeKey: string; value: { kind: "success" | "error"; message: string } | null } | null>(null);
+  const [savingOther, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [editingRelationshipListingId, setEditingRelationshipListingId] = useState<string | null>(null);
-  const [workflowDraftStore] = useState(createPropertyDraftStore);
+  const standaloneDraftStore = useMemo(() => createPropertyDraftStore(draftUserId), [draftUserId]);
+  const workflowDraftStore = suppliedDraftStore?.ownerUserId === draftUserId ? suppliedDraftStore : standaloneDraftStore;
+  useEffect(() => () => standaloneDraftStore.clearAll(), [standaloneDraftStore]);
+  useEffect(() => {
+    if (workflowDraftStore === suppliedDraftStore) return; // The CRM parent also protects unmounted sections.
+    const warn = (event: BeforeUnloadEvent) => { protectPropertyDraftUnload(workflowDraftStore, event); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [suppliedDraftStore, workflowDraftStore]);
+  const workflowMutationBusy = useSyncExternalStore(workflowDraftStore.subscribe,workflowDraftStore.isMutationBusy,()=>false);
+  const saving = savingOther || workflowMutationBusy;
   const workflowCapabilities = usePropertyWorkflowCapabilities(context.workspaceId);
-  const [draft, setDraft] = useState<PropertyDraft>(() => ({
+  const draftScopeKey = `property-create:${propertyDraftScopeKey({ userId: draftUserId, workspaceId: context.workspaceId, projectId: activeProjectId })}`;
+  const initialProjectId = activeProjectId && projects.some((project) => project.id === activeProjectId) ? activeProjectId : "";
+  const initialDraft = useMemo<PropertyDraft>(() => ({
+    geography: createPropertyGeography("AT"),
     address: "",
     areaSqm: "",
     availableFrom: "",
@@ -390,9 +366,7 @@ export function PropertyCommandCenter({
     postalCode: "",
     price: "",
     priceVisibility: "publish_price",
-    projectId: activeProjectId && projects.some((project) => project.id === activeProjectId)
-      ? activeProjectId
-      : "",
+    projectId: initialProjectId,
     publicPrice: "",
     purchaseAncillaryCosts: "",
     region: "",
@@ -404,7 +378,26 @@ export function PropertyCommandCenter({
     title: "",
     usageType: "residential",
     yearBuilt: "",
-  }));
+  }), [initialProjectId]);
+  const { draft, setDraft: updateStoredDraft, clearSubmittedDraft } = usePropertyDraft(workflowDraftStore, draftScopeKey, initialDraft);
+  const pendingPropertyCreate = useSyncExternalStore(workflowDraftStore.subscribe, () => workflowDraftStore.readCreateAttempt(draftScopeKey), () => undefined);
+  const hasOtherPendingCreate = useSyncExternalStore(workflowDraftStore.subscribe, () => workflowDraftStore.hasCreateAttemptOutside(draftScopeKey), () => false);
+  const propertyCreateUncertain = pendingPropertyCreate?.phase === "uncertain";
+  const geography = draft.geography ?? initialDraft.geography!;
+  const scopeMismatchMessage = language === "de"
+    ? "Bitte zum ursprünglichen Arbeitsbereich und Projekt zurückkehren, um den offenen Speichervorgang zu prüfen."
+    : "Return to the original workspace and project to check the pending save.";
+  const uncertaintyMessage = language === "de"
+    ? "Speicherergebnis ungeklärt. Bitte denselben Vorgang erneut prüfen; die Eingaben bleiben bis zur Bestätigung gesperrt."
+    : "Save result is unknown. Check the same operation again; inputs stay locked until confirmed.";
+  const notice = (storedNotice?.scopeKey === draftScopeKey ? storedNotice.value : null) ??
+    (propertyCreateUncertain ? { kind: "error" as const, message: uncertaintyMessage } : null);
+  function setNotice(value: { kind: "success" | "error"; message: string } | null) {
+    setStoredNotice({ scopeKey: draftScopeKey, value });
+  }
+  function setDraft(update: Parameters<typeof updateStoredDraft>[0]) {
+    if (!workflowDraftStore.readCreateAttempt(draftScopeKey)) updateStoredDraft(update);
+  }
 
   const filteredAssets = assets.filter((asset) => {
     const matchesStatus = statusFilter === "all" || asset.status === statusFilter;
@@ -421,6 +414,40 @@ export function PropertyCommandCenter({
   const selectedUnitBoardScope = createUnitBoardScope(selectedAsset);
   const selectedListingId = listingIdFromAssetId(selectedAsset?.id);
   const selectedListing = sellerListings.find((listing) => listing.id === selectedListingId && listing.workspaceId === context.workspaceId);
+  const channelPropertyId = selectedAsset?.sellerListingId ?? null;
+  const channelProjectId = selectedAsset?.projectId ?? null;
+  const channelPriceScopeKey = channelPropertyId ? JSON.stringify([draftUserId, context.workspaceId, channelProjectId, channelPropertyId]) : null;
+  const channelReadKey = JSON.stringify([channelPriceScopeKey, channelPriceReload]);
+  const channelPolicy = storedChannelPrices[channelReadKey]?.state;
+  const channelDraft = channelPriceScopeKey ? channelPriceDrafts[channelPriceScopeKey] : undefined;
+  const staleChannelDraft = Boolean(channelDraft && channelPolicy && channelDraft.revision !== channelPolicy.revision);
+  const channelPolicyError = storedChannelPrices[channelReadKey]?.error ?? (staleChannelDraft
+    ? (language === "de" ? "Preisregeln wurden geändert. Aktuellen Stand laden und Änderungen erneut auswählen." : "Price rules changed. Reload and select your changes again.")
+    : undefined);
+  const selectedChannelPrices = applyPropertyChannelPriceEdits(channelPolicy?.channelPriceVisibility ?? selectedAsset?.channelPriceVisibility, channelDraft?.edits);
+  useEffect(() => {
+    if (activeTab !== "channels" || !channelPropertyId || !actions.changePrice.enabled) return;
+    const controller = new AbortController();
+    const search = new URLSearchParams({ workspaceId: context.workspaceId, operation: "channel_price_visibility", propertyId: channelPropertyId });
+    void fetch(`/api/crm/properties?${search}`, { cache: "no-store", signal: controller.signal }).then(async response => {
+      const result = await response.json() as { persisted?: boolean; data?: PropertyChannelPriceState; error?: string };
+      const data = result.data;
+      if (!response.ok || result.persisted !== true || !data || data.propertyId !== channelPropertyId ||
+          data.workspaceId !== context.workspaceId || data.projectId !== channelProjectId || !/^[a-f0-9]{64}$/.test(data.revision)) {
+        throw new Error(result.error || (language === "de" ? "Preisregeln konnten nicht geladen werden." : "Could not load price rules."));
+      }
+      if (!controller.signal.aborted) setStoredChannelPrices(current => ({ ...current, [channelReadKey]: { state: data } }));
+    }).catch(error => {
+      if (!controller.signal.aborted) setStoredChannelPrices(current => ({ ...current, [channelReadKey]: { error: error instanceof Error ? error.message : "Price rules unavailable" } }));
+    });
+    return () => controller.abort();
+  }, [activeTab, actions.changePrice.enabled, channelPropertyId, channelProjectId, channelReadKey, context.workspaceId, language]);
+  function propertyAreaLabel(asset: PropertyAssetSummary) {
+    const listing = sellerListings.find((item) => item.id === asset.sellerListingId && item.workspaceId === asset.workspaceId);
+    const knownZero = asset.areaSqm === 0 && listing?.areaSqm === 0 &&
+      propertyCoreNumberIsKnown(listing.canonicalPayload, "areaSqm", listing.areaSqm);
+    return asset.areaSqm || knownZero ? `${formatNumber(asset.areaSqm ?? 0, language)} m2` : "-";
+  }
   const editingListing = sellerListings.find((listing) => listing.id === editingListingId && listing.workspaceId === context.workspaceId);
   const editingRelationshipListing = sellerListings.find((listing) => listing.id === editingRelationshipListingId && listing.workspaceId === context.workspaceId);
   const selectedCostItems = selectedListingId ? propertyCostItems.filter((item) => item.propertyId === selectedListingId) : [];
@@ -431,6 +458,19 @@ export function PropertyCommandCenter({
   const qualityIssues = buildPropertyDataQualityIssues({ assets, language, leads, reservations });
   const matches = buildPropertyMatches({ assets, buyerSearchProfiles, contacts, language, leads });
   const activeReservations = reservations.filter((reservation) => reservation.status === "hold" || reservation.status === "reserved");
+  const inquiryScopeKey = `${context.workspaceId}:${activeProjectId ?? "all"}`;
+  const [storedInquiryState,setStoredInquiryState] = useState<{key:string;data:PropertyInquiryState|null;error:string}|null>(null);
+  const [inquiryRefresh,setInquiryRefresh] = useState(0);
+  useEffect(()=>{
+    const controller = new AbortController();
+    void fetch(`/api/crm/property-inquiries?workspaceId=${encodeURIComponent(context.workspaceId)}${activeProjectId?`&projectId=${encodeURIComponent(activeProjectId)}`:""}`,{cache:"no-store",signal:controller.signal}).then(async response=>{
+      const result=await response.json() as {data?:PropertyInquiryState;error?:string};if(!response.ok||!result.data)throw new Error(result.error||"Objektanfragen nicht verfügbar");
+      setStoredInquiryState({key:inquiryScopeKey,data:result.data,error:""});
+    }).catch((error:unknown)=>{if(!controller.signal.aborted)setStoredInquiryState({key:inquiryScopeKey,data:null,error:error instanceof Error?error.message:"Objektanfragen nicht verfügbar"});});
+    return()=>controller.abort();
+  },[context.workspaceId,activeProjectId,activeTab,inquiryScopeKey,inquiryRefresh]);
+  const savedInquiries=storedInquiryState?.key===inquiryScopeKey?storedInquiryState.data:null;
+  const inquiryError=storedInquiryState?.key===inquiryScopeKey?storedInquiryState.error:"";
   const routeResults = leads.slice(0, 20).map((lead) => {
     const budget = getBudgetRange(lead);
     return {
@@ -476,14 +516,6 @@ export function PropertyCommandCenter({
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function updateField(sectionId: string, label: string, value: string) {
-    const key = fieldKey(sectionId, label);
-    setDraft((current) => ({
-      ...current,
-      fieldValues: { ...current.fieldValues, [key]: value },
-    }));
-  }
-
   function updateTextBlock(key: string, value: string) {
     setDraft((current) => ({
       ...current,
@@ -492,10 +524,11 @@ export function PropertyCommandCenter({
   }
 
   function updateChannelPrice(channel: string, value: PropertyPriceVisibility) {
-    setDraft((current) => ({
-      ...current,
-      channelPriceVisibility: { ...current.channelPriceVisibility, [channel]: value },
-    }));
+    if (!channelPriceScopeKey || !channelPolicy || saving || staleChannelDraft) return;
+    setChannelPriceDrafts(current => ({ ...current, [channelPriceScopeKey]: {
+      revision: current[channelPriceScopeKey]?.revision ?? channelPolicy.revision,
+      edits: { ...current[channelPriceScopeKey]?.edits, [channel]: value },
+    } }));
   }
 
   function updateCostItem(index: number, key: keyof PropertyCostDraft, value: string | boolean) {
@@ -507,10 +540,10 @@ export function PropertyCommandCenter({
     }));
   }
 
-  async function postPropertyOperation(body: Record<string, unknown>) {
+  async function postPropertyOperation(body: Record<string, unknown>, headers: Record<string, string> = {}) {
     const response = await csrfFetch(`/api/crm/properties?${new URLSearchParams({ workspaceId: context.workspaceId })}`, {
       body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...headers },
       method: "POST",
     });
     const payload = await response.json().catch(() => ({ error: copy.notices.actionSaveFailed }));
@@ -526,25 +559,41 @@ export function PropertyCommandCenter({
   }
 
   async function saveSelectedPriceVisibility() {
-    if (!selectedAsset?.sellerListingId || saving) return;
+    if (!channelPolicy || !channelPriceScopeKey || !channelDraft || saving || staleChannelDraft) return;
+    const scopeKey = channelPriceScopeKey;
+    const submittedDraft = channelDraft;
     setSaving(true);
     setNotice(null);
     try {
-      await postPropertyOperation({
-        channelPriceVisibility: draft.channelPriceVisibility,
-        operation: "update_price_visibility",
-        priceVisibility: selectedAsset.priceVisibility,
-        projectId: selectedAsset.projectId,
-        propertyId: selectedAsset.sellerListingId,
-        publicPrice: selectedAsset.publicPrice ?? selectedAsset.price,
-      });
+      const result = await postPropertyOperation({
+        operation: "patch_channel_price_visibility", propertyId: channelPolicy.propertyId,
+        expectedProjectId: channelPolicy.projectId, expectedPolicyRevision: submittedDraft.revision, changes: submittedDraft.edits,
+      }, { "Idempotency-Key": crypto.randomUUID(), "X-Correlation-Id": crypto.randomUUID() });
+      if (result.persisted !== true) throw new Error(copy.notices.priceVisibilitySaveFailed);
       setNotice({ kind: "success", message: copy.notices.priceVisibilitySaved });
-      await onPropertyChanged?.();
+      setChannelPriceDrafts(current => {
+        if (current[scopeKey] !== submittedDraft) return current;
+        const next = { ...current }; delete next[scopeKey]; return next;
+      });
+      // Reload the live policy even if a successful response came from a receipt.
+      setChannelPriceReload(value => value + 1);
+      try { await onPropertyChanged?.(); } catch {
+        setNotice({ kind: "success", message: language === "de" ? "Preisregeln gespeichert. Die Objektübersicht konnte nicht neu geladen werden." : "Price rules saved. The property overview could not be refreshed." });
+      }
     } catch (error) {
       setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.priceVisibilitySaveFailed });
+      setStoredChannelPrices(current => ({ ...current, [channelReadKey]: { error: language === "de" ? "Aktuellen Stand laden und Änderungen erneut auswählen." : "Reload the current rules and select your changes again." } }));
     } finally {
       setSaving(false);
     }
+  }
+
+  function reloadSelectedPriceRules() {
+    if (!channelPriceScopeKey || saving) return;
+    setChannelPriceDrafts(current => {
+      const next = { ...current }; delete next[channelPriceScopeKey]; return next;
+    });
+    setChannelPriceReload(value => value + 1);
   }
 
   async function uploadAndAttachFile(file: File, kind: "media" | "document") {
@@ -603,6 +652,11 @@ export function PropertyCommandCenter({
   async function submitProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!actions.createProperty.enabled || saving) return;
+    const existingAttempt = workflowDraftStore.readCreateAttempt(draftScopeKey);
+    if (existingAttempt && (existingAttempt.workspaceId !== context.workspaceId || existingAttempt.projectId !== draft.projectId)) {
+      setNotice({ kind: "error", message: scopeMismatchMessage });
+      return;
+    }
     if (!draftProjects.some((project) => project.id === draft.projectId)) {
       setNotice({
         kind: "error",
@@ -610,51 +664,71 @@ export function PropertyCommandCenter({
       });
       return;
     }
-    setSaving(true);
+    const mutationToken = workflowDraftStore.acquireMutation();
+    if (!mutationToken) return;
     setNotice(null);
-
+    let committed = false;
+    let attempt = existingAttempt;
     try {
-      const response = await csrfFetch("/api/crm/properties", {
-        body: JSON.stringify({
-          operation: "create_property",
-          ...draft,
-          costItems: toCostItems(draft),
-          publicPrice: draft.publicPrice || draft.price,
-          textBlocks: toTextBlocks(draft),
-        }),
-        headers: { "Content-Type": "application/json" },
+      if (!attempt) {
+        const requestDraft = normalizeDirectPropertyNumericDraft(draft);
+        const completeDetails = propertyDetailsInput({ ...requestDraft, costItems: toCostItems(requestDraft) });
+        attempt = {
+          workspaceId: context.workspaceId,
+          projectId: draft.projectId,
+          endpoint: propertyWorkspaceEndpoint("/api/crm/properties", context.workspaceId),
+          body: JSON.stringify({
+            operation: "create_property",
+            ...requestDraft,
+            ...completeDetails,
+            costItems: toCostItems(requestDraft),
+            publicPrice: requestDraft.publicPrice || requestDraft.price,
+            textBlocks: toTextBlocks(requestDraft),
+          }),
+          key: crypto.randomUUID(),
+          correlation: crypto.randomUUID(),
+          submittedDraft: draft,
+          phase: "in_flight",
+        };
+      }
+      workflowDraftStore.setCreateAttempt(draftScopeKey, { ...attempt, phase: "in_flight" });
+      const response = await csrfFetch(attempt.endpoint, {
+        body: attempt.body,
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key, "X-Correlation-Id": attempt.correlation },
         method: "POST",
       });
       const payload = await response.json().catch(() => ({ error: copy.notices.propertySaveFailed }));
       if (!response.ok) {
+        if (response.status < 500) workflowDraftStore.clearCreateAttempt(draftScopeKey, attempt.key);
         throw new Error(typeof payload.error === "string" ? payload.error : copy.notices.propertySaveFailed);
       }
+      if (!confirmedPropertyCreation(payload, attempt.workspaceId, attempt.projectId)) {
+        throw new Error(copy.notices.propertySaveFailed);
+      }
+      committed = true;
+      // A late acknowledgement belongs only to the submitted scope and values.
+      if (workflowDraftStore.clearCreateAttempt(draftScopeKey, attempt.key)) clearSubmittedDraft(attempt.submittedDraft);
       setNotice({ kind: "success", message: copy.notices.propertySaved });
-      setDraft((current) => ({
-        ...current,
-        address: "",
-        areaSqm: "",
-        availableFrom: "",
-        availableFromText: "",
-        availabilityNote: "",
-        costItems: createCostDrafts(),
-        projectId: activeProjectId ?? "",
-        price: "",
-        publicPrice: "",
-        rooms: "",
-        textBlocks: createTextDrafts(),
-        title: "",
-      }));
       await onPropertyChanged?.();
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.propertySaveFailed });
+      const stillPending = attempt && workflowDraftStore.markCreateUncertain(draftScopeKey, attempt.key);
+      setNotice({ kind: "error", message: committed
+        ? (language === "de" ? "Objekt gespeichert. Die Ansicht konnte noch nicht aktualisiert werden; bitte neu laden." : "Property saved. The view could not be refreshed; please reload it.")
+        : stillPending
+          ? uncertaintyMessage
+          : error instanceof DirectPropertyNumericDraftError
+            ? (language === "de"
+              ? "Bitte Zahleneingaben prüfen: keine Exponenten, keine negativen Werte und nur die unterstützten Nachkommastellen."
+              : "Check numeric inputs: use no exponents or negative values, and only the supported decimal places.")
+            : error instanceof Error ? error.message : copy.notices.propertySaveFailed });
     } finally {
-      setSaving(false);
+      workflowDraftStore.releaseMutation(mutationToken);
     }
   }
 
   return (
     <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      {hasOtherPendingCreate ? <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{scopeMismatchMessage}</p> : null}
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
@@ -819,7 +893,7 @@ export function PropertyCommandCenter({
                       </td>
                       <td className="py-3 pr-4"><StatusChip label={copy.statusLabels[asset.status]} status={asset.status} /></td>
                       <td className="py-3 pr-4 font-semibold text-slate-900">{asset.price ? formatCurrency(asset.price, language) : "-"}</td>
-                      <td className="py-3 pr-4 text-stone-700">{asset.areaSqm ? `${formatNumber(asset.areaSqm, language)} m2` : "-"}</td>
+                      <td className="py-3 pr-4 text-stone-700">{propertyAreaLabel(asset)}</td>
                       <td className="py-3 pr-4 text-stone-700">
                         {asset.unitCount ? (
                           <div className="flex min-w-[220px] flex-wrap gap-1.5">
@@ -836,7 +910,7 @@ export function PropertyCommandCenter({
                         ) : "-"}
                       </td>
                       <td className="py-3 text-stone-700">
-                        {routeResults.filter((item) => item.route.propertyId === asset.id || item.route.projectId === asset.projectId).length}
+                        {savedInquiries ? savedInquiries.counts.find(item=>item.propertyId===asset.sellerListingId)?.count ?? 0 : "—"}
                       </td>
                     </tr>
                   ))}
@@ -879,7 +953,7 @@ export function PropertyCommandCenter({
                   >
                     {copy.detail.openUnits}
                   </button>
-                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
+                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("documents")} />
                   <button
                     className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
                     disabled={!selectedListing || !workflowCapabilities.canEditProperty}
@@ -891,7 +965,7 @@ export function PropertyCommandCenter({
                     }}
                     type="button"
                   >
-                    {language === "de" ? "Stammdaten & Kaufnebenkosten bearbeiten" : "Edit property core & purchase costs"}
+                    {language === "de" ? "Objekt vollständig bearbeiten" : "Edit complete property"}
                   </button>
                   <button
                     className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
@@ -917,6 +991,10 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "create" ? (
+        <div className="grid gap-5">
+        {actions.createProperty.enabled ? <GuidedPropertyCreateWorkspace workspaceId={context.workspaceId} projectId={activeProjectId} language={language}
+          onCreated={async listing=>{await refreshPropertyData();onClearPropertyFocus?.();setQuery("");setStatusFilter("all");setSelectedAssetId(`listing:${listing.id}`);setActiveTab("overview");setEditingListingId(listing.id);}}/> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{actions.createProperty.reason}</p>}
+        <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">{language==="de"?"Erweiterte Direkterfassung mit allen Feldern":"Advanced direct entry with all fields"}</summary><p className="my-4 text-sm text-stone-600">{language==="de"?"Für fortsetzbare Serverentwürfe den Assistenten oben verwenden. Ungespeicherte Direkteingaben bleiben beim Bereichswechsel erhalten, getrennt nach Arbeitsbereich und Projektfilter. Beim Neuladen, Schließen oder Abmelden gehen sie verloren.":"Use the wizard above for resumable server drafts. Unsaved direct-entry values survive section changes, separately for each workspace and project filter. Reloading, closing or signing out loses them."}</p>
         <form className="grid gap-5" onSubmit={submitProperty}>
           <div className="sticky top-3 z-20 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -934,13 +1012,15 @@ export function PropertyCommandCenter({
                   <span className={`rounded-md border px-3 py-2 text-sm font-semibold ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>{notice.message}</span>
                 ) : null}
                 <button className="min-h-12 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!actions.createProperty.enabled || saving || !draftProjects.some((project) => project.id === draft.projectId)} type="submit">
-                  {saving ? copy.form.saving : actions.createProperty.label}
+                  {saving ? copy.form.saving : propertyCreateUncertain ? (language === "de" ? "Speicherergebnis erneut prüfen" : "Check save result again") : actions.createProperty.label}
                 </button>
               </div>
             </div>
             {!actions.createProperty.enabled && actions.createProperty.reason ? <p className="mt-3 text-sm text-stone-600">{actions.createProperty.reason}</p> : null}
           </div>
 
+          <fieldset className="min-w-0" disabled={saving || propertyCreateUncertain}>
+          <legend className="sr-only">{language === "de" ? "Objektangaben" : "Property details"}</legend>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="grid min-w-0 gap-5">
               <PropertyFormSection
@@ -1002,10 +1082,6 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("postalCode", event.target.value)} value={draft.postalCode} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>{copy.form.region}</span>
-                    <input className={propertyInputClass} onChange={(event) => updateDraft("region", event.target.value)} value={draft.region} />
-                  </label>
-                  <label className={propertyFieldClass}>
                     <span>{copy.form.subObjectType}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("subObjectType", event.target.value)} value={draft.subObjectType} />
                   </label>
@@ -1014,21 +1090,25 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("availableFromText", event.target.value)} value={draft.availableFromText} />
                   </label>
                 </div>
+                <PropertyGeographyFields geography={geography} region={draft.region} language={language} disabled={saving}
+                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,energyCertificate:current.geography?.countryCode===geography.countryCode?current.energyCertificate:{version:1,countryCode:geography.countryCode} }))} />
+                <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className={propertyFieldClass}>{language==="de"?"Ort":"City / locality"}<input className={propertyInputClass} value={draft.city??""} onChange={e=>updateDraft("city",e.target.value)}/></label><label className={propertyFieldClass}>{language==="de"?"Straße (strukturiert)":"Street (structured)"}<input className={propertyInputClass} value={draft.street??""} onChange={e=>updateDraft("street",e.target.value)}/></label></div>
+                <PropertyEnergyFields geography={geography} energy={draft.energyCertificate??{version:1,countryCode:geography.countryCode}} usageType={draft.usageType} yearBuilt={Number(draft.yearBuilt)||0} language={language} disabled={saving} onChange={energyCertificate=>updateDraft("energyCertificate",energyCertificate)}/>
               </PropertyFormSection>
 
               <PropertyFormSection title={copy.form.areasAvailability}>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <label className={propertyFieldClass}>
                     <span>{copy.form.livingArea}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("areaSqm", event.target.value)} type="number" value={draft.areaSqm} />
+                    <input className={propertyInputClass} min="0" max={PROPERTY_AREA_MAX_SQM} onChange={(event) => updateDraft("areaSqm", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.areaSqm} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.rooms}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rooms", event.target.value)} type="number" value={draft.rooms} />
+                    <input className={propertyInputClass} min="0" max="999.9" onChange={(event) => updateDraft("rooms", event.target.value)} type="number" step="0.1" inputMode="decimal" value={draft.rooms} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.yearBuilt}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("yearBuilt", event.target.value)} type="number" value={draft.yearBuilt} />
+                    <input className={propertyInputClass} min="1" max="9999" onChange={(event) => updateDraft("yearBuilt", event.target.value)} type="number" step="1" inputMode="numeric" value={draft.yearBuilt} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.availableFrom}</span>
@@ -1053,19 +1133,19 @@ export function PropertyCommandCenter({
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <label className={propertyFieldClass}>
                     <span>{copy.form.purchasePrice}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("price", event.target.value)} type="number" value={draft.price} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("price", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.price} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.rentNet}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentNet", event.target.value)} type="number" value={draft.rentNet} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentNet", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.rentNet} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.rentGross}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentPrice", event.target.value)} type="number" value={draft.rentPrice} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentPrice", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.rentPrice} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.purchaseAncillaryCosts}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("purchaseAncillaryCosts", event.target.value)} type="number" value={draft.purchaseAncillaryCosts} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("purchaseAncillaryCosts", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.purchaseAncillaryCosts} />
                   </label>
                 </div>
                 <div className="mt-5 grid gap-4">
@@ -1078,9 +1158,9 @@ export function PropertyCommandCenter({
                           return item.groupKey === group.key ? (
                           <div className="grid gap-3 rounded-md bg-white p-3 md:grid-cols-[minmax(160px,1fr)_repeat(3,minmax(110px,150px))_minmax(90px,auto)]" key={item.costKey}>
                             <span className="self-center text-sm font-semibold text-slate-900">{itemLabel}</span>
-                            <input aria-label={`${itemLabel} ${copy.form.net}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyNet" : "oneTimeNet", event.target.value)} placeholder={copy.form.net} type="number" value={group.key === "monthly" ? item.monthlyNet : item.oneTimeNet} />
-                            <input aria-label={`${itemLabel} ${copy.form.vat}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyVat" : "oneTimeVat", event.target.value)} placeholder={copy.form.vat} type="number" value={group.key === "monthly" ? item.monthlyVat : item.oneTimeVat} />
-                            <input aria-label={`${itemLabel} ${copy.form.gross}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyGross" : "oneTimeGross", event.target.value)} placeholder={copy.form.gross} type="number" value={group.key === "monthly" ? item.monthlyGross : item.oneTimeGross} />
+                            <input aria-label={`${itemLabel} ${copy.form.net}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyNet" : "oneTimeNet", event.target.value)} placeholder={copy.form.net} type="number" min="0" step="0.01" inputMode="decimal" value={group.key === "monthly" ? item.monthlyNet : item.oneTimeNet} />
+                            <input aria-label={`${itemLabel} ${copy.form.vat}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyVat" : "oneTimeVat", event.target.value)} placeholder={copy.form.vat} type="number" min="0" step="0.01" inputMode="decimal" value={group.key === "monthly" ? item.monthlyVat : item.oneTimeVat} />
+                            <input aria-label={`${itemLabel} ${copy.form.gross}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyGross" : "oneTimeGross", event.target.value)} placeholder={copy.form.gross} type="number" min="0" step="0.01" inputMode="decimal" value={group.key === "monthly" ? item.monthlyGross : item.oneTimeGross} />
                             <label className="flex min-h-12 items-center gap-2 text-sm font-semibold text-stone-700">
                               <input checked={item.exposeVisible} onChange={(event) => updateCostItem(index, "exposeVisible", event.target.checked)} type="checkbox" />
                               {copy.form.exposeVisible}
@@ -1116,25 +1196,7 @@ export function PropertyCommandCenter({
                 description={copy.form.legalDetailsDescription}
                 title={copy.form.legalDetails}
               >
-                <div className="grid gap-4">
-                  {localizedFieldSections.map((section) => (
-                    <details className="rounded-md border border-stone-200 bg-stone-50 p-4" key={section.id} open={defaultOpenPropertyDetailSections.has(section.id)}>
-                      <summary className="cursor-pointer text-base font-semibold text-slate-950">{section.title}</summary>
-                      <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                        {section.fields.map((field) => (
-                          <label className={propertyFieldClass} key={field.key}>
-                            <span>{field.label}</span>
-                            <input
-                              className={propertyInputClass}
-                              onChange={(event) => updateField(section.id, field.key, event.target.value)}
-                              value={draft.fieldValues[fieldKey(section.id, field.key)] ?? ""}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                  ))}
-                </div>
+                <PropertyDetailsEditor details={bindPropertyDetails(draft.propertyDetails??readPropertyDetails({canonicalPayload:{fieldValues:draft.fieldValues}}),draft as unknown as Record<string,unknown>)} language={language} countryCode={geography.countryCode} disabled={saving} onChange={details=>updateDraft("propertyDetails",details)}/>
               </PropertyFormSection>
             </div>
 
@@ -1152,7 +1214,7 @@ export function PropertyCommandCenter({
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.publicPrice}</span>
-                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("publicPrice", event.target.value)} type="number" value={draft.publicPrice} />
+                    <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("publicPrice", event.target.value)} type="number" step="0.01" inputMode="decimal" value={draft.publicPrice} />
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.gdprStatus}</span>
@@ -1205,7 +1267,10 @@ export function PropertyCommandCenter({
               </section>
             </aside>
           </div>
+          </fieldset>
         </form>
+        </details>
+        </div>
       ) : null}
 
       {activeTab === "projectUnits" ? (
@@ -1282,11 +1347,20 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "inquiries" ? (
+        <>
+        <PropertyInquiryList data={savedInquiries} error={inquiryError} propertyId={selectedListingId} language={language} onRefresh={()=>setInquiryRefresh(value=>value+1)} onOpenLead={id=>onOpenLead?onOpenLead(id):onOpenLeadInbox()}/>
+        <PropertyInquiryAssignment language={language} workspaceId={context.workspaceId} activeProjectId={activeProjectId}
+          assets={assets} units={units} canAssign={workflowCapabilities.canAssignInquiry} disabledReason={workflowCapabilities.failed ? (language==="de"?"Berechtigungen konnten nicht geladen werden. Bitte Ansicht neu laden.":"Permissions could not be loaded. Please reload.") : undefined}
+          isMutationBusy={workflowMutationBusy} acquireMutation={workflowDraftStore.acquireMutation} releaseMutation={workflowDraftStore.releaseMutation}
+          onRefresh={refreshPropertyData} suggestions={routeResults.map(({lead,route})=>({leadId:lead.id,label:route.routingReason}))}/>
+        {selectedListing ? <PropertyBookingWorkspace workspaceId={context.workspaceId} propertyId={selectedListing.id}
+          canWrite={workflowCapabilities.canEditProperty} onChanged={refreshPropertyData}/> : null}
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">{copy.subviews.inquiryRouting}</h4>
+            <h4 className="text-lg font-semibold text-slate-950">{language === "de" ? "Zuordnungsvorschläge" : "Suggested associations"}</h4>
             <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenLeadInbox} type="button">{copy.subviews.openLeadCenter}</button>
           </div>
+          <p className="mt-3 text-sm text-stone-600">{language === "de" ? "Kriterienbasierte Vorschläge sind noch keine gespeicherte Objektzuordnung und fließen nicht in die Objektzähler ein." : "Criteria-based suggestions are not saved property associations and are excluded from property counters."}</p>
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-[960px] w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
@@ -1302,7 +1376,7 @@ export function PropertyCommandCenter({
                 {routeResults.map(({ lead, route }) => (
                   <tr className="border-t border-stone-200 align-top" key={lead.id}>
                     <td className="py-3 pr-4">
-                      <p className="font-semibold text-slate-950">{getCrmSystemTextLabel(lead.intent, language)}</p>
+                      <button className="text-left font-semibold text-blue-900 underline decoration-blue-200 underline-offset-4" type="button" onClick={() => onOpenLead ? onOpenLead(lead.id) : onOpenLeadInbox()}>{getCrmSystemTextLabel(lead.intent, language)}</button>
                       <p className="mt-1 text-xs text-stone-500">{contacts.find((contact) => contact.id === lead.contactId)?.name ?? lead.contactId}</p>
                     </td>
                     <td className="py-3 pr-4 text-stone-700">{route.sourceChannel}</td>
@@ -1315,6 +1389,7 @@ export function PropertyCommandCenter({
             </table>
           </div>
         </article>
+        </>
       ) : null}
 
       {activeTab === "channels" ? (
@@ -1332,8 +1407,9 @@ export function PropertyCommandCenter({
                   {copy.channels[channel] ?? channel}
                   <select
                     className="rounded-md border border-stone-300 bg-white px-2 py-2 text-xs font-semibold normal-case tracking-normal text-slate-900"
+                    disabled={!channelPolicy || staleChannelDraft || saving || !actions.changePrice.enabled}
                     onChange={(event) => updateChannelPrice(channel, event.target.value as PropertyPriceVisibility)}
-                    value={draft.channelPriceVisibility[channel] ?? "publish_price"}
+                    value={propertyChannelPriceValue(selectedChannelPrices, channel, channelPolicy?.priceVisibility ?? selectedAsset?.priceVisibility ?? "hide_price")}
                   >
                     {PROPERTY_PRICE_VISIBILITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{copy.priceVisibility[option.value] ?? option.label}</option>)}
                   </select>
@@ -1341,9 +1417,10 @@ export function PropertyCommandCenter({
               ))}
             </div>
             <div className="grid gap-2">
-              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selectedAsset?.sellerListingId || saving || !actions.changePrice.enabled} onClick={saveSelectedPriceVisibility} type="button">
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!channelPolicy || !channelDraft || staleChannelDraft || saving || !actions.changePrice.enabled} onClick={saveSelectedPriceVisibility} type="button">
                 {copy.form.savePriceLogic}
               </button>
+              {channelPolicyError ? <div role="alert" className="text-xs text-rose-800"><p>{channelPolicyError}</p><button type="button" className="underline" disabled={saving} onClick={reloadSelectedPriceRules}>{language === "de" ? "Preisregeln neu laden" : "Reload price rules"}</button></div> : null}
               {!actions.changePrice.enabled && actions.changePrice.reason ? <p className="text-xs text-stone-600">{actions.changePrice.reason}</p> : null}
             </div>
           </div>
@@ -1356,14 +1433,14 @@ export function PropertyCommandCenter({
               <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.price}: {copy.priceVisibility[selectedAsset.priceVisibility] ?? selectedAsset.priceVisibility}</span>
             </div>
           ) : null}
+          {selectedListing ? <PropertyPortalWorkspace workspaceId={context.workspaceId} propertyId={selectedListing.id} language={language} /> : null}
           {preflight ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Preflight</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{preflight.status}</p>
                 <div className="mt-4 grid gap-2">
-                  <ActionButton action={actions.publishProperty} />
-                  <ActionButton action={actions.exportChannel} />
+                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("documents")} />
                 </div>
               </div>
               <div className="grid gap-2">
@@ -1415,13 +1492,14 @@ export function PropertyCommandCenter({
                   type="file"
                 />
               </label>
-              <ActionButton action={actions.approveDocument} />
             </div>
           </div>
           {notice ? <p aria-atomic="true" className={`mt-3 text-sm font-semibold ${notice.kind === "success" ? "text-emerald-800" : "text-rose-800"}`}
             role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</p> : null}
           {selectedListing ? (
             <div className="mt-4">
+              <PropertyCostWorkspace draftStore={workflowDraftStore} draftUserId={draftUserId} listing={selectedListing} workspaceId={context.workspaceId} items={selectedCostItems} language={language} canEdit={workflowCapabilities.canEditProperty} onSaved={refreshPropertyData} />
+              <PropertyTextWorkspace listing={selectedListing} workspaceId={context.workspaceId} blocks={selectedTextBlocks} language={language} canEdit={workflowCapabilities.canEditProperty} draftStore={workflowDraftStore} draftUserId={draftUserId} onSaved={refreshPropertyData} />
               <PropertyExposeWorkspace
                 draftStore={workflowDraftStore}
                 draftUserId={draftUserId}
@@ -1430,6 +1508,8 @@ export function PropertyCommandCenter({
                 listing={selectedListing}
                 workspaceId={context.workspaceId}
               />
+              <WebExposeCommandCenter workspaceId={context.workspaceId} propertyId={selectedListing.id} propertyTitle={selectedListing.title} language={language}
+                leads={leads.filter(lead => lead.projectId === selectedListing.projectId).map(lead => ({ id: lead.id, label: contacts.find(contact => contact.id === lead.contactId)?.name || lead.intent || lead.id }))} />
             </div>
           ) : (
             <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">

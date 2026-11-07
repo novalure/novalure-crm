@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { withCrmRead } from "@/lib/crm-command";
 import {
+  canAccessWorkspaceMedia,
+  findWorkspaceMediaAsset,
   listWorkspaceMedia,
   maxMediaUploadBytes,
   MediaStoreError,
@@ -17,8 +19,12 @@ export async function GET(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
-  const media = await withCrmRead(auth.session, (_tx, session) =>
-    listWorkspaceMedia(session.workspaceId));
+  const media = await withCrmRead(auth.session, async (_tx, session) => {
+    const media = await listWorkspaceMedia(session.workspaceId);
+    const allowed = await Promise.all(media.assets.map((asset) =>
+      canAccessWorkspaceMedia(session.workspaceId, asset.folder, asset.id)));
+    return { ...media, assets: media.assets.filter((_asset, index) => allowed[index]) };
+  });
   return NextResponse.json(
     { assets: media.assets.map(serializeMediaAsset), quota: media.quota },
     { headers: privateJsonHeaders },
@@ -37,9 +43,13 @@ export async function POST(request: Request) {
     }
 
     try {
-      const changedAsset = await withCrmRead(auth.session, (_tx, session) => body.action === "publish"
-        ? publishWorkspaceMedia(assetId, session.workspaceId)
-        : revokeWorkspaceMediaPublication(assetId, session.workspaceId));
+      const changedAsset = await withCrmRead(auth.session, async (_tx, session) => {
+        const asset = await findWorkspaceMediaAsset(assetId, session.workspaceId);
+        if (!asset || !await canAccessWorkspaceMedia(session.workspaceId, asset.folder, asset.id, true)) return null;
+        return body.action === "publish"
+          ? publishWorkspaceMedia(assetId, session.workspaceId)
+          : revokeWorkspaceMediaPublication(assetId, session.workspaceId);
+      });
       if (!changedAsset) {
         return NextResponse.json({ error: "Media asset not found." }, { headers: privateJsonHeaders, status: 404 });
       }
@@ -73,10 +83,14 @@ export async function POST(request: Request) {
 
   try {
     const { asset, media, publishedAsset } = await withCrmRead(auth.session, async (_tx, session) => {
+      const folder = stringField(formData.get("folder"))?.trim() || "media-uploads";
+      if (!await canAccessWorkspaceMedia(session.workspaceId, folder, null, true)) {
+        throw new MediaStoreError("PROJECT_MEDIA_FORBIDDEN", "Media project access denied.");
+      }
       const asset = await saveWorkspaceFile({
         alt: stringField(formData.get("alt")),
         file,
-        folder: stringField(formData.get("folder")),
+        folder,
         name: stringField(formData.get("name")),
         workspaceId: session.workspaceId,
       });
@@ -110,7 +124,7 @@ function isTruthy(value: FormDataEntryValue | null) {
 }
 
 function statusForMediaError(error: MediaStoreError) {
-  if (error.code === "KNOWLEDGE_MEDIA_PRIVATE") return 403;
+  if (error.code === "KNOWLEDGE_MEDIA_PRIVATE" || error.code === "PROJECT_MEDIA_FORBIDDEN") return 403;
   if (error.code === "FILE_TOO_LARGE" || error.code === "IMAGE_TOO_LARGE") return 413;
   if (error.code === "PRIVATE_STORAGE_UNAVAILABLE" || error.code === "PUBLIC_STORAGE_UNAVAILABLE") return 503;
   if (error.code === "WORKSPACE_QUOTA_EXCEEDED") return 409;

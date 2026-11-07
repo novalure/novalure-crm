@@ -1,0 +1,417 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-11-04T21:42:37.122Z",
+  "status": "LOCAL_COHERENT_SOURCE_AND_TARGETED_CANDIDATE_CHECKS_COMPLETE_EXTERNAL_GATES_OPEN",
+  "base": "80de72a4fb92befa73128aaa7d801adc35c7fd1d",
+  "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+  "sourceHashes": {
+    "migrations/190_property_inventory_knownness.sql": "d9d8d521f3867f8c7eecb8c6b57836b29fa68bd8d2eb9b2fd5e5d48498781d78",
+    "src/components/crm-workspace.tsx": "0edf19c0b815e4acfc9888faec062470eb9520d92545c688d45742552513d682",
+    "src/components/property-command-center.tsx": "3b07efc7afa40b99ff1e2428d37e27ee7f42c44605bdfb37fe463a18a53167a4",
+    "src/lib/db/property-department-repositories.ts": "67724ce58f5041450a323a980b95fe8769dce840a78274135f984feeb6ad185e",
+    "src/lib/db/property-expose-repositories.ts": "786afb1ee70941a8f356bb61c7b0a0d58c4726eba0b0b789694f7541370738ca",
+    "src/lib/db/web-expose-repository.ts": "a1db051b91ed4a18b5da485be053b32c9c5b79c075f6fdd913427b099bdc5dd5",
+    "src/lib/property-core-editing.ts": "eb930fff83ee39bcdb1b53f1089fb4e61069eb2723e801f49bdf95bc087434aa",
+    "src/lib/property-core-numbers.ts": "ef74d1e3adbb62d3e492971bd6bd961bb7acbce0f6613c90058f600e79943af5",
+    "src/lib/property-direct-numeric.ts": "ee3c1e0b79e1a22d3350b35393b14100158c0ad6efc6c9ac9055bc1f6e4621dd",
+    "src/lib/property-draft-store.ts": "ab619d699d484f6de7cb58cc5f69f8ab380741285cc1f3194d185d90a0da782e",
+    "src/lib/property-expose-public-content.ts": "4bb332878ce60ef4263fd1f16020cce61d9f9a79fb058853571995cd52dec686",
+    "src/lib/property-expose-service.ts": "d5a744ca8e758e5fe5d8c21fb0690be1d319c05e768a226e5a1cbbd97b2b1340",
+    "src/lib/use-property-draft.ts": "914d101fe035f1d2ef2d08e08d36a76d8d2f002f85f01ddb60952cc9e27d6123",
+    "src/lib/web-expose-pdf.ts": "e7c955383420668bb2dea77baa4e3c1a54ebfba54cd8f7b28b19ea8011327115"
+  },
+  "changedFiles": [
+    "migrations/190_property_inventory_knownness.sql",
+    "qa/crm-core-refresh-2026-11-04/baseline-results.json",
+    "qa/crm-core-refresh-2026-11-04/browser-results.json",
+    "qa/crm-core-refresh-2026-11-04/validation.md",
+    "qa/property-create-lifecycle-2026-11-04/browser-results.json",
+    "qa/property-create-lifecycle-2026-11-04/validation.md",
+    "qa/property-direct-numeric-20261104/component-browser-results.json",
+    "qa/property-direct-numeric-20261104/component-validation.md",
+    "qa/property-direct-numeric-20261104/validation.json",
+    "qa/property-optional-price-20261104/validation.md",
+    "scripts/crm-core-refresh-ui-tests.mjs",
+    "scripts/property-core-number-state-tests.ts",
+    "scripts/property-create-draft-tests.ts",
+    "scripts/property-create-lifecycle-tests.ts",
+    "scripts/property-create-route-integrity-tests.ts",
+    "scripts/property-developer-zero-expose-tests.ts",
+    "scripts/property-direct-create-ui-tests.mjs",
+    "scripts/property-direct-numeric-browser-tests.ts",
+    "scripts/property-direct-numeric-tests.ts",
+    "scripts/property-public-output-tests.ts",
+    "scripts/property-public-output-website-render.tsx",
+    "src/components/crm-workspace.tsx",
+    "src/components/property-command-center.tsx",
+    "src/lib/db/property-department-repositories.ts",
+    "src/lib/db/property-expose-repositories.ts",
+    "src/lib/db/web-expose-repository.ts",
+    "src/lib/property-core-editing.ts",
+    "src/lib/property-core-numbers.ts",
+    "src/lib/property-direct-numeric.ts",
+    "src/lib/property-draft-store.ts",
+    "src/lib/property-expose-public-content.ts",
+    "src/lib/property-expose-service.ts",
+    "src/lib/use-property-draft.ts",
+    "src/lib/web-expose-pdf.ts"
+  ],
+  "qualification": "Exact candidate local source checks; new disposable loopback PostgreSQL clusters and synthetic tenants, actual components/parent with synthetic HTTP, generated PDF bytes. No live or production acceptance.",
+  "authority": "PARENT_EXPLICIT_LOCAL_INTEGRATION_ONLY",
+  "cherryPicks": [
+    "f4bbf63d3eaa6273e4ee5ab277924dfd2c08abac\tfix(properties): distinguish optional price intent per field",
+    "c9d8d6f3b2a6bad943be70ba1e5fc709736b6c9a\tfix(properties): preserve optional price intent through edits",
+    "8482e437320beafc0c541f5594d7f6271d462b85\ttest(properties): verify legacy alias cannot bypass full editing",
+    "9651cad1ae2485d26fc2acf5f3aacead6699642b\tPreserve direct property creation across section navigation",
+    "65ccac546974eb93ee5bb096a6e7f153895bdf56\tNormalize native property number strings before EUR text parsing",
+    "50d22f4d563d968aaaecec504012e14c3812dde4\tNormalize direct property request values before projections",
+    "7ebb899b578ca8051a1f2c95201ae4889c31e190\tGuard CRM refresh commits against stale property save callbacks",
+    "fea87b1055c0afdf6b65d0dbbe25e977071ae8e0\tRetire CRM request guards at the committed identity boundary",
+    "150e905cff476bebd4723b3cf852e48c5771370f\tfix(properties): redact public titles and preserve country energy output",
+    "e4cd5bdeec2b9bde3c7e643d45da29973b15d46e\tfix(properties): retain absent optional price flags in PDF source",
+    "b58071ace04e2bca2bf8b9bec5a71cdc7f3779ce\tfix(properties): require confirmed developer zero in generated expose",
+    "19af886e81362b6acd3cbd463e428b2c678f2236\tVerify URL restoration with integrated CRM request guards"
+  ],
+  "conflict": "Only050d58a crm-workspace conflict: retain existing URL-restoration useCallback, explicit-null All and replaceHistory; add begin/complete/fail switch tickets and guard dependency. No duplicate handler. Dedicated seventh actual-parent case verifies guarded URL restoration.",
+  "isolation": {
+    "parentEnvironment": "PLATFORM_ALLOWLIST_ONLY_NO_CREDENTIALS_OR_DATABASE_URL_INHERITED",
+    "nodeEgress": "LOOPBACK_SOCKET_PRELOAD_INHERITED_BY_NODE_CHILDREN",
+    "runner": "artifacts/sunday-crm-integration-20261104/run-isolated-local.mjs",
+    "guard": "artifacts/sunday-crm-integration-20261104/loopback-only.mjs",
+    "fixtureLimits": "Partial historical schemas, unchanged exclusions. Media group combines092-096/121/189/191; output group applies106+155/163/166/190, not a complete production-upgrade rehearsal."
+  },
+  "runs": [
+    {
+      "label": "server",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/server.raw.json",
+      "originalSha256": "1e1bea0b677d645f783a687c88ca1a01c2b28746be223d5c4faea3f9551e031f",
+      "tests": 34,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "executionStartedAtRevision": "b58071ace04e2bca2bf8b9bec5a71cdc7f3779ce",
+      "qualification": "Server suite and runtime-source closure unchanged through19af; only the separate parent-browser test changed while this run completed. No second execution claimed."
+    },
+    {
+      "label": "helper",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/helper.raw.json",
+      "originalSha256": "b0e7b3466cebb5006ee1ec87f059cd7fcc6a366010fa955294e410ce01d3e7b5",
+      "tests": 15,
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "label": "outputs",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/outputs.raw.json",
+      "originalSha256": "0e205d26670ec02315bb2064a5ccf0a8f6853501940372411333ed45464b802b",
+      "tests": 21,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "label": "media-191",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/media-191.raw.json",
+      "originalSha256": "454707e60e7ae5c17f3731f8f54bc32f81e7c0371dc9f71b093f6c757eedb986",
+      "tests": 15,
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "label": "direct-browser",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/direct-browser.raw.json",
+      "originalSha256": "9caab2a154f4b06ea34b162319ffa266a50d9e229ed1ac48867a62224c1c981d",
+      "cases": 18,
+      "passed": 18,
+      "browserErrors": 0,
+      "syntheticHttp": true,
+      "databaseIntegration": false,
+      "report": "artifacts/sunday-crm-integration-20261104/coherent-final/direct-browser-results.json"
+    },
+    {
+      "label": "parent-browser",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/parent-browser.raw.json",
+      "originalSha256": "9cc34d3e13e721e778d3c3a48fb3dd861a5f255c59fcceda0998e62304127c13",
+      "cases": 7,
+      "passed": 7,
+      "browserErrors": 0,
+      "syntheticHttp": true,
+      "databaseIntegration": false,
+      "report": "artifacts/sunday-crm-integration-20261104/coherent-final/parent-browser-results.json"
+    },
+    {
+      "label": "typecheck",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/typecheck.raw.json",
+      "originalSha256": "b0debda8718392cd657107659fb5ed5dbe4b44b7a7ce73068a42a75cd0f64656"
+    },
+    {
+      "label": "affected-lint",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/affected-lint.raw.json",
+      "originalSha256": "b0debda8718392cd657107659fb5ed5dbe4b44b7a7ce73068a42a75cd0f64656"
+    },
+    {
+      "label": "build",
+      "exitCode": 0,
+      "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+      "transport": "artifacts/sunday-crm-integration-20261104/coherent-final/build.raw.json",
+      "originalSha256": "eac2811a68075a058c108ea14169475a46bffdfedf137ea5b78e3b309c422690"
+    }
+  ],
+  "outputs": {
+    "generatedPdfs": 24,
+    "parsedPages": 54,
+    "generatedHtml": 12,
+    "developerZeroPdfByteControls": "asking/public/rent exact SourceSQL to PDF; unconfirmed and mismatched denied, confirmed and nondeveloper controls retained",
+    "report": "artifacts/sunday-crm-integration-20261104/coherent-final/outputs-verification.json",
+    "reportBaseField": "Historical fixture base11c4384c, not the current execution revision",
+    "files": [
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-de-property.pdf",
+        "bytes": 21428,
+        "sha256": "ed47d7b0106af039a5e42d6eb55adda6f6067568c08635ddd4b6767c1c7d6a29"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-de-web.pdf",
+        "bytes": 23171,
+        "sha256": "80922aa60ca96fbd521fda04b5117a9a7a127eeb4881256c2b3b6e0982f2b540"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-de.html",
+        "bytes": 6837,
+        "sha256": "f63c1d16716268eeedc90b8ad4ad420f77b0745760b456c01723ae32a69df871"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-en-property.pdf",
+        "bytes": 20828,
+        "sha256": "343ef8bb4ffa9185496dd3c203189540ee142ed4995ad60d955e300d3b1c9ac4"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-en-web.pdf",
+        "bytes": 22610,
+        "sha256": "d7861c09debdb23515fa0b2b110b21df041fd78b4857526d923afc864db6b5a1"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-en.html",
+        "bytes": 6807,
+        "sha256": "9669bd682ea08f9d3ab226b41cbdd43df4a4dca298a328b6a06b25b52b97c7f0"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-es-property.pdf",
+        "bytes": 21229,
+        "sha256": "4fcc2ba696f797ce13df4cb50be9abc7032bca438a83a825446dfc787ca15b97"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-es-web.pdf",
+        "bytes": 22891,
+        "sha256": "bd97dc295a67206f137b75cdf35507dc229023103232367e0fb9f7aa41c59aac"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-AT-es.html",
+        "bytes": 6907,
+        "sha256": "7ffd04ec4a3e5f90beffa630fe18a0d56d270de86ddae3fb59cbc85169e28662"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-de-property.pdf",
+        "bytes": 22283,
+        "sha256": "23b33a0d0c85336d3fe98aa211bd65f45abbabfe337de75f7f9de198f3460434"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-de-web.pdf",
+        "bytes": 24876,
+        "sha256": "6282da7e7ffcede5e09e6ee13092f1f54c033cd21f98bac75ed7ea6e57ab2355"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-de.html",
+        "bytes": 7235,
+        "sha256": "90b1990f603b1e8bf927d94b00d4f56fad2cf9fd57094efacf43e5698cab5aeb"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-en-property.pdf",
+        "bytes": 21515,
+        "sha256": "032859fe4a171ea1f0cc4d296d706d838814c9cf13de98fac87f4f63d81b8743"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-en-web.pdf",
+        "bytes": 24274,
+        "sha256": "cd7cb3d3e3789bcf1f028aaed92924005eba9ebe02be855aed0c846a8db5320d"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-en.html",
+        "bytes": 7218,
+        "sha256": "20093201db93ca7b06fdbd10c8f3b5604ac0a97e80bc13d72562da0856eec342"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-es-property.pdf",
+        "bytes": 22071,
+        "sha256": "8a846eb3a7977c3d673be9faa67847ec5685d3f10952edc72b270d29d9dbf084"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-es-web.pdf",
+        "bytes": 24585,
+        "sha256": "bc022fc8196a4123bc52b3deecdffd5cc08a6863826fd87e7b2872f8349699af"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-DE-es.html",
+        "bytes": 7324,
+        "sha256": "cfeadae95dd2051896f7ccc32a45fbd154b9d12f23d77474930d4e8cd6e90c3b"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-de-property.pdf",
+        "bytes": 21654,
+        "sha256": "1b0d42568644d05b778c1f1c99c7165c85ffcb5b8eb6732a3b68ef210aaee606"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-de-web.pdf",
+        "bytes": 23392,
+        "sha256": "e86bfab6a9a18b906aa8ddce3f3ba7f4c9320bf9c324fc76a2f6008d3e61d1de"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-de.html",
+        "bytes": 6880,
+        "sha256": "c6e5579b0551f5feb682dafbd51c7c9806844daa62a8a6f2d8446d1b2dccf0fc"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-en-property.pdf",
+        "bytes": 20801,
+        "sha256": "52306d7df300de8f79d95e70c1ac54c00b6a32ceecaf3b8dc4542f471cc2394b"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-en-web.pdf",
+        "bytes": 22627,
+        "sha256": "f36f1d566cf9c4b8f5f3078c6a94b695f6e517a4b6c92b45862872c407272219"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-en.html",
+        "bytes": 6848,
+        "sha256": "7e59d794585d37be3b3f59bbb7b754bf5c279ff2f257082aac584dd0cc60eccf"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-es-property.pdf",
+        "bytes": 21178,
+        "sha256": "9d2355e08e75e92a710a31c2158bf48e77c5011b859e1bc6aa711ef6934e7739"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-es-web.pdf",
+        "bytes": 22925,
+        "sha256": "54838c8477813615f86465395040c3caa438e84d135e17ebff7384a2e3418dfe"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-ES-es.html",
+        "bytes": 6942,
+        "sha256": "9062a595db83b12a2ab48ca4d1e669d7931bd691b0af0be8b6ca84081ec913c2"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-de-property.pdf",
+        "bytes": 22362,
+        "sha256": "d78b22ac6df795364c0becb367ab62cb7deba7f95f85c2818cc2f34670676055"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-de-web.pdf",
+        "bytes": 25068,
+        "sha256": "38e002e2cece0afa3fc4e08b4534283547eab1842e4b4ab271480febfaaaf2e3"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-de.html",
+        "bytes": 7188,
+        "sha256": "35ef84f8215a12847eac803835a4a88cfe7c0887c434b3bbb1c1522dfd892a18"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-en-property.pdf",
+        "bytes": 21563,
+        "sha256": "102b21cbe2cb51bc0c943d3ecbf31414ef2323b68ebd45fa42c70499bc76ea74"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-en-web.pdf",
+        "bytes": 24332,
+        "sha256": "7aaed9d550b5baed959d9afe423e4873ef473f8a28ebc44e28d1ef4673d09fa4"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-en.html",
+        "bytes": 7146,
+        "sha256": "6e0160e8d230ae84441ea4b9eda7b7466f29193e068c044ec939b672ded773ed"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-es-property.pdf",
+        "bytes": 22104,
+        "sha256": "cb95e7bc551cfdc48b053a3e54ed13b440fefdc6314cb0d7a7bed0f318ab4bd1"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-es-web.pdf",
+        "bytes": 24688,
+        "sha256": "aa9ca5c51c7da8be385c044e47a47b56cae016ec43b365ca733a5dec58cdc33e"
+      },
+      {
+        "path": ".npm-cache/qa/property-public-output/SYNTHETIC-IE-es.html",
+        "bytes": 7258,
+        "sha256": "aa8f6a2911c8510936f846b27c7afc30edea5873f74a666780bf961f73798115"
+      }
+    ],
+    "visualQualification": "Current bytes parsed and asserted; no new independent visual or live-browser PDF-layout acceptance claimed."
+  },
+  "preserved": [
+    "PR129 invitation/message authority fences",
+    "Current bb8 assistant and migration188",
+    "Current commercial billing/navigation",
+    "Media189 plus exact owner dependency191",
+    "Existing workspace settings and authorized URL restoration",
+    "Package/lock/deployment/workflows unchanged"
+  ],
+  "excludedDuplicateCommits": [
+    "6330b449",
+    "3a28f879",
+    "8939a4b",
+    "0bb165a"
+  ],
+  "independentSourceReview": {
+    "path": "artifacts/sunday-crm-integration-20261104/root-independent-review-19af886e.json",
+    "sha256": "3e98e85eb7b3d9b2193604a0f902056c7876f086b0376b8a5a6e38e764a5c0fa",
+    "scope": "Exact integrated source delta; dependency order and single composed workspace conflict; existing server authority and RLS preserved",
+    "findings": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "genuineApp": false
+  },
+  "historicalFailures": "All original donor/QA failures and prior8/9 scope-string failure remain unchanged. No failures occurred in the current targeted candidate runs; old failing evidence is not relabelled.",
+  "lifecycle": "Former SRC05 pending-ref/remount and late-parent-refresh source findings addressed within the passing18 direct-component and7 actual-parent local cases. This is bounded synthetic HTTP qualification, not a global/live SRC05 acceptance.",
+  "open": [
+    "Independent review applies only to this exact local source delta; no genuine App or native CI attestation",
+    "Full production role/schema/identity/business-flow acceptance and actual target gates",
+    "Complete production migration rehearsal; 189/190/191 have not been applied to production",
+    "Historical published snapshots require supported review and republish/revoke; no retrospective repair",
+    "Existing live QA residue groups and untested matrix remain outside this task",
+    "Commercial and financial authority for future real provider actions"
+  ],
+  "realEffects": {
+    "providerCalls": 0,
+    "modelCalls": 0,
+    "appCalls": 0,
+    "productionDatabaseConnections": 0,
+    "productionMigrations": 0,
+    "customerWrites": 0,
+    "pushes": 0,
+    "pullRequests": 0,
+    "deployments": 0,
+    "budgetChanges": 0
+  }
+}

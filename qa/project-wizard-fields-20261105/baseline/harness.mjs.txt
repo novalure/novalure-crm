@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { chromium, expect as playwrightExpect } from "@playwright/test";
+import { applySalesSchema } from "./lib/local-sales-db.mjs";
+import { seedSalesBrowser } from "./lib/sales-browser-fixture.mjs";
+import { startReachabilityDb } from "./lib/property-reachability-local-db.mjs";
+import { startReachabilityHttp } from "./lib/property-reachability-next-http.mjs";
+
+const repository = process.cwd();
+const baselineRevision = "3492729aa8cb48459bad650fca91c9095aa9534e";
+const baseline = process.env.CRM_QA_WIZARD_BASELINE === "1";
+const sourceDirectory = baseline ? path.join(repository, ".npm-cache/qa/wizard-fields-baseline-349") : repository;
+const output = path.resolve(process.env.CRM_QA_WIZARD_OUTPUT || "qa/project-wizard-fields-20261105", baseline ? "baseline" : "fixed");
+const sha = value => createHash("sha256").update(value).digest("hex");
+const harnessSha256 = sha(await readFile(new URL(import.meta.url)));
+const checks = [], browserErrors = [], serverErrors = [], externalBrowserRequests = [], projectPosts = [], projectResponses = [];
+const evidence = { schemaVersion: 1, baseline, baselineRevision, harnessSha256, scope: "ACTUAL_LOOPBACK_BROWSER_LOGIN_MFA_COOKIE_CSRF_NEXT_API_AND_POSTGRES_SYNTHETIC_DATA_ONLY", noHttpMocks: true, noSessionSeed: true, noProviderOrCloudCalls: true, startedAt: new Date().toISOString(), checks };
+let db, http, browser, context, page, enteredCrm = false;
+const check = (name, passed, details) => { checks.push({ name, status: passed ? "PASS" : "FAIL", ...(details === undefined ? {} : { details }) }); console.log(`${passed ? "PASS" : "FAIL"} ${name}`); };
+function totp(secret) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", bytes = []; let bits = 0, value = 0;
+  for (const character of secret) { const digit = alphabet.indexOf(character); assert.ok(digit >= 0); value = (value << 5) | digit; bits += 5; if (bits >= 8) { bits -= 8; bytes.push((value >>> bits) & 255); value &= (1 << bits) - 1; } }
+  const counter = Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000))); const digest = createHmac("sha1", Buffer.from(bytes)).update(counter).digest();
+  return String((digest.readUInt32BE(digest[digest.length - 1] & 15) & 0x7fffffff) % 1000000).padStart(6, "0");
+}
+try {
+  await mkdir(output, { recursive: true });
+  if (baseline) {
+    const frozen = await readFile(path.join(sourceDirectory, "src/components/crm-workspace.tsx"));
+    const committed = execFileSync("git", ["show", `${baselineRevision}:src/components/crm-workspace.tsx`], { cwd: repository });
+    const canonical = bytes => bytes.toString("utf8").replace(/\r\n/g, "\n");
+    assert.equal(sha(canonical(frozen)), sha(canonical(committed)), "baseline app must match exact 349 commit after newline normalization");
+    evidence.baselineCanonicalShellSha256 = sha(canonical(frozen));
+  }
+  process.chdir(sourceDirectory);
+  console.log("PHASE owned local PostgreSQL and unchanged historical schema");
+  db = await startReachabilityDb(); evidence.databaseDirectory = db.directory;
+  evidence.appliedMigrations = await applySalesSchema(db);
+  const fixture = await seedSalesBrowser(db), ownerId = randomUUID(), funnelId = randomUUID();
+  await db.admin.query("insert into account_ui_preferences(auth_identity_id,language_preference) values($1,'de')", [fixture.authIdentityId]);
+  await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC WIZARD ASSIGNEE',$3,'admin','novalureAdmin','active')", [ownerId, fixture.workspaceId, `synthetic-wizard-${ownerId}@example.invalid`]);
+  await db.admin.query("insert into funnels(id,workspace_id,project_id,owner_user_id,name,goal,audience,entry_channel,status) values($1,$2,$3,$4,'SYNTHETIC WIZARD FIELD TEMPLATE','SYNTHETIC inert template','SYNTHETIC','Website','entwurf')", [funnelId, fixture.workspaceId, fixture.projectId, fixture.userId]);
+  const initialSessions = (await db.admin.query("select count(*)::int as count from auth_sessions where auth_identity_id=$1", [fixture.authIdentityId])).rows[0].count;
+  assert.equal(initialSessions, 0);
+  evidence.fixture = { workspaceId: fixture.workspaceId, actorId: fixture.userId, sourceProjectId: fixture.projectId, selectedOwnerId: ownerId, selectedFunnelId: funnelId, initialSessionCount: initialSessions, allBusinessDataSynthetic: true };
+  const runtimeFlags = (await db.pool.query("select current_user as role,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication from pg_roles where rolname=current_user")).rows[0];
+  assert.ok(Object.entries(runtimeFlags).filter(([key]) => key !== "role").every(([, value]) => value === false)); evidence.runtimeRole = runtimeFlags;
+  console.log("PHASE immutable app-byte capture and real local Next server");
+  http = await startReachabilityHttp(db, { session: randomBytes(48).toString("base64url"), encryption: randomBytes(40).toString("hex"), rateLimit: randomBytes(40).toString("hex") });
+  evidence.appInputs = http.inputs; evidence.httpRunDirectory = http.runDirectory;
+  browser = await chromium.launch({ channel: process.env.CRM_QA_BROWSER_CHANNEL || "chrome", headless: true });
+  context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: "de-AT", timezoneId: "Europe/Vienna", serviceWorkers: "block" });
+  await context.route("**/*", route => { const url = new URL(route.request().url()); if (url.origin === http.origin || ["data:", "blob:"].includes(url.protocol)) return route.continue(); externalBrowserRequests.push({ origin: url.origin, pathname: url.pathname }); return route.abort(); });
+  await context.addInitScript(() => localStorage.setItem("novalure-crm-navigation-preset-v1", "realEstateBroker"));
+  page = await context.newPage(); const expect = playwrightExpect.configure({ timeout: 30000 }); page.setDefaultTimeout(30000); page.setDefaultNavigationTimeout(120000);
+  page.on("pageerror", error => browserErrors.push(error.message));
+  page.on("response", response => { const url = new URL(response.url()); if (url.origin === http.origin && response.status() >= 500) serverErrors.push({ path: url.pathname, status: response.status() }); });
+  page.on("request", request => { const url = new URL(request.url()); if (url.origin === http.origin && url.pathname === "/api/crm/projects" && request.method() === "POST") projectPosts.push({ pathname: url.pathname, workspaceId: url.searchParams.get("workspaceId"), body: request.postDataJSON(), csrfPresent: Boolean(request.headers()["x-novalure-csrf-token"]), idempotencyKey: request.headers()["idempotency-key"] ?? null }); });
+  console.log("PHASE actual password and rendered TOTP enrollment");
+  await page.goto(http.origin + "/login?lang=de", { waitUntil: "domcontentloaded" });
+  const consent = page.getByRole("button", { name: /^(Nur essenzielle|Only necessary)$/ }); if (await consent.isVisible()) await consent.click();
+  await page.locator("#login-email").fill(fixture.email); await page.locator("#login-password").fill(fixture.password);
+  await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), page.locator("form:has(#login-password) button[type=submit]").click()]);
+  await expect(page.locator("#login-mfa-code")).toBeVisible();
+  const secret = (await page.locator("p").filter({ has: page.locator("strong", { hasText: /TOTP-Schlüssel:|TOTP key:/ }) }).locator("code").innerText()).trim();
+  const recoveryCodes = await page.locator("form:has(#login-mfa-code) li code").allTextContents(); assert.ok(recoveryCodes.length > 0);
+  await page.locator('input[name="recoveryCodesSaved"]').check(); await page.locator("#login-mfa-code").fill(totp(secret));
+  await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), page.getByRole("button", { name: /^(Sicher bestätigen|Verify securely)$/ }).click()]);
+  await expect(page.locator("[data-crm-sidebar]")).toBeVisible({ timeout: 120000 });
+  enteredCrm = true;
+  const cookie = (await context.cookies()).find(value => value.name === "novalure_session");
+  check("actual password/TOTP flow issued opaque HttpOnly MFA session", Boolean(cookie?.httpOnly && cookie.value.startsWith("v2.")));
+  await page.goto(`${http.origin}/?workspaceId=${fixture.workspaceId}&projectId=all#projects`, { waitUntil: "domcontentloaded" });
+  await expect(page.locator("[data-crm-profile-select]").first()).toHaveValue("realEstateBroker");
+  const readyCore = await page.evaluate(async () => { const response = await fetch("/api/crm/core", { cache: "no-store", credentials: "same-origin" }); return response.status; }); assert.equal(readyCore, 200);
+  const marker = `SYNTHETIC WIZARD FIELDS ${randomUUID().slice(0, 8)}`, notes = "SYNTHETIC WIZARD NOTES — harmless persistence marker", pipelineKey = "pipeline_investment";
+  console.log("PHASE actual project wizard and single real create");
+  await page.getByRole("button", { name: "Neues Projekt", exact: true }).last().click();
+  const dialog = page.getByRole("dialog", { name: "Projekt-Wizard", exact: true }); await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Projektname", { exact: true }).fill(marker);
+  await dialog.getByPlaceholder("Zielgruppe, Startdatum, Besonderheiten", { exact: true }).fill(notes);
+  await dialog.locator("select").filter({ has: page.locator(`option[value="${ownerId}"]`) }).selectOption(ownerId);
+  await dialog.locator("select").filter({ has: page.locator(`option[value="${funnelId}"]`) }).selectOption(funnelId);
+  await dialog.locator("select").filter({ has: page.locator(`option[value="${pipelineKey}"]`) }).selectOption(pipelineKey);
+  evidence.selected = { name: marker, notes, ownerUserId: ownerId, funnelTemplateId: funnelId, pipelineTemplateKey: pipelineKey };
+  const [response] = await Promise.all([page.waitForResponse(value => new URL(value.url()).pathname === "/api/crm/projects" && value.request().method() === "POST"), dialog.getByRole("button", { name: "Projekt anlegen", exact: true }).click()]);
+  const payload = await response.json(); projectResponses.push({ status: response.status(), body: payload });
+  check("real project POST passed server authorization and CSRF", response.status() === 200 && payload.persisted === true && Boolean(payload.project?.id), { status: response.status(), persisted: payload.persisted ?? null });
+  assert.equal(response.status(), 200); assert.equal(payload.persisted, true); const createdId = payload.project.id; assert.match(createdId, /^[a-f0-9-]{36}$/i);
+  evidence.createdProjectId = createdId;
+  await expect.poll(() => projectPosts.length).toBe(1); check("one create with real browser CSRF and command identity", projectPosts.length === 1 && projectPosts[0].csrfPresent && Boolean(projectPosts[0].idempotencyKey));
+  await expect(page.getByRole("button", { name: "Projekt wird gespeichert...", exact: true })).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" }); await expect(page.locator("[data-crm-sidebar]")).toBeVisible();
+  const readback = await page.evaluate(async () => { const response = await fetch("/api/crm/core", { credentials: "same-origin", cache: "no-store" }); return { status: response.status, body: await response.json() }; });
+  assert.equal(readback.status, 200); const reloaded = readback.body.data?.projects?.find(project => project.id === createdId); assert.ok(reloaded); evidence.reloadedProject = reloaded;
+  const client = await db.pool.connect(); let row, pipeline;
+  try { await client.query("begin read only"); await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [fixture.workspaceId, fixture.userId]); row = (await client.query("select to_jsonb(p) as project from projects p where p.workspace_id=$1 and p.id=$2", [fixture.workspaceId, createdId])).rows[0]?.project; if (row?.default_pipeline_id) pipeline = (await client.query("select id,workspace_id,project_id,key,name,purpose from crm_pipelines where workspace_id=$1 and id=$2", [fixture.workspaceId, row.default_pipeline_id])).rows[0]; await client.query("rollback"); }
+  catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
+  assert.ok(row); evidence.databaseProject = row; evidence.databaseDefaultPipeline = pipeline ?? null;
+  check("real reload/Core and RLS-scoped runtime SQL agree on the created project", reloaded.id === row.id && reloaded.name === marker && row.workspace_id === fixture.workspaceId);
+  const submitted = projectPosts[0].body.project;
+  for (const [field, expected] of Object.entries({ notes, ownerUserId: ownerId, funnelTemplateId: funnelId })) check(`wizard ${field} is transmitted and survives real reload`, submitted[field] === expected && reloaded[field] === expected, { sent: submitted[field] ?? null, reloaded: reloaded[field] ?? null, expected });
+  check("selected pipeline template survives reload as explicit selection", reloaded.setupDefaults?.pipelineTemplateKey === pipelineKey, { requested: pipelineKey, sentDefaultPipelineId: submitted.defaultPipelineId ?? null, reloadedSetupDefaults: reloaded.setupDefaults ?? null, actualDefaultPipeline: pipeline ?? null });
+  check("no browser exception or external browser request", browserErrors.length === 0 && externalBrowserRequests.length === 0, { browserErrors, externalBrowserRequests });
+} catch (error) { evidence.failure = { name: error.name, message: String(error.message).slice(0, 1500) }; if (enteredCrm && page) { evidence.failedCrmDom = await page.evaluate(() => ({ url: location.pathname + location.search + location.hash, lang: document.querySelector("main.crm-app")?.getAttribute("lang"), dialogs: [...document.querySelectorAll('[role="dialog"]')].map(element => ({ labelledby: element.getAttribute("aria-labelledby"), heading: element.querySelector("h1,h2,h3")?.textContent, text: element.textContent?.slice(0, 2000) })), buttons: [...document.querySelectorAll("button")].filter(element => /Neues Projekt|New project/.test(element.textContent ?? "")).map(element => ({ text: element.textContent, disabled: element.disabled })) })).catch(() => null); await page.screenshot({ path: path.join(output, "failure.png"), fullPage: false }).catch(() => undefined); } console.error(`LOCAL_WIZARD_FAILURE ${error.name}: ${String(error.message).slice(0, 500)}`); process.exitCode = 1; }
+finally {
+  if (context) await context.close().catch(error => { evidence.browserCleanupError = error.message; }); if (browser) await browser.close().catch(error => { evidence.browserCleanupError = error.message; });
+  try { if (http) evidence.httpCleanup = await http.stop(); } catch (error) { evidence.httpCleanupError = error.message; process.exitCode = 1; }
+  try { if (db) evidence.dbCleanup = await db.stop(); } catch (error) { evidence.dbCleanupError = error.message; process.exitCode = 1; }
+  process.chdir(repository); Object.assign(evidence, { finishedAt: new Date().toISOString(), projectPosts, projectResponses, browserErrors, serverErrors, externalBrowserRequests, totals: { checks: checks.length, passed: checks.filter(item => item.status === "PASS").length, failed: checks.filter(item => item.status === "FAIL").length } });
+  await mkdir(output, { recursive: true }); await writeFile(path.join(output, "results.json"), JSON.stringify(evidence, null, 2) + "\n"); console.log(JSON.stringify({ output, totals: evidence.totals, failure: evidence.failure ?? null }));
+}
+if (checks.some(item => item.status === "FAIL")) process.exitCode = 1;

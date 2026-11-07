@@ -1,0 +1,268 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { after, before, test } from "node:test";
+import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
+import type { AppSession } from "../src/lib/auth/session";
+import { executeCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../src/lib/crm-command";
+import { createAutomationGraph, type AutomationGraph } from "../src/lib/automation/graph";
+import { controlAutomationEnrollment, enrollAutomationLead, listAutomations, recordAutomationEvent, reviewAutomationDraft, runAutomationDue, saveAutomation, setAutomationStatus } from "../src/lib/automation/repository";
+import { handleAutomationCron } from "../src/lib/automation/scheduler";
+import { upsertLeadRecord } from "../src/lib/db/crm-write-repositories";
+import { runPropertySalesCommand } from "../src/lib/db/property-sales-repositories";
+
+let db: Awaited<ReturnType<typeof startLocalSalesDb>>, options: TenantTransactionOptions;
+const workspaceId = randomUUID(), otherWorkspaceId = randomUUID(), actorId = randomUUID(), limitedId = randomUUID(), projectId = randomUUID(), hiddenProjectId = randomUUID(), contactId = randomUUID();
+const session: AppSession = { authenticated: true, source: "headers", workspaceId, userId: actorId, workspaceName: "Synthetic automation QA", name: "Synthetic Owner", email: "automation@qa.invalid", role: "owner", productRole: "customer_owner", permissions: ["crm:read", "crm:write"], productPermissions: ["pipeline:write"] };
+const limited: AppSession = { ...session, userId: limitedId, role: "agent", productRole: "project_sales_member" };
+const meta = () => ({ idempotencyKey: randomUUID(), correlationId: randomUUID() });
+const command = <T>(action: (tx: TenantTransaction, fresh: AppSession) => Promise<T>) => executeCrmCommand(session, { operation: "automation.qa", capability: "pipeline:write", projectId, payload: {}, ...meta() }, (tx, context) => action(tx, context.session), options);
+async function ensureWebSchema(){if(!(await db.admin.query("select to_regclass('public.web_expose_versions') is not null as ready")).rows[0].ready)await db.admin.query(await readFile("migrations/155_web_expose.sql","utf8"));}
+async function lead(project = projectId) { const id = randomUUID(); await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,assigned_to_user_id,type,status,intent) values($1,$2,$3,$4,$5,'Käufer','Neu','Synthetic inquiry')", [id, workspaceId, project, contactId, actorId]); return id; }
+async function published(graph = createAutomationGraph(), scope: string | null = projectId) {
+  graph.businessHours = false;
+  const saved = await command((tx, fresh) => saveAutomation(tx, fresh, { projectId: scope, name: `Synthetic ${randomUUID()}`, graph }));
+  await command((tx, fresh) => setAutomationStatus(tx, fresh, { id: saved.data.id, expectedRevision: 1, active: true }));
+  return saved.data.id;
+}
+before(async () => {
+  db = await startLocalSalesDb(); await applySalesSchema(db, { maxMigrationNumber: 106 });
+  await db.admin.query(await readFile("migrations/154_automation_graph.sql", "utf8"));
+  options = { pool: db.pool as unknown as NonNullable<TenantTransactionOptions["pool"]> };
+  await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'Synthetic automation','managed_by_novalure'),($2,'Other synthetic','managed_by_novalure')", [workspaceId, otherWorkspaceId]);
+  await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'Synthetic Owner','automation@qa.invalid','owner','customer_owner','active'),($2,$3,'Limited','limited@qa.invalid','agent','project_sales_member','active')", [actorId, limitedId, workspaceId]);
+  await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$3,'Visible','Bauträger'),($2,$3,'Hidden','Bauträger')", [projectId, hiddenProjectId, workspaceId]);
+  await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)", [workspaceId, projectId, limitedId]);
+  await db.admin.query("insert into contacts(id,workspace_id,project_id,name,role,email,phone) values($1,$2,$3,'Synthetic Contact','Käufer','contact@qa.invalid','+430000')", [contactId, workspaceId, projectId]);
+});
+after(async () => { if (db) await db.stop(); });
+test("saved graph survives reload; activation creates immutable version, later draft edits do not change it", async () => {
+  const graph = createAutomationGraph(), id = await published(graph);
+  const loaded = await listAutomations(session, projectId, options), row = loaded.definitions.find((d) => d.id === id)!;
+  assert.equal(row.status, "active"); assert.equal(row.activeVersion, 1); assert.equal(row.revision, 2);
+  graph.nodes[1].title = "Changed draft";
+  await command((tx, fresh) => saveAutomation(tx, fresh, { id, projectId, expectedRevision: 2, name: row.name, graph }));
+  assert.equal((await db.admin.query("select graph->'nodes'->1->>'title' as title from crm_automation_versions where automation_id=$1", [id])).rows[0].title, "Anfrage persönlich beantworten");
+  await assert.rejects(command((tx, fresh) => saveAutomation(tx, fresh, { id, projectId, expectedRevision: 2, name: row.name, graph })), /zwischenzeitlich/);
+  await assert.rejects(db.admin.query("update crm_automation_versions set graph='{}' where automation_id=$1", [id]), /immutable|append|not allowed/i);
+});
+test("event replay + concurrent runner create exactly one task per node", async () => {
+  const id = await published(), leadId = await lead(), eventId = randomUUID();
+  await command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId, trigger: "new_lead" }));
+  await command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId, trigger: "new_lead" }));
+  await Promise.all([command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id)), command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id))]);
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, id])).rowCount, 1);
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0].status, "completed");
+  await assert.rejects(command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId, trigger: "expose_opened" })), /Ereignis-ID/);
+});
+test("durable wait resumes the next node once, independent of a browser session", async () => {
+  const graph = createAutomationGraph(); graph.nodes.push({ id: "wait", type: "wait", title: "Wait", hours: 24 }); graph.edges[0].to = "wait"; graph.edges.push({ from: "wait", to: "task", port: "next" });
+  const id = await published(graph), leadId = await lead();
+  await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  const waiting = (await db.admin.query("select id,status,node_id,due_at from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0];
+  assert.equal(waiting.status, "waiting"); assert.equal(waiting.node_id, "task"); assert.ok(new Date(waiting.due_at).getTime() > Date.now() + 23 * 3600000);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, id])).rowCount, 0);
+  await db.admin.query("update crm_automation_enrollments set due_at=now()-interval '1 minute' where id=$1", [waiting.id]);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, id])).rowCount, 1);
+});
+test("a second genuine event remains pending while its lead has a live run and is admitted after that run ends",async()=>{
+ const graph=createAutomationGraph();graph.trigger='proof_uploaded';graph.nodes.push({id:'wait',type:'wait',title:'Wait',hours:1});graph.edges[0].to='wait';graph.edges.push({from:'wait',to:'task',port:'next'});
+ const id=await published(graph),leadId=await lead(),first=randomUUID(),second=randomUUID();
+ await command(tx=>recordAutomationEvent(tx,{workspaceId,projectId,leadId,eventId:first,trigger:'proof_uploaded'},{enroll:false}));await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));
+ await command(tx=>recordAutomationEvent(tx,{workspaceId,projectId,leadId,eventId:second,trigger:'proof_uploaded'},{enroll:false}));await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));
+ assert.equal((await db.admin.query('select a.event_id from crm_automation_admissions a join crm_automation_events e on e.id=a.event_id where a.automation_id=$1 and e.event_key=$2',[id,second])).rowCount,0);
+ await db.admin.query("update crm_automation_enrollments set due_at=clock_timestamp()-interval '1 minute' where automation_id=$1",[id]);await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));
+ assert.equal((await db.admin.query('select id from crm_automation_enrollments where automation_id=$1',[id])).rowCount,2);
+ await db.admin.query("update crm_automation_enrollments set due_at=clock_timestamp()-interval '1 minute' where automation_id=$1",[id]);await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2",[leadId,id])).rowCount,2);
+});
+test("unknown analytics waits for a real signal instead of taking No branch", async () => {
+  const graph: AutomationGraph = { ...createAutomationGraph(), nodes: [{ id: "start", type: "start", title: "Start" }, { id: "if", type: "condition", title: "Opened?", condition: "expose_opened" }, { id: "task", type: "task", title: "Known open", dueDays: 0 }, { id: "end", type: "stop", title: "End" }], edges: [{ from: "start", to: "if", port: "next" }, { from: "if", to: "task", port: "yes" }, { from: "if", to: "end", port: "no" }, { from: "task", to: "end", port: "next" }] };
+  const id = await published(graph), leadId = await lead();
+  await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0].status, "waiting_signal");
+  await command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId: randomUUID(), trigger: "expose_opened" }));
+  await db.admin.query("update crm_automation_enrollments set due_at=now() where lead_id=$1 and automation_id=$2", [leadId, id]);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, id])).rowCount, 1);
+});
+test("contact since planning cancels a waiting flow before any task is created", async () => {
+  const id = await published(), leadId = await lead();
+  await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  await db.admin.query("update leads set last_contact_at=clock_timestamp() where id=$1", [leadId]);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0].status, "stopped");
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1", [leadId])).rowCount, 0);
+});
+test("historical contact cannot stop a later enrollment; a fresh opt-out always does", async () => {
+  const id = await published(), leadId = await lead();
+  await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  await command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId: randomUUID(), trigger: "personal_contact", occurredAt: new Date(Date.now() - 3600000).toISOString() }));
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0].status, "running");
+  await command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId: randomUUID(), trigger: "opt_out" }));
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0].status, "stopped");
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1", [leadId])).rowCount, 0);
+});
+test("canonical sales qualification cannot be bypassed by a phase node and remains visibly blocked", async () => {
+  const graph = createAutomationGraph(); graph.nodes[1] = { id: "task", type: "phase", title: "Qualification", value: "Qualifiziert" };
+  const id = await published(graph), leadId = await lead();
+  const intake = await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  const run = (await listAutomations(session, projectId, options)).enrollments.find((e) => e.automationId === id && e.leadId === leadId)!;
+  assert.equal(run.status, "blocked"); assert.match(run.stopReason!, /CANONICAL_QUALIFICATION_REQUIRED/);
+  assert.equal((await db.admin.query("select status from leads where id=$1", [leadId])).rows[0].status, "Neu");
+  await command((tx, fresh) => controlAutomationEnrollment(tx, fresh, { id: intake.data.enrollmentId!, retry: true }));
+  await command((tx, fresh) => controlAutomationEnrollment(tx, fresh, { id: intake.data.enrollmentId!, retry: false }));
+  await assert.rejects(command((tx, fresh) => controlAutomationEnrollment(tx, fresh, { id: intake.data.enrollmentId!, retry: true })), /blockierter/);
+});
+test("email node persists a reviewable draft and cannot report a send", async () => {
+  const graph = createAutomationGraph(); graph.nodes[1] = { id: "task", type: "email_draft", title: "Draft", subject: "Synthetic draft", body: "Synthetic message" };
+  const id = await published(graph), leadId = await lead();
+  await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  const ran = await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id)); assert.equal(ran.data.externalSends, 0);
+  const draft = (await listAutomations(session, projectId, options)).drafts.find((d) => d.leadId === leadId)!;
+  assert.equal(draft.subject, "Synthetic draft"); assert.equal(draft.consentAllowed, false);
+  await command((tx, fresh) => reviewAutomationDraft(tx, fresh, { id: draft.id, dismiss: false }));
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rows[0].status, "completed");
+});
+test("org graph admits scoped leads; cross-project event and unauthorized read are denied", async () => {
+  const id = await published(createAutomationGraph(), null), leadId = await lead();
+  await command((tx) => recordAutomationEvent(tx, { workspaceId, projectId, leadId, eventId: randomUUID(), trigger: "new_lead" }));
+  assert.equal((await db.admin.query("select id from crm_automation_enrollments where automation_id=$1 and lead_id=$2", [id, leadId])).rowCount, 1);
+  await assert.rejects(command((tx) => recordAutomationEvent(tx, { workspaceId, projectId: hiddenProjectId, leadId, eventId: randomUUID(), trigger: "new_lead" })), /Projekt/);
+  const hidden = await published(createAutomationGraph(), hiddenProjectId);
+  const visible = await listAutomations(limited, projectId, options); assert.ok(!visible.definitions.some((d) => d.id === hidden || d.id === id));
+  assert.equal((await db.pool.query("select id from crm_automations")).rowCount, 0);
+});
+test("real lead and complete search-profile commits produce deduplicated new-lead/profile/phase signals", async () => {
+  const newId = await published(), profileGraph = createAutomationGraph(); profileGraph.trigger = "search_profile_completed";
+  const profileId = await published(profileGraph), phaseGraph = createAutomationGraph(); phaseGraph.trigger = "lead_phase_changed";
+  const phaseId = await published(phaseGraph), key = randomUUID();
+  const input = { session, idempotencyKey: key, lead: { projectId, contactId, assignedToUserId: actorId, type: "Käufer" as const, status: "Neu" as const, intent: "Synthetic source integration", objectType: "Wohnung" as const, region: "Wien", buyerProfile: { budgetFrom: 200000, budgetTo: 400000, financingStatus: "offen" as const, useCase: "Eigennutzung" as const, desiredLocation: "Wien", propertyType: "Wohnung" as const } } };
+  const first = (await command((_tx, fresh) => upsertLeadRecord({ ...input, session: fresh }))).data, second = (await command((_tx, fresh) => upsertLeadRecord({ ...input, session: fresh }))).data;
+  assert.ok(first.persisted && second.persisted, JSON.stringify({ first, second })); if (!first.persisted || !second.persisted) return;
+  assert.equal(first.data.id, second.data.id);
+  const events = (await db.admin.query("select trigger_key from crm_automation_events where lead_id=$1", [first.data.id])).rows.map((r) => r.trigger_key);
+  assert.equal(events.filter((e) => e === "new_lead").length, 1); assert.equal(events.filter((e) => e === "search_profile_completed").length, 1, JSON.stringify((await db.admin.query("select * from buyer_search_profiles where buyer_lead_id=$1", [first.data.id])).rows));
+  const changed = (await command((_tx, fresh) => upsertLeadRecord({ session: fresh, lead: { id: first.data.id, projectId, version: first.data.version, status: "Termin offen" } }))).data; assert.ok(changed.persisted);
+  assert.equal((await db.admin.query("select id from crm_automation_events where lead_id=$1 and trigger_key='lead_phase_changed'", [first.data.id])).rowCount, 1);
+  for (const id of [newId, profileId, phaseId]) { await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id)); assert.equal((await db.admin.query("select id from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [first.data.id, id])).rowCount, 1); }
+});
+test("authoritative qualification, handover and confirmed viewing atomically feed automation events", async () => {
+  const graph = createAutomationGraph(); graph.trigger = "appointment_booked";
+  const id = await published(graph), leadId = await lead(), unitId = randomUUID();
+  await db.admin.query("insert into property_units(id,workspace_id,project_id,unit_number,status) values($1,$2,$3,$4,'available')", [unitId, workspaceId, projectId, `QA-${unitId}`]);
+  const sales = (action: "qualification.save" | "handover.create" | "viewing.save", payload: Record<string, unknown>, expectedVersion?: number) => runPropertySalesCommand(session, { action, projectId, payload, expectedVersion, ...meta() }, options);
+  await sales("qualification.save", { leadId, budgetFrom: 200000, budgetTo: 400000, financingStatus: "vorqualifiziert", purchaseTimeline: "2027", useCase: "Eigennutzung", desiredUnitId: unitId, priority: "high", sourceReference: "Synthetic buyer interview" }, 1);
+  await sales("handover.create", { leadId, recipientUserId: actorId, sourceReference: "Synthetic handover" }, 2);
+  const values = { leadId, unitId, ownerUserId: actorId, startsAt: "2030-01-07T10:00:00Z", endsAt: "2030-01-07T11:00:00Z", timeZone: "Europe/Vienna", status: "planned" };
+  const planned = await sales("viewing.save", values);
+  assert.equal((await db.admin.query("select id from crm_automation_events where lead_id=$1 and trigger_key='appointment_booked'", [leadId])).rowCount, 0);
+  const viewingId = String(planned.data.record!.id);
+  const confirm = { action: "viewing.save" as const, projectId, payload: { ...values, viewingId, status: "confirmed" }, expectedVersion: 1, ...meta() };
+  await runPropertySalesCommand(session, confirm, options); await runPropertySalesCommand(session, confirm, options);
+  assert.equal((await db.admin.query("select id from crm_automation_events where lead_id=$1 and trigger_key='appointment_booked'", [leadId])).rowCount, 1);
+  assert.equal((await db.admin.query("select id from crm_automation_events where lead_id=$1 and trigger_key='lead_phase_changed'", [leadId])).rowCount, 2);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, id));
+  assert.equal((await db.admin.query("select id from crm_automation_enrollments where lead_id=$1 and automation_id=$2", [leadId, id])).rowCount, 1);
+});
+test("cron requires bearer, exact allowlist and a durable authenticated delegation", async () => {
+  const id = await published(), env: NodeJS.ProcessEnv = { NODE_ENV: "test", CRON_SECRET: "synthetic-automation-secret", NOVALURE_AUTOMATION_SCOPES: JSON.stringify([{ workspaceId, automationId: id, actorId }]) };
+  assert.equal((await handleAutomationCron(new Request("https://qa.invalid/api/cron/automations"), env, options)).status, 401);
+  const response = await handleAutomationCron(new Request("https://qa.invalid/api/cron/automations", { headers: { authorization: `Bearer ${env.CRON_SECRET}` } }), env, options);
+  assert.equal(response.status, 503); assert.match(await response.text(), /AUTOMATION_ACTOR_REVOKED|AUTOMATION_DELEGATION_REQUIRED|AUTOMATION_IDENTITY_REVOKED/);
+  assert.equal((await handleAutomationCron(new Request("https://qa.invalid/api/cron/automations?workspaceId=forged", { headers: { authorization: `Bearer ${env.CRON_SECRET}` } }), env, options)).status, 401);
+});
+test("MFA-persisted activation delegates a narrow flow to authenticated cron; pause revokes its execution", async () => {
+  const id = await published(), leadId = await lead();
+  const identityId = (await db.admin.query("select auth_identity_id from workspace_users where id=$1", [actorId])).rows[0].auth_identity_id;
+  const sessionId = randomUUID();
+  await db.admin.query("update auth_identities set credential_state='active',mfa_enabled_at=now(),mfa_secret_ciphertext='SYNTHETIC-NOT-A-REAL-SECRET' where id=$1", [identityId]);
+  await db.admin.query("insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,mfa_verified_at,expires_at) values($1,$2,$3,$4,$5,now(),now()+interval '1 hour')", [sessionId, "a".repeat(64), identityId, actorId, workspaceId]);
+  const cookieSession: AppSession = { ...session, source: "cookie", authIdentityId: identityId, authSessionId: sessionId };
+  await executeCrmCommand(cookieSession, { operation: "automation.qa.activate", resourceId: id, projectId, capability: "pipeline:write", payload: {}, ...meta() }, (tx, context) => setAutomationStatus(tx, context.session, { id, expectedRevision: 2, active: true }), options);
+  assert.equal((await listAutomations(session, projectId, options)).definitions.find((d) => d.id === id)!.scheduleGranted, true);
+  await command((tx, fresh) => enrollAutomationLead(tx, fresh, { automationId: id, leadId, eventId: randomUUID() }));
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", CRON_SECRET: "synthetic-valid-cron-secret", NOVALURE_AUTOMATION_SCOPES: JSON.stringify([{ workspaceId, automationId: id, actorId }]) };
+  const request = () => new Request("https://qa.invalid/api/cron/automations", { headers: { authorization: `Bearer ${env.CRON_SECRET}` } });
+  const first = await handleAutomationCron(request(), env, options); assert.equal(first.status, 200, await first.clone().text());
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, id])).rowCount, 1);
+  const audit = (await db.admin.query("select after from audit_logs where entity_id=$1 and action='automation.scheduled_run'", [id])).rows[0].after;
+  assert.equal(audit.actorType, "DELEGATED_AUTOMATION_JOB");
+  await command((tx, fresh) => setAutomationStatus(tx, fresh, { id, expectedRevision: 3, active: false }));
+  const paused = await handleAutomationCron(request(), env, options); assert.equal(paused.status, 200); assert.equal((await paused.json()).results[0].status, "paused");
+});
+test("real Web-exposé outbox is canonicalized once but reaches each matching delegated flow", async () => {
+  await ensureWebSchema();
+  const first = await published(), second = await published(), leadId = await lead(), eventId = randomUUID();
+  await db.admin.query("insert into web_expose_outbox(id,workspace_id,project_id,lead_id,event_type) values($1,$2,$3,$4,'new_lead')", [eventId, workspaceId, projectId, leadId]);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, first));
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, second));
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=any($2::text[])", [leadId, [first, second]])).rowCount, 2);
+  assert.equal((await db.admin.query("select id from crm_automation_events where event_key=$1", [eventId])).rowCount, 1);
+  assert.ok((await db.admin.query("select processed_at from web_expose_outbox where id=$1", [eventId])).rows[0].processed_at);
+});
+test("analytics withdrawal cancels a future expose-derived wait while an independent inquiry flow remains valid", async () => {
+  await ensureWebSchema();
+  const graph = createAutomationGraph(); graph.trigger = "expose_opened"; graph.nodes.push({ id: "wait", type: "wait", title: "Wait", hours: 24 }); graph.edges[0].to = "wait"; graph.edges.push({ from: "wait", to: "task", port: "next" });
+  const exposeFlow = await published(graph), inquiryFlow = await published(), leadId = await lead();
+  const propertyId = randomUUID(), versionId = randomUUID(), linkId = randomUUID(), sessionId = randomUUID();
+  await db.admin.query("insert into seller_listings(id,workspace_id,project_id,title,address,region,object_type,area_sqm) values($1,$2,$3,'Synthetic consent property','Synthetic address','Wien','Wohnung',70)", [propertyId, workspaceId, projectId]);
+  await db.admin.query("insert into web_expose_versions(id,workspace_id,project_id,property_id,created_by,language,version,snapshot,source_fingerprint) values($1,$2,$3,$4,$5,'de',1,'{\"schemaVersion\":1}','synthetic')", [versionId, workspaceId, projectId, propertyId, actorId]);
+  await db.admin.query("insert into web_expose_links(id,workspace_id,version_id,token_hash,label,intended_lead_id) values($1,$2,$3,$4,'Synthetic personal link',$5)", [linkId, workspaceId, versionId, "1".repeat(64), leadId]);
+  await db.admin.query("insert into web_expose_sessions(id,workspace_id,link_id,token_hash,visitor_hash) values($1,$2,$3,$4,$5)", [sessionId, workspaceId, linkId, "2".repeat(64), "3".repeat(64)]);
+  await db.admin.query("insert into web_expose_outbox(workspace_id,project_id,lead_id,event_type,payload) values($1,$2,$3,'expose_opened',$4::jsonb),($1,$2,$3,'new_lead','{}')", [workspaceId, projectId, leadId, JSON.stringify({ exposeSessionId: sessionId, exposeVersionId: versionId, identityLevel: "intended_recipient" })]);
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, exposeFlow));
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where automation_id=$1 and lead_id=$2", [exposeFlow, leadId])).rows[0].status, "waiting");
+  await db.admin.query("update web_expose_sessions set withdrawn_at=clock_timestamp() where id=$1", [sessionId]);
+  const after = await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, exposeFlow)); assert.equal(after.data.revoked, 1);
+  assert.equal((await db.admin.query("select status from crm_automation_enrollments where automation_id=$1 and lead_id=$2", [exposeFlow, leadId])).rows[0].status, "stopped");
+  await command((tx, fresh) => runAutomationDue(tx, fresh, projectId, 25, inquiryFlow));
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, exposeFlow])).rowCount, 0);
+  assert.equal((await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2", [leadId, inquiryFlow])).rowCount, 1);
+});
+test("manager erasure removes exposure attribution across event/run/steps/drafts/task audit and preserves inquiry work", async () => {
+  await ensureWebSchema();
+  const taskGraph=createAutomationGraph();taskGraph.trigger='expose_opened';taskGraph.nodes[1].title='Synthetic customer opened the property expose';
+  const taskFlow=await published(taskGraph),draftGraph=createAutomationGraph();draftGraph.trigger='expose_opened';draftGraph.nodes[1]={id:'task',type:'email_draft',title:'Private followup',subject:'Synthetic recipient opened expose',body:'Synthetic private context from this expose open'};
+  const draftFlow=await published(draftGraph),inquiryFlow=await published(),leadId=await lead(),propertyId=randomUUID(),versionId=randomUUID(),linkId=randomUUID(),sessionId=randomUUID();
+  await db.admin.query("insert into seller_listings(id,workspace_id,project_id,title,address,region,object_type,area_sqm) values($1,$2,$3,'Synthetic erasure property','Synthetic address','Wien','Wohnung',70)",[propertyId,workspaceId,projectId]);
+  await db.admin.query("insert into web_expose_versions(id,workspace_id,project_id,property_id,created_by,language,version,snapshot,source_fingerprint) values($1,$2,$3,$4,$5,'de',1,'{\"schemaVersion\":1}','synthetic')",[versionId,workspaceId,projectId,propertyId,actorId]);
+  await db.admin.query("insert into web_expose_links(id,workspace_id,version_id,token_hash,label,intended_lead_id) values($1,$2,$3,$4,'Synthetic erasure link',$5)",[linkId,workspaceId,versionId,randomUUID().replaceAll('-','').repeat(2),leadId]);
+  await db.admin.query("insert into web_expose_sessions(id,workspace_id,link_id,token_hash,visitor_hash) values($1,$2,$3,$4,$5)",[sessionId,workspaceId,linkId,randomUUID().replaceAll('-','').repeat(2),randomUUID().replaceAll('-','').repeat(2)]);
+  const eventKey=randomUUID();
+  await db.admin.query("insert into web_expose_outbox(id,workspace_id,project_id,lead_id,event_type,payload) values($1,$2,$3,$4,'expose_opened',$5::jsonb)",[eventKey,workspaceId,projectId,leadId,JSON.stringify({exposeSessionId:sessionId,exposeVersionId:versionId,identityLevel:'intended_recipient'})]);
+  for(const id of[taskFlow,draftFlow])await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));
+  await command((tx,fresh)=>enrollAutomationLead(tx,fresh,{automationId:inquiryFlow,leadId,eventId:randomUUID()}));await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,inquiryFlow));
+  const affected=(await db.admin.query("select id from crm_automation_enrollments where lead_id=$1 and automation_id=any($2::uuid[])",[leadId,[taskFlow,draftFlow]])).rows.map(row=>row.id);
+  const task=(await db.admin.query("select id from tasks where lead_id=$1 and metadata->>'automationId'=$2",[leadId,taskFlow])).rows[0];
+  await assert.rejects(withCrmRead(limited,tx=>tx.queryOne("select crm_automation_erase_exposure($1::uuid,$2::uuid)",[workspaceId,sessionId]),options),/workspace manager/);
+  const erased=await command(tx=>tx.queryOne<{result:{events:number}}>("select crm_automation_erase_exposure($1::uuid,$2::uuid) as result",[workspaceId,sessionId]));assert.equal(erased.data!.result.events,1);
+  const tombstone=(await db.admin.query("select lead_id,trigger_key,context from crm_automation_events where event_key=$1",[eventKey])).rows[0];assert.deepEqual(tombstone,{lead_id:null,trigger_key:'tracking_erased',context:{}});
+  for(const row of(await db.admin.query("select lead_id,automation_id,version,status from crm_automation_enrollments where id=any($1::uuid[])",[affected])).rows)assert.deepEqual(row,{lead_id:null,automation_id:null,version:null,status:'stopped'});
+  assert.ok((await db.admin.query("select result from crm_automation_steps where enrollment_id=any($1::uuid[])",[affected])).rows.every(row=>JSON.stringify(row.result)==='{}'));
+  const draft=(await db.admin.query("select contact_id,subject,body,status from crm_automation_drafts where enrollment_id=any($1::uuid[])",[affected])).rows[0];assert.deepEqual(draft,{contact_id:null,subject:'Gelöschter Automationsentwurf',body:'',status:'dismissed'});
+  const keptTask=(await db.admin.query("select lead_id,title,metadata from tasks where id=$1",[task.id])).rows[0];assert.equal(keptTask.lead_id,leadId);assert.equal(keptTask.title,'Nachfassaufgabe');assert.equal(keptTask.metadata.enrollmentId,undefined);
+  assert.ok((await db.admin.query("select after from audit_logs where entity_type='task' and entity_id=$1",[task.id])).rows.every(row=>row.after?.title==='Nachfassaufgabe'));
+  assert.equal((await db.admin.query("select id from crm_automation_enrollments where automation_id=$1 and lead_id=$2",[inquiryFlow,leadId])).rowCount,1);
+  const retry=await command(tx=>recordAutomationEvent(tx,{workspaceId,projectId,leadId,eventId:eventKey,trigger:'expose_opened',context:{exposeSessionId:sessionId,exposeVersionId:versionId,identityLevel:'intended_recipient'}}));assert.equal(retry.data.enrolled,0);
+  await assert.rejects(command(async tx=>{await tx.execute("update crm_automation_events set context='{}' where workspace_id=$1 and event_key=$2",[workspaceId,eventKey]);return{};}),/immutable|permission denied/);
+  const repeat=await command(tx=>tx.queryOne<{result:{events:number}}>("select crm_automation_erase_exposure($1::uuid,$2::uuid) as result",[workspaceId,sessionId]));assert.equal(repeat.data!.result.events,0);
+});
+test("isolated onboarding leads cannot emit events or enter real automations",async()=>{
+ const id=await published(),leadId=await lead();
+ await db.admin.query("update leads set metadata=metadata||'{\"onboardingExample\":{\"synthetic\":true}}'::jsonb where id=$1",[leadId]);
+ const result=await command(tx=>recordAutomationEvent(tx,{workspaceId,projectId,leadId,eventId:randomUUID(),trigger:'new_lead'}));assert.equal(result.data.eventId,null);assert.equal(result.data.skipped,'synthetic_example');
+ await assert.rejects(command((tx,fresh)=>enrollAutomationLead(tx,fresh,{automationId:id,leadId,eventId:randomUUID()})),/Beispieldaten/);
+ assert.equal((await db.admin.query("select id from crm_automation_events where lead_id=$1",[leadId])).rowCount,0);
+ const legacyLead=await lead();await command((tx,fresh)=>enrollAutomationLead(tx,fresh,{automationId:id,leadId:legacyLead,eventId:randomUUID()}));
+ await db.admin.query("update leads set metadata=metadata||'{\"onboardingExample\":{\"synthetic\":true}}'::jsonb where id=$1",[legacyLead]);
+ await command((tx,fresh)=>runAutomationDue(tx,fresh,projectId,25,id));
+ assert.equal((await db.admin.query("select status from crm_automation_enrollments where automation_id=$1 and lead_id=$2",[id,legacyLead])).rows[0].status,'stopped');
+ assert.equal((await db.admin.query("select id from tasks where lead_id=$1",[legacyLead])).rowCount,0);
+});

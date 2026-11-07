@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "producerInspectionAfterRun": true,
+  "original349BaselineHarnessMatched": true,
+  "helperBindings": [
+    {
+      "file": "scripts/lib/property-reachability-local-db.mjs",
+      "byteSha256": "e3d661d5f521cb517b2a4bde0fe7dd25a1c4c6663b847448789670e4eaaebb46",
+      "lfSha256": "96caecb249a83b2205c718a12677c684f60417a76da6e3aa677341f07f7e65c1",
+      "unchangedFrom349": true
+    },
+    {
+      "file": "scripts/lib/local-sales-db.mjs",
+      "byteSha256": "739387e9f076d78b1a2079cc10dfcbf763207b3a344ee869d725bd8448c47a55",
+      "lfSha256": "33e57ef41f60ce24693479f84e63f369969448c409767df560f50694f5d7b855",
+      "unchangedFrom349": true
+    },
+    {
+      "file": "scripts/lib/sales-browser-fixture.mjs",
+      "byteSha256": "d77e391e7df64ba37395ee916ead74d91fec3b7347a12123e16438b156cdaa99",
+      "lfSha256": "cdc6e8dbbcc245d33ff80306905879fb4971780fbfefe54490d04d0fb983b55f",
+      "unchangedFrom349": true
+    },
+    {
+      "file": "scripts/lib/property-reachability-next-http.mjs",
+      "byteSha256": "296b63bcaebea871666b706f8005935a5950fbbab29a8f79777b0b01f9ad074f",
+      "lfSha256": "6c0c5462126c436d2239644aa2a4525fc7ce76b39d4b8c742632385e8a99b662",
+      "unchangedFrom349": true
+    },
+    {
+      "file": "scripts/lib/property-reachability-next-server.mjs",
+      "byteSha256": "bd2612f1746910c58cbd37d7df65cc8d2b55545891d1ff42c7be37bb99c4de25",
+      "lfSha256": "9300562289067570b176d6352d40fed26a66ecacfe3c8019a6ddd79a9d94cc4a",
+      "unchangedFrom349": true
+    },
+    {
+      "file": "scripts/lib/property-reachability-http-network-guard.mjs",
+      "byteSha256": "bd44870d2b386053a985a9ac691d1a29570877285ab107d155fe197ebc23d0fc",
+      "lfSha256": "ac83522589b2c078caf7a6fe5603f18cc8278b1b39c449244ee81e1e280bdc2f",
+      "unchangedFrom349": true
+    }
+  ],
+  "runtimeBindings": [
+    {
+      "file": "src/app/api/crm/projects/route.ts",
+      "byteSha256": "c8b9de52f1bd9ed49c037fd6e183ff9dc535b2f5e3d73643465a6223ef3e926d",
+      "lfSha256": "bad8564e3a0088ee2a24e3c792edc410200207ef1efe7873f0ab61822e1ca0d2",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/components/crm-workspace.tsx",
+      "byteSha256": "ff5ab53aa460a7e9537dcadccbf82e366977f82b5ffc95c761dabffeb12f815a",
+      "lfSha256": "bf63d6c87e805034f9e665158a77db4666097324e22f96c86be8bb0feb818804",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/components/project-wizard-fields.tsx",
+      "byteSha256": "694ef05625206b71fe61d31bef11ec669ca0d1aacedac14ff3b29018aa5e73ee",
+      "lfSha256": "694ef05625206b71fe61d31bef11ec669ca0d1aacedac14ff3b29018aa5e73ee",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/lib/project-wizard.ts",
+      "byteSha256": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689",
+      "lfSha256": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/lib/crm-types.ts",
+      "byteSha256": "609e55243122c986fc8616d29f1d7590aaf45575ea2e65e0ca8a6b2ce36ff268",
+      "lfSha256": "15820ce8b6417e0bb7292d980ac6af869a7db9c615103b2d799fa2469b68c646",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/lib/db/crm-write-repositories.ts",
+      "byteSha256": "007ffd6e1629fb417ac407ba675821c3394fbe75cbcfa142dd503c1a62e1ba48",
+      "lfSha256": "9aec1a517efd24125937a7dea70d57ccce3dda1cbe4ebc1fd99a11148ee90b1a",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/lib/db/project-wizard-repository.ts",
+      "byteSha256": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd",
+      "lfSha256": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd",
+      "matchesAppCapture": true
+    },
+    {
+      "file": "src/lib/db/pipeline-default-repositories.ts",
+      "byteSha256": "7a687b4f1937795820851a991d9e12278460a4563fcc2803df2e940a116c94a3",
+      "lfSha256": "a04a0aae55b18f5cc56bc25b2d2b2031a0b3636675f979163b51610e13554784",
+      "matchesAppCapture": true
+    }
+  ],
+  "migration197LfSha256": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1",
+  "networkQualification": {
+    "browserExternalRequests": 0,
+    "nodeFinalBlockedAttempts": 2,
+    "nodePreWizardCount": null,
+    "nodePostWizardCount": null,
+    "blockedTargetsAndTimingNotReported": true,
+    "qualifiedClaim": "The unchanged strict Node guard prevented the two unclassified connection attempts; none is treated as a send/funnel/provider action or as zero attempts. No external connection was permitted by this guarded app."
+  },
+  "appInputCount": 852,
+  "currentAppBytesAllMatched": true
+}

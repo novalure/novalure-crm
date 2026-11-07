@@ -1,5 +1,8 @@
 import type { PropertyPriceVisibility } from "./crm-types";
 import type { JSONContent } from "@tiptap/react";
+import type { PropertyEnergyCertificate, PropertyGeography } from "./property-country";
+import type { PropertyDetails } from "./property-details";
+import type { PropertyCostEditorDraft } from "./property-cost-editing";
 
 export type PropertyCostDraft = {
   costKey: string;
@@ -15,7 +18,14 @@ export type PropertyCostDraft = {
 };
 
 export type PropertyDraft = {
-  coreEdit?: { propertyId: string; workspaceId: string; expected: Record<string, unknown>; expectedAncillaryCosts?: Record<string, unknown> };
+  costEditor?: PropertyCostEditorDraft;
+  coreEdit?: { propertyId: string; workspaceId: string; expected: Record<string, unknown>; expectedAncillaryCosts?: Record<string, unknown>; expectedGeography?: Record<string, unknown> | null; expectedEnergyCertificate?: Record<string, unknown> | null; expectedUsageType?: string; expectedFullSnapshot?: Record<string,unknown> };
+  propertyDetails?: PropertyDetails;
+  city?: string;
+  street?: string;
+  internalNotes?: string;
+  geography?: PropertyGeography | null;
+  energyCertificate?: PropertyEnergyCertificate;
   address: string;
   areaSqm: string;
   availableFrom: string;
@@ -77,9 +87,21 @@ function stableDraftValue(value: unknown): string {
 
 type DraftEntry = { draft: PropertyDraft; baseline: PropertyDraft };
 
+export type PropertyCreateAttempt = {
+  workspaceId: string;
+  projectId: string;
+  endpoint: string;
+  body: string;
+  key: string;
+  correlation: string;
+  submittedDraft: PropertyDraft;
+  phase: "in_flight" | "uncertain";
+};
+
 /** One instance per mounted CRM session. Never writes customer inputs to browser storage. */
 export function createPropertyDraftStore(ownerUserId?: string) {
   const entries = new Map<string, DraftEntry>();
+  const createAttempts = new Map<string, PropertyCreateAttempt>();
   const listeners = new Set<() => void>();
   let activeMutation: symbol | null = null;
   const notify = () => listeners.forEach((listener) => listener());
@@ -94,7 +116,30 @@ export function createPropertyDraftStore(ownerUserId?: string) {
       return entries.get(scopeKey)?.draft;
     },
     hasDrafts() {
-      return entries.size > 0;
+      return entries.size > 0 || createAttempts.size > 0;
+    },
+    readCreateAttempt(scopeKey: string) {
+      return createAttempts.get(scopeKey);
+    },
+    hasCreateAttemptOutside(scopeKey: string) {
+      return [...createAttempts.keys()].some((key) => key !== scopeKey);
+    },
+    setCreateAttempt(scopeKey: string, attempt: PropertyCreateAttempt) {
+      createAttempts.set(scopeKey, attempt);
+      notify();
+    },
+    markCreateUncertain(scopeKey: string, expectedKey: string) {
+      const current = createAttempts.get(scopeKey);
+      if (current?.key !== expectedKey) return false;
+      createAttempts.set(scopeKey, { ...current, phase: "uncertain" });
+      notify();
+      return true;
+    },
+    clearCreateAttempt(scopeKey: string, expectedKey: string) {
+      if (createAttempts.get(scopeKey)?.key !== expectedKey) return false;
+      createAttempts.delete(scopeKey);
+      notify();
+      return true;
     },
     isMutationBusy() {
       return activeMutation !== null;
@@ -137,8 +182,10 @@ export function createPropertyDraftStore(ownerUserId?: string) {
       return removed;
     },
     clearAll() {
-      if (!entries.size) return;
+      if (!entries.size && !createAttempts.size && !activeMutation) return;
       entries.clear();
+      createAttempts.clear();
+      activeMutation = null;
       notify();
     },
   };

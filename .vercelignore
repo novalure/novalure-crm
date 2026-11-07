@@ -16,3 +16,8 @@ node_modules/
 *.docx
 docs/audit/
 docs/changes/
+.env*
+.data/
+qa/
+output/
+docs/

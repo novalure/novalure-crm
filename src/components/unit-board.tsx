@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type {
   Contact,
   Deal,
@@ -18,10 +18,13 @@ import {
   getUnitBoardCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import { isUnitInPropertyBoardScope, type PropertyUnitBoardScope, type PropertyUnitObjectScope } from "@/lib/property-department";
 import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
+import { UNIT_DETAIL_FIELDS, parseUnitDetailsPatch, unitDetailsDraft, unitPriceInput, unitDetailErrorMessage, type UnitDetailsDraft } from "@/lib/property-unit-details";
+import { createUnitInventoryDraft, updateUnitInventoryDraft, type UnitInventoryDraft } from "@/lib/unit-inventory-draft";
+import { parsePropertyEuroCents } from "@/lib/property-money";
 
 type UnitBoardProps = {
   workspaceId: string;
@@ -85,18 +88,19 @@ type WorkflowNotice = {
 
 type InventoryMode = "building" | "unit" | null;
 
-type InventoryDraft = {
-  address: string;
-  areaSqm: string;
-  buildingId: string;
-  floor: string;
-  floors: string;
-  name: string;
-  price: string;
-  projectId: string;
-  rooms: string;
-  unitNumber: string;
-};
+type InventoryDraft = UnitInventoryDraft;
+
+function UnitDetailInputs({ draft, language, onChange, disabled = false }: {
+  draft: UnitDetailsDraft; language: LanguageCode; onChange: (key: keyof UnitDetailsDraft, value: string) => void; disabled?: boolean;
+}) {
+  return <>{UNIT_DETAIL_FIELDS.map(({ key, kind, de, en }) => <label className="grid gap-1 text-sm font-semibold text-slate-800" key={key}>
+    {language === "de" ? de : en}
+    <input className="min-h-11 rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+      disabled={disabled} min={kind === "year" ? 1800 : 0} max={kind === "year" ? 2200 : kind === "area" ? 99999999.99 : key === "bedrooms" ? 100 : 10000}
+      onChange={event => onChange(key, event.target.value)} placeholder={language === "de" ? "Unbekannt" : "Unknown"}
+      step={kind === "area" ? "0.01" : "1"} type="number" value={draft[key]} />
+  </label>)}</>;
+}
 
 const statusStyles: Record<PropertyUnit["status"], string> = {
   available: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -108,6 +112,7 @@ const statusStyles: Record<PropertyUnit["status"], string> = {
 const reservationStyles: Record<PropertyReservation["status"], string> = {
   requested: "border-violet-200 bg-violet-50 text-violet-900",
   converted: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  withdrawn: "border-stone-200 bg-stone-50 text-stone-700",
   expired: "border-rose-200 bg-rose-50 text-rose-900",
   hold: "border-amber-200 bg-amber-50 text-amber-900",
   reserved: "border-blue-200 bg-blue-50 text-blue-900",
@@ -294,18 +299,21 @@ export function UnitBoard({
   const [runtimeBusyKey, setRuntimeBusyKey] = useState("");
   const [runtimeNotice, setRuntimeNotice] = useState<WorkflowNotice | null>(null);
   const [inventoryMode, setInventoryMode] = useState<InventoryMode>(null);
-  const [inventoryDraft, setInventoryDraft] = useState<InventoryDraft>(() => ({
-    address: "",
-    areaSqm: "",
-    buildingId: "",
-    floor: "",
-    floors: "",
-    name: "",
-    price: "",
-    projectId: initialBoardProjectId !== "all" ? initialBoardProjectId : "",
-    rooms: "",
-    unitNumber: "",
-  }));
+  const [inventoryDraft, setInventoryDraft] = useState<InventoryDraft>(() => createUnitInventoryDraft(initialBoardProjectId !== "all" ? initialBoardProjectId : ""));
+  const inventoryLock = useRef(false);
+  const detailLock = useRef(false);
+  const detailEditorRef = useRef<HTMLElement>(null);
+  const [detailUnit, setDetailUnit] = useState<PropertyUnit | null>(null);
+  const [detailDraft, setDetailDraft] = useState<UnitDetailsDraft>(() => unitDetailsDraft());
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailNotice, setDetailNotice] = useState<WorkflowNotice | null>(null);
+  const [investorPrice, setInvestorPrice] = useState("");
+  const [investorSource, setInvestorSource] = useState("");
+  useEffect(()=>{
+    if(!detailUnit?.id) return;
+    detailEditorRef.current?.focus({preventScroll:true});
+    detailEditorRef.current?.scrollIntoView({block:"start"});
+  },[detailUnit?.id]);
   const [inventoryNotice, setInventoryNotice] = useState<WorkflowNotice | null>(null);
   const [inventorySaving, setInventorySaving] = useState(false);
 
@@ -341,7 +349,7 @@ export function UnitBoard({
 
           return { building, buyer, buyerMatches, deal, project, reservation, unit };
         })
-        .filter(({ unit }) => focusedUnitIds.size === 0 || focusedUnitIds.has(unit.id))
+        .filter(({ unit }) => isUnitInPropertyBoardScope(unit, focusScope, focusedUnitIds))
         .filter(({ unit }) => projectFilter === "all" || unit.projectId === projectFilter)
         .filter(({ unit }) => buildingFilter === "all" || unit.buildingId === buildingFilter)
         .filter(({ unit }) => statusFilter === "all" || unit.status === statusFilter)
@@ -361,6 +369,7 @@ export function UnitBoard({
       contacts,
       deals,
       focusedUnitIds,
+      focusScope,
       leads,
       maxPriceCents,
       minPriceCents,
@@ -399,7 +408,8 @@ export function UnitBoard({
         item.days !== null &&
         item.days <= 7 &&
         item.reservation.status !== "converted" &&
-        item.reservation.status !== "expired",
+        item.reservation.status !== "expired" &&
+        item.reservation.status !== "withdrawn",
     )
     .sort((left, right) => (left.days ?? 0) - (right.days ?? 0));
 
@@ -479,21 +489,23 @@ export function UnitBoard({
   }
 
   function updateInventoryDraft<Key extends keyof InventoryDraft>(key: Key, value: InventoryDraft[Key]) {
-    setInventoryDraft((current) => ({ ...current, [key]: value }));
+    setInventoryDraft((current) => updateUnitInventoryDraft(current,key,value));
   }
 
   async function submitInventory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canManage || !inventoryMode || !inventoryDraft.projectId) return;
+    if (!canManage || !inventoryMode || !inventoryDraft.projectId || inventoryLock.current) return;
 
+    inventoryLock.current = true;
     setInventorySaving(true);
     setInventoryNotice(null);
 
     try {
-      const response = await csrfFetch("/api/crm/units", {
+      const response = await csrfFetch(`/api/crm/units?${new URLSearchParams({workspaceId})}`, {
         body: JSON.stringify({
           operation: inventoryMode,
           ...inventoryDraft,
+          ...(inventoryMode === "unit" ? parseUnitDetailsPatch(inventoryDraft) : {}),
           price: "0",
           status: "available",
           idempotencyKey: crypto.randomUUID(),
@@ -503,21 +515,62 @@ export function UnitBoard({
         method: "POST",
       });
       const data = await response.json().catch(() => ({ error: text.inventorySaveFailed }));
-      if (!response.ok) {
+      if (!response.ok || data.persisted !== true || !data.data?.id || data.data.workspaceId !== workspaceId || data.data.projectId !== inventoryDraft.projectId) {
         throw new Error(typeof data.error === "string" ? data.error : text.inventorySaveFailed);
       }
 
       setInventoryNotice({ kind: "success", message: text.inventorySaved });
+      setInventoryDraft(createUnitInventoryDraft(inventoryDraft.projectId));
       setInventoryMode(null);
       await onReservationChanged?.();
     } catch (error) {
       setInventoryNotice({
         kind: "error",
-        message: error instanceof Error ? error.message : text.inventorySaveFailed,
+        message: unitDetailErrorMessage(error,language,text.inventorySaveFailed),
       });
     } finally {
+      inventoryLock.current = false;
       setInventorySaving(false);
     }
+  }
+
+  function openUnitDetails(unit: PropertyUnit) {
+    if(!canManage || detailLock.current) return;
+    setDetailUnit(unit);
+    setDetailDraft(unitDetailsDraft(unit));
+    setInvestorPrice(unitPriceInput(unit.investorPriceCents));
+    setInvestorSource("");
+    setDetailNotice(null);
+  }
+
+  async function saveUnitDetails(operation: "unit_details" | "investor_price") {
+    if(!canManage || !detailUnit || detailLock.current) return;
+    detailLock.current=true;setDetailSaving(true);setDetailNotice(null);
+    try {
+      const values=operation === "unit_details" ? parseUnitDetailsPatch(detailDraft) : {};
+      const price=investorPrice.trim() === "" ? null : /^\d+(?:\.\d{1,2})?$/.test(investorPrice.trim()) ? parsePropertyEuroCents(investorPrice) : null;
+      if(operation === "investor_price" && (investorPrice.trim() && price === null || !investorSource.trim())) throw new Error(language === "de" ? "Bitte gültigen Anlegerpreis und Bestätigungsquelle angeben." : "Enter a valid investor price and confirmation source.");
+      const response=await csrfFetch(`/api/crm/units?${new URLSearchParams({workspaceId})}`,{
+        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({operation,projectId:detailUnit.projectId,unitId:detailUnit.id,expectedVersion:detailUnit.version,
+          idempotencyKey:crypto.randomUUID(),correlationId:crypto.randomUUID(),...(operation === "unit_details" ? values : {investorPriceCents:price,sourceReference:investorSource.trim()})}),
+      });
+      const receipt=await response.json().catch(()=>null);
+      if(!response.ok) throw new Error(receipt?.code === "VERSION_CONFLICT" || response.status === 409
+        ? language === "de" ? "Die Einheit wurde zwischenzeitlich geändert. Bitte neu laden und die Änderungen prüfen." : "The unit changed. Reload and review your changes."
+        : receipt?.code === "FORBIDDEN" ? language === "de" ? "Für die Preisbestätigung fehlt die ausdrückliche Projektvollmacht." : "Explicit project price authority is required."
+        : typeof receipt?.error === "string" ? receipt.error : text.inventorySaveFailed);
+      const saved=receipt?.data;
+      if(receipt?.persisted !== true || saved?.id !== detailUnit.id || saved.workspaceId !== workspaceId || saved.projectId !== detailUnit.projectId
+        || !Number.isSafeInteger(saved.version) || saved.version !== (detailUnit.version ?? 0)+1
+        || (operation === "unit_details" ? Object.entries(values).some(([key,value])=>saved[key] !== value) : saved.investorPriceCents !== price)) throw new Error(text.inventorySaveFailed);
+      setDetailUnit(saved);
+      if(operation === "unit_details") setDetailDraft(unitDetailsDraft(saved));
+      else {setInvestorPrice(unitPriceInput(price));setInvestorSource("");}
+      setDetailNotice({kind:"success",message:language === "de" ? "Einheit gespeichert." : "Unit saved."});
+      try { await onReservationChanged?.(); }
+      catch { setDetailNotice({kind:"success",message:language === "de" ? "Gespeichert. Bitte die Ansicht neu laden." : "Saved. Refresh the view."}); }
+    } catch(error) { setDetailNotice({kind:"error",message:unitDetailErrorMessage(error,language,text.inventorySaveFailed)}); }
+    finally {detailLock.current=false;setDetailSaving(false);}
   }
 
   function updateWorkflowDraft<Key extends keyof WorkflowDraft>(key: Key, value: WorkflowDraft[Key]) {
@@ -744,6 +797,7 @@ export function UnitBoard({
                 <button
                   className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
                   onClick={() => onOpenProperty({
+                    originAssetId: focusScope.originAssetId,
                     projectId: focusScope.projectId,
                     unitId: focusScope.unitIds?.[0],
                   })}
@@ -897,6 +951,10 @@ export function UnitBoard({
                     value="0"
                   />
                 </label>
+                <div className="md:col-span-2 xl:col-span-4 text-sm text-stone-600">
+                  {language === "de" ? "Optionale Einheitsdetails: leer bedeutet unbekannt, 0 bedeutet ausdrücklich nicht vorhanden. Preise werden nach dem Anlegen mit Projektvollmacht bestätigt." : "Optional unit details: blank means unknown, 0 explicitly means none. Prices are confirmed with project authority after creation."}
+                </div>
+                <UnitDetailInputs draft={inventoryDraft} language={language} onChange={updateInventoryDraft} disabled={inventorySaving} />
               </>
             )}
             <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
@@ -918,6 +976,29 @@ export function UnitBoard({
           </form>
         </article>
       ) : null}
+
+      {detailUnit && canManage ? <article ref={detailEditorRef} tabIndex={-1} className="scroll-mt-6 rounded-lg border border-stone-200 bg-white p-5" aria-label={language === "de" ? "Einheitsdetails bearbeiten" : "Edit unit details"}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h4 className="text-lg font-semibold text-slate-950">{language === "de" ? "Einheitsdetails" : "Unit details"}: {detailUnit.unitNumber}</h4>
+          <button className="min-h-11 rounded-md border border-stone-300 px-3 text-sm font-semibold" disabled={detailSaving} onClick={()=>setDetailUnit(null)} type="button">{language === "de" ? "Schließen" : "Close"}</button>
+        </div>
+        <p className="mt-2 text-sm text-stone-600">{language === "de" ? "Leere Angaben bleiben unbekannt. 0 wird ausdrücklich gespeichert. Verkaufspreis und Reservierungsstatus bleiben bei Detailänderungen erhalten." : "Blank values remain unknown. Zero is stored explicitly. Detail changes preserve the sale price and reservation status."}</p>
+        {detailNotice ? <p className={`mt-3 rounded-md p-3 text-sm ${detailNotice.kind === "error" ? "bg-rose-50 text-rose-900" : "bg-emerald-50 text-emerald-900"}`} role={detailNotice.kind === "error" ? "alert" : "status"}>{detailNotice.message}</p> : null}
+        <form className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={event=>{event.preventDefault();void saveUnitDetails("unit_details");}}>
+          <UnitDetailInputs draft={detailDraft} language={language} onChange={(key,value)=>setDetailDraft(current=>({...current,[key]:value}))} disabled={detailSaving} />
+          <div className="flex items-end md:col-span-2"><button className="min-h-11 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={detailSaving || !detailUnit.version} type="submit">{detailSaving ? text.saving : language === "de" ? "Details speichern" : "Save details"}</button></div>
+        </form>
+        <form className="mt-6 grid gap-3 border-t border-stone-200 pt-4 md:grid-cols-3" onSubmit={event=>{event.preventDefault();void saveUnitDetails("investor_price");}}>
+          <label className="grid gap-1 text-sm font-semibold text-slate-800">{language === "de" ? "Zweiter Anlegerpreis (EUR)" : "Second investor price (EUR)"}
+            <input className="min-h-11 rounded-md border border-stone-300 px-3 py-2" disabled={detailSaving} min="0" onChange={event=>setInvestorPrice(event.target.value)} placeholder={language === "de" ? "Unbekannt" : "Unknown"} step="0.01" type="number" value={investorPrice} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-800">{language === "de" ? "Quelle der Preisbestätigung" : "Price confirmation source"}
+            <input className="min-h-11 rounded-md border border-stone-300 px-3 py-2" disabled={detailSaving} maxLength={2000} onChange={event=>setInvestorSource(event.target.value)} required value={investorSource} />
+          </label>
+          <div className="flex items-end"><button className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={detailSaving || !detailUnit.version} type="submit">{language === "de" ? "Anlegerpreis bestätigen" : "Confirm investor price"}</button></div>
+          <p className="text-xs text-stone-600 md:col-span-3">{language === "de" ? "Erfordert eine ausdrückliche Preisvollmacht für dieses Projekt. Leer bestätigt die Entfernung des Anlegerpreises. Der Verkaufspreis wird nicht verändert; der Anlegerpreis wird nicht automatisch veröffentlicht." : "Requires explicit project price authority. A blank amount confirms removal. The sale price is preserved; the investor price is not automatically published."}</p>
+        </form>
+      </article> : null}
 
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1325,6 +1406,10 @@ export function UnitBoard({
                       <p className="font-semibold text-slate-950">{unit.unitNumber}</p>
                       <p className="mt-1 text-xs text-stone-500">{building?.name ?? text.noBuilding}</p>
                       <p className="mt-1 text-xs text-stone-500">{project?.name ?? text.noProject}</p>
+                      <details className="mt-2 text-xs text-stone-600">
+                        <summary className="min-h-8 cursor-pointer font-semibold">{language === "de" ? "Einheitsdetails" : "Unit details"}</summary>
+                        <dl className="mt-1 grid gap-1">{UNIT_DETAIL_FIELDS.map(({key,kind,de,en})=><div key={key}><dt className="inline">{language === "de" ? de : en}: </dt><dd className="inline">{unit[key] == null ? language === "de" ? "Unbekannt" : "Unknown" : `${formatNumber(unit[key],language)}${kind === "area" ? " m²" : ""}`}</dd></div>)}</dl>
+                      </details>
                       {onOpenProperty ? (
                         <button
                           className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-emerald-800 hover:text-emerald-950"
@@ -1340,6 +1425,7 @@ export function UnitBoard({
                     </td>
                     <td className="px-4 py-4 font-semibold text-slate-950">
                       {formatCurrency(unit.priceCents / 100, language)}
+                      {unit.investorPriceCents != null ? <p className="mt-2 text-xs font-medium text-stone-600">{language === "de" ? "Anlegerpreis" : "Investor price"}: {formatCurrency(unit.investorPriceCents/100,language)}</p> : null}
                     </td>
                     <td className="px-4 py-4 text-slate-700">{text.areaValue(formatNumber(unit.areaSqm, language))}</td>
                     <td className="px-4 py-4 text-slate-700">{formatNumber(unit.rooms, language)}</td>
@@ -1407,6 +1493,7 @@ export function UnitBoard({
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex w-56 min-w-0 flex-col gap-2">
+                        {canManage ? <button className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50" disabled={detailSaving} onClick={()=>openUnitDetails(unit)} type="button">{language === "de" ? "Details bearbeiten" : "Edit details"}</button> : null}
                         <button
                           className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
                           disabled={!canManage || unit.status !== "available" || (hasActiveReservation && reservation?.status !== "requested")}

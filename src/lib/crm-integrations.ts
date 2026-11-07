@@ -1,0 +1,6 @@
+export type IntegrationProvider='google'|'microsoft';
+export type IntegrationConfiguration={google:boolean;microsoft:boolean;resend:boolean;resendWebhook:boolean};
+export type IntegrationCheck={code:string;passed:boolean};
+export type IntegrationCheckRecord={id:string;targetType:'calendar'|'website'|'resend';targetId:string;mode:'local';passed:boolean;checks:IntegrationCheck[];createdAt:string};
+export type WebsiteIntegrationRecord={id:string;projectId:string|null;formId:string|null;type:string;status:'test'|'active'|'disabled'|'revoked';mode:'training'|'real_customer';allowedOrigins:string[];capabilities:string[];publicSiteKey:string;updatedAt:string;revokedAt:string|null};
+export type IntegrationWorkspace={source:'database';workspaceId:string;webhookUrl:string;configuration:IntegrationConfiguration;calendars:{provider:IntegrationProvider;accountLabel:string|null;status:string;updatedAt:string|null;connected:boolean;expiresAt:string|null;scopes:string[];error:string|null}[];gatewayInstalled:boolean;websites:WebsiteIntegrationRecord[];forms:{id:string;name:string;projectId:string}[];checks:IntegrationCheckRecord[];providerEvents:{id:string;deliveryKind:string;deliveryId:string;providerEmailId:string;type:string;occurredAt:string;receivedAt:string}[]};

@@ -172,7 +172,15 @@ async function insertPasswordResetToken(input: {
         user_agent,
         expires_at
       )
-      values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, now() + ($8::int * interval '1 minute'))
+      select $1::uuid, $2::uuid, $3, $4, $5, $6, $7, now() + ($8::int * interval '1 minute')
+      ${input.workspaceUserId ? `
+        where exists (
+          select 1 from workspace_users member
+          where member.id=$2::uuid and member.workspace_id=$1::uuid
+            and member.auth_identity_id=$3 and member.status in ('active', 'invited')
+          for share
+        )
+      ` : ""}
       returning id
     `,
     [
@@ -392,6 +400,15 @@ export function createPasswordResetFormToken(headers: Pick<Headers, "get">) {
     : null;
 }
 
+const activeResetExchangeMembership = `
+  (exchange.workspace_user_id is null or exists (
+    select 1 from workspace_users member
+    where member.id = exchange.workspace_user_id
+      and member.auth_identity_id = exchange.auth_identity_id
+      and member.status in ('active', 'invited')
+  ))
+`;
+
 export async function hasValidPasswordResetExchange(headers: Pick<Headers, "get">) {
   const value = readResetExchangeCookie(headers.get("cookie"));
   if (!value || !hasDatabaseUrl()) return false;
@@ -405,6 +422,7 @@ export async function hasValidPasswordResetExchange(headers: Pick<Headers, "get"
           and exchange.used_at is null
           and exchange.expires_at > now()
           and identity.credential_state <> 'disabled'
+          and ${activeResetExchangeMembership}
         limit 1
       `,
       [hashOpaqueToken(value)],
@@ -436,15 +454,24 @@ export async function confirmPasswordReset(input: {
     const fingerprint = getAuthRequestFingerprint(input.request);
     const updated = await queryOne<{ id: string }>(
       `
-        with consumed_exchange as (
+        with locked_identity as materialized (
+          select identity.id
+          from auth_password_reset_exchanges exchange
+          join auth_identities identity on identity.id = exchange.auth_identity_id
+          where exchange.exchange_hash = $1
+            and exchange.used_at is null
+            and exchange.expires_at > now()
+            and identity.credential_state <> 'disabled'
+            and ${activeResetExchangeMembership}
+          for no key update of identity
+        ), consumed_exchange as (
           update auth_password_reset_exchanges exchange
           set used_at = now()
-          from auth_identities identity
+          from locked_identity identity
           where exchange.exchange_hash = $1
             and exchange.auth_identity_id = identity.id
             and exchange.used_at is null
             and exchange.expires_at > now()
-            and identity.credential_state <> 'disabled'
           returning
             exchange.id,
             exchange.reset_token_id,

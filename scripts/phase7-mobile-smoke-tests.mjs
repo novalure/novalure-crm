@@ -29,7 +29,7 @@ test("lead inbox and task command centers constrain narrow layouts", () => {
   const tasks = readText("src/components/task-command-center.tsx");
 
   assert.match(leadInbox, /<section className="grid min-w-0 max-w-full gap-4 overflow-hidden">/);
-  assert.match(leadInbox, /<section className="grid min-w-0 max-w-full gap-4 2xl:grid-cols-\[minmax\(0,1fr\)_420px\]">/);
+  assert.ok(leadInbox.includes('<section className={`grid min-w-0 max-w-full gap-4 ${detailsOnly ? "" : "2xl:grid-cols-[minmax(0,1fr)_420px]"}`}>'));
   assert.match(leadInbox, /lg:grid-cols-\[minmax\(0,1fr\)_220px\]/);
   assert.match(tasks, /<section className="grid min-w-0 max-w-full gap-4 overflow-hidden">/);
   assert.match(tasks, /<section className="grid min-w-0 max-w-full gap-4 xl:grid-cols-\[minmax\(0,1fr\)_360px\]">/);

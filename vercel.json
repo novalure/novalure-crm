@@ -1,6 +1,15 @@
 {
+  "buildCommand": "npm run build -- --webpack",
   "git": {
     "deploymentEnabled": {
+      "codex/shared-learning-package4-20261102": false,
+      "codex/continuous-operation-20261029-crm": false,
+      "codex/shared-behavior-studio-adapter-20261027": false,
+      "codex/shared-behavior-customer-hooks-20261027": false,
+      "codex/shared-learning-package3-crm-20261027": false,
+      "codex/shared-behavior-package3-20261026": false,
+      "codex/shared-behavior-package2-20261026": false,
+      "codex/shared-behavior-foundation-20261026": false,
       "main": false,
       "codex/universal-booking": false,
       "codex/studio-preview-crm-handoff": false,
@@ -13,6 +22,26 @@
     }
   },
   "crons": [
+    {
+      "path": "/api/cron/newsletter",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/notification-digests",
+      "schedule": "11,41 * * * *"
+    },
+    {
+      "path": "/api/cron/lead-proof-retention",
+      "schedule": "37 3 * * *"
+    },
+    {
+      "path": "/api/cron/web-expose-retention",
+      "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/automations",
+      "schedule": "*/5 * * * *"
+    },
     {
       "path": "/api/cron/meeting-reminders",
       "schedule": "* * * * *"
@@ -32,6 +61,10 @@
     {
       "path": "/api/cron/knowledge-monitoring",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/mailbox-sync",
+      "schedule": "*/2 * * * *"
     }
   ]
 }

@@ -114,6 +114,24 @@ export function parseCrmScopeUrl(search: string): ParsedCrmScopeUrl {
   return { projectId, status: "valid", workspaceId };
 }
 
+/** Choose a URL workspace only from the server's managed-workspace list.
+ * Loading its data must still go through the authorized workspace-switch API.
+ */
+export function getCrmWorkspaceRestoreTarget(input: {
+  availableWorkspaces: ReadonlyArray<{ id: string }>;
+  currentWorkspaceId: string;
+  search: string;
+}): { projectId: string | null; workspaceId: string } | null {
+  const scope = parseCrmScopeUrl(input.search);
+  if (
+    scope.status !== "valid" ||
+    scope.workspaceId === input.currentWorkspaceId ||
+    !input.availableWorkspaces.some((workspace) => workspace.id === scope.workspaceId)
+  ) return null;
+
+  return { projectId: scope.projectId, workspaceId: scope.workspaceId };
+}
+
 export function getCrmScopePreferenceKey(userId: string, workspaceId: string) {
   return `novalure:crm-scope:v${CRM_SCOPE_VERSION}:${encodeURIComponent(userId)}:${encodeURIComponent(workspaceId)}`;
 }

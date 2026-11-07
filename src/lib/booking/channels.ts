@@ -7,13 +7,13 @@ import { crmPayloadDigest, type TenantTransaction } from "@/lib/crm-command";
 import { BookingError, type BookingKind, type BookingProviderName, type BookingRecord } from "./types";
 import { bookingAudit, readBooking, withBookingTransaction } from "./repository";
 import { cancelBooking, confirmBooking, createBookingHold, getBookingAvailability, getBookingStatus, rescheduleBooking, type BookingServiceOptions } from "./service";
-import { bookingBootstrapRows, lookupBookingPublication, publicBookingPublication, publicationUuid, serverBookingSession, type StoredBookingPublication } from "./publication";
+import { bookingBootstrapRows, lookupBookingPublication, publicBookingPublication, publicationUuid, serverBookingSession, type StoredBookingPublication, type PreparedBookingPublication } from "./publication";
 import { readBookingSetup } from "./configuration";
 import { bookingChannels, type BookingChannel, type PublicBookingRecord } from "./publication-types";
 
 export type BookingChannelRelation = { source: "studio_handoff" | "external_chat" | "machine" | "form_submission"; sourceId: string; leadId?: string; contactId?: string };
 export type TrustedBookingBinding = { expectedChannel: "chat" | "voice" | "form"; expectedWorkspaceId: string; expectedPublicId: string; expectedBindingId: string; expectedTypeIds: string[] };
-export type BookingChannelOptions = BookingServiceOptions & { trustedBinding?: TrustedBookingBinding };
+export type BookingChannelOptions = BookingServiceOptions & { trustedBinding?: TrustedBookingBinding; studioHoldPhone?: string; studioConfirmAuthorize?: () => Promise<void>; preparedPublication?: PreparedBookingPublication; findNextAvailability?: boolean };
 type SessionInput = { publicId: string; channel: BookingChannel; typeId: string; language: "de" | "en" };
 type ChannelSession = { id:string; workspaceId:string; organizerId:string; publicationId:string; assignmentId:string; channel:BookingChannel; language:"de"|"en"; bindingId:string|null; relation:BookingChannelRelation|Record<string,never>; origin:string; ipHash:string; expiresAt:string; provider:BookingProviderName; kind:BookingKind; publication:StoredBookingPublication };
 type ChannelOperation = {id:string; coreKey:string; bookingId:string|null; state:"attempting"|"succeeded"|"unknown"|"rejected"; requestHash:string; errorCode:string|null};
@@ -28,7 +28,9 @@ export function assertBookingChannelOrigin(request:Request,publication:StoredBoo
 function validateSessionInput(input:unknown):SessionInput{fields(input,["publicId","channel","typeId","language"]);if(typeof input.publicId!=="string"||!bookingChannels.includes(input.channel as BookingChannel)||!["de","en"].includes(String(input.language)))throw new BookingError("INVALID_CHANNEL_INPUT");return {publicId:input.publicId,channel:input.channel as BookingChannel,typeId:uuid(input.typeId),language:input.language as "de"|"en"};}
 function validateRelation(input:BookingChannelRelation|undefined){if(input===undefined)return {};fields(input,["source","sourceId","leadId","contactId"]);if(!["studio_handoff","external_chat","machine","form_submission"].includes(input.source))throw new BookingError("INVALID_CHANNEL_RELATION");bounded(input.sourceId,160);if(input.leadId)uuid(input.leadId);if(input.contactId)uuid(input.contactId);return input;}
 async function issue(request:Request,input:SessionInput,options:BookingChannelOptions,trusted?:{workspaceId:string;bindingId:string;relation?:BookingChannelRelation}){
-  const stored=await lookupBookingPublication(input.publicId,options),assignment=stored.config.assignments.find(item=>item.id===input.typeId);
+  const prepared=options.preparedPublication;
+  if(prepared&&(!trusted||prepared.channel!==input.channel||prepared.stored.config.publicId!==input.publicId||prepared.publication.publicId!==input.publicId||prepared.stored.workspaceId!==trusted.workspaceId||!prepared.publication.types.some(type=>type.id===input.typeId)))throw new BookingError("BOOKING_CHANNEL_FORBIDDEN",403);
+  const stored=prepared?.stored??await lookupBookingPublication(input.publicId,options),assignment=stored.config.assignments.find(item=>item.id===input.typeId);
   if(!assignment||!stored.config.channels[input.channel])throw new BookingError("PUBLICATION_NOT_FOUND",404);
   if(trusted&&trusted.workspaceId!==stored.workspaceId)throw new BookingError("BOOKING_CHANNEL_FORBIDDEN",403);
   const origin=trusted?(trusted.relation?.source==="external_chat"?requestOrigin(request):`trusted:${input.channel}`):assertBookingChannelOrigin(request,stored),hash=ipHash(request),token=createOpaqueToken(),expiresAt=new Date(Date.now()+30*60_000).toISOString();
@@ -39,13 +41,70 @@ async function issue(request:Request,input:SessionInput,options:BookingChannelOp
     const budget=await tx.queryOne<{allowed:boolean}>("select booking_channel_reserve_budget($1,$2,'session') as allowed",[stored.id,hash]);if(!budget?.allowed)throw new BookingError("BOOKING_SESSION_LIMIT",429);
     await tx.execute(`insert into booking_channel_sessions(workspace_id,organizer_id,publication_id,assignment_id,publication_revision,token_hash,ip_hash,origin,channel,language,binding_id,relation,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::timestamptz)`,[stored.workspaceId,assignment.organizerId,stored.id,assignment.id,stored.revision,hashOpaqueToken(token),hash,origin,input.channel,input.language,trusted?.bindingId??null,JSON.stringify(validateRelation(trusted?.relation)),expiresAt]);
   },options);
-  return {token,expiresAt,publication:await publicBookingPublication(stored,input.channel,options)};
+  return {token,expiresAt,publication:prepared?.publication??await publicBookingPublication(stored,input.channel,options)};
 }
 export async function startBookingChannelSession(request:Request,raw:unknown,options:BookingChannelOptions={}){const input=validateSessionInput(raw);if(input.channel==="chat"||input.channel==="voice")throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);return issue(request,input,options);}
 export async function issueTrustedBookingChannelSession(request:Request,input:SessionInput&{workspaceId:string;bindingId:string;relation?:BookingChannelRelation},options:BookingChannelOptions={}){
   if(!["chat","voice","form"].includes(input.channel))throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
   uuid(input.workspaceId);bounded(input.bindingId,200);
   return issue(request,validateSessionInput({publicId:input.publicId,channel:input.channel,typeId:input.typeId,language:input.language}),options,{workspaceId:input.workspaceId,bindingId:input.bindingId,relation:input.relation});
+}
+/** Reauthorize the same Studio session after fresh signed, accepted-enquiry verification.
+ * Its operation keys, ownership, counters and 30-minute access lifetime are retained.
+ * Expired tokens remain invalid everywhere else; revoked/changed grants are never renewed.
+ */
+export async function resumeTrustedStudioBookingSession(token:string,typeId:string,relation:BookingChannelRelation,stored:StoredBookingPublication,options:BookingChannelOptions){
+  const expected=options.trustedBinding,assignment=stored.config.assignments.find(item=>item.id===typeId);
+  if(typeof token!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(token)||!expected||expected.expectedChannel!=="chat"||
+    expected.expectedWorkspaceId!==stored.workspaceId||expected.expectedPublicId!==stored.config.publicId||
+    expected.expectedBindingId!==relation.sourceId||relation.source!=="studio_handoff"||!expected.expectedTypeIds.includes(typeId)||
+    !assignment||!["teams","phone"].includes(assignment.kind))throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
+  validateRelation(relation);
+  const owner=serverBookingSession(stored.workspaceId,assignment.organizerId),tokenHash=hashOpaqueToken(token);
+  return withBookingTransaction(owner,async(tx,fresh)=>{
+    await tx.query("select pg_advisory_xact_lock_shared(hashtextextended($1,0))",[`booking-workspace:${stored.workspaceId}`]);
+    const current=await tx.queryOne<{publication:StoredBookingPublication|null}>("select booking_publication_lookup($1) as publication",[stored.config.publicId]);
+    if(!current?.publication||current.publication.revision!==stored.revision)throw new BookingError("BOOKING_PUBLICATION_CHANGED",409);
+    const params=[tokenHash,stored.workspaceId,assignment.organizerId,stored.id,typeId,relation.sourceId,stored.revision,JSON.stringify(relation)];
+    const predicate=`token_hash=$1 and workspace_id=$2 and organizer_id=$3 and publication_id=$4 and assignment_id=$5 and binding_id=$6
+      and publication_revision=$7 and relation=$8::jsonb and channel='chat' and origin='trusted:chat' and language='en'
+      and revoked_at is null and request_count<200`;
+    const found=await tx.queryOne<{id:string}>(`select id from booking_channel_sessions where ${predicate}`,params);
+    if(!found)throw new BookingError("BOOKING_SESSION_INVALID",401);
+    await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`booking-channel:${found.id}`]);
+    const row=await tx.queryOne<{id:string;expiresAt:string;active:boolean;ipHash:string}>(`select id,expires_at as "expiresAt",expires_at>now() as active,ip_hash as "ipHash" from booking_channel_sessions where ${predicate} for update`,params);
+    if(!row)throw new BookingError("BOOKING_SESSION_INVALID",401);
+    let expiresAt=row.expiresAt;
+    if(!row.active){
+      const budget=await tx.queryOne<{allowed:boolean}>("select booking_channel_reserve_budget($1,$2,'session') as allowed",[stored.id,row.ipHash]);
+      if(!budget?.allowed)throw new BookingError("BOOKING_SESSION_LIMIT",429);
+      const renewed=await tx.queryOne<{expiresAt:string}>(`update booking_channel_sessions set expires_at=now()+interval '30 minutes' where ${predicate} returning expires_at as "expiresAt"`,params);
+      if(!renewed)throw new BookingError("BOOKING_SESSION_INVALID",401);
+      expiresAt=renewed.expiresAt;
+    }
+    // This also rechecks the current accepted CRM relation and active publisher/assignment.
+    // A failure rolls back a tentative renewal, including its durable rate reservation.
+    const authorized=await tx.queryOne<{allowed:boolean}>("select booking_channel_authorize_session($1) as allowed",[row.id]);
+    if(!authorized?.allowed)throw new BookingError("BOOKING_SESSION_INVALID",401);
+    if(!row.active)await tx.execute("insert into audit_logs(workspace_id,actor_user_id,action,entity_type,entity_id,after) values($1,$2,'booking.channel_session_resumed','booking_channel_session',$3,$4::jsonb)",[fresh.workspaceId,fresh.userId,row.id,JSON.stringify({assignmentId:typeId,previousExpiresAt:row.expiresAt,expiresAt,proof:"fresh_signed_accepted_studio_enquiry"})]);
+    return {token,expiresAt:new Date(expiresAt).toISOString()};
+  },options);
+}
+/** Resolve only a signed Studio session after its current binding and publication are rechecked. */
+export async function trustedStudioBookingKind(token:string,relation:BookingChannelRelation,options:BookingChannelOptions):Promise<BookingKind>{
+  const expected=options.trustedBinding;
+  if(!expected||expected.expectedChannel!=="chat")throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
+  const session=await loadSession(token,undefined,options);
+  if(session.language!=="en")throw new BookingError("BOOKING_CHANNEL_LANGUAGE_REQUIRED",409);
+  if(session.relation.source!=="studio_handoff"||session.relation.sourceId!==expected.expectedBindingId||
+     session.relation.leadId!==relation.leadId||session.relation.contactId!==relation.contactId)
+    throw new BookingError("TRUSTED_BOOKING_CHANNEL_REQUIRED",403);
+  await withBookingTransaction(actor(session),async tx=>{
+    await sessionGuard(tx,session,false);
+    const allowed=await tx.queryOne<{allowed:boolean}>("select booking_channel_authorize_session($1) as allowed",[session.id]);
+    if(!allowed?.allowed)throw new BookingError("BOOKING_SESSION_INVALID",401);
+  },options);
+  return session.kind;
 }
 async function loadSession(token:string,request:Request|undefined,options:BookingChannelOptions,receipt=false):Promise<ChannelSession>{
   if(typeof token!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(token))throw new BookingError("BOOKING_SESSION_INVALID",401);
@@ -83,7 +142,8 @@ async function status(session:ChannelSession,body:Record<string,unknown>,options
   const row=await getBookingStatus(actor(session),id,options);if(row.state==="confirmed")await attachRelation(session,id,options);return {booking:publicRecord(row,session)};
 }
 async function claim(session:ChannelSession,action:Exclude<BookingChannelAction,"availability"|"status">,body:Record<string,unknown>,options:BookingChannelOptions){
-  const clientKey=action==="confirm"?uuid(body.bookingId):uuid(body.idempotencyKey),requestHash=crmPayloadDigest(body);
+  const clientKey=action==="confirm"?uuid(body.bookingId):uuid(body.idempotencyKey),
+    requestHash=crmPayloadDigest(action==="hold"&&options.studioHoldPhone?{...body,recipientPhone:options.studioHoldPhone}:body);
   return withBookingTransaction(actor(session),async(tx,fresh)=>{
     await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`booking-channel:${session.id}`]);await sessionGuard(tx,session);
     if(action!=="hold")await ownBooking(tx,session,uuid(body.bookingId));
@@ -108,6 +168,7 @@ export async function dispatchBookingChannelAction(token:string,action:BookingCh
     const allowed=await tx.queryOne<{allowed:boolean}>("select booking_channel_authorize_session($1) as allowed",[session.id]);
     if(!allowed?.allowed)throw new BookingError("BOOKING_SESSION_INVALID",401);
     await sessionGuard(tx,session,false);
+    if(action==="confirm")await options.studioConfirmAuthorize?.();
     if(session.kind==="office"&&action!=="cancel"){
       const setup=await readBookingSetup(tx,fresh,"office"),published=session.publication.config.assignments.find(item=>item.id===session.assignmentId)?.publicLocation;
       if(!published||published.trim()!==setup.rules.location.trim())throw new BookingError("PUBLIC_OFFICE_LOCATION_REQUIRED",409);
@@ -117,8 +178,8 @@ export async function dispatchBookingChannelAction(token:string,action:BookingCh
   if(action==="availability"){
     fields(body,["date","location","locationConfirmed","bookingId"]);if(typeof body.date!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(body.date))throw new BookingError("INVALID_DATE");
     const exclude=await withBookingTransaction(actor(session),async tx=>{await sessionGuard(tx,session);return body.bookingId!==undefined?(await ownBooking(tx,session,uuid(body.bookingId))).id:undefined;},options);
-    const result=await getBookingAvailability(actor(session),{provider:session.provider,kind:session.kind,date:body.date,...location(body,session),...(exclude?{excludeBookingId:exclude}:{})},options);
-    return {slots:result.slots.map(({startsAt,endsAt})=>({startsAt,endsAt})),timeZone:result.rules.timeZone,durationMinutes:result.rules.durationMinutes,requestFallback:result.requestFallback??false,travelIssues:result.travelIssues??[]};
+    const result=await getBookingAvailability(actor(session),{provider:session.provider,kind:session.kind,date:body.date,findNext:options.findNextAvailability,...location(body,session),...(exclude?{excludeBookingId:exclude}:{})},options);
+    return {date:result.date,slots:result.slots.map(({startsAt,endsAt})=>({startsAt,endsAt})),timeZone:result.rules.timeZone,durationMinutes:result.rules.durationMinutes,requestFallback:result.requestFallback??false,travelIssues:result.travelIssues??[]};
   }
   if(action==="status"){fields(body,["bookingId","idempotencyKey"]);return status(session,body,options);}
   if(!["hold","confirm","reschedule","cancel"].includes(action))throw new BookingError("INVALID_CHANNEL_ACTION");

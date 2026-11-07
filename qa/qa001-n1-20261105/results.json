@@ -1,0 +1,322 @@
+{
+  "capturedAt": "2026-11-04T23:51:39.789Z",
+  "baseline": false,
+  "baselineRevision": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+  "requestedRevision": null,
+  "sourceRevision": null,
+  "testedHead": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+  "harnessSha256": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+  "sourceHashNormalization": "CRLF to LF",
+  "sourceHashes": {
+    "src/components/crm-workspace.tsx": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+    "src/lib/crm-core-request-guard.ts": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452"
+  },
+  "localOnly": true,
+  "actualCrmWorkspace": true,
+  "actualExistingHandlers": true,
+  "freshBrowserContextPerCase": true,
+  "reactStrictMode": true,
+  "unrelatedChildrenStubbed": true,
+  "syntheticHttp": true,
+  "serverAuthorizationStubbed": true,
+  "fullProjectFormPostSequenceExecuted": false,
+  "databaseIntegration": false,
+  "liveTest": false,
+  "fixtureContext": {
+    "productRole": "platform_admin",
+    "operatingModel": "novalure_internal",
+    "syntheticOnly": true
+  },
+  "totals": {
+    "cases": 4,
+    "passed": 4,
+    "failed": 0
+  },
+  "results": [
+    {
+      "name": "stale A selection cannot cancel current B-to-C switch or overwrite pending scope/URL",
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "beforeOldCallback": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "dataWorkspaceIds": [
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "hydrated": false,
+          "blocked": true,
+          "invalid": false,
+          "status": "fresh",
+          "switchStatus": "loading",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties",
+          "historyLength": 3
+        },
+        "afterOldCallback": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "dataWorkspaceIds": [
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "hydrated": false,
+          "blocked": true,
+          "invalid": false,
+          "status": "fresh",
+          "switchStatus": "loading",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties",
+          "historyLength": 3
+        },
+        "newestSwitchCompleted": true,
+        "final": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "77777777-7777-4777-8777-777777777777",
+          "dataWorkspaceIds": [
+            "77777777-7777-4777-8777-777777777777"
+          ],
+          "scope": {
+            "projectId": "88888888-8888-4888-8888-888888888888",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "77777777-7777-4777-8777-777777777777"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "fresh",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=77777777-7777-4777-8777-777777777777&projectId=88888888-8888-4888-8888-888888888888#properties",
+          "historyLength": 4
+        }
+      },
+      "requests": [
+        {
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "gated": false,
+          "marker": null
+        },
+        {
+          "workspaceId": "77777777-7777-4777-8777-777777777777",
+          "gated": true,
+          "marker": "SYNTHETIC newest C"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "genuine current B project selection still cancels pending C and preserves explicit All",
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "beforeCurrentSelection": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "dataWorkspaceIds": [
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "hydrated": false,
+          "blocked": true,
+          "invalid": false,
+          "status": "fresh",
+          "switchStatus": "loading",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties",
+          "historyLength": 3
+        },
+        "afterCurrentSelection": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "dataWorkspaceIds": [
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "scope": {
+            "projectId": null,
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "idle",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=all#properties",
+          "historyLength": 4
+        },
+        "newestSwitchCompleted": false,
+        "final": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "dataWorkspaceIds": [
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "scope": {
+            "projectId": null,
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "idle",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=all#properties",
+          "historyLength": 4
+        }
+      },
+      "requests": [
+        {
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "gated": false,
+          "marker": null
+        },
+        {
+          "workspaceId": "77777777-7777-4777-8777-777777777777",
+          "gated": true,
+          "marker": "SYNTHETIC newest C"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "old B selection cannot overwrite an already accepted C scope or URL",
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "beforeOldCallback": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "77777777-7777-4777-8777-777777777777",
+          "dataWorkspaceIds": [
+            "77777777-7777-4777-8777-777777777777"
+          ],
+          "scope": {
+            "projectId": "88888888-8888-4888-8888-888888888888",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "77777777-7777-4777-8777-777777777777"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "fresh",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=77777777-7777-4777-8777-777777777777&projectId=88888888-8888-4888-8888-888888888888#properties",
+          "historyLength": 4
+        },
+        "afterOldCallback": {
+          "identity": "SYNTHETIC-N1-user-A",
+          "workspaceId": "77777777-7777-4777-8777-777777777777",
+          "dataWorkspaceIds": [
+            "77777777-7777-4777-8777-777777777777"
+          ],
+          "scope": {
+            "projectId": "88888888-8888-4888-8888-888888888888",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "77777777-7777-4777-8777-777777777777"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "fresh",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=77777777-7777-4777-8777-777777777777&projectId=88888888-8888-4888-8888-888888888888#properties",
+          "historyLength": 4
+        }
+      },
+      "requests": [
+        {
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "gated": false,
+          "marker": null
+        },
+        {
+          "workspaceId": "77777777-7777-4777-8777-777777777777",
+          "gated": false,
+          "marker": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "callback from retired login identity cannot overwrite current same-workspace All URL",
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "beforeOldCallback": {
+          "identity": "SYNTHETIC-N1-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "dataWorkspaceIds": [
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "scope": {
+            "projectId": null,
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "idle",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=all#properties",
+          "historyLength": 3
+        },
+        "afterOldCallback": {
+          "identity": "SYNTHETIC-N1-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "dataWorkspaceIds": [
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "scope": {
+            "projectId": null,
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "hydrated": true,
+          "blocked": false,
+          "invalid": false,
+          "status": "idle",
+          "switchStatus": "idle",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=all#properties",
+          "historyLength": 3
+        }
+      },
+      "requests": [],
+      "browserErrors": [],
+      "blockedNetwork": []
+    }
+  ]
+}
