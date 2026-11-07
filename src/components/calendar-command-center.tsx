@@ -448,7 +448,8 @@ function getMeetingProviderLabel(provider: MeetingProvider, text: CalendarComman
 function getEventCalendarProvider(
   event: CalendarEvent | undefined,
   fallback: CalendarProvider,
-): CalendarProvider {
+): CalendarProvider | "manual" {
+  if (event?.calendarProvider === "manual" || event?.internalManual) return "manual";
   if (event?.calendarProvider === "google" || event?.location === "Google Meet" || event?.googleMeetJoinUrl) {
     return "google";
   }
@@ -1240,6 +1241,9 @@ export function CalendarCommandCenter({
     selectedEvent?.event,
     calendarIntegrations.defaultProvider,
   );
+  const selectedEventProviderLabel = selectedEventProvider === "manual"
+    ? language === "de" ? "Manuell" : "Manual"
+    : getCalendarProviderLabel(selectedEventProvider, text);
   const bookingSlug = shareConfig.slug.trim() || slugify(projectLabel) || "meeting";
   const bookingPath = workspacePublicKey
     ? `/book/${encodeURIComponent(workspacePublicKey)}/${encodeURIComponent(bookingSlug)}`
@@ -3590,7 +3594,7 @@ export function CalendarCommandCenter({
               [text.start, selectedEvent ? formatDateTime(selectedEvent.event.startsAt, locale) : "-"],
               [text.end, selectedEvent ? formatTime(selectedEvent.event.endsAt, locale) : "-"],
               [text.location, selectedEvent?.event.location],
-              [text.calendarLabel, getCalendarProviderLabel(selectedEventProvider, text)],
+              [text.calendarLabel, selectedEventProviderLabel],
               [text.meetingLabel, getMeetingStatusLabel(selectedEvent?.event, text)],
               [text.status, selectedEvent ? calendarStatusLabels[selectedEvent.event.status] : undefined],
               [text.owner, selectedEvent?.owner?.name],

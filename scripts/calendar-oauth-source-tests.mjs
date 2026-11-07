@@ -47,6 +47,51 @@ test("calendar initially renders an unknown connection state in both languages",
   }
 });
 
+test("manual calendar provider stays manual in the real detail panel under either workspace default", () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = () => { fetches += 1; throw new Error("Unexpected network call during static component render"); };
+  const startsAt = new Date().toISOString(), endsAt = new Date(Date.now() + 3_600_000).toISOString();
+  const variants = [
+    { calendarProvider: "manual", internalManual: true, expected: "manual" },
+    { calendarProvider: "manual", expected: "manual" },
+    { internalManual: true, expected: "manual" },
+    { calendarProvider: "google", expected: "google" },
+    { calendarProvider: "microsoft", expected: "microsoft" },
+    { expected: "default" },
+  ];
+  try {
+    for (const language of ["de", "en"]) for (const fallback of ["microsoft", "google"]) for (const variant of variants) {
+      Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { search: "?calendar_connected=" + fallback } } });
+      const copy = getCalendarCommandCenterCopy(language), provider = variant.expected === "default" ? fallback : variant.expected;
+      const expectedLabel = provider === "manual" ? language === "de" ? "Manuell" : "Manual"
+        : copy.calendarProviders.find(option => option.id === provider).label;
+      const html = renderToStaticMarkup(createElement(CalendarCommandCenter, {
+        activeProjectId: null, contacts: [], events: [{
+          id: "11111111-1111-4111-8111-111111111111", workspaceId: "home", projectId: "", title: "SYNTHETIC provider label",
+          startsAt, endsAt, location: "Telefon", status: "geplant", preparation: [], outcomeGoal: "SYNTHETIC internal review",
+          ...(variant.calendarProvider ? { calendarProvider: variant.calendarProvider } : {}),
+          ...(variant.internalManual ? { internalManual: true } : {}),
+        }], language, leads: [], projectLabel: "Synthetic workspace", projects: [], sessionUserId: "", sessionUserName: "",
+        tasks: [], users: [], workspaceId: "home", sessionWorkspaceId: "home",
+      }));
+      const detail = html.match(/<aside\b[^>]*>[\s\S]*?<\/aside>/)?.[0];
+      assert.ok(detail, "real selected-event detail panel must render");
+      const label = detail.indexOf(">" + copy.calendarLabel + "</p>");
+      assert.ok(label >= 0);
+      const calendarRow = detail.slice(label, detail.indexOf("</div>", label));
+      assert.ok(calendarRow.includes(">" + expectedLabel + "</p>"), `${language}/${fallback}/${variant.expected}: calendar label`);
+      assert.ok(detail.includes(copy.graphFields.provider + " · " + provider), `${language}/${fallback}/${variant.expected}: mapping provider`);
+    }
+    assert.equal(fetches, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else delete globalThis.window;
+  }
+});
+
 test("managed workspace retains legacy read-only boundaries and uses the scoped personal calendar bridge", async () => {
   const result = await runLoader({ ok: true, json: async () => ({ source: "database", google: { connected: true }, microsoft: { connected: false } }) }, { workspaceId: "managed-workspace" });
   assert.equal(result.status, "ready");

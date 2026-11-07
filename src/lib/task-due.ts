@@ -74,6 +74,7 @@ export function taskDueState(value: string, now: Date = new Date(), timeZone = "
 }
 
 export function formatTaskDue(value: string, language: "de" | "en", timeZone = "Europe/Vienna", now = new Date()) {
+  if (!value.trim()) return language === "de" ? "Ohne Fälligkeit" : "No due date";
   const state = taskDueState(value, now, timeZone);
   if (!state.dueAt) return language === "de" ? "Ohne gültige Fälligkeit" : "No valid due date";
   return new Intl.DateTimeFormat(language === "de" ? "de-DE" : "en-IE", { dateStyle: "medium", ...(state.dateOnly ? {} : { timeStyle: "short" as const }), timeZone }).format(state.dueAt);
