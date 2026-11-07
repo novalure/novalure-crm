@@ -13,6 +13,7 @@ import {
   CrmMachineAuthError, getCrmMachineBearer, verifyCrmMachineToken,
   type CrmMachineAuthOptions,
 } from "./crm-machine-auth";
+import { CRM_PERSONAL_SOURCE, verifyPersonalAutonomousCrmToken } from "./crm-autonomous-personal-auth";
 import { readKnowledgeJson } from "./knowledge-center/http";
 import { KnowledgeCenterError } from "./knowledge-center/policy";
 
@@ -26,7 +27,7 @@ const grantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 type AccessRequest = {
   contractVersion: typeof autonomousAccessContract;
-  operation: "Read" | "UpdateTask";
+  operation: "Read" | "UpdateTask" | "DescribeAssignment";
   correlationId: string;
   idempotencyKey: string;
   expectedVersion: number | null;
@@ -36,7 +37,7 @@ type Grant = {
   id: string; workload_id: string; workspace_id: string; actor_user_id: string;
   project_id: string; source_id: string; entity: "Task" | "Project";
   department_id: string; agent_id: string; task_id: string; scopes: string[];
-  delegation_public_key: string;
+  delegation_public_key: string; expires_at: Date | string | null;
 };
 type Principal = { id: string; workspace_id: string; identity_id: string };
 export type AutonomousAccessOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions };
@@ -51,11 +52,11 @@ function record(value: unknown): Record<string, unknown> {
 function parseRequest(value: unknown): AccessRequest {
   const body = record(value);
   assertCrmFields(body, ["contractVersion", "operation", "correlationId", "idempotencyKey", "expectedVersion", "patch"]);
-  if (body.contractVersion !== autonomousAccessContract || !["Read", "UpdateTask"].includes(String(body.operation)) ||
+  if (body.contractVersion !== autonomousAccessContract || !["Read", "UpdateTask", "DescribeAssignment"].includes(String(body.operation)) ||
       !uuid.test(String(body.idempotencyKey))) denied("INVALID_REQUEST", 400);
   assertCrmUuid(body.correlationId);
   const patch = record(body.patch);
-  if (body.operation === "Read") {
+  if (body.operation !== "UpdateTask") {
     if (body.expectedVersion !== null || Object.keys(patch).length) denied("INVALID_REQUEST", 400);
   } else {
     assertExpectedVersion(body.expectedVersion);
@@ -115,11 +116,19 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
         request.headers.has("cookie") || request.headers.has("origin")) denied("ACCESS_DENIED", 401);
     const token = getCrmMachineBearer(request.headers);
     if (!token) denied("ACCESS_DENIED", 401);
-    const claims = await verifyCrmMachineToken(token, options.machineAuth);
+    const claims = await verifyCrmMachineToken(token, options.machineAuth).catch(error => {
+      const env = options.machineAuth?.env ?? process.env;
+      if (env.CRM_MACHINE_AUTH_ENABLED !== "1" || env.CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED !== "1") throw error;
+      return verifyPersonalAutonomousCrmToken(token, options.machineAuth);
+    });
     const principalParams = [claims.issuer, claims.audience, claims.projectId, claims.ownerId,
       claims.subject, claims.workspaceId, claims.environment];
-    const principal = (await queryAuthenticationRows<Principal>(principalSql, principalParams, options))[0];
-    if (!principal || principal.workspace_id !== claims.workspaceId) denied();
+    const personal = claims.identityId === CRM_PERSONAL_SOURCE.identityId;
+    const principal = (await queryAuthenticationRows<Principal>(personal
+      ? "select * from public.crm_authenticate_personal_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8)" : principalSql,
+    personal ? [...principalParams, claims.customEnvironmentId] : principalParams, options))[0];
+    if (!principal || principal.workspace_id !== claims.workspaceId || principal.identity_id !==
+        (personal ? CRM_PERSONAL_SOURCE.identityId : "EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY")) denied();
     const delegation = parseDelegation(request.headers.get("x-evelyn-delegation"));
     const body = parseRequest(await readKnowledgeJson(request,
       ["contractVersion", "operation", "correlationId", "idempotencyKey", "expectedVersion", "patch"], 8192));
@@ -132,8 +141,11 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
       workspaceId: grant.workspace_id, workspaceName: "Registered internal delegation", name: "Registered CRM service agent",
       email: "delegated-crm-agent@service.invalid", role: "agent", productRole: "novalure_operator",
       permissions: getRolePermissions("agent"), productPermissions: getProductRoleCapabilities("novalure_operator"),
-      serviceIdentity: { identityId: principal.identity_id, role: claims.role, consumer: claims.consumer,
-        environment: claims.environment, jtiHash: claims.jtiHash } };
+      serviceIdentity: claims.environment === "franz-personal"
+        ? { identityId: CRM_PERSONAL_SOURCE.identityId, role: claims.role, consumer: claims.consumer,
+          environment: claims.environment, jtiHash: claims.jtiHash }
+        : { identityId: principal.identity_id, role: claims.role, consumer: claims.consumer,
+          environment: claims.environment, jtiHash: claims.jtiHash } };
     const attribution = { grantId: grant.id, departmentId: grant.department_id, agentId: grant.agent_id, taskId: grant.task_id };
     const commandInput: CrmCommandInput = { operation: "autonomous.task.title.update", resourceId: grant.source_id,
       projectId: grant.project_id, expectedVersion: body.expectedVersion!, idempotencyKey: body.idempotencyKey,
@@ -141,20 +153,21 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
     const access = async (tx: TenantTransaction, fresh: AppSession) => {
       const current = await tx.queryOne<Grant>(grantSql, [principal.id, grant.id]);
       if (!current || grantDigest(current) !== grantDigest(grant)) denied();
-      await assertProjectGrant(tx, fresh, grant.project_id, body.operation !== "Read");
+      await assertProjectGrant(tx, fresh, grant.project_id, body.operation === "UpdateTask");
       const revalidate = async () => {
         const effective = await tx.queryOne<Grant>(grantSql, [principal.id, grant.id]);
         if (!effective || grantDigest(effective) !== grantDigest(grant)) denied();
         const effectTime = options.machineAuth?.now ?? new Date();
         verifyDelegation(delegation, effective, body, effectTime);
         if (claims.expiresAt <= Math.floor(effectTime.valueOf() / 1000)) denied("ACCESS_DENIED", 401);
+        return effective;
       };
       await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`autonomous-access:${grant.id}:${nonce}`]);
       // Lock waits must never extend transport authority past its lifetime.
       await revalidate();
       if (await tx.queryOne("select nonce from crm_autonomous_access_events where grant_id=$1 and nonce=$2", [grant.id, nonce])) denied("NONCE_REPLAY", 409);
       let data: Record<string, unknown>, auditReference: string = randomUUID(), replayed = false;
-      if (body.operation === "Read") data = await projection(tx, grant);
+      if (body.operation !== "UpdateTask") data = await projection(tx, grant);
       else {
         const command = await executeCrmCommand(fresh, commandInput, async commandTx => {
           const target = await commandTx.queryOne(`select id from tasks where id=$1::uuid and workspace_id=$2::uuid
@@ -174,7 +187,18 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
         await projection(tx, grant);
         data = command.data; auditReference = command.auditReference; replayed = command.replayed;
       }
-      await revalidate();
+      const effective = await revalidate();
+      if (body.operation === "DescribeAssignment") {
+        // This is the caller's own signed assignment, never a registry list or
+        // business-data response. The normal current source projection above
+        // still fences a moved/private source before any lease is disclosed.
+        const now = Math.floor((options.machineAuth?.now ?? new Date()).valueOf() / 1000);
+        const expiresAt = Math.min(now + 60, claims.expiresAt, effective.expires_at === null
+          ? now + 60 : Math.floor(new Date(effective.expires_at).valueOf() / 1000));
+        if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) denied();
+        data = { operations: grant.entity === "Task" && grant.scopes.includes("crm.tasks.write")
+          ? ["Read", "UpdateTask"] : ["Read"], expiresAt };
+      }
       // Insert only after a successful read or committed-command result. The
       // nonce, attribution and effect share this transaction and roll back together.
       await tx.execute(`insert into crm_autonomous_access_events(grant_id,nonce,workspace_id,actor_user_id,department_id,
@@ -188,7 +212,7 @@ export async function handleAutonomousCrmAccess(request: Request, options: Auton
     // Match History's canonical command-before-business order. The command's
     // nested preflight is reentrant in this same tenant transaction. Reads do
     // not acquire a write-command lock, and all grant/TTL/output checks remain.
-    const result = body.operation === "Read" ? await withCrmRead(session, access, options)
+    const result = body.operation !== "UpdateTask" ? await withCrmRead(session, access, options)
       : await withCrmCommandPreflight(session, commandInput, access, options);
     return Response.json({ contractVersion: autonomousAccessContract, correlationId: body.correlationId, ...result },
       { headers: { "Cache-Control": "private, no-store" } });
