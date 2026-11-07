@@ -53,7 +53,7 @@ test("contact destructive flow is soft-delete with visible confirmation and rest
   assert.doesNotMatch(repo, /delete from contacts/i);
   assert.match(route, /export const DELETE = withCrmSalesWrite\(deleteHandler\)/);
   assert.match(route, /async function deleteHandler\(request: Request, session: AppSession\)/);
-  assert.match(readText("src/lib/crm-sales-http.ts"), /input\.method === "DELETE" \|\| input\.body\.action === "archive"\) \? "settings:manage"/);
+  assert.match(readText("src/lib/crm-sales-http.ts"), /capability: \(\(match\[1\] === "contacts" && \(input\.method === "DELETE" \|\| input\.body\.action === "archive"\)\) \|\| \(match\[1\] === "calendar-events" && input\.method === "DELETE"\)\) \? "settings:manage" : rule\.capability/);
   assert.match(route, /archiveContactRecord/);
   assert.match(ui, /archiveConfirmContactId/);
   assert.match(ui, /confirmArchive/);
