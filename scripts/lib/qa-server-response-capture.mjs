@@ -33,6 +33,122 @@ export function qaRequestFingerprint(secret, method, url, headers) {
   ])).digest("hex");
 }
 
+/** Independent CDP wire metadata must retain the complete existing PW audit. */
+export function assertQaWireNativeMultisets(native, wire) {
+  const signature = row => JSON.stringify([row.key, row.path, row.method,
+    ...(row.kind === "response" ? [row.status, row.ok, row.json] : [])]);
+  for (const kind of ["request", "response"]) {
+    const count = rows => rows.filter(row => row.kind === kind).reduce((map, row) => {
+      const key = signature(row); map.set(key, (map.get(key) ?? 0) + 1); return map;
+    }, new Map());
+    const a = count(native), b = count(wire);
+    if (a.size !== b.size || [...a].some(([key, n]) => b.get(key) !== n)) {
+      const error = new Error(kind === "request" ? "QA_WIRE_NATIVE_REQUEST_MULTISET_MISMATCH" : "QA_WIRE_NATIVE_RESPONSE_MULTISET_MISMATCH");
+      error.coverage = { nativeCount: native.filter(row => row.kind === kind).length, wireCount: wire.filter(row => row.kind === kind).length };
+      throw error;
+    }
+  }
+}
+
+/** Header values/URLs stay in this owned host's RAM. No provisional header,
+ * guessed sec-fetch value or FIFO request assignment is a wire binding. */
+export function createQaWireAudit({ origin, secret }) {
+  assert(new URL(origin).origin === origin && new URL(origin).hostname === "127.0.0.1" && /^[a-f0-9]{64}$/.test(secret));
+  const requests = new Map(), ignored = new Set(), pending = new Map();
+  let failure = null, events = 0, ownerClosing = false, detached = false, pendingBytes = 0;
+  const need = (condition, code) => { if (!condition) throw Error(code); };
+  const id = value => { need(typeof value === "string" && value.length > 0 && value.length < 200, "QA_WIRE_INVALID_ID"); return value; };
+  const scope = (url, type) => type === "Fetch" && url.origin === origin && url.pathname.startsWith("/api/");
+  const normalizedHeaders = headers => {
+    need(headers && typeof headers === "object" && !Array.isArray(headers) && JSON.stringify(headers).length <= 65536, "QA_WIRE_INVALID_HEADERS");
+    const result = Object.create(null);
+    for (const [name, value] of Object.entries(headers)) {
+      const lower = name.toLowerCase();
+      need(!Object.hasOwn(result, lower) && typeof value === "string", "QA_WIRE_AMBIGUOUS_HEADERS"); result[lower] = value;
+    }
+    return result;
+  };
+  const bind = (row, headers) => {
+    need(!row.extra, "QA_WIRE_DUPLICATE_EXTRAINFO");
+    row.captureKey = qaRequestFingerprint(secret, row.method, row.url, headers); row.extra = true; row.url = null;
+  };
+  const receive = action => event => {
+    if (failure) return;
+    try { need(++events <= 50000 && requests.size + ignored.size + pending.size <= 20000, "QA_WIRE_EVENT_LIMIT"); action(event); }
+    catch (error) { failure = error instanceof Error && /^QA_WIRE_[A-Z_]+$/.test(error.message) ? error.message : "QA_WIRE_INVALID_EVENT"; }
+  };
+  const onRequest = receive(event => {
+    const requestId = id(event.requestId), url = new URL(event.request.url);
+    if (!scope(url, event.type)) {
+      need(!requests.has(requestId), "QA_WIRE_SCOPE_OR_REDIRECT_CHANGED"); ignored.add(requestId);
+      if (pending.has(requestId)) { pendingBytes -= pending.get(requestId).bytes; pending.delete(requestId); } return;
+    }
+    need(!requests.has(requestId) && !ignored.has(requestId) && !event.redirectResponse, "QA_WIRE_REDIRECT_OR_REUSED_ID");
+    need(/^[A-Z]{3,8}$/.test(event.request.method), "QA_WIRE_INVALID_METHOD");
+    const row = { requestId, key: sha(event.request.method + "\0" + url.href), path: url.pathname, method: event.request.method,
+      url: url.href, extra: false, captureKey: null, response: null, terminal: null, direct: true };
+    requests.set(requestId, row);
+    if (pending.has(requestId)) {
+      const saved = pending.get(requestId); pendingBytes -= saved.bytes; pending.delete(requestId); bind(row, saved.headers);
+    }
+  });
+  const onExtra = receive(event => {
+    const requestId = id(event.requestId); if (ignored.has(requestId)) return;
+    const headers = normalizedHeaders(event.headers), row = requests.get(requestId);
+    if (row) bind(row, headers);
+    else {
+      need(!pending.has(requestId), "QA_WIRE_DUPLICATE_EXTRAINFO");
+      const bytes = JSON.stringify(headers).length; need(pending.size < 128 && pendingBytes + bytes <= 524288, "QA_WIRE_PENDING_HEADER_LIMIT");
+      pendingBytes += bytes; pending.set(requestId, { headers, bytes });
+    }
+  });
+  const onResponse = receive(event => {
+    const requestId = id(event.requestId), url = new URL(event.response.url), row = requests.get(requestId);
+    if (!row) { need(!scope(url, event.type), "QA_WIRE_RESPONSE_WITHOUT_REQUEST"); return; }
+    need(event.type === "Fetch" && !row.response && sha(row.method + "\0" + url.href) === row.key, "QA_WIRE_UNBOUND_RESPONSE");
+    const headers = normalizedHeaders(event.response.headers);
+    need(Number.isInteger(event.response.status) && event.response.status >= 200 && event.response.status <= 599, "QA_WIRE_INVALID_STATUS");
+    row.direct = !event.response.fromDiskCache && !event.response.fromServiceWorker && !event.response.fromPrefetchCache;
+    row.response = { kind: "response", key: row.key, path: row.path, method: row.method, status: event.response.status,
+      ok: event.response.status < 300, json: String(headers["content-type"] ?? "").includes("application/json") };
+  });
+  const terminal = kind => receive(event => {
+    const row = requests.get(id(event.requestId)); if (!row) return;
+    need(!row.terminal, "QA_WIRE_DUPLICATE_TERMINAL"); row.terminal = kind;
+    need(kind !== "finished" || row.response, "QA_WIRE_FINISHED_WITHOUT_RESPONSE");
+  });
+  const diagnostics = () => ({ requests: requests.size, responses: [...requests.values()].filter(row => row.response).length,
+    missingExtraInfo: [...requests.values()].filter(row => !row.extra).length,
+    nonDirectResponses: [...requests.values()].filter(row => !row.direct).length,
+    pendingTerminals: [...requests.values()].filter(row => !row.terminal).length, unmatchedExtraInfo: pending.size,
+    detached, ownerClosing, failure });
+  const snapshot = native => {
+    if (failure) { const error = Error("QA_WIRE_INVALID"); error.coverage = diagnostics(); throw error; }
+    if (pending.size || [...requests.values()].some(row => !row.terminal)) {
+      const error = Error("QA_WIRE_PENDING"); error.coverage = diagnostics(); throw error;
+    }
+    const network = [...requests.values()].flatMap(row => {
+      // Intercepted abort/fulfill traffic remains fully counted. Without actual
+      // ExtraInfo/direct transport its null binding can NEVER prove Node EOF.
+      const captureKey = row.extra && row.direct ? row.captureKey : null;
+      const request = { kind: "request", key: row.key, path: row.path, method: row.method, captureKey };
+      return row.response ? [request, { ...row.response, captureKey }] : [request];
+    });
+    assertQaWireNativeMultisets(native, network); return network;
+  };
+  return {
+    install(channel) {
+      channel.on("Network.requestWillBeSent", onRequest); channel.on("Network.requestWillBeSentExtraInfo", onExtra);
+      channel.on("Network.responseReceived", onResponse); channel.on("Network.loadingFinished", terminal("finished"));
+      channel.on("Network.loadingFailed", terminal("failed"));
+      channel.on("close", () => { detached = true; if (!ownerClosing) failure = "QA_WIRE_UNEXPECTED_DETACH"; });
+    },
+    snapshot, diagnostics,
+    beginOwnerClose(native) { snapshot(native); ownerClosing = true; },
+    cleanupAfterFailure() { failure ??= "QA_WIRE_UNQUALIFIED_OWNER_CLOSE"; ownerClosing = true; },
+  };
+}
+
 export function createQaCaptureRelay() {
   const rows = []; let failure = false, runId;
   return {

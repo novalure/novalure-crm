@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { validQaServerAuthGroups, validQaServerOriginalBag, isQaPreheaderAbortedRead } from "./qa-server-response-capture.mjs";
+import { validQaServerAuthGroups, validQaServerOriginalBag, isQaPreheaderAbortedRead, assertQaWireNativeMultisets } from "./qa-server-response-capture.mjs";
 const opaqueReferences = new Map();
 const opaqueReference = value => {
   if (typeof value !== "string") return null;
@@ -216,7 +216,8 @@ export function parseQaFetchBindingMessage(message) {
   return row;
 }
 
-export function assertObservedFetchCoverage(network, observations, serverBodyProofs = new Map()) {
+export function assertObservedFetchCoverage(network, observations, serverBodyProofs = new Map(), wireNetwork = null) {
+  if (wireNetwork !== null) assertQaWireNativeMultisets(network, wireNetwork);
   const startsById = new Map(), terminalIds = new Set(), undispatchedIds = new Set();
   for (const row of observations) {
     const id = `${row.documentId}/${row.id}`;
@@ -268,7 +269,7 @@ export function assertObservedFetchCoverage(network, observations, serverBodyPro
       proof.bodyHashes.some(body => !Number.isInteger(body.status) || body.status < 200 || body.status >= 300 || !/^[a-f0-9]{64}$/.test(body.sha256)) ||
       (!(row.bodyError === "body_read_failed" && row.json && row.status >= 200 && row.status < 300 && row.method === "GET" &&
         !row.keepalive && !row.signalAbortedAtStart && row.signalAborted && !row.bodyInspected) && !isQaPreheaderAbortedRead(row)) ||
-      !validQaServerAuthGroups(network, row, proof) || !validQaServerOriginalBag(observations, row, proof))
+      !validQaServerAuthGroups(wireNetwork ?? network, row, proof) || !validQaServerOriginalBag(observations, row, proof))
       throw new Error("INVALID_SERVER_EGRESS_BODY_PROOF");
     return true;
   };

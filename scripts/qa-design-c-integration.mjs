@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from "./lib/qa-response-inspection.mjs";
-import { qaRequestFingerprint, qualifyQaServerBodies, requestQaCaptureSnapshot } from "./lib/qa-server-response-capture.mjs";
+import { qaRequestFingerprint, qualifyQaServerBodies, requestQaCaptureSnapshot, createQaWireAudit } from "./lib/qa-server-response-capture.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
@@ -69,6 +69,7 @@ const results = [],
   readerMutations = [],
   authenticationProofs = [];
 const contexts = [];
+const wireAudits = [];
 const responseBarriers = new WeakMap();
 const fetchAudits = new WeakMap();
 const serverBodyResolutions = new Map();
@@ -77,11 +78,12 @@ const serverBodyQualificationDiagnostics = new Map();
 const capture = fixture.responseCapture;
 assert(capture?.syntheticOnly === true && capture.origin === base.origin && /^[a-f0-9]{32}$/.test(capture.runId) && /^[a-f0-9]{64}$/.test(capture.secret));
 async function serverBodyProofs(audit, timeoutMs = 1000) {
+  audit.boundWireNetwork = audit.wire.snapshot(audit.network);
   const records = await requestQaCaptureSnapshot(capture.runId, { timeoutMs: Math.min(1000, timeoutMs) });
   assert(records.length <= 20000 && records.every(row => row.runId === capture.runId));
   assert(!records.some(row => row.foreign), "Actual server egress contains a foreign private sentinel");
   const diagnostics = [];
-  const proofs = qualifyQaServerBodies(audit.network, audit.observations, records, capture.runId, diagnostics);
+  const proofs = qualifyQaServerBodies(audit.boundWireNetwork, audit.observations, records, capture.runId, diagnostics);
   for (const diagnostic of diagnostics) {
     const prior = serverBodyQualificationDiagnostics.get(diagnostic.reference);
     assert(serverBodyQualificationDiagnostics.size < 2000 || prior, "Bounded server qualification diagnostics exceeded");
@@ -121,12 +123,12 @@ async function drainResponseInspections(page) {
     try {
       const proofs = await serverBodyProofs(audit, Math.max(1, deadline - Date.now()));
       if (Date.now() >= deadline) throw new Error("Original/native Fetch coverage deadline exceeded");
-      assertObservedFetchCoverage(audit.network, audit.observations, proofs); return;
+      assertObservedFetchCoverage(audit.network, audit.observations, proofs, audit.boundWireNetwork); return;
     }
     catch (error) {
       // A new original fetch may start between the browser snapshot and its
       // native event delivery. Re-observe within the SAME budget, never refetch.
-      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY", "QA_SERVER_CAPTURE_PENDING"].includes(error.message)) throw error;
+      if (!(error instanceof Error) || !["UNSETTLED_ORIGINAL_FETCH_LIFECYCLE", "UNOBSERVED_NATIVE_FETCH_REQUEST", "UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY", "UNMATCHED_ORIGINAL_FETCH_START", "UNMATCHED_ORIGINAL_SUCCESSFUL_JSON_BODY", "QA_SERVER_CAPTURE_PENDING", "QA_WIRE_PENDING", "QA_WIRE_NATIVE_REQUEST_MULTISET_MISMATCH", "QA_WIRE_NATIVE_RESPONSE_MULTISET_MISMATCH"].includes(error.message)) throw error;
       lastCoverageError = { code: error.message, ...(error.coverage ?? {}) };
       if (Date.now() >= deadline) throw error;
       await new Promise(resolve => setTimeout(resolve, 25));
@@ -819,6 +821,9 @@ async function newPage(label) {
   // The native binding event already owns its serialized metadata. Unlike
   // Playwright exposeBinding it needs no surviving execution-context lookup.
   const channel = await context.newCDPSession(page);
+  const audit = fetchAudit(page); audit.wire = createQaWireAudit({ origin: base.origin, secret: capture.secret });
+  audit.wire.install(channel); wireAudits.push({ context, audit });
+  await channel.send("Network.enable");
   channel.on("Runtime.bindingCalled", message => {
     if (message.name !== "__crmQaFetchReport") return;
     try {
@@ -2429,14 +2434,23 @@ try {
       error: error.stack || error.message,
     });
 } finally {
-  for (const context of contexts) await context.close().catch(() => {});
+  for (const context of contexts) {
+    for (const { audit } of wireAudits.filter(row => row.context === context)) {
+      try { audit.wire.beginOwnerClose(audit.network); }
+      catch (error) {
+        audit.wire.cleanupAfterFailure(); results.push({ name: "Complete native wire audit before owned close", status: "FAIL",
+          error: error.message + ": " + JSON.stringify(safeQaFetchDiagnostic(error.coverage ?? null)) });
+      }
+    }
+    await context.close().catch(() => {});
+  }
   await browser?.close();
   await admin.end();
   const finalFetchAudits = [operatorPage, customerPage, viewerPage].filter(Boolean).map(fetchAudit);
   // Closing the contexts can publish the final real pagehide records. Preserve
   // every historical/native obligation after that last lifecycle transition.
   for (const audit of finalFetchAudits) {
-    try { assertObservedFetchCoverage(audit.network, audit.observations, await serverBodyProofs(audit)); }
+    try { assertObservedFetchCoverage(audit.network, audit.observations, await serverBodyProofs(audit), audit.boundWireNetwork); }
     catch (error) { results.push({ name: "Final original/native Fetch audit", status: "FAIL", error: error.message + ": " + JSON.stringify(error.coverage ?? null) }); }
   }
   const { events: fetchLifecycle, ...fetchLifecycleDiagnostics } = collectFetchLifecycleDiagnostics(finalFetchAudits);
@@ -2478,6 +2492,7 @@ try {
       preHeaderAbortedReadCount: proof.preHeaderAbortedReadCount,
       actualEgressEofAndBodiesInspected: true, exactIndividualRequestClaim: false, successfulStatusAssignedToOriginalTerminal: false })),
     serverBodyQualificationDiagnostics: [...serverBodyQualificationDiagnostics.values()],
+    nativeWireDiagnostics: wireAudits.map(({ audit }) => audit.wire.diagnostics()),
     fetchLifecycle,
     fetchLifecycleDiagnostics,
     consoleErrors,

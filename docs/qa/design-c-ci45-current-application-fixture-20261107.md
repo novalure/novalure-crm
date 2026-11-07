@@ -378,3 +378,41 @@ fixtures (no Chromium claim). Additional cases cover the exact new eligibility,
 missing/unsafe Node evidence and group cardinality. The existing unchanged
 original observer, HTTP EOF monitor and private RAM boundary evidence is reused.
 No rerun, build, deployment or further release authority is inferred.
+
+## Actual wire-header binding after the9fcd failure
+
+The9fcd native run42414662211 remains failed at step45 (47/4), after steps1–44
+passed. Its strict candidate was now observed, but18 same-key server starts were
+all unclaimed by the18 native header fingerprints. No field value or private
+digest was retained, so the exact historical tuple difference is not asserted.
+
+One authorized public toy probe used installed Playwright1.63 and system
+Chrome156 in a fresh ephemeral profile, without CRM code, database or account
+access. With the same route interception and request.allHeaders ordering,
+allHeaders omitted sec-fetch-mode and sec-fetch-dest while the actual Node input
+contained both. Actual CDP requestWillBeSentExtraInfo for that request ID matched
+all six Node fields. A separate public Node24.18 start-channel probe on Windows
+and Linux found complete matching headers at both start and handler. Neither toy
+probe is an exact native CI/CRM acceptance result.
+
+The request fingerprint itself and both original Fetch/Node EOF observers remain
+unchanged. A separate CDP audit now binds actual wire headers and each response
+by exact request ID, URL, method and status. It independently compares complete
+two-sided request/response multisets with every existing Playwright audit row;
+that previous audit is neither replaced nor reduced. Server body proofs use only
+this independently matched wire network. Redirect/reused IDs, duplicate or
+ambiguous metadata, wrong URL/status counts and unexpected detach fail closed.
+All delayed metadata must settle within the existing finite drain budget.
+
+Intentional intercepted abort/fulfill controls remain fully counted. They may
+lack physical wire ExtraInfo and cannot claim an authenticated Node EOF binding.
+Already inspected original bodies still supply their own existing body proof.
+Any claimed server body group requires the actual complete wire-header binding
+for every request; missing ExtraInfo and non-direct/cache/service-worker results
+cannot borrow a server body. Explicit owned close requires a complete matching
+audit first, and the final audit still checks all retained records after close.
+
+Raw headers/URLs and the unchanged per-run full HMAC exist only in host RAM.
+Persistent wire diagnostics contain fixed failure codes, counts and booleans.
+The exploratory per-component RAM diagnostics are kept outside this candidate;
+no guessed header values, dropped fields or fingerprint policy changes are used.

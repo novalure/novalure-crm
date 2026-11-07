@@ -8,11 +8,28 @@ import { gzipSync } from "node:zlib";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import { observeQaServerResponse, qaRequestFingerprint, qualifyQaServerBodies, createQaCaptureRelay, requestQaCaptureSnapshot, answerQaCaptureRequest } from "./lib/qa-server-response-capture.mjs";
+import { observeQaServerResponse, qaRequestFingerprint, qualifyQaServerBodies, createQaCaptureRelay, requestQaCaptureSnapshot, answerQaCaptureRequest, createQaWireAudit, assertQaWireNativeMultisets } from "./lib/qa-server-response-capture.mjs";
 import { assertObservedFetchCoverage, parseQaFetchBindingMessage, safeQaFetchDiagnostic, collectFetchLifecycleDiagnostics, createResponseInspectionBarrier } from "./lib/qa-response-inspection.mjs";
 
 const secret = "b".repeat(64), runId = "a".repeat(32), doc = "1794075165538-0.7775903198219385";
 const sha = value => createHash("sha256").update(value).digest("hex");
+const wireHeaders = { cookie: "PUBLIC_SYNTHETIC_SESSION=one", authorization: "PUBLIC_SYNTHETIC_ONLY", "user-agent": "Public transport",
+  accept: "application/json", "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" };
+function wireFixture() {
+  const origin = "http://127.0.0.1:12345", url = origin + "/api/crm/team?public=one", key = sha("GET\0" + url);
+  const channel = new EventEmitter(), wire = createQaWireAudit({ origin, secret }); wire.install(channel);
+  const native = [{ kind: "request", key, path: "/api/crm/team", method: "GET" },
+    { kind: "response", key, path: "/api/crm/team", method: "GET", status: 200, ok: true, json: true }];
+  const events = {
+    request: { requestId: "public.1", type: "Fetch", request: { method: "GET", url } },
+    extra: { requestId: "public.1", headers: wireHeaders },
+    response: { requestId: "public.1", type: "Fetch", response: { url, status: 200, headers: { "Content-Type": "application/json" } } },
+    finished: { requestId: "public.1" },
+  };
+  const emit = (name, event = events[name]) => channel.emit({ request: "Network.requestWillBeSent", extra: "Network.requestWillBeSentExtraInfo",
+    response: "Network.responseReceived", finished: "Network.loadingFinished", failed: "Network.loadingFailed" }[name], event);
+  return { origin, url, key, channel, wire, native, events, emit };
+}
 function row(key, extra = {}) { return { kind: "terminal", documentId: doc, id: 1, key, path: "/api/crm/team", method: "GET", phase: "body", status: 200, json: true,
   bodyInspected: false, signalAborted: true, signalAbortedAtStart: false, keepalive: false, foreign: false, bodyError: "body_read_failed", bodySha256: null,
   failedBeforeHeaders: false, retiredReadBeforeHeaders: false, preAbortedNoDispatch: false, rejectedWithOriginalAbortReason: false, ...extra }; }
@@ -367,4 +384,82 @@ test("passive real ServerResponse error monitoring preserves native throws, orig
     const terminal = f.records.find(row => row.kind === "terminal");
     assert.equal(terminal.terminal, "finish"); assert.equal(terminal.complete, false); assert.equal(terminal.bodySha256, null);
   } finally { await f.stop(); }
+});
+
+test("CDP wire ExtraInfo supplies all strict fingerprint fields while preserving the complete independent PW multiset", () => {
+  const f = wireFixture(); f.emit("extra"); f.emit("request"); f.emit("response"); f.emit("finished");
+  const network = f.wire.snapshot(f.native), actual = qaRequestFingerprint(secret, "GET", f.url, wireHeaders);
+  const provisional = { ...wireHeaders }; delete provisional["sec-fetch-mode"]; delete provisional["sec-fetch-dest"];
+  assert.notEqual(qaRequestFingerprint(secret, "GET", f.url, provisional), actual);
+  assert.equal(network[0].captureKey, actual); assert.equal(network[1].captureKey, actual);
+  const observations = [row(f.key, { kind: "start", phase: "request", status: null, json: false, signalAborted: false, bodyError: null }), row(f.key)];
+  const identity = { runId, id: 1, key: f.key, captureKey: actual, path: "/api/crm/team", method: "GET" };
+  const records = [{ ...identity, kind: "start" }, { ...identity, kind: "terminal", status: 200, json: true, complete: true,
+    terminal: "finish", bodySha256: sha('{"public":true}'), foreign: false, inspectionError: null }];
+  const proofs = qualifyQaServerBodies(network, observations, records, runId);
+  assert.equal(proofs.size, 1); assert.doesNotThrow(() => assertObservedFetchCoverage(f.native, observations, proofs, network));
+  for (const change of [n => n.pop(), n => n.push({ ...n[0] }), n => n[1].status = 201, n => n[1].json = false,
+    n => n[0].method = "POST", n => n[0].key = sha("OTHER_QUERY")]) {
+    const native = structuredClone(f.native); change(native);
+    assert.throws(() => assertQaWireNativeMultisets(native, network), /QA_WIRE_NATIVE_.*_MULTISET_MISMATCH/);
+    assert.throws(() => assertObservedFetchCoverage(native, observations, proofs, network), /QA_WIRE_NATIVE_.*_MULTISET_MISMATCH/);
+  }
+  const privateProjection = JSON.stringify({ state: f.wire.diagnostics(), projected: safeQaFetchDiagnostic(network) });
+  for (const value of [actual, f.key, f.url, ...Object.values(wireHeaders)]) assert(!privateProjection.includes(value));
+  assert.equal(f.wire.diagnostics().missingExtraInfo, 0);
+});
+
+test("same-URL concurrent CDP requests bind out-of-order headers and statuses by exact IDs, never FIFO", () => {
+  const f = wireFixture(), second = { ...wireHeaders, cookie: "PUBLIC_OTHER_SESSION" };
+  f.native.push({ ...f.native[0] }, { ...f.native[1], status: 403, ok: false });
+  f.emit("request"); f.emit("request", { ...f.events.request, requestId: "public.2" });
+  f.emit("response", { ...f.events.response, requestId: "public.2", response: { ...f.events.response.response, status: 403 } });
+  f.emit("extra", { requestId: "public.2", headers: second });
+  f.emit("response"); f.emit("extra"); f.emit("finished", { requestId: "public.2" }); f.emit("finished");
+  const network = f.wire.snapshot(f.native), success = network.find(row => row.kind === "response" && row.status === 200);
+  const denied = network.find(row => row.kind === "response" && row.status === 403);
+  assert.equal(success.captureKey, qaRequestFingerprint(secret, "GET", f.url, wireHeaders));
+  assert.equal(denied.captureKey, qaRequestFingerprint(secret, "GET", f.url, second));
+  assert.notEqual(success.captureKey, denied.captureKey);
+});
+
+test("missing, ambiguous, reused, redirected or detached wire data cannot supply authenticated Node body evidence", () => {
+  const scenarios = [
+    f => { f.emit("request"); f.emit("extra"); f.emit("extra"); },
+    f => { f.emit("request"); f.emit("request"); },
+    f => f.emit("request", { ...f.events.request, redirectResponse: { status: 302 } }),
+    f => { f.emit("request"); f.emit("response", { ...f.events.response, response: { ...f.events.response.response, url: f.url + "&other=1" } }); },
+    f => { f.emit("request"); f.emit("extra", { requestId: "public.1", headers: { Cookie: "PUBLIC_A", cookie: "PUBLIC_B" } }); },
+    f => f.emit("response"),
+    f => { f.emit("request"); f.emit("extra"); f.emit("response"); f.emit("response"); },
+    f => { f.emit("request"); f.emit("extra"); f.emit("response"); f.emit("finished"); f.emit("finished"); },
+    f => { f.emit("request"); f.emit("extra"); f.emit("response"); f.emit("finished"); f.channel.emit("close"); },
+  ];
+  for (const scenario of scenarios) {
+    const f = wireFixture(); scenario(f); assert.throws(() => f.wire.snapshot(f.native), /QA_WIRE_INVALID/);
+    assert(!JSON.stringify(f.wire.diagnostics()).includes(f.url));
+  }
+  const pending = wireFixture(); pending.emit("request"); pending.emit("extra"); pending.emit("response");
+  assert.throws(() => pending.wire.snapshot(pending.native), /QA_WIRE_PENDING/);
+  for (const cached of [false, true]) {
+    const f = wireFixture(); f.emit("request"); if (cached) f.emit("extra");
+    f.emit("response", { ...f.events.response, response: { ...f.events.response.response, fromServiceWorker: cached } }); f.emit("finished");
+    const network = f.wire.snapshot(f.native); assert.equal(network[0].captureKey, null); assert.equal(network[1].captureKey, null);
+    const observations = [row(f.key, { kind: "start", phase: "request", status: null, json: false, signalAborted: false, bodyError: null }), row(f.key)];
+    const own = qaRequestFingerprint(secret, "GET", f.url, wireHeaders), identity = { runId, id: 1, key: f.key, captureKey: own, path: "/api/crm/team", method: "GET" };
+    const records = [{ ...identity, kind: "start" }, { ...identity, kind: "terminal", status: 200, json: true, complete: true,
+      terminal: "finish", bodySha256: sha('{"public":true}'), foreign: false, inspectionError: null }];
+    const proofs = qualifyQaServerBodies(network, observations, records, runId); assert.equal(proofs.size, 0);
+    assert.throws(() => assertObservedFetchCoverage(f.native, observations, proofs, network), /UNINSPECTED_NATIVE_SUCCESSFUL_JSON_BODY/);
+  }
+});
+
+test("owned close retains all counters, while intercepted traffic has no fabricated wire-header or Node-EOF binding", () => {
+  const f = wireFixture(); f.emit("request"); f.emit("extra"); f.emit("response"); f.emit("finished");
+  f.wire.beginOwnerClose(f.native); f.channel.emit("close"); assert.doesNotThrow(() => f.wire.snapshot(f.native));
+  assert.throws(() => f.wire.snapshot([...f.native, { ...f.native[0] }]), /QA_WIRE_NATIVE_REQUEST_MULTISET_MISMATCH/);
+  const aborted = wireFixture(); aborted.emit("request"); aborted.emit("failed", { requestId: "public.1" });
+  const native = [aborted.native[0]], wire = aborted.wire.snapshot(native);
+  assert.equal(wire.length, 1); assert.equal(wire[0].captureKey, null); assert.equal(aborted.wire.diagnostics().missingExtraInfo, 1);
+  assert.throws(() => assertQaWireNativeMultisets(aborted.native, wire), /QA_WIRE_NATIVE_RESPONSE_MULTISET_MISMATCH/);
 });
