@@ -86,7 +86,7 @@ function HistoryTimeline({ workspaceId, projectId, unitId, reservationId, curren
     };
   }, []);
 
-  const load = useCallback(async (cursor: string | null) => {
+  const load = useCallback((cursor: string | null) => {
     const lifecycle = request.current;
     if (!lifecycle.mounted || lifecycle.busy) return;
     lifecycle.busy = true;
@@ -94,22 +94,23 @@ function HistoryTimeline({ workspaceId, projectId, unitId, reservationId, curren
     const controller = new AbortController();
     lifecycle.controller = controller;
     const current = () => lifecycle.mounted && sequence === lifecycle.sequence;
-    try {
-      const params = new URLSearchParams({ workspaceId, projectId, unitId });
-      if (reservationId) params.set("reservationId", reservationId);
-      if (cursor) params.set("cursor", cursor);
-      const response = await fetch(`/api/crm/property-sales/history?${params}`, { cache: "no-store", credentials: "same-origin", signal: controller.signal });
-      if (!current()) return;
+    const params = new URLSearchParams({ workspaceId, projectId, unitId });
+    if (reservationId) params.set("reservationId", reservationId);
+    if (cursor) params.set("cursor", cursor);
+    const skipped = Symbol();
+    void fetch(`/api/crm/property-sales/history?${params}`, { cache: "no-store", credentials: "same-origin", signal: controller.signal }).then(response => {
+      if (!current()) return skipped;
       if (!response.ok) {
         const denied = response.status === 401 || response.status === 403 || response.status === 404;
         setState(previous => ({ ...previous, ...(denied ? { items: [], nextCursor: null, loaded: false } : {}), denied,
           error: denied ? "Der Verlauf ist für diese Auswahl nicht verfügbar. Bitte prüfen Sie Ihre Projektberechtigung oder melden Sie sich erneut an."
             : response.status === 400 ? "Diese Verlaufsseite kann nicht geladen werden. Bitte aktualisieren Sie den Verlauf."
               : "Der Verlauf konnte nicht geladen werden. Bitte versuchen Sie es erneut." }));
-        return;
+        return skipped;
       }
-      const result: unknown = await response.json();
-      if (!current()) return;
+      return response.json() as Promise<unknown>;
+    }).then(result => {
+      if (!current() || result === skipped) return;
       const page = result && typeof result === "object" && "source" in result && result.source === "database" && "data" in result ? result.data : null;
       if (!isPropertySalesHistoryPage(page) || page.workspaceId !== workspaceId || page.projectId !== projectId || page.unitId !== unitId || page.reservationId !== reservationId
         || (page.nextCursor !== null && (page.nextCursor === cursor || (cursor !== null && lifecycle.cursors.has(page.nextCursor))))) {
@@ -128,15 +129,15 @@ function HistoryTimeline({ workspaceId, projectId, unitId, reservationId, curren
           return true;
         })], nextCursor: page.nextCursor, loaded: true, error: "", denied: false };
       });
-    } catch {
+    }).catch(() => {
       if (current()) setState(previous => ({ ...previous, error: "Die Verbindung zum Verlauf ist unterbrochen. Bitte versuchen Sie es erneut." }));
-    } finally {
+    }).finally(() => {
       if (current()) {
         lifecycle.busy = false;
         lifecycle.controller = null;
         setLoading(false);
       }
-    }
+    });
   }, [workspaceId, projectId, unitId, reservationId]);
 
   useEffect(() => { void load(null); }, [load]);
