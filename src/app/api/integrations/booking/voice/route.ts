@@ -1,5 +1,5 @@
-import { handleMachineBookingRequest } from "@/lib/booking/channel-http";
+import { handleVoiceBookingRequest } from "@/lib/booking/studio-voice-authority";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-export async function POST(request: Request) { return handleMachineBookingRequest(request, "voice"); }
+export async function POST(request: Request) { return handleVoiceBookingRequest(request); }
