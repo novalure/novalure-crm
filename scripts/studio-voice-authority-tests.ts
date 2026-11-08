@@ -243,6 +243,56 @@ test("Studio voice uses independent forced-RLS authority and the existing durabl
       });
     });
 
+    await t.test("malformed saved bot grants are denied before any session or budget write", async t => {
+      const savedGrant = { enabled: true, publicId: publication.publicId, channels: ["voice"], typeIds: [id.assignment] };
+      const malformed: Array<[string, Record<string, unknown>]> = [
+        ["object channels with a false voice value", { channels: { voice: false } }],
+        ["string channels", { channels: "voice" }],
+        ["null channels", { channels: null }],
+        ["object typeIds with a false assignment value", { typeIds: { [id.assignment]: false } }],
+        ["null typeIds", { typeIds: null }],
+        ["empty typeIds", { typeIds: [] }],
+        ["numeric typeIds entry", { typeIds: [id.assignment, 42] }],
+        ["null typeIds entry", { typeIds: [id.assignment, null] }],
+        ["object typeIds entry", { typeIds: [id.assignment, { id: id.assignment }] }],
+        ["invalid UUID typeIds entry", { typeIds: [id.assignment, "not-a-uuid"] }],
+        ["more than fifty typeIds", { typeIds: Array.from({ length: 51 }, () => id.assignment) }],
+        ["null publicId", { publicId: null }],
+        ["object publicId", { publicId: { value: publication.publicId } }],
+        ["array publicId", { publicId: [publication.publicId] }],
+      ];
+      for (const [label, patch] of malformed) await t.test(label, async () => {
+        await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: { ...savedGrant, ...patch } })]);
+        try {
+          const before = await counts();
+          const result = await call({ operation: "session", typeId: id.assignment });
+          assert.equal(result.response.status, 403, JSON.stringify(result.body));
+          assert.deepEqual(await counts(), before);
+        } finally { await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: savedGrant })]); }
+        const restored = await verifyStudioVoiceBookingAuthority(request({ operation: "session", typeId: id.assignment }), options);
+        assert.deepEqual(restored.typeIds, [id.assignment]);
+        assert.equal(restored.publicId, publication.publicId);
+      });
+      await t.test("numeric publicId is denied even when its text matches the persisted publication", async () => {
+        const numericPublicId = "12345678901";
+        await db.admin.query("update booking_publications set public_id=$2,config=jsonb_set(config,'{publicId}',to_jsonb($2::text)) where id=$1", [stored.id, numericPublicId]);
+        try {
+          await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: { ...savedGrant, publicId: Number(numericPublicId) } })]);
+          const before = await counts();
+          const result = await call({ operation: "session", typeId: id.assignment });
+          assert.equal(result.response.status, 403, JSON.stringify(result.body));
+          assert.deepEqual(await counts(), before);
+          await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: { ...savedGrant, publicId: numericPublicId } })]);
+          assert.equal((await verifyStudioVoiceBookingAuthority(request({ operation: "session", typeId: id.assignment }), options)).publicId, numericPublicId,
+            "the identical identifier is valid when saved as the required JSON string");
+        } finally {
+          await db.admin.query("update booking_publications set public_id=$2,config=jsonb_set(config,'{publicId}',to_jsonb($2::text)) where id=$1", [stored.id, publication.publicId]);
+          await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: savedGrant })]);
+        }
+        assert.equal((await verifyStudioVoiceBookingAuthority(request({ operation: "session", typeId: id.assignment }), options)).publicId, publication.publicId);
+      });
+    });
+
     await t.test("caller metadata, foreign type and unsupported operations cannot broaden the saved authority", async () => {
       for (const body of [
         { operation: "session", typeId: id.assignment, workspaceId: randomUUID() },
@@ -422,6 +472,34 @@ test("Studio voice uses independent forced-RLS authority and the existing durabl
       } finally {
         forecast.release(); pauseBusy = undefined;
         await db.admin.query("update studio_voice_booking_grants set enabled=true where id=$1", [id.grant]);
+      }
+    });
+    await t.test("a malformed saved bot grant during the final forecast fences the original session before provider create", async () => {
+      const token = await issue(), held = await hold(token, nextSlot()), forecast = gate();
+      const sessionHash = createHash("sha256").update(token).digest("hex");
+      const original = (await db.admin.query("select token_hash,binding_id,relation,publication_revision,assignment_id,organizer_id,expires_at from booking_channel_sessions where token_hash=$1", [sessionHash])).rows[0];
+      const before = await counts(), beforeCreates = creates;
+      const savedGrant = { enabled: true, publicId: publication.publicId, channels: ["voice"], typeIds: [id.assignment] };
+      pauseBusy = () => forecast.wait();
+      const pending = call(confirm(token, held.booking));
+      try {
+        await Promise.race([forecast.ready, pending.then(result => { throw new Error(`Confirmation ended before the forecast: ${JSON.stringify(result.body)}`); })]);
+        await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: { ...savedGrant, channels: { voice: false } } })]);
+        forecast.release();
+        const result = await pending;
+        assert.equal(result.response.status, 200, JSON.stringify(result.body));
+        assert.equal((result.body.booking as PublicBookingRecord).id, held.booking.id);
+        assert.equal((result.body.booking as PublicBookingRecord).state, "expired");
+        assert.equal(creates, beforeCreates);
+        assert.equal((await counts()).sessions, before.sessions, "the existing token is used without issuing a replacement session");
+        const operation = (await db.admin.query("select state,error_code from booking_operations where booking_id=$1", [held.booking.id])).rows;
+        assert.deepEqual(operation, [{ state: "rejected", error_code: "BOOKING_SESSION_INVALID" }]);
+        const preserved = (await db.admin.query("select token_hash,binding_id,relation,publication_revision,assignment_id,organizer_id,expires_at from booking_channel_sessions where token_hash=$1", [sessionHash])).rows[0];
+        assert.deepEqual(preserved, original);
+        assert.equal((await db.admin.query("select count(*)::int as n from booking_channel_operations where booking_id=$1 and action='confirm'", [held.booking.id])).rows[0].n, 1);
+      } finally {
+        forecast.release(); pauseBusy = undefined;
+        await db.admin.query("update bots set config=$2::jsonb where id=$1", [id.bot, JSON.stringify({ booking: savedGrant })]);
       }
     });
     await t.test("the draft preserves an existing channel in another workspace", async () => {

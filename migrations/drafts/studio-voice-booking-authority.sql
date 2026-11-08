@@ -128,8 +128,21 @@ begin
    and a.enabled and a.kind='teams' and a.provider='microsoft' and a.organizer_id=g.organizer_id
    and exists(select 1 from jsonb_array_elements(pub.config->'assignments') item where item->>'id'=a.id::text
     and item->>'organizerId'=g.organizer_id::text and item->>'kind'='teams' and item->>'provider'='microsoft')
-   and bot.config->'booking'->'enabled'='true'::jsonb and bot.config->'booking'->>'publicId'=pub.public_id
-   and bot.config->'booking'->'channels'?'voice' and bot.config->'booking'->'typeIds'?g.assignment_id::text
+   -- Match readSavedBookingGrant: objects with matching keys are not saved array grants.
+   -- CASE guards every array function; SQL does not promise left-to-right AND evaluation.
+   and case when jsonb_typeof(bot.config) is distinct from 'object'
+     or jsonb_typeof(bot.config->'booking') is distinct from 'object'
+     or jsonb_typeof(bot.config->'booking'->'publicId') is distinct from 'string'
+     or jsonb_typeof(bot.config->'booking'->'channels') is distinct from 'array'
+     or jsonb_typeof(bot.config->'booking'->'typeIds') is distinct from 'array' then false
+    else bot.config->'booking'->'enabled'='true'::jsonb
+     and bot.config->'booking'->>'publicId'~'^[a-z0-9][a-z0-9-]{10,79}$'
+     and bot.config->'booking'->>'publicId'=pub.public_id and bot.config->'booking'->'channels'?'voice'
+     and jsonb_array_length(bot.config->'booking'->'typeIds') between 1 and 50
+     and not exists(select 1 from jsonb_array_elements(bot.config->'booking'->'typeIds') item
+      where jsonb_typeof(item) is distinct from 'string'
+       or coalesce(item#>>'{}','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+     and bot.config->'booking'->'typeIds'?g.assignment_id::text end
    and not exists(select 1 from public.workspace_module_settings m where m.workspace_id=p_workspace and m.module_key='bots' and not m.enabled)
    and c.status='connected' and c.provider='microsoft' and c.revision=g.connection_revision and c.account_id=g.account_id and c.write_calendar_id=g.calendar_id
    and exists(select 1 from jsonb_array_elements(c.calendars) k where k->>'id'=g.calendar_id and k->'teamsSupported'='true'::jsonb)
