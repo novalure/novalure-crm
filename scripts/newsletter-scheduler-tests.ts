@@ -64,10 +64,44 @@ test('explicit cancellation, changed draft, revoked actor and mismatched configu
  const revoked=await fixture();await plan(revoked);await db.admin.query("update workspace_users set role='agent',product_role='project_sales_member' where id=$1",[owner]);try{assert.equal((await handleNewsletterCron(request(),env(revoked.projectId),options())).status,503);}finally{await db.admin.query("update workspace_users set role='owner',product_role='customer_owner' where id=$1",[owner]);}const wrong=env(randomUUID());await handleNewsletterCron(request(),wrong,options());assert.equal(sent.length,before);assert.equal((await handleNewsletterCron(request('?projectId='+revoked.projectId),env(revoked.projectId),options())).status,401);assert.equal((await handleNewsletterCron(new Request('https://example.invalid/api/cron/newsletter'),env(revoked.projectId),options())).status,401);});
 test('legacy campaign migration is explicit, scoped and replay-safe, retaining historical content and values without inventing delivery',async()=>{const f=await fixture(),legacy=randomUUID(),segment=randomUUID();await db.admin.query("insert into newsletter_segments(id,workspace_id,project_id,name,audience) values($1,$2,$3,'SYNTHETIC Other segment','Alle')",[segment,w,f.projectId]);await db.admin.query("insert into newsletter_campaigns(id,workspace_id,name,subject,status,recipients,metrics,content_blocks,segment_id) values($1,$2,'SYNTHETIC Legacy','SYNTHETIC Original subject','gesendet',99,'{\"opened\":45}','[\"SYNTHETIC Original body\"]',$3)",[legacy,w,segment]);const listed=await readLegacyNewsletterCampaigns(session(),options()),source=listed.campaigns.find(row=>row.id===legacy)!;assert.ok(source);const target=(await fixture()).projectId,input={campaignId:legacy,projectId:target,expectedUpdatedAt:source.updatedAt,reason:'SYNTHETIC checked target project',resetSegment:false,confirmed:true as const};await assert.rejects(migrateLegacyNewsletterCampaign(session(),input,metadata(),options()),/Segment/);const meta=metadata(),result=await migrateLegacyNewsletterCampaign(session(),{...input,resetSegment:true},meta,options());assert.equal(result.data.campaignId,legacy);assert.equal((await migrateLegacyNewsletterCampaign(session(),{...input,resetSegment:true},meta,options())).replayed,true);const original=(await db.admin.query('select source_snapshot from crm_newsletter_legacy_migrations where campaign_id=$1',[legacy])).rows[0].source_snapshot;assert.equal(original.recipients,99);assert.equal(original.status,'gesendet');assert.equal(original.metrics.opened,45);assert.deepEqual(original.content_blocks,['SYNTHETIC Original body']);const adopted=(await readNewsletterWorkspace(session(),target,options())).drafts.find(row=>row.campaignId===legacy)!;assert.equal(adopted.projectId,target);assert.equal(adopted.input.subject,'SYNTHETIC Original subject');assert.equal(adopted.approvedRevision,null);assert.equal(adopted.revision,0);const proof=(await readLegacyNewsletterCampaigns(session(),options())).migrations.find(row=>row.campaignId===legacy)!;assert.equal(proof.sourceRecipients,99);assert.equal(proof.sourceSubject,'SYNTHETIC Original subject');assert.equal((await db.admin.query('select count(*) from crm_newsletter_deliveries where campaign_id=$1',[legacy])).rows[0].count,'0');await assert.rejects(withCrmRead(session(),tx=>tx.execute('update crm_newsletter_legacy_migrations set reason=reason where campaign_id=$1::uuid',[legacy]),options()));});
 
-test('cancelling during a running batch serializes against in-flight decisions and never declares unknown claims safe to resend',async()=>{
+test('cancelling during a running batch serializes against in-flight decisions and never declares unknown claims safe to resend',{timeout:30000},async()=>{
  const f=await fixture(10);await plan(f);let calls=0,cancelled=false,cancellation:Promise<unknown>|undefined;
- const transport=async()=>{assert.equal(cancelled,false,'No new provider call may start after cancellation commits');calls++;if(calls===1){const row=(await readNewsletterSchedules(session(),f.campaignId,options())).schedules[0],scope={workspaceId:w,actorId:owner};cancellation=withTenantTransaction(scope,tx=>runWithTenantTransaction(scope,tx,()=>cancelNewsletterSchedule(session(),{id:row.id,expectedVersion:row.version},metadata(),options())),options()).then(result=>{cancelled=true;return result;});}await new Promise(resolve=>setTimeout(resolve,40));return {status:'accepted' as const,messageId:randomUUID()};};
- const response=await handleNewsletterCron(request(),env(f.projectId),{...options(),transport});assert.equal(response.status,200,await response.clone().text());await cancellation;assert.ok(cancelled);assert.ok(calls<10);assert.equal((await readNewsletterSchedules(session(),f.campaignId,options())).schedules[0].status,'cancelled');const before=calls;await handleNewsletterCron(request(),env(f.projectId),{...options(),transport});assert.equal(calls,before);await assert.rejects(sendNewsletterBatch(session(),f,metadata(),options()),/ungeklärt/);
+ const entered=Promise.withResolvers<void>(),release=Promise.withResolvers<void>(),cancellationBackend=Promise.withResolvers<number>();
+ const bounded=async<T>(pending:Promise<T>,message:string)=>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{return await Promise.race([pending,new Promise<T>((_resolve,reject)=>{timer=setTimeout(()=>reject(new Error(message)),10000);})]);}
+  finally{if(timer)clearTimeout(timer);}
+ };
+ const transport=async()=>{assert.equal(cancelled,false,'No new provider call may start after cancellation commits');calls++;entered.resolve();await release.promise;return {status:'accepted' as const,messageId:randomUUID()};};
+ const running=handleNewsletterCron(request(),env(f.projectId),{...options(),transport});
+ try{
+  await bounded(Promise.race([entered.promise,running.then(()=>{throw new Error('The batch ended before an in-flight provider decision');})]),'The provider decision barrier was not reached');
+  const row=(await readNewsletterSchedules(session(),f.campaignId,options())).schedules[0],scope={workspaceId:w,actorId:owner};
+  cancellation=withTenantTransaction(scope,async tx=>{
+   const backend=await tx.queryOne<{pid:number}>('select pg_backend_pid() as pid');assert.ok(backend);cancellationBackend.resolve(backend.pid);
+   return runWithTenantTransaction(scope,tx,()=>cancelNewsletterSchedule(session(),{id:row.id,expectedVersion:row.version},metadata(),options()));
+  },options()).then(result=>{cancelled=true;return result;});
+  const backend=await bounded(Promise.race([cancellationBackend.promise,cancellation.then(()=>{throw new Error('Cancellation committed without an in-flight decision barrier');})]),'The independent cancellation backend was not reached');
+  // Do not assume a 40ms transport delay lets the independent cancellation
+  // reach its UPDATE. Observe that actual statement waiting on the live row
+  // lock before releasing any provider result.
+  let waiting=false;const deadline=Date.now()+10000;
+  while(Date.now()<deadline){
+   const lock=(await db.admin.query<{waiting:boolean}>("select wait_event_type='Lock' and cardinality(pg_blocking_pids(pid))>0 and query like 'update crm_newsletter_schedules set status=%' as waiting from pg_stat_activity where pid=$1 and datname=current_database()",[backend])).rows[0];
+   if(lock?.waiting){waiting=true;break;}
+   assert.equal(cancelled,false,'Cancellation must wait for the current provider decision');
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.ok(waiting,'The actual cancellation UPDATE must wait on the in-flight schedule lock');
+  release.resolve();
+  const response=await running;assert.equal(response.status,200,await response.clone().text());await cancellation;assert.ok(cancelled);assert.ok(calls>0);assert.ok(calls<10);
+  assert.equal((await readNewsletterSchedules(session(),f.campaignId,options())).schedules[0].status,'cancelled');
+  const persisted=(await db.admin.query<{accepted:number;unresolved:number}>("select count(*) filter(where status='accepted')::int accepted,count(*) filter(where status in('claimed','uncertain'))::int unresolved from crm_newsletter_deliveries where workspace_id=$1 and campaign_id=$2",[w,f.campaignId])).rows[0];
+  assert.equal(persisted.accepted,calls);assert.equal(persisted.unresolved,10-calls);
+  const before=calls;await handleNewsletterCron(request(),env(f.projectId),{...options(),transport});assert.equal(calls,before);await assert.rejects(sendNewsletterBatch(session(),f,metadata(),options()),/ungeklärt/);
+ }finally{
+  release.resolve();await Promise.allSettled([running,...(cancellation?[cancellation]:[])]);
+ }
 });
 
 test('actual cookie schedule route requires endpoint CSRF, preserves stored MFA binding and returns only the authorised campaign',async()=>{
