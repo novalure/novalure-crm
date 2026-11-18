@@ -9,7 +9,8 @@ import { createCrmCandidateManifest, crmCandidateOriginalSources, crmCandidateTa
   validateCrmCandidateDescriptor, validateCrmCandidatePlan } from './lib/crm-candidate-fresh-manifest.mjs';
 import { loadCrmCandidateCommittedManifest, validateCrmCandidatePrivateInput } from './crm-candidate-fresh-bootstrap.mjs';
 import { planCrmCandidateOfficialStep, crmCandidateMetadataEnvironment } from './lib/crm-candidate-official-migrations.mjs';
-import { completeCrmCandidateFreshSchema } from './lib/crm-candidate-fresh-bootstrap.mjs';
+import { assertCrmCandidateProviderRoles, completeCrmCandidateFreshSchema, crmCandidateQueries } from './lib/crm-candidate-fresh-bootstrap.mjs';
+import { catalogQueries } from './lib/studio-stage3-qa-fingerprint.mjs';
 
 const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const now = Date.now();
@@ -27,10 +28,44 @@ const files = crmCandidateOriginalSources.forward.map(row => ({ path: row.path, 
 const staged = crmCandidateOriginalSources.staged087.map(row => ({ path: row.path, content: readFileSync(row.path, 'utf8') }));
 const manifest = createCrmCandidateManifest(files, staged, headCommit);
 const descriptorDigest = digest(descriptor);
+// The five-name shape was observed read-only on native PG18.7. These test rows
+// remain fixtures, not a new native preflight or SQL-installation claim.
+const providerRoles = [
+  { name: 'cloud_admin', login: true, superuser: true, bypassrls: true, create_database: true, create_role: true, replication: true },
+  { name: 'neon_service', login: true, superuser: false, bypassrls: true, create_database: true, create_role: true, replication: true },
+  { name: 'neon_superuser', login: false, superuser: false, bypassrls: true, create_database: true, create_role: true, replication: true },
+  { name: 'neondb_owner', login: true, superuser: false, bypassrls: true, create_database: true, create_role: true, replication: true },
+  { name: 'token_roles', login: false, superuser: false, bypassrls: false, create_database: false, create_role: false, replication: false },
+];
+const providerMemberships = [{ parent: 'neon_superuser', member: 'neondb_owner', grantor: 'cloud_admin',
+  admin_option: false, inherit_option: true, set_option: true }];
 const plan = () => {
   const bound = { headCommit, descriptorDigest, manifestDigest: manifest.sha256, target: crmCandidateTarget(descriptor), syntheticCatalog: true };
   return { format: 'crm-candidate-fresh-plan-v1', capturedAt: new Date(now).toISOString(), bound, sha256: digest(bound) };
 };
+
+test('new candidate recognizes only the native five-role shape with inert reserved token role; prior four names still work', () => {
+  assert.equal(assertCrmCandidateProviderRoles(providerRoles, providerMemberships), providerRoles);
+  assert.equal(assertCrmCandidateProviderRoles(providerRoles.slice(0, 4), providerMemberships).length, 4);
+});
+
+test('reserved token LOGIN/elevated/replication/membership or unknown provider roles remain denied', () => {
+  for (const flag of ['login', 'superuser', 'bypassrls', 'create_database', 'create_role', 'replication']) {
+    for (const value of [true, undefined, 'false']) {
+      const altered = providerRoles.map(row => row.name === 'token_roles' ? { ...row, [flag]: value } : row);
+      assert.throws(() => assertCrmCandidateProviderRoles(altered, providerMemberships), /RESERVED_TOKEN_ROLE_UNSAFE/);
+    }
+  }
+  for (const edge of [
+    { parent: 'neon_superuser', member: 'token_roles', grantor: 'cloud_admin' },
+    { parent: 'token_roles', member: 'novalure_app', grantor: 'cloud_admin' },
+    { parent: 'token_roles', member: 'other_bridge', grantor: 'cloud_admin' },
+    { parent: 'pg_monitor', member: 'token_roles', grantor: 'cloud_admin' },
+    { parent: 'neon_superuser', member: 'other_bridge', grantor: 'token_roles' },
+  ]) assert.throws(() => assertCrmCandidateProviderRoles(providerRoles, [...providerMemberships, edge]), /RESERVED_TOKEN_ROLE_UNSAFE/);
+  assert.throws(() => assertCrmCandidateProviderRoles([...providerRoles, { ...providerRoles[4], name: 'unknown_provider' }], providerMemberships), /FRESH_PROVIDER_ROLES/);
+  assert.throws(() => assertCrmCandidateProviderRoles([...providerRoles, providerRoles[4]], providerMemberships), /FRESH_PROVIDER_ROLES/);
+});
 
 test('historical061 module imports and renders independently without any new CRM registry or helper', async () => {
   const root = path.resolve('.npm-cache/qa');
@@ -144,13 +179,17 @@ test('official planner preserves explicit manual predecessors and tokens bind fu
 test('synthetic orchestration only: all086–201 and actual staged source identities retained; failures do not claim full success', async () => {
   const initial = manifest.early.filter(row => row.number >= 41).map(ledgerRow);
   const rows = [...initial], events = [], calls = [], stageSql = [];
+  let observedRoles = providerRoles, observedMemberships = providerMemberships;
   const client = { async query(query) {
+    if (query === crmCandidateQueries.providerRoles) return { rows: observedRoles };
+    if (query === catalogQueries.memberships) return { rows: observedMemberships };
     if (query === 'select version,name,checksum from public.novalure_schema_migrations order by version') return { rows };
     if (query === manifest.staged087[0].content) { stageSql.push(query); return { rows: [{ crm_d11_backfill_batch: { remaining: { synthetic: 0 } } }] }; }
     if (query === manifest.staged087[1].content) { stageSql.push(query); return { rows: [] }; }
     assert.ok(['begin', 'commit', 'rollback'].includes(query)); return { rows: [] };
   } };
-  const earlyResult = { status: 'PASS_NEW_NATIVE_EARLY_SCHEMA_THROUGH_085', headCommit, manifestDigest: manifest.sha256 };
+  const earlyResult = { status: 'PASS_NEW_NATIVE_EARLY_SCHEMA_THROUGH_085', headCommit, manifestDigest: manifest.sha256,
+    providerRoleBaseline: { roles: providerRoles, sha256: digest(providerRoles) } };
   const runOfficial = async row => { calls.push(row?.version || 'STANDARD'); rows.push(...(row ? [row] : manifest.standard).map(ledgerRow)); };
   const result = await completeCrmCandidateFreshSchema({ client, manifest, earlyResult, runOfficial, journal: async event => events.push(event) });
   assert.equal(result.ledger.rows, 125); assert.equal(result.forwardSqlFiles, 166);
@@ -164,4 +203,19 @@ test('synthetic orchestration only: all086–201 and actual staged source identi
   await assert.rejects(completeCrmCandidateFreshSchema({ client, manifest, earlyResult,
     runOfficial: async () => { throw new Error('SYNTHETIC_OFFICIAL_FAILURE'); }, journal: async event => failedEvents.push(event) }));
   assert.equal(failedEvents.some(row => row.event === 'COMPLETE_SCHEMA_VERIFIED'), false);
+  for (const alteration of ['token_flag', 'provider_drift', 'token_runtime_grant']) {
+    rows.splice(0, rows.length, ...initial);
+    observedRoles = providerRoles; observedMemberships = providerMemberships;
+    const deniedEvents = []; let attempts = 0;
+    await assert.rejects(completeCrmCandidateFreshSchema({ client, manifest, earlyResult,
+      runOfficial: async row => {
+        attempts++; rows.push(ledgerRow(row));
+        if (alteration === 'token_flag') observedRoles = providerRoles.map(role => role.name === 'token_roles' ? { ...role, replication: true } : role);
+        if (alteration === 'provider_drift') observedRoles = providerRoles.map(role => role.name === 'neon_service' ? { ...role, login: false } : role);
+        if (alteration === 'token_runtime_grant') observedMemberships = [...providerMemberships,
+          { parent: 'token_roles', member: 'novalure_app', grantor: 'neondb_owner', admin_option: false, inherit_option: true, set_option: true }];
+      }, journal: async event => deniedEvents.push(event) }), /RESERVED_TOKEN_ROLE_UNSAFE|PROVIDER_BASELINE_CHANGED/);
+    assert.equal(attempts, 1);
+    assert.equal(deniedEvents.some(row => row.event === 'COMPLETE_SCHEMA_VERIFIED'), false);
+  }
 });

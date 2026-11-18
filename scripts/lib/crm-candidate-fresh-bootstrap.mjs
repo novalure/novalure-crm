@@ -6,9 +6,12 @@ import { crmCandidateTarget, digest, validateCrmCandidateDescriptor, validateCrm
 import { applyMigration } from '../db-migrate.mjs';
 
 const check = (condition, code) => assert.ok(condition, code);
-const providerRoleNames = new Set(['cloud_admin', 'neon_service', 'neon_superuser', 'neondb_owner']);
+const providerRoleNames = new Set(['cloud_admin', 'neon_service', 'neon_superuser', 'neondb_owner', 'token_roles']);
 export const crmCandidatePreservedDatabase = 'crm_candidate_provider_baseline';
 export const crmCandidateQueries = Object.freeze({
+  providerRoles: `select rolname as name,rolcanlogin as login,rolsuper as superuser,rolbypassrls as bypassrls,
+    rolcreatedb as create_database,rolcreaterole as create_role,rolreplication as replication
+    from pg_roles where rolname !~ '^pg_' order by rolname`,
   empty: `select
     (select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace
       where n.nspname !~ '^pg_' and n.nspname<>'information_schema'
@@ -31,6 +34,34 @@ export const crmCandidateQueries = Object.freeze({
     from pg_roles r where r.rolname in('novalure_app','novalure_tenant_app') order by r.rolname`,
   ledger: 'select version,name,checksum from public.novalure_schema_migrations order by version',
 });
+
+function assertReservedTokenRole(roles, memberships) {
+  const token = roles.filter(row => row.name === 'token_roles');
+  // Neon documents this reserved role. Recognition grants nothing and never modifies it.
+  // https://neon.com/docs/manage/roles#reserved-role-names
+  check(token.length <= 1 && token.every(row => ['login', 'superuser', 'bypassrls', 'create_database', 'create_role', 'replication']
+    .every(flag => row[flag] === false)) && Array.isArray(memberships) &&
+    memberships.every(row => row.parent !== 'token_roles' && row.member !== 'token_roles' && row.grantor !== 'token_roles'),
+  'CRM_QA_RESERVED_TOKEN_ROLE_UNSAFE');
+}
+
+export function assertCrmCandidateProviderRoles(roles, memberships) {
+  check(Array.isArray(roles) && roles.length >= 3 && new Set(roles.map(row => row.name)).size === roles.length &&
+    roles.every(row => providerRoleNames.has(row.name)) && roles.some(row => row.name === 'cloud_admin') &&
+    roles.some(row => row.name === 'neon_superuser') &&
+    roles.some(row => row.name === 'neondb_owner' && row.login && !row.superuser && row.create_database && row.create_role),
+  'CRM_QA_FRESH_PROVIDER_ROLES');
+  assertReservedTokenRole(roles, memberships);
+  return roles;
+}
+
+async function assertProviderBaseline(client, baseline) {
+  check(baseline && digest(baseline.roles) === baseline.sha256, 'CRM_QA_PROVIDER_BASELINE_REQUIRED');
+  const roles = (await client.query(crmCandidateQueries.providerRoles)).rows;
+  assertReservedTokenRole(roles, (await client.query(catalogQueries.memberships)).rows);
+  const provider = roles.filter(row => providerRoleNames.has(row.name));
+  check(provider.length === baseline.roles.length && digest(provider) === baseline.sha256, 'CRM_QA_PROVIDER_BASELINE_CHANGED');
+}
 
 export async function crmCandidateTransaction(client, action) {
   await client.query('begin');
@@ -79,7 +110,8 @@ async function clusterGuard(context, control, expectedNames, providerRoles, appl
   check(databases.map(row => row.name).join(',') === [...expectedNames].sort().join(',') &&
     databases.filter(row => ['neondb', crmCandidatePreservedDatabase].includes(row.name))
       .every(row => row.owner === 'neondb_owner' && row.is_template === false), 'CRM_QA_DATABASE_INVENTORY');
-  const roles = (await control.query(prepareTargetQueries.roles)).rows;
+  const roles = (await control.query(crmCandidateQueries.providerRoles)).rows;
+  assertReservedTokenRole(roles, (await control.query(catalogQueries.memberships)).rows);
   check(roles.filter(row => providerRoleNames.has(row.name)).length === providerRoles.length &&
     digest(roles.filter(row => providerRoleNames.has(row.name))) === digest(providerRoles) &&
     roles.every(row => providerRoleNames.has(row.name) || application.includes(row.name)) &&
@@ -95,11 +127,9 @@ async function clusterGuard(context, control, expectedNames, providerRoles, appl
 
 async function capture(context, descriptor, descriptorDigest, manifest, headCommit, now) {
   const { client: control } = await context.open('postgres');
-  const roles = (await control.query(prepareTargetQueries.roles)).rows;
-  check(roles.length >= 3 && roles.every(row => providerRoleNames.has(row.name)) &&
-    roles.some(row => row.name === 'cloud_admin') && roles.some(row => row.name === 'neon_superuser') &&
-    roles.some(row => row.name === 'neondb_owner' && row.login && !row.superuser && row.create_database && row.create_role),
-  'CRM_QA_FRESH_PROVIDER_ROLES');
+  const roles = (await control.query(crmCandidateQueries.providerRoles)).rows;
+  const memberships = (await control.query(catalogQueries.memberships)).rows;
+  assertCrmCandidateProviderRoles(roles, memberships);
   const databases = await clusterGuard(context, control, ['neondb', 'postgres', 'template0', 'template1'], roles);
   const selected = await context.open('neondb');
   await selected.client.query('begin isolation level repeatable read read only');
@@ -109,7 +139,7 @@ async function capture(context, descriptor, descriptorDigest, manifest, headComm
     baseline = await snapshot(selected.client);
     await selected.client.query('rollback');
   } catch (error) { await selected.client.query('rollback'); throw error; }
-  const memberships = (await control.query(catalogQueries.memberships)).rows;
+  check(digest((await control.query(catalogQueries.memberships)).rows) === digest(memberships), 'CRM_QA_PROVIDER_MEMBERSHIP_DRIFT');
   await clusterGuard(context, control, ['neondb', 'postgres', 'template0', 'template1'], roles);
   await context.close(selected.client);
   const bound = { headCommit, descriptorDigest, target: crmCandidateTarget(descriptor), manifestDigest: manifest.sha256,
@@ -231,6 +261,7 @@ export async function runCrmCandidateFreshEarly({ connect, descriptor, descripto
     await clusterGuard(context, control, names, roles, ['novalure_app', 'novalure_tenant_app']);
     const result = { status: 'PASS_NEW_NATIVE_EARLY_SCHEMA_THROUGH_085', headCommit, descriptorDigest,
       manifestDigest: manifest.sha256, planDigest: plan.sha256, applied, ledger,
+      providerRoleBaseline: { roles, sha256: digest(roles) },
       providerBaselineUnchanged: true, productionAccess: 0, sourceRestoreClaimed: false, historicalLedgerCopied: false };
     await record('EARLY_COMPLETE', { status: result.status, ledger, appliedCount: applied.length }); return result;
   } catch (error) {
@@ -247,10 +278,13 @@ export async function completeCrmCandidateFreshSchema({ client, manifest, earlyR
     earlyResult.headCommit === manifest.headCommit && earlyResult.manifestDigest === manifest.sha256,
   'CRM_QA_EARLY_RECEIPT_REQUIRED');
   assertCrmCandidateLedger((await client.query(crmCandidateQueries.ledger)).rows, manifest.early.filter(row => row.number >= 41));
+  await assertProviderBaseline(client, earlyResult.providerRoleBaseline);
   const stages = [];
   for (const migration of manifest.explicit) {
+    await assertProviderBaseline(client, earlyResult.providerRoleBaseline);
     await journal({ event: 'OFFICIAL_RUNNER_INTENT', version: migration.version, checksum: migration.checksum, manual: migration.manual });
     await runOfficial(migration);
+    await assertProviderBaseline(client, earlyResult.providerRoleBaseline);
     assertCrmCandidateLedger((await client.query(crmCandidateQueries.ledger)).rows,
       manifest.selected.filter(row => row.number >= 41 && (row.number < migration.number ||
         (row.number === migration.number && row.version.localeCompare(migration.version) <= 0))));
@@ -272,7 +306,9 @@ export async function completeCrmCandidateFreshSchema({ client, manifest, earlyR
     }
   }
   await journal({ event: 'OFFICIAL_STANDARD_PENDING_INTENT', versions: manifest.standard.map(row => row.version) });
+  await assertProviderBaseline(client, earlyResult.providerRoleBaseline);
   await runOfficial(null);
+  await assertProviderBaseline(client, earlyResult.providerRoleBaseline);
   const ledger = assertCrmCandidateLedger((await client.query(crmCandidateQueries.ledger)).rows, manifest.selected.filter(row => row.number >= 41));
   check(ledger.rows === 125 && stages.length === 2, 'CRM_QA_FULL_SOURCE_COVERAGE');
   await journal({ event: 'COMPLETE_SCHEMA_VERIFIED', ledger, sourceInventorySqlFiles: 169, forwardSqlFiles: 166,
