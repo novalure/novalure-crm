@@ -42,13 +42,20 @@ async function catalog(client, runtimeRole) {
   return { identity, roles, edges, owners, ownership, access };
 }
 
-async function attestTarget(client, target, localTest, evidence, executionProfile) {
+const candidateAuthorizations = new WeakSet();
+async function attestTarget(client, target, localTest, evidence, executionProfile, candidateAuthorization) {
   if (!target || Object.keys(target).sort().join(',') !== 'branchId,databaseName,projectId,runtimeRole') fail('exact explicit target required');
   name(target.runtimeRole); const identity = evidence.identity;
   if (identity.serverVersionNum < 170000) fail('PostgreSQL 17 or later required');
   if (identity.databaseName !== target.databaseName || identity.currentUser !== identity.sessionUser) fail('database or session identity mismatch');
   if (!localTest) {
     if (identity.projectId !== target.projectId || identity.branchId !== target.branchId || identity.currentUser !== 'neondb_owner') fail('connected Neon fingerprint mismatch');
+    if (executionProfile === 'crm-candidate-fresh') {
+      if (!candidateAuthorizations.has(candidateAuthorization) ||
+        ['projectId', 'branchId', 'databaseName', 'runtimeRole'].some(key =>
+          candidateAuthorization.descriptor[key] !== target[key])) fail('exact new CRM candidate authorization required');
+      return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: 'crm-candidate-fresh:' + neon061ProfileId };
+    }
     if (executionProfile === 'production') {
       if (Object.keys(neon061ProductionTarget).some(key => target[key] !== neon061ProductionTarget[key])) fail('pinned Neon Production fingerprint mismatch');
       return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: 'production:' + neon061ProfileId };
@@ -109,7 +116,7 @@ function attestRoles(evidence, target, profile) {
 }
 
 /** Caller MUST own BEGIN, original-source ledger insert, and COMMIT/ROLLBACK. No provider-role SQL is executed. */
-export async function applyNeon061Compatibility({ client, sql, target, localTest, executionContext, executionProfile = 'qa' }) {
+async function applyNeon061Core({ client, sql, target, localTest, executionContext, executionProfile = 'qa', candidateAuthorization }) {
   if (!executionContext || Object.keys(executionContext).sort().join(',') !== 'headCommit,planDigest' || !/^[a-f0-9]{40}$/.test(executionContext.headCommit) || !/^[a-f0-9]{64}$/.test(executionContext.planDigest)) fail('exact runner commit and plan digest required');
   const source = normalize(sql); if (hash(source) !== neon061SourceChecksum) fail('historical source checksum mismatch');
   await client.query('savepoint g24_neon_061_compat'); // PostgreSQL rejects calls outside a transaction.
@@ -120,7 +127,7 @@ export async function applyNeon061Compatibility({ client, sql, target, localTest
     const predecessors = ledger.filter(row => /^0*60(?:_|$)/.test(row.version));
     if (predecessors.length !== 1 || predecessors[0].checksum !== predecessorChecksum) fail('exact checksummed 060 predecessor required');
     const before = await catalog(client, target?.runtimeRole);
-    const profile = await attestTarget(client, target, localTest, before, executionProfile);
+    const profile = await attestTarget(client, target, localTest, before, executionProfile, candidateAuthorization);
     const roleEvidence = attestRoles(before, target, profile);
     const prepared = renderNeon061Compatibility(source, profile);
     await client.query(prepared.executedSql);
@@ -131,6 +138,9 @@ export async function applyNeon061Compatibility({ client, sql, target, localTest
     if (validation.length !== 15 || validation.some(row => !row.convalidated)) fail('all fifteen tenant foreign keys must be validated');
     const receiptId = randomUUID();
     const evidence = { executionContext: { ...executionContext }, identity: { projectId: target.projectId, branchId: target.branchId, databaseName: target.databaseName, currentUser: after.identity.currentUser, sessionUser: after.identity.sessionUser, serverVersionNum: after.identity.serverVersionNum }, roles: roleEvidence, foreignKeysValidated: validation.map(row => row.conname), forcedRlsTables: after.owners.map(row => row.relname), historicalLedgerChecksumMeaning: 'unaltered source bytes normalized to LF', executedChecksumMeaning: 'actual SQL with only two narrowly qualified creator-edge exclusions' };
+    if (candidateAuthorization) evidence.candidateAuthorization = { descriptorSha256: candidateAuthorization.descriptorSha256,
+      organizationId: candidateAuthorization.descriptor.organizationId,
+      nativeCreationReceiptSha256: candidateAuthorization.descriptor.nativeCreationReceiptSha256 };
     await client.query(`create table public.novalure_migration_execution_receipts (id uuid primary key,source_version text not null unique,source_checksum text not null check(source_checksum ~ '^[a-f0-9]{64}$'),executed_sql_checksum text not null check(executed_sql_checksum ~ '^[a-f0-9]{64}$'),profile_id text not null,target jsonb not null,catalog_evidence jsonb not null,executed_at timestamptz not null default now(),executed_by text not null default current_user);
       create function public.novalure_migration_receipt_immutable() returns trigger language plpgsql set search_path=pg_catalog as $receipt$ begin raise exception using errcode = '55000', message = 'Migration execution receipts are append-only'; end $receipt$;
       create trigger novalure_migration_receipts_append_only before update or delete or truncate on public.novalure_migration_execution_receipts for each statement execute function public.novalure_migration_receipt_immutable();
@@ -142,4 +152,20 @@ export async function applyNeon061Compatibility({ client, sql, target, localTest
     await client.query('release savepoint g24_neon_061_compat');
     return Object.freeze({ receiptId, profileId: profile.profileId, sourceChecksum: prepared.sourceChecksum, executedSqlChecksum: prepared.executedSqlChecksum, evidence });
   } catch (error) { await client.query('rollback to savepoint g24_neon_061_compat'); await client.query('release savepoint g24_neon_061_compat'); throw error; }
+}
+
+// Historical entry points and pins retain their original contracts.
+export async function applyNeon061Compatibility({ client, sql, target, localTest, executionContext, executionProfile = 'qa' }) {
+  return applyNeon061Core({ client, sql, target, localTest, executionContext, executionProfile });
+}
+
+/** Distinct fresh-candidate entry. It cannot widen any historical target/profile. */
+export async function applyCrmCandidate061Compatibility({ client, sql, target, executionContext, descriptor, descriptorSha256 }) {
+  const { validateCrmCandidateDescriptor, crmCandidateTarget, digest } = await import('./crm-candidate-fresh-manifest.mjs');
+  const approved = validateCrmCandidateDescriptor(descriptor, { expectedDigest: descriptorSha256,
+    headCommit: executionContext?.headCommit });
+  if (digest(crmCandidateTarget(approved)) !== digest(target)) fail('exact CRM candidate target required');
+  const candidateAuthorization = Object.freeze({ descriptor: approved, descriptorSha256 });
+  candidateAuthorizations.add(candidateAuthorization);
+  return applyNeon061Core({ client, sql, target, executionContext, executionProfile: 'crm-candidate-fresh', candidateAuthorization });
 }

@@ -1,0 +1,20 @@
+{
+  "format": "crm-candidate-free-target-v1",
+  "status": "PENDING_NATIVE_PROJECT",
+  "sourceRevision": "PENDING_FINAL_REVIEWED_SOURCE",
+  "organizationId": "org-cool-cloud-50864215",
+  "plan": "free",
+  "projectId": "PENDING",
+  "branchId": "PENDING",
+  "branchParentId": null,
+  "endpointId": "PENDING",
+  "projectCreatedAt": "PENDING",
+  "directHost": "PENDING",
+  "pooledHost": "PENDING",
+  "databaseName": "neondb",
+  "runtimeRole": "novalure_app",
+  "migrationRole": "neondb_owner",
+  "productionDirectHost": "PENDING_NATIVE_FORBIDDEN_HOST_METADATA",
+  "productionPooledHost": "PENDING_NATIVE_FORBIDDEN_HOST_METADATA",
+  "nativeCreationReceiptSha256": "PENDING"
+}

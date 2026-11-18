@@ -163,6 +163,10 @@ jobs:
       - name: Neon 061 compatibility and role isolation regression
         run: npm run test:neon:061
 
+      - name: Fresh CRM QA source plans and restricted-role bootstrap contracts
+        # Disposable loopback PostgreSQL and synthetic provider metadata only.
+        run: npm run test:crm-candidate-fresh
+
       - name: Sales schema upgrade, rollback and native restore
         run: npm run test:sales:migrations
 

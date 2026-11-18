@@ -464,7 +464,7 @@ function consumeMigrationPlanToken(path, expectedToken) {
 
 export function isManualCutoverVersion(version) { return manualCutoverVersions.has(version); }
 
-function readMigrations() {
+export function readMigrations() {
   const migrationsDir = join(process.cwd(), "migrations");
   if (readdirSync(migrationsDir).includes("120_shared_behavior_package4.sql")) assertPackage4MigrationSources(process.cwd());
   if (readdirSync(migrationsDir).some(file => /^11[5-8]_shared_behavior_/.test(file)))
@@ -507,7 +507,7 @@ async function ledgerExists(client) {
   return Boolean(result.rows[0]?.tableName);
 }
 
-async function readLedger(client) {
+export async function readLedger(client) {
   if (!(await ledgerExists(client))) return { exists: false, rows: [] };
 
   const result = await client.query({
@@ -858,7 +858,7 @@ function printStatus({ ledger, migrations, plan }) {
   }
 }
 
-async function applyMigration(client, migration, context = {}) {
+export async function applyMigration(client, migration, context = {}) {
   console.log(`Applying ${migration.path}`);
   await client.query("begin");
   try {
