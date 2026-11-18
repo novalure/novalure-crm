@@ -1,5 +1,5 @@
 const candidateOrigin = "http://127.0.0.1:3000";
-const candidateRef = "refs/heads/codex/evelyn-crm-package4-integration";
+const candidateRef = "refs/heads/codex/crm-release-20261106";
 const candidateWorkflow = `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${candidateRef}`;
 const enquiryPath = "/api/public/website-sales/enquiry";
 
