@@ -61,6 +61,10 @@ jobs:
       - name: Unit and component smoke tests
         run: npm run test:unit
 
+      - name: Media HTTP validation and controlled failure responses
+        # Real route handlers with synthetic session and storage module ports.
+        run: npm run test:media-routes
+
       - name: Design C data provenance and customer self-service regression
         run: npm run test:design-c-integration
 
@@ -140,6 +144,21 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-18
+
+      - name: AI billing quota, settlement and administrator access
+        # Disposable loopback PostgreSQL and synthetic provider responses only.
+        run: npm run test:ai-billing
+
+      - name: CRM assistant authorization, metering and uncertain outcomes
+        run: npm run test:crm-assistant
+
+      - name: Prepare pinned official OpenImmo reference schema
+        # Public reference bytes stay in the ignored cache, outside test artifacts.
+        run: node scripts/prepare-openimmo-reference.mjs
+
+      - name: CRM domain workflows and public property publication
+        # The fixed runner serializes its 47 existing local domain suites.
+        run: npm run test:livelisted
 
       - name: Neon 061 compatibility and role isolation regression
         run: npm run test:neon:061

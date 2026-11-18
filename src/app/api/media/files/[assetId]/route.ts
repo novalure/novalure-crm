@@ -21,6 +21,9 @@ export async function GET(request: Request, context: RouteContext) {
   if (!auth.ok) return auth.response;
 
   const { assetId } = await context.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assetId)) {
+    return NextResponse.json({ error: "Invalid media asset ID." }, { headers: privateHeaders, status: 400 });
+  }
   try {
     const result = await withCrmRead(auth.session, async (_tx, session) => {
       const asset = await findWorkspaceMediaAsset(assetId, session.workspaceId);

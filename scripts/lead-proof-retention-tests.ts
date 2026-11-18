@@ -7,6 +7,7 @@ import {after,before,test} from 'node:test';
 import type {AppSession} from '../src/lib/auth/session';
 import {executeCrmCommand,withCrmRead,type TenantTransaction,type TenantTransactionOptions} from '../src/lib/crm-command';
 import {startDesignCIntegrationDatabase} from './lib/design-c-integration-fixture.mjs';
+import {applyMediaProjectRuntimeFunctions} from './lib/media-project-runtime-fixture.mjs';
 let db:Awaited<ReturnType<typeof startDesignCIntegrationDatabase>>,options:TenantTransactionOptions,root:string;
 let repository:typeof import('../src/lib/lead-proof-retention-repository'),qualification:typeof import('../src/lib/lead-qualification-repository'),scheduler:typeof import('../src/lib/lead-proof-retention-scheduler');
 const keys=['NOVALURE_MEDIA_ROOT','NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN','BLOB_PRIVATE_READ_WRITE_TOKEN','NOVALURE_PUBLIC_BLOB_READ_WRITE_TOKEN','BLOB_READ_WRITE_TOKEN','VERCEL','VERCEL_ENV','VERCEL_URL'],original=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
@@ -25,6 +26,9 @@ before(async()=>{
  root=await mkdtemp(path.join(os.tmpdir(),'lead-proof-retention-'));for(const key of keys)delete process.env[key];process.env.NOVALURE_MEDIA_ROOT=root;
  repository=await import('../src/lib/lead-proof-retention-repository');qualification=await import('../src/lib/lead-qualification-repository');scheduler=await import('../src/lib/lead-proof-retention-scheduler');
  db=await startDesignCIntegrationDatabase();for(const file of['154_automation_graph.sql','155_web_expose.sql','159_lead_qualification.sql','163_web_expose_resources.sql','179_lead_proof_retention.sql']){const connection=await db.admin.connect();try{await connection.query('begin');await connection.query('set local role neondb_owner');await connection.query(await readFile(`migrations/${file}`,'utf8'));await connection.query('commit');}catch(error){await connection.query('rollback');throw error;}finally{connection.release();}}options={pool:db.pool as unknown as NonNullable<TenantTransactionOptions['pool']>};
+ // Current private uploads require 189's unchanged scalar primitives; this
+ // narrow retention fixture does not claim the full project-media RLS cutover.
+ await applyMediaProjectRuntimeFunctions(db);
  await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'Synthetic retention','managed_by_novalure')",[workspaceId]);await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'Owner','retention@qa.invalid','owner','customer_owner','active'),($2,$3,'Agent','retention-agent@qa.invalid','agent','project_sales_member','active')",[actorId,limitedId,workspaceId]);
  await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'Retention project','Makler')",[projectId,workspaceId]);await db.admin.query('insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)',[workspaceId,projectId,limitedId]);await db.admin.query("insert into contacts(id,workspace_id,project_id,name,role,email) values($1,$2,$3,'Synthetic buyer','Käufer','retention-buyer@qa.invalid')",[contactId,workspaceId,projectId]);await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,assigned_to_user_id,type,intent) values($1,$2,$3,$4,$5,'Käufer','Synthetic financial proof')",[leadId,workspaceId,projectId,contactId,actorId]);
 });

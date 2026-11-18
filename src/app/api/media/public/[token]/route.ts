@@ -14,13 +14,13 @@ const publicShareHeaders = {
 };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const { token } = await context.params;
-  const asset = await findPublicMediaAsset(token);
-  if (!asset) {
-    return NextResponse.json({ error: "Public media asset not found." }, { headers: publicShareHeaders, status: 404 });
-  }
-
   try {
+    const { token } = await context.params;
+    const asset = await findPublicMediaAsset(token);
+    if (!asset) {
+      return NextResponse.json({ error: "Public media asset not found." }, { headers: publicShareHeaders, status: 404 });
+    }
+
     const content = await readMediaAssetContent(asset);
     if (!content) {
       return NextResponse.json({ error: "Public media asset not found." }, { headers: publicShareHeaders, status: 404 });

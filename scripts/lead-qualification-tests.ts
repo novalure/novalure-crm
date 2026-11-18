@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import type { AppSession } from "../src/lib/auth/session";
 import { executeCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../src/lib/crm-command";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
+import { applyMediaProjectRuntimeFunctions } from "./lib/media-project-runtime-fixture.mjs";
 import { evaluateLeadPropertyMatch, type LeadMatchProfile, type LeadMatchProperty } from "../src/lib/lead-qualification-matching";
 
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>, options: TenantTransactionOptions, root: string;
@@ -27,6 +28,9 @@ before(async () => {
   repository = await import("../src/lib/lead-qualification-repository"); media = await import("../src/lib/media-store"); automation = await import("../src/lib/automation/repository");
   db = await startLocalSalesDb(); await applySalesSchema(db, { maxMigrationNumber: 106 });
   await db.admin.query(await readFile("migrations/154_automation_graph.sql", "utf8")); await db.admin.query(await readFile("migrations/159_lead_qualification.sql", "utf8"));
+  // Reuse the unchanged 189 scalar primitives for private upload quota reads;
+  // this remains a partial qualification fixture, not a full RLS upgrade proof.
+  await applyMediaProjectRuntimeFunctions(db);
   options = { pool: db.pool as unknown as NonNullable<TenantTransactionOptions["pool"]> };
   await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'Synthetic proof QA','managed_by_novalure')", [workspaceId]);
   await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$3,'Owner','proof@qa.invalid','owner','customer_owner','active'),($2,$3,'Limited','proof-limited@qa.invalid','agent','project_sales_member','active')", [actorId, limitedId, workspaceId]);

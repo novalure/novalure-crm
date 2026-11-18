@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
@@ -23,6 +22,7 @@ import { createPropertyGeography } from "../src/lib/property-country";
 import { formatApprovedPropertyCosts, publicPropertyDetailGroups, publicPropertyPortalDetails, publicPropertyUnitFacts } from "../src/lib/property-expose-details";
 import type { PropertyExposeLanguage, PropertyExposeOptions } from "../src/lib/property-expose";
 import type { WebExposeSnapshot } from "../src/lib/web-expose";
+import { validateOpenImmoReference } from "./lib/openimmo-reference.mjs";
 
 process.env.NOVALURE_AUTH_ENCRYPTION_KEY ||= "synthetic-property-details-only-encryption-key-20261104";
 const canonical = {
@@ -124,9 +124,11 @@ test("native and separate OpenImmo details validate against the actual official 
       assert.doesNotMatch(hidden, /250000|123\.45|55\.00|<nebenkosten>|<heizkosten>/);
     } else assert.doesNotMatch(xml, /wohnflaeche|schlafzimmer|heating_installation|250000/);
     await writeFile(file, xml);
-    const validation = spawnSync("powershell.exe", ["-NoProfile", "-File", "scripts/validate-openimmo.ps1", "-SchemaPath", ".npm-cache/qa/openimmo-reference/openimmo_127d.xsd", "-XmlPath", file], { encoding: "utf8", windowsHide: true, timeout: 20000 });
-    assert.equal(validation.status, 0, `${action}: ${validation.stdout}\n${validation.stderr}`);
+    await validateOpenImmoReference(file);
   }
+  const invalid = path.join(output, "invalid-root.xml");
+  await writeFile(invalid, '<?xml version="1.0"?><not_openimmo/>');
+  await assert.rejects(validateOpenImmoReference(invalid), /OpenImmo XSD validation failed/);
 });
 
 test("actual DB projections agree across web, classic PDF and portal, and use only the selected unit and public cost rows", { timeout: 180000 }, async () => {

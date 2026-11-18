@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import type {AppSession} from '../src/lib/auth/session';
 import {withCrmRead,type TenantTransactionOptions} from '../src/lib/crm-command';
 import {loadPropertyUnits,loadPaginatedPropertyUnits,loadPaginatedPropertyAssets} from '../src/lib/db/crm-loaders';
@@ -49,7 +50,11 @@ test('opening the inventory for an empty property never widens to its project, w
 
 test('real persisted metadata survives full and paginated unit loaders, asset-summary mapping and a versioned inventory edit',async()=>{
  const db=await startLocalSalesDb();try{
-  await applySalesSchema(db,{maxMigrationNumber:106});const workspaceId=randomUUID(),projectId=randomUUID(),actorId=randomUUID(),ownedId=randomUUID(),unlinkedId=randomUUID(),unitId=randomUUID();
+  await applySalesSchema(db,{maxMigrationNumber:106});
+  // The current unit loaders read the structured columns added by the actual
+  // 186 migration. Apply it unchanged without expanding this fixture globally.
+  await db.admin.query(await readFile('migrations/186_property_unit_details.sql','utf8'));
+  const workspaceId=randomUUID(),projectId=randomUUID(),actorId=randomUUID(),ownedId=randomUUID(),unlinkedId=randomUUID(),unitId=randomUUID();
   const session:AppSession={authenticated:true,source:'headers',workspaceId,userId:actorId,workspaceName:'Synthetic mapping',name:'Owner',email:'mapping@qa.invalid',role:'owner',productRole:'customer_owner',permissions:['crm:read','crm:write'],productPermissions:['pipeline:write','reservations:write']},options:TenantTransactionOptions={pool:db.pool as unknown as NonNullable<TenantTransactionOptions['pool']>};
   await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'Synthetic unit mapping','managed_by_novalure')",[workspaceId]);await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Owner','mapping@qa.invalid','owner','customer_owner','active')",[actorId,workspaceId]);await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'Synthetic shared project','Makler')",[projectId,workspaceId]);
   await db.admin.query("insert into seller_listings(id,workspace_id,project_id,title,address,region,object_type,area_sqm,rooms,year_built) values($1,$3,$4,'Existing Austrian property','Vienna','Wien','Wohnung',92,3,2026),($2,$3,$4,'New German property','Berlin','Berlin','Wohnung',94,3,2026)",[ownedId,unlinkedId,workspaceId,projectId]);

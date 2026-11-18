@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import type { Readable } from "node:stream";
 import type { EventEmitter } from "node:events";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { SaxesParser } from "saxes";
 import { createPropertyGeography } from "../src/lib/property-country";
@@ -20,6 +19,7 @@ import { getProductRoleCapabilities } from "../src/lib/product-model";
 import { createSellerListingRecord } from "../src/lib/db/property-department-repositories";
 import { downloadPropertyPortalExport, loadPropertyPortalState, preparePropertyPortalExport, previewPropertyPortal, savePropertyPortalProfile } from "../src/lib/db/property-portal-repository";
 import { mediaAssetPath, type MediaAsset } from "../src/lib/media-store";
+import { validateOpenImmoReference } from "./lib/openimmo-reference.mjs";
 
 type ZipEntry = { fileName: string };
 type ZipFile = EventEmitter & { readEntry(): void; openReadStream(entry: ZipEntry, callback: (error: Error | null, stream: Readable) => void): void };
@@ -50,16 +50,12 @@ test("OpenImmo export escapes text, follows release flags and never leaks intern
   assert.throws(() => parsePropertyPortalProfile({ ...profile, password: "do-not-store" }), /INVALID_PORTAL_PROFILE/);
   assert.throws(() => createPropertyPortalZip({ "../escape.xml": "test" }), /INVALID_PORTAL_ARCHIVE_NAME/);
 });
-test("generated CHANGE and DELETE exports validate against the official downloaded OpenImmo 1.2.7d XSD", async (t) => {
-  const schema = ".npm-cache/qa/openimmo-reference/openimmo_127d.xsd";
-  try { await access(schema); } catch { t.skip("Official XSD not supplied locally. Download the official archive; parser tests do not claim XSD validation."); return; }
-  if (process.platform !== "win32") { t.skip("This reference-validation helper uses the Windows .NET XML Schema validator."); return; }
+test("generated CHANGE and DELETE exports validate against the official downloaded OpenImmo 1.2.7d XSD", async () => {
   await mkdir(".npm-cache/qa/openimmo-reference/generated", { recursive: true });
   for (const action of ["CHANGE", "DELETE"] as const) {
     const path = `.npm-cache/qa/openimmo-reference/generated/${action}.xml`;
     await writeFile(path, buildPropertyPortalXml({ ...source, media: [{ id: randomUUID(), assetId: randomUUID(), fileName: "media-synthetic.png", title: "Synthetic image", format: "PNG", kind: "image", sizeBytes: 100, updatedAt: "2026-11-04" }] }, profile, action, "2026-11-04T10:00:00Z"));
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-File", "scripts/validate-openimmo.ps1", "-SchemaPath", schema, "-XmlPath", path], { encoding: "utf8", windowsHide: true, timeout: 20000 });
-    assert.equal(result.status, 0, `${action}: ${result.stdout}\n${result.stderr}`);
+    await validateOpenImmoReference(path);
   }
 });
 test("portal profiles and frozen packages persist with tenant/project rights and stale preview protection", { timeout: 180000 }, async (t) => {
@@ -75,7 +71,11 @@ test("portal profiles and frozen packages persist with tenant/project rights and
     const session = { authenticated: true, userId, workspaceId, workspaceName: "Synthetic portal", name: "Synthetic", email: `portal-${userId}@example.invalid`, role: "owner", productRole: "customer_owner", permissions: getRolePermissions("owner"), productPermissions: getProductRoleCapabilities("customer_owner"), source: "database" } as AppSession;
     const viewer = { ...session, userId: viewerId, role: "agent", productRole: "broker_agent" } as AppSession, foreign = { ...session, userId: foreignUser, workspaceId: foreignWorkspace } as AppSession;
     const options = { pool: db.pool as unknown as TenantPool }, run = <T>(work: (tx: TenantTransaction, scoped: AppSession) => Promise<T>, actor = session) => withCrmRead(actor, work, options);
-    const created = await run((_tx, scoped) => createSellerListingRecord({ session: scoped, property: { title: "Synthetic <portal>", address: source.fullAddress, region: "Wien", city: "Wien", postalCode: "1010", geography: source.geography, energyCertificate: source.energy, areaSqm: 80.5, rooms: 3, yearBuilt: 2000, price: 123456.78, usageType: "residential", objectType: "Wohnung", projectId, internalNotes: "PRIVATE-INTERNAL" } }));
+    const property = { title: 'Synthetic "portal" & partner', address: source.fullAddress, region: "Wien", city: "Wien", postalCode: "1010", geography: source.geography, energyCertificate: source.energy, areaSqm: 80.5, rooms: 3, yearBuilt: 2000, price: 123456.78, usageType: "residential", objectType: "Wohnung", projectId, internalNotes: "PRIVATE-INTERNAL" };
+    const rejected = await run((_tx, scoped) => createSellerListingRecord({ session: scoped, property: { ...property, title: "Synthetic <portal>" } }));
+    assert.deepEqual(rejected, { persisted: false, reason: "Invalid property title" });
+    assert.equal(Number((await db.admin.query("select count(*) from seller_listings where workspace_id=$1", [workspaceId])).rows[0].count), 0, "Rejected markup must not persist a property");
+    const created = await run((_tx, scoped) => createSellerListingRecord({ session: scoped, property }));
     assert.ok(created.persisted, JSON.stringify(created)); if (!created.persisted) return;
     const propertyId = created.data.id;
     await db.admin.query("insert into property_text_blocks(workspace_id,project_id,property_id,text_key,channel,title,content,status,visibility) values($1,$2,$3,'portal','Immobilienportal','Synthetic portal','Approved synthetic public description','approved','channel')", [workspaceId, projectId, propertyId]);
@@ -89,6 +89,7 @@ test("portal profiles and frozen packages persist with tenant/project rights and
     await t.test("prepare rejects stale data, stores a real package and keeps it out of transport queues", async () => {
       const preview = await run((tx, scoped) => previewPropertyPortal(tx, scoped, propertyId, profile.portalName, "CHANGE"));
       assert.equal(preview.checks.some((check) => check.status === "missing"), false, JSON.stringify(preview.checks));
+      assert.match(preview.xml, /Synthetic &quot;portal&quot; &amp; partner/);
       await db.admin.query("update seller_listings set title='Updated synthetic' where id=$1", [propertyId]);
       await assert.rejects(run((tx, scoped) => preparePropertyPortalExport(tx, scoped, { propertyId, portalName: profile.portalName, action: "CHANGE", expectedSourceFingerprint: preview.sourceFingerprint, reviewed: true, idempotencyKey: randomUUID() })), /Vorschau/);
       const fresh = await run((tx, scoped) => previewPropertyPortal(tx, scoped, propertyId, profile.portalName, "CHANGE"));
