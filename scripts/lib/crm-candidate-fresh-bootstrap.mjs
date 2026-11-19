@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
+import { setTimeout as pause } from 'node:timers/promises';
 import { applyCrmCandidate061Compatibility, renderNeon061Compatibility } from './neon-061-compat.mjs';
 import { captureDatabaseMetadata, captureExtensionMetadata, catalogQueries } from './studio-stage3-qa-fingerprint.mjs';
 import { prepareTargetQueries } from './studio-stage3-qa-prepare-target.mjs';
-import { crmCandidateTarget, digest, validateCrmCandidateDescriptor, validateCrmCandidatePlan } from './crm-candidate-fresh-manifest.mjs';
+import { crmCandidateTarget, digest, sha256, validateCrmCandidateDescriptor, validateCrmCandidatePlan } from './crm-candidate-fresh-manifest.mjs';
 import { applyMigration } from '../db-migrate.mjs';
 
 const check = (condition, code) => assert.ok(condition, code);
 const providerRoleNames = new Set(['cloud_admin', 'neon_service', 'neon_superuser', 'neondb_owner', 'token_roles']);
+const providerMonitors = new Set(['compute_ctl:compute_monitor', 'vm-monitor', 'neon_compute_sql_exporter']);
+const safeSessionErrors = new WeakSet();
+const strictProviderIdle = row => row.role === 'cloud_admin' && row.database === 'postgres' &&
+  row.backend_type === 'client backend' && row.state === 'idle';
 export const crmCandidatePreservedDatabase = 'crm_candidate_provider_baseline';
 export const crmCandidateQueries = Object.freeze({
+  sessions: `select pid,datname as database,usename as role,state,backend_type,application_name
+    from pg_stat_activity where backend_type='client backend' order by pid`,
   providerRoles: `select rolname as name,rolcanlogin as login,rolsuper as superuser,rolbypassrls as bypassrls,
     rolcreatedb as create_database,rolcreaterole as create_role,rolreplication as replication
     from pg_roles where rolname !~ '^pg_' order by rolname`,
@@ -34,6 +41,53 @@ export const crmCandidateQueries = Object.freeze({
     from pg_roles r where r.rolname in('novalure_app','novalure_tenant_app') order by r.rolname`,
   ledger: 'select version,name,checksum from public.novalure_schema_migrations order by version',
 });
+
+function sessionFailure(reason, rows, own, attempts) {
+  const knownStates = new Set(['active', 'idle', 'idle in transaction', 'idle in transaction (aborted)', 'fastpath function call', 'disabled']);
+  const safe = row => {
+    const app = typeof row?.application_name === 'string' ? row.application_name : '';
+    return { pid: Number.isInteger(row?.pid) && row.pid > 0 ? row.pid : null,
+      roleClass: row?.role === 'cloud_admin' ? 'PROVIDER_ADMIN' : row?.role === 'neondb_owner' ? 'OWNER' :
+        row?.role === 'novalure_app' ? 'RUNTIME' : 'OTHER',
+      databaseClass: ['postgres', 'neondb', crmCandidatePreservedDatabase].includes(row?.database) ? row.database : 'OTHER',
+      state: knownStates.has(row?.state) ? row.state : 'UNKNOWN',
+      backendType: row?.backend_type === 'client backend' ? 'CLIENT_BACKEND' : 'OTHER',
+      application: providerMonitors.has(app) || app === 'crm-candidate-original-qa-bootstrap' ? app : 'OTHER',
+      applicationSha256: sha256(app), applicationBytes: Buffer.byteLength(app) };
+  };
+  const seen = new Set(rows.map(row => row?.pid));
+  const missing = [...own.keys()].filter(pid => !seen.has(pid));
+  const offenders = rows.filter(row => own.has(row?.pid) ? row.role !== 'neondb_owner' || row.database !== own.get(row.pid) ||
+    row.backend_type !== 'client backend' : !strictProviderIdle(row));
+  const error = new Error('CRM_QA_FOREIGN_SESSION');
+  error.sessionGuardDiagnostic = Object.freeze({ reason, attempts, ownExpectedCount: own.size, missingOwnCount: missing.length,
+    missingOwnPids: Object.freeze(missing.slice(0, 32)), observedCount: rows.length, projectedCount: Math.min(offenders.length, 32),
+    sessions: Object.freeze(offenders.slice(0, 32).map(row => Object.freeze(safe(row)))) });
+  safeSessionErrors.add(error);
+  return error;
+}
+
+/** All retries are metadata reads; successful return still requires the original strict-idle condition. */
+export async function assertCrmCandidateSessions({ readSessions, own, wait = pause }) {
+  check(own instanceof Map && own.size > 0 && [...own].every(([pid, database]) => Number.isInteger(pid) && pid > 0 &&
+    ['postgres', 'neondb', crmCandidatePreservedDatabase].includes(database)), 'CRM_QA_SESSION_EXPECTATION_INVALID');
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const rows = await readSessions();
+    if (!Array.isArray(rows) || rows.some(row => !Number.isInteger(row?.pid) || row.pid <= 0) ||
+      new Set(rows.map(row => row.pid)).size !== rows.length) throw sessionFailure('INVALID_SESSION_INVENTORY', [], own, attempt);
+    const seen = new Set(rows.map(row => row.pid));
+    if ([...own.keys()].some(pid => !seen.has(pid))) throw sessionFailure('MISSING_OWN_PID', rows, own, attempt);
+    if (rows.some(row => own.has(row.pid) && (row.role !== 'neondb_owner' || row.database !== own.get(row.pid) ||
+      row.backend_type !== 'client backend'))) throw sessionFailure('MISMATCHED_OWN_IDENTITY', rows, own, attempt);
+    const rejected = rows.filter(row => !own.has(row.pid) && !strictProviderIdle(row));
+    if (rejected.length === 0) return { attempts: attempt };
+    const knownBusyOnly = rejected.every(row => row.role === 'cloud_admin' && row.database === 'postgres' &&
+      row.backend_type === 'client backend' && providerMonitors.has(row.application_name) && row.state === 'active');
+    if (!knownBusyOnly) throw sessionFailure('UNRECOGNIZED_FOREIGN_SESSION', rows, own, attempt);
+    if (attempt === 5) throw sessionFailure('PROVIDER_NOT_QUIESCENT_TIMEOUT', rows, own, attempt);
+    await wait(100);
+  }
+}
 
 function assertReservedTokenRole(roles, memberships) {
   const token = roles.filter(row => row.name === 'token_roles');
@@ -116,11 +170,17 @@ async function clusterGuard(context, control, expectedNames, providerRoles, appl
     digest(roles.filter(row => providerRoleNames.has(row.name))) === digest(providerRoles) &&
     roles.every(row => providerRoleNames.has(row.name) || application.includes(row.name)) &&
     application.every(name => roles.some(row => row.name === name)), 'CRM_QA_ROLE_INVENTORY');
-  const sessions = (await control.query(prepareTargetQueries.sessions)).rows;
   const own = new Map([...context.clients.values()].map(row => [row.pid, row.database]));
-  check(sessions.filter(row => own.has(row.pid)).length === own.size && sessions.every(row =>
-    own.has(row.pid) ? row.role === 'neondb_owner' && row.database === own.get(row.pid) :
-      row.role === 'cloud_admin' && row.database === 'postgres' && row.state === 'idle'), 'CRM_QA_FOREIGN_SESSION');
+  let observations = 0;
+  await assertCrmCandidateSessions({ own, readSessions: async () => {
+    if (observations++ > 0) {
+      check(digest((await control.query(prepareTargetQueries.databases)).rows) === digest(databases), 'CRM_QA_DATABASE_INVENTORY_CHANGED_WHILE_WAITING');
+      check(digest((await control.query(crmCandidateQueries.providerRoles)).rows) === digest(roles), 'CRM_QA_ROLE_INVENTORY_CHANGED_WHILE_WAITING');
+      assertReservedTokenRole(roles, (await control.query(catalogQueries.memberships)).rows);
+    }
+    await control.query('select pg_stat_clear_snapshot()');
+    return (await control.query(crmCandidateQueries.sessions)).rows;
+  } });
   check((await control.query(prepareTargetQueries.prepared)).rows[0]?.count === 0, 'CRM_QA_PREPARED_TRANSACTION');
   return databases;
 }
@@ -225,6 +285,7 @@ export async function runCrmCandidateFreshEarly({ connect, descriptor, descripto
     }));
     const names = ['neondb', 'postgres', 'template0', 'template1', crmCandidatePreservedDatabase];
     for (const migration of manifest.early) {
+      phase = 'GUARD_BEFORE_ORIGINAL_' + migration.version;
       await clusterGuard(context, control, names, roles,
         ['novalure_app', ...(applied.some(row => row.number === 60) ? ['novalure_tenant_app'] : [])]);
       const receipt = await effect('ORIGINAL_' + migration.version, () => crmCandidateTransaction(fresh.client, async () => {
@@ -247,6 +308,7 @@ export async function runCrmCandidateFreshEarly({ connect, descriptor, descripto
         execution: receipt ? 'NEW_NATIVE_061_COMPATIBILITY_RECEIPT' : 'UNCHANGED_ORIGINAL_SQL', ...(receipt ? { receipt061: receipt } : {}) });
       await record('MIGRATION_COMMITTED', applied.at(-1));
     }
+    phase = 'GUARD_FINAL_EARLY_SCHEMA';
     await runtimePosture(fresh.client, true);
     const ledger = assertCrmCandidateLedger((await fresh.client.query(crmCandidateQueries.ledger)).rows,
       manifest.early.filter(row => row.number >= 41));
@@ -267,6 +329,7 @@ export async function runCrmCandidateFreshEarly({ connect, descriptor, descripto
   } catch (error) {
     await record('HELD_REQUIRES_READ_ONLY_RECONCILIATION', { operationsAcknowledged: operations,
       code: /^[A-Z][A-Z0-9_]{0,99}$/.test(error.message || '') ? error.message : 'CRM_QA_NATIVE_STEP_UNCONFIRMED',
+      ...(safeSessionErrors.has(error) ? { sessionGuard: error.sessionGuardDiagnostic } : {}),
       ...(typeof error.code === 'string' && /^[A-Z0-9]{5}$/.test(error.code) ? { sqlState: error.code } : {}) });
     throw error;
   } finally { await context.closeAll(); }

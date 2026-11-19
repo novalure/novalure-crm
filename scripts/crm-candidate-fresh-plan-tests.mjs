@@ -5,11 +5,11 @@ import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createCrmCandidateManifest, crmCandidateOriginalSources, crmCandidateTarget, digest,
+import { createCrmCandidateManifest, crmCandidateOriginalSources, crmCandidateTarget, digest, sha256,
   validateCrmCandidateDescriptor, validateCrmCandidatePlan } from './lib/crm-candidate-fresh-manifest.mjs';
 import { loadCrmCandidateCommittedManifest, validateCrmCandidatePrivateInput } from './crm-candidate-fresh-bootstrap.mjs';
 import { planCrmCandidateOfficialStep, crmCandidateMetadataEnvironment } from './lib/crm-candidate-official-migrations.mjs';
-import { assertCrmCandidateProviderRoles, completeCrmCandidateFreshSchema, crmCandidateQueries } from './lib/crm-candidate-fresh-bootstrap.mjs';
+import { assertCrmCandidateProviderRoles, assertCrmCandidateSessions, completeCrmCandidateFreshSchema, crmCandidateQueries } from './lib/crm-candidate-fresh-bootstrap.mjs';
 import { catalogQueries } from './lib/studio-stage3-qa-fingerprint.mjs';
 
 const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -66,6 +66,80 @@ test('reserved token LOGIN/elevated/replication/membership or unknown provider r
   assert.throws(() => assertCrmCandidateProviderRoles([...providerRoles, { ...providerRoles[4], name: 'unknown_provider' }], providerMemberships), /FRESH_PROVIDER_ROLES/);
   assert.throws(() => assertCrmCandidateProviderRoles([...providerRoles, providerRoles[4]], providerMemberships), /FRESH_PROVIDER_ROLES/);
 });
+
+const sessionOwn = new Map([[11, 'postgres'], [12, 'neondb']]);
+const ownSessions = [...sessionOwn].map(([pid, database]) => ({ pid, database, role: 'neondb_owner',
+  state: 'active', backend_type: 'client backend', application_name: 'crm-candidate-original-qa-bootstrap' }));
+const monitor = application_name => ({ pid: 21, database: 'postgres', role: 'cloud_admin', state: 'active',
+  backend_type: 'client backend', application_name });
+
+test('provider quiescence retries only reads and succeeds only after original strict-idle observation', async () => {
+  for (const app of ['compute_ctl:compute_monitor', 'vm-monitor', 'neon_compute_sql_exporter']) {
+    let reads = 0; const waits = [];
+    const result = await assertCrmCandidateSessions({ own: sessionOwn, readSessions: async () => {
+      reads++; return [...ownSessions, { ...monitor(app), state: reads === 1 ? 'active' : 'idle' }];
+    }, wait: async ms => waits.push(ms) });
+    assert.equal(result.attempts, 2); assert.equal(reads, 2); assert.deepEqual(waits, [100]);
+  }
+  const waits = [];
+  const immediate = await assertCrmCandidateSessions({ own: sessionOwn,
+    readSessions: async () => [...ownSessions, { ...monitor('original-idle-provider'), state: 'idle' }], wait: async ms => waits.push(ms) });
+  assert.equal(immediate.attempts, 1); assert.equal(waits.length, 0);
+});
+
+test('known provider active never authorizes a write: five reads/four pauses then a safe held diagnostic', async () => {
+  let reads = 0; const waits = [];
+  await assert.rejects(assertCrmCandidateSessions({ own: sessionOwn,
+    readSessions: async () => { reads++; return [...ownSessions, monitor('vm-monitor')]; },
+    wait: async ms => waits.push(ms) }), error => {
+    assert.equal(error.message, 'CRM_QA_FOREIGN_SESSION');
+    assert.equal(error.sessionGuardDiagnostic.reason, 'PROVIDER_NOT_QUIESCENT_TIMEOUT');
+    assert.equal(error.sessionGuardDiagnostic.attempts, 5);
+    assert.equal(error.sessionGuardDiagnostic.sessions[0].application, 'vm-monitor');
+    assert.equal(error.sessionGuardDiagnostic.sessions[0].state, 'active');
+    return true;
+  });
+  assert.equal(reads, 5); assert.deepEqual(waits, [100, 100, 100, 100]);
+});
+
+test('own PID/identity failures and arbitrary foreign sessions deny immediately without waiting', async () => {
+  const base = monitor('compute_ctl:compute_monitor');
+  const cases = [
+    { rows: [...ownSessions.slice(1), base], reason: 'MISSING_OWN_PID' },
+    { rows: [...ownSessions.map((row, index) => index ? row : { ...row, role: 'cloud_admin' }), base], reason: 'MISMATCHED_OWN_IDENTITY' },
+    { rows: [...ownSessions.map((row, index) => index ? row : { ...row, database: 'neondb' }), base], reason: 'MISMATCHED_OWN_IDENTITY' },
+    { rows: [...ownSessions, base, { ...base, pid: 22, role: 'novalure_app' }], reason: 'UNRECOGNIZED_FOREIGN_SESSION' },
+    ...[{ ...base, database: 'neondb' }, { ...base, role: 'neondb_owner' }, { ...base, backend_type: 'parallel worker' },
+      { ...base, application_name: 'unknown-app' }, { ...base, state: 'idle in transaction' },
+      { ...base, state: 'idle in transaction (aborted)' }, { ...base, state: null }]
+      .map(row => ({ rows: [...ownSessions, row], reason: 'UNRECOGNIZED_FOREIGN_SESSION' })),
+    { rows: [...ownSessions, ownSessions[0]], reason: 'INVALID_SESSION_INVENTORY' },
+  ];
+  for (const { rows, reason } of cases) {
+    let reads = 0, waits = 0;
+    await assert.rejects(assertCrmCandidateSessions({ own: sessionOwn, readSessions: async () => { reads++; return rows; },
+      wait: async () => { waits++; } }), error => {
+      assert.equal(error.sessionGuardDiagnostic.reason, reason); return true;
+    });
+    assert.equal(reads, 1); assert.equal(waits, 0);
+  }
+});
+
+test('failed-session projection is bounded and never forwards unknown application, role, database or query text', async () => {
+  const privateLabel = 'postgresql://SYNTHETIC-PRIVATE-NOT-A-CREDENTIAL@example.invalid/db';
+  const rows = Array.from({ length: 50 }, (_, index) => ({ ...monitor(privateLabel), pid: index + 100,
+    role: privateLabel, database: privateLabel, query: privateLabel }));
+  await assert.rejects(assertCrmCandidateSessions({ own: sessionOwn, readSessions: async () => [...ownSessions, ...rows],
+    wait: async () => assert.fail('Unknown sessions must not wait') }), error => {
+    const diagnostic = error.sessionGuardDiagnostic;
+    assert.equal(diagnostic.sessions.length, 32); assert.equal(diagnostic.observedCount, 52);
+    assert.equal(diagnostic.sessions[0].roleClass, 'OTHER'); assert.equal(diagnostic.sessions[0].databaseClass, 'OTHER');
+    assert.equal(diagnostic.sessions[0].application, 'OTHER'); assert.equal(diagnostic.sessions[0].applicationSha256, sha256(privateLabel));
+    assert.ok(!JSON.stringify(diagnostic).includes(privateLabel)); assert.ok(!JSON.stringify(diagnostic).includes('query'));
+    return true;
+  });
+});
+
 
 test('historical061 module imports and renders independently without any new CRM registry or helper', async () => {
   const root = path.resolve('.npm-cache/qa');

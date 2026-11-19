@@ -176,6 +176,42 @@ export function observeQaFetchBodies({ origin, bindingTransport = "playwright" }
   });
 }
 
+/** Serialized into the original renderer. Do not yield back to the host between
+ * the final lifecycle check and navigation: hydration can start a real fetch in
+ * that gap, and Chromium may retire it without publishing its terminal events.
+ * Existing native/body coverage remains independently required by the caller. */
+export async function navigateQaAfterObservedFetch({ kind, href, timeoutMs = 15000 }) {
+  if (!["assign", "reload"].includes(kind) || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15000)
+    throw new Error("QA_NAVIGATION_INPUT_INVALID");
+  const state = globalThis.__crmQaFetchBodies;
+  if (!state || typeof state.drain !== "function" || typeof state.snapshot !== "function")
+    throw new Error("QA_NAVIGATION_OBSERVER_MISSING");
+  let target;
+  if (kind === "assign") {
+    target = new URL(href, globalThis.location.href);
+    if (target.origin !== globalThis.location.origin || target.username || target.password)
+      throw new Error("QA_NAVIGATION_TARGET_INVALID");
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await state.drain(Math.max(1, deadline - Date.now()));
+    // Preserve the existing Node-egress qualification path for an actually
+    // failed browser clone. A timeout or unknown write never authorizes reload.
+    if (!result.ok && (result.timedOut || !result.errors?.length || result.errors.some(error => error !== "body_read_failed")))
+      throw new Error("QA_NAVIGATION_ORIGINAL_FETCH_UNSETTLED");
+    const current = state.snapshot();
+    if (current.foreign) throw new Error("QA_NAVIGATION_FOREIGN_BODY");
+    if (current.errors.some(error => error !== "body_read_failed"))
+      throw new Error("QA_NAVIGATION_ORIGINAL_FETCH_UNSETTLED");
+    if (current.pending || current.bridgesPending || current.sequence !== result.sequence) continue;
+    // No await, timer, host round trip or synthetic terminal before this call.
+    if (kind === "reload") globalThis.location.reload();
+    else globalThis.location.assign(target.href);
+    return;
+  }
+  throw new Error("QA_NAVIGATION_ORIGINAL_FETCH_UNSETTLED");
+}
+
 const requestTrace = row => ({ documentId: row.documentId ?? null, id: row.id ?? null,
   key: opaqueReference(row.key), path: row.path ?? null, method: row.method ?? null });
 

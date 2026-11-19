@@ -6,7 +6,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createResponseInspectionBarrier, observeQaFetchBodies, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from "./lib/qa-response-inspection.mjs";
+import { createResponseInspectionBarrier, observeQaFetchBodies, navigateQaAfterObservedFetch, assertObservedFetchCoverage, collectFetchLifecycleDiagnostics, requiresCrmDocumentReload, parseQaFetchBindingMessage, safeQaFetchDiagnostic } from "./lib/qa-response-inspection.mjs";
 import { qaRequestFingerprint, qualifyQaServerBodies, requestQaCaptureSnapshot, createQaWireAudit } from "./lib/qa-server-response-capture.mjs";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
@@ -138,11 +138,22 @@ async function drainResponseInspections(page) {
 }
 async function gotoAfterInspection(page, ...args) {
   await drainResponseInspections(page);
-  return page.goto(...args);
+  // The initial blank document has no original API work to retire.
+  if (page.url() === "about:blank") return page.goto(...args);
+  const [href, options] = args;
+  const [response] = await Promise.all([
+    page.waitForNavigation(options),
+    page.evaluate(navigateQaAfterObservedFetch, { kind: "assign", href }),
+  ]);
+  return response;
 }
 async function reloadAfterInspection(page, ...args) {
   await drainResponseInspections(page);
-  return page.reload(...args);
+  const [response] = await Promise.all([
+    page.waitForNavigation(args[0]),
+    page.evaluate(navigateQaAfterObservedFetch, { kind: "reload" }),
+  ]);
+  return response;
 }
 let browser, accounts, operatorPage, customerPage, viewerPage, areaId, sourceId;
 const operationalReaders = [

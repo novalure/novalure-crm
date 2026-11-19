@@ -21,6 +21,7 @@ const environment = Object.fromEntries(Object.entries(process.env).filter(([key]
 environment.NEXT_TELEMETRY_DISABLED = "1";
 
 const suites = [
+  { id: "navigation-lifecycle", script: "scripts/qa-navigation-inspection-tests.mjs", nodeArgs: ["--test", "--test-concurrency=1"] },
   { id: "design-c-integration", script: "scripts/qa-design-c-integration.mjs", nodeArgs: [] },
   { id: "knowledge-browser", script: "scripts/qa-knowledge-browser.mjs", nodeArgs: [] },
   { id: "package4-integration", script: "scripts/qa-package4-integration.mjs", nodeArgs: ["--conditions=react-server", "--import", "tsx"] },
