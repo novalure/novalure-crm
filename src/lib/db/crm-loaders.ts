@@ -56,7 +56,7 @@ import {
 } from "@/lib/crm-data";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { CrmCommandError, withCrmRead } from "@/lib/crm-command";
-import { crmTables } from "@/lib/db/schema";
+import { crmPhysicalTableStatusSql, crmTables } from "@/lib/db/schema";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import { buildPropertyAssets, type PropertyAssetSummary } from "@/lib/property-department";
 import { businessKpiSqlPredicate } from "@/lib/website-sales-kpi";
@@ -893,16 +893,7 @@ async function getScopedCoreCrmData(
 
 async function listMissingExpectedTables() {
   const tableStatus = await queryRows<TableStatusRow>(
-    `
-      select
-        expected.table_name as "tableName",
-        (t.table_name is not null) as "exists"
-      from unnest($1::text[]) as expected(table_name)
-      left join information_schema.tables t
-        on t.table_schema = 'public'
-       and t.table_name = expected.table_name
-      order by expected.table_name
-    `,
+    crmPhysicalTableStatusSql,
     [[...crmTables]],
   );
 

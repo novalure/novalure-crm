@@ -120,6 +120,23 @@ export const crmTables = [
 
 export type CrmTable = (typeof crmTables)[number];
 
+// Physical schema readiness must not mistake deliberately denied table access
+// for absence. Application reads remain subject to their existing ACLs and RLS.
+export const crmPhysicalTableStatusSql = `
+  select
+    expected.table_name as "tableName",
+    exists (
+      select 1
+      from pg_catalog.pg_class relation
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname = 'public'
+        and relation.relname = expected.table_name
+        and relation.relkind in ('r', 'p', 'v', 'f')
+    ) as "exists"
+  from unnest($1::text[]) as expected(table_name)
+  order by expected.table_name
+`;
+
 export type DatabaseStatus =
   | { configured: true; pooledUrlEnv: string; directUrlEnv: string }
   | { configured: false; missing: string[] };

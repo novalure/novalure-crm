@@ -6,6 +6,7 @@ import { getCoreCrmData } from '../src/lib/db/crm-loaders';
 import { getRolePermissions } from '../src/lib/auth/permissions';
 import { getProductRoleCapabilities } from '../src/lib/product-model';
 import { closeLocalTestPool } from '../src/lib/db/local-test-transport';
+import { crmPhysicalTableStatusSql, crmTables } from '../src/lib/db/schema';
 import { startDesignCIntegrationDatabase, seedDesignCIntegration } from './lib/design-c-integration-fixture.mjs';
 
 test('explicit current Design C fixture builds the complete original application frontier on loopback', { timeout: 180_000 }, async () => {
@@ -42,17 +43,54 @@ test('explicit current Design C fixture builds the complete original application
     testEnvironment.DATABASE_URL = `postgresql://${db.role}@127.0.0.1:${db.port}/neondb`;
     testEnvironment.CRM_LOCAL_TEST_DATABASE = '1'; testEnvironment.NODE_ENV = 'test';
     const operator = accounts.operator;
-    const core = await getCoreCrmData(operator.workspaceId, { session: {
+    const loadCore = () => getCoreCrmData(operator.workspaceId, { session: {
       authenticated: true, source: 'database', workspaceId: operator.workspaceId, workspaceName: 'SYNTHETIC',
       userId: operator.userId, name: 'SYNTHETIC', email: 'synthetic@example.invalid', role: 'owner', productRole: 'novalureAdmin',
       permissions: getRolePermissions('owner'), productPermissions: getProductRoleCapabilities('novalureAdmin'),
     } });
+    const core = await loadCore();
     assert.equal(core.source, 'database');
     assert.deepEqual(core.moduleErrors ?? {}, {});
     assert.ok(Object.values(core.moduleSources).every(source => source === 'database'));
     assert.ok(core.contacts.some(contact => contact.id === operator.developerContactId));
     assert.ok(core.projects.some(project => project.id === operator.projectId));
     assert.ok(core.contacts.every(contact => contact.workspaceId === operator.workspaceId));
+    const ownerTables = new Set((await db.admin.query("select table_name from information_schema.tables where table_schema='public' and table_type in ('BASE TABLE','VIEW','FOREIGN')")).rows.map((row: { table_name: string }) => row.table_name));
+    assert.equal(crmTables.length, 112);
+    assert.deepEqual(crmTables.filter(name => !ownerTables.has(name)), []);
+    const readPhysicalStatus = async () => (await db.pool.query(crmPhysicalTableStatusSql, [[...crmTables]])).rows as { tableName: string; exists: boolean }[];
+    const physicalStatus = await readPhysicalStatus();
+    assert.equal(physicalStatus.length, 112);
+    assert.ok(physicalStatus.every(row => row.exists));
+    assert.deepEqual(core.missingTables, []);
+    for (const [relation, deniedRead] of [
+      ['company_profiles', 'select id from public.company_profiles limit 0'],
+      ['company_profile_versions', 'select id from public.company_profile_versions limit 0'],
+    ]) {
+      assert.ok((await db.admin.query('select to_regclass($1) relation', [`public.${relation}`])).rows[0].relation);
+      assert.equal((await db.pool.query('select has_table_privilege(current_user,$1,\'SELECT\') allowed', [`public.${relation}`])).rows[0].allowed, false);
+      assert.equal((await db.pool.query("select count(*)::int count from information_schema.tables where table_schema='public' and table_name=$1", [relation])).rows[0].count, 0);
+      await assert.rejects(db.pool.query(deniedRead), (error: unknown) => (error as { code?: string }).code === '42501');
+    }
+    assert.equal((await db.admin.query("select to_regclass('public.approval_requests_catalog_visibility_probe') relation")).rows[0].relation, null);
+    let renamed = false;
+    try {
+      // Fault injection only in this owned disposable DB, with the original ACLs unchanged.
+      await db.admin.query('alter table public.approval_requests rename to approval_requests_catalog_visibility_probe');
+      renamed = true;
+      const missingStatus = await readPhysicalStatus();
+      assert.equal(missingStatus.find(row => row.tableName === 'approval_requests')?.exists, false);
+      const missingCore = await loadCore();
+      assert.deepEqual(missingCore.missingTables, ['approval_requests']);
+      assert.deepEqual(missingCore.moduleErrors ?? {}, {});
+      assert.ok(Object.values(missingCore.moduleSources).every(source => source === 'database'));
+    } finally {
+      if (renamed) await db.admin.query('alter table public.approval_requests_catalog_visibility_probe rename to approval_requests');
+    }
+    assert.deepEqual((await loadCore()).missingTables, []);
+    for (const relation of ['company_profiles', 'company_profile_versions']) {
+      assert.equal((await db.pool.query('select has_table_privilege(current_user,$1,\'SELECT\') allowed', [`public.${relation}`])).rows[0].allowed, false);
+    }
     for (const relation of ['crm_notification_preferences','crm_ai_assistant_runs','crm_integration_checks','web_expose_templates','project_wizard_settings']) {
       const protection = (await db.admin.query('select relrowsecurity,relforcerowsecurity from pg_class where oid=$1::regclass', [`public.${relation}`])).rows[0];
       assert.equal(protection.relrowsecurity, true, relation); assert.equal(protection.relforcerowsecurity, true, relation);

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/auth/session";
 import { getBuildMetadata } from "@/lib/build-metadata";
 import { queryRows } from "@/lib/db/client";
-import { crmTables, getDatabaseStatus } from "@/lib/db/schema";
+import { crmPhysicalTableStatusSql, crmTables, getDatabaseStatus } from "@/lib/db/schema";
 import { hasProductCapability } from "@/lib/product-model";
 
 type TableStatusRow = {
@@ -81,16 +81,7 @@ export async function GET(request: Request) {
   if (status.configured) {
     const [tableResult, ledgerResult, identityResult] = await Promise.allSettled([
       queryRows<TableStatusRow>(
-        `
-          select
-            expected.table_name as "tableName",
-            (t.table_name is not null) as "exists"
-          from unnest($1::text[]) as expected(table_name)
-          left join information_schema.tables t
-            on t.table_schema = 'public'
-           and t.table_name = expected.table_name
-          order by expected.table_name
-        `,
+        crmPhysicalTableStatusSql,
         [[...crmTables]],
       ),
       queryRows<MigrationLedgerRow>(
