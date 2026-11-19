@@ -133,7 +133,7 @@
     "yauzl": "3.4.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.65.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pdfkit": "0.17.6",
