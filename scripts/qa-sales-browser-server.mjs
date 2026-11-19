@@ -19,6 +19,7 @@ const serveBuiltApplication = process.argv.includes("--built");
 const designCIntegration = process.argv.includes("--design-c");
 const livelistedIntegration = process.argv.includes("--livelisted");
 const propertyAssignmentRegression = process.argv.includes("--property-assignment-regression");
+const websiteSalesWorkbench = process.argv.includes("--website-sales-workbench");
 
 async function waitForExit(completion, durationMs) {
   let timer;
@@ -73,6 +74,7 @@ process.stdin.on("end", requestStop);
 process.stdin.resume();
 
 try {
+  if (websiteSalesWorkbench && (!designCIntegration || !serveBuiltApplication)) throw new Error("Website Sales browser QA requires the optimized build and current isolated application schema");
   for (const name of [".env.local", ".env.production.local", ".env.development.local", ".env.production", ".env.development", ".env"]) {
     try { await access(name); throw new Error("Refusing to run browser QA in a checkout with environment files"); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -90,6 +92,7 @@ try {
   }
   checkStop();
   const fixture = await seedSalesBrowser(db);
+  if (websiteSalesWorkbench) Object.assign(fixture, await (await import("./lib/website-sales-workbench-browser-fixture.mjs")).seedWebsiteSalesWorkbenchBrowser(db, fixture));
   const localEncryptionKey = randomBytes(40).toString("hex");
   if (livelistedIntegration) {
     Object.assign(fixture, await (await import("./lib/livelisted-browser-fixture.mjs")).seedLivelistedBrowser(db, fixture, localEncryptionKey));
