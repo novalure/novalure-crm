@@ -288,12 +288,25 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
             let content;
             try { content = parseOfferContent(input.payload.content); }
             catch (error) { if (error instanceof OfferValidationError) fail(error.code, 400); throw error; }
-            const contact = await commandTx.queryOne<{ email: string | null; name: string }>(`select email,name from contacts where workspace_id=$1 and id=$2 and project_id=$3 and organization_id=$4 and archived_at is null for update`,
-            [fresh.workspaceId, row.contactId, scope.projectId, scope.companyId]);
-            if (!contact || content.recipientEmail !== contact.email?.trim().toLowerCase() || content.recipientName !== contact.name.trim()) fail("CANONICAL_RECIPIENT_REQUIRED");
+            // Match the existing offer writer: deal -> contact -> lead -> organization.
+            // A contact-first prelock can deadlock with that writer on the same deal.
             const deal = await commandTx.queryOne<{ version: number }>(`select version from deals where workspace_id=$1 and id=$2 and project_id=$3 and contact_id=$4 and organization_id=$5 and lead_id=$6 for update`,
             [fresh.workspaceId, row.dealId, scope.projectId, row.contactId, scope.companyId, row.leadId]);
             if (!deal) fail("DEAL_SCOPE_DENIED", 403);
+            const contact = await commandTx.queryOne<{ email: string | null; name: string }>(`select email,name from contacts where workspace_id=$1 and id=$2 and project_id=$3 and organization_id=$4 and archived_at is null for update`,
+            [fresh.workspaceId, row.contactId, scope.projectId, scope.companyId]);
+            if (!contact || content.recipientEmail !== contact.email?.trim().toLowerCase() || content.recipientName !== contact.name.trim()) fail("CANONICAL_RECIPIENT_REQUIRED");
+            const lead = await commandTx.queryOne(`select id from leads where workspace_id=$1 and id=$2 and project_id=$3 and contact_id=$4 for update`,
+            [fresh.workspaceId, row.leadId, scope.projectId, row.contactId]);
+            if (!lead) fail("LEAD_SCOPE_DENIED", 403);
+            const organization = await commandTx.queryOne(`select id from organizations where workspace_id=$1 and id=$2 and project_id=$3 for update`,
+            [fresh.workspaceId, scope.companyId, scope.projectId]);
+            if (!organization) fail("COMPANY_SCOPE_DENIED", 403);
+            // Waiting for business locks must not preserve an earlier readiness/consent snapshot.
+            const effective = qualification(row.prospect);
+            if (effective.status !== "READY" || effective.evidenceDigest !== row.evidenceDigest) fail("CURRENT_EVIDENCE_REQUIRED");
+            const currentStop = await contactStop(commandTx, fresh, row);
+            if (currentStop) fail(currentStop);
             const offer = await executeOfferCommand(fresh, { operation: "create", projectId: scope.projectId, dealId: row.dealId!,
               expectedVersion: Number(deal.version), idempotencyKey: offerKey(input.idempotencyKey), correlationId: input.correlationId, payload: { content, leadId: row.leadId } }, options);
             await updateWorkflow(commandTx, context, row, "status='OFFER_DRAFT',offer_draft_id=$6", [offer.data.id]);

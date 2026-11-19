@@ -80,11 +80,24 @@ There is no grant, credential, approval or provider activation seed in this chan
 
 ## Candidate verification, 19 November 2026
 
-The final scoped run passed 15 actual PostgreSQL tests and 8 connected HTTP tests
+The final scoped run passed 17 actual PostgreSQL tests and 8 connected HTTP tests
 with the actual companion client. Typecheck, affected lint and the production
 Next build passed. Production dependency audit reported zero vulnerabilities.
 The broader unchanged suites were also executed: 266 unit, 114 Sales, 60 Sales
 Final, 15 migration and 23 Website Sales Ingestion tests passed; final changes
-specific to this workflow were then exercised by the 15/8 scoped runs. Independent
+specific to this workflow were then exercised by the 17/8 scoped runs. Independent
 exact-revision review and repository CI remain release conditions, not claims
 made by this local record.
+
+The final two concurrency regressions cover the ordinary canonical offer service
+on the same deal and an opt-out committed while the workflow waits for its contact
+lock. Preparation uses the canonical Deal → Contact → Lead → Organization order
+and rechecks current evidence and contact restrictions after those locks.
+
+The first Git push automatically created Preview `HvhfTsvdVHdvK3PBvLnh6xFps7yp`
+at source `d8188bd49c61ae45e6810740150a0e5d31774859`, despite the native project
+metadata's `createDeployments=disabled`. It was READY at 19:50:58 UTC on 19 November.
+No runtime acceptance or migration-202 application is inferred. Production aliases
+were read back on the prior deployment. Actual build billing is unknown. The
+task branch now has an explicit `git.deploymentEnabled=false` entry in
+`vercel.json`; existing branch and Production settings are unchanged.

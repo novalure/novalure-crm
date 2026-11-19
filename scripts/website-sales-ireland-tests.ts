@@ -6,6 +6,7 @@ import type { AppSession } from "../src/lib/auth/session";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
 import type { TenantPool } from "../src/lib/db/tenant-client";
+import { executeOfferCommand } from "../src/lib/db/offer-repositories";
 import { getWebsiteSalesIrelandWorkflow, runWebsiteSalesIrelandCommand, websiteSalesIrelandContract, type WebsiteSalesIrelandCommand } from "../src/lib/db/website-sales-ireland-repositories";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 
@@ -31,6 +32,24 @@ test("Website Sales Ireland uses canonical CRM rows, durable evidence, scoped tr
     const options = { pool: db.pool as unknown as TenantPool };
     const command = (operation: WebsiteSalesIrelandCommand["operation"], payload: Record<string, unknown>, fields: Partial<WebsiteSalesIrelandCommand> = {}): WebsiteSalesIrelandCommand => ({ contractVersion: websiteSalesIrelandContract, operation, projectId: ids.project, companyId: ids.company, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload, ...fields });
     const run = (input: WebsiteSalesIrelandCommand, actor = session) => runWebsiteSalesIrelandCommand(actor, input, options);
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void, reject!: (reason: unknown) => void;
+      const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+      return { promise, resolve, reject };
+    };
+    const interceptedPool = (hooks: { before?: (sql: string, pid: number) => Promise<void>; after?: (sql: string, pid: number) => Promise<void> }): TenantPool => ({
+      connect: async () => {
+        const connection = await db.pool.connect();
+        const pid = Number((await connection.query("select pg_backend_pid() as pid")).rows[0].pid);
+        return { release: connection.release.bind(connection), query: async (...args: unknown[]) => {
+          const sql = typeof args[0] === "string" ? args[0] : "";
+          await hooks.before?.(sql, pid);
+          const result: unknown = await Reflect.apply(connection.query, connection, args);
+          await hooks.after?.(sql, pid);
+          return result;
+        } };
+      },
+    } as unknown as TenantPool);
     const register = (address = `${randomUUID()} Test Street, Dublin, Ireland`) => run(command("register_location", { countryCode: "IE", address, sourceUrl: "https://example.invalid/company/location", sourceReference: "Synthetic registered company location; no external verification asserted" }));
     const prospect = (locationId: string, end = new Date(Date.now() + 86400000).toISOString()) => {
       const identity = { workspaceId: ids.workspace, projectId: ids.project, companyId: ids.company, locationId };
@@ -123,6 +142,80 @@ test("Website Sales Ireland uses canonical CRM rows, durable evidence, scoped tr
       const results = await Promise.allSettled(branches.map(branch => runWebsiteSalesIrelandCommand(session,
         command("prepare_offer", { content: offerContent(), expectedEvidenceDigest: branch.row.evidenceDigest }, { locationId: branch.locationId, expectedVersion: branch.row.version }), { pool: controlledPool })));
       assert.equal(results.filter(result => result.status === "fulfilled").length, 2, "Both independent branch drafts must commit without an organization-lock upgrade deadlock");
+    });
+    await t.test("concurrent canonical offer creation on the same deal produces one draft without a lock inversion", async () => {
+      const data = await qualified();
+      const canonicalHasDeal = deferred<void>(), releaseCanonical = deferred<void>(), newFirstLock = deferred<string>();
+      const canonicalPool = interceptedPool({ after: async sql => {
+        if (sql.includes('select id,project_id as "projectId",contact_id as "contactId"') && sql.includes("from deals")) {
+          canonicalHasDeal.resolve(); await releaseCanonical.promise;
+        }
+      } });
+      const newPool = interceptedPool({ before: async sql => {
+        if (sql.includes("select version from deals")) newFirstLock.resolve("deal");
+      }, after: async sql => {
+        if (sql.includes("select email,name from contacts")) newFirstLock.resolve("contact");
+      } });
+      const canonicalResult = executeOfferCommand(session, { operation: "create", projectId: ids.project, dealId: data.row.dealId!,
+        expectedVersion: 1, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { content: offerContent(), leadId: data.row.leadId } }, { pool: canonicalPool })
+        .then(value => ({ status: "fulfilled" as const, value }), reason => { canonicalHasDeal.reject(reason); return { status: "rejected" as const, reason }; });
+      try {
+        await canonicalHasDeal.promise;
+        const newResult = runWebsiteSalesIrelandCommand(session, command("prepare_offer", { content: offerContent(), expectedEvidenceDigest: data.row.evidenceDigest },
+          { locationId: data.locationId, expectedVersion: data.row.version }), { pool: newPool })
+          .then(value => { newFirstLock.resolve("unexpected_completion"); return { status: "fulfilled" as const, value }; }, reason => { newFirstLock.resolve("unexpected_rejection"); return { status: "rejected" as const, reason }; });
+        const firstLock = await newFirstLock.promise;
+        releaseCanonical.resolve();
+        const [canonical, attempted] = await Promise.all([canonicalResult, newResult]);
+        assert.equal(firstLock, "deal", "The new workflow must wait on the canonical deal before locking its contact");
+        assert.equal(canonical.status, "fulfilled", canonical.status === "rejected" ? String(canonical.reason?.code) : "");
+        assert.equal(attempted.status, "rejected");
+        if (attempted.status === "rejected") assert.equal(attempted.reason?.code, "OFFER_ALREADY_EXISTS");
+        assert.equal(Number((await db.admin.query("select count(*) from crm_offers where workspace_id=$1 and deal_id=$2", [ids.workspace, data.row.dealId])).rows[0].count), 1);
+      } finally { releaseCanonical.resolve(); await canonicalResult; }
+    });
+    await t.test("opt-out committed during an actual contact lock wait is rechecked before creating a draft", async () => {
+      const raceContact = randomUUID();
+      await db.admin.query("insert into contacts(id,workspace_id,project_id,organization_id,name,role,email) values($1,$2,$3,$4,'Existing synthetic contact','Ansprechpartner','existing@example.invalid')", [raceContact, ids.workspace, ids.project, ids.company]);
+      const observedData = await observed();
+      const qualifiedResult = await run(command("qualify", { contactId: raceContact, opportunitySummary: "Consent lock race", nextAction: "Review internally", expectedEvidenceDigest: observedData.row.evidenceDigest }, { locationId: observedData.locationId, expectedVersion: 1 }));
+      const row = qualifiedResult.data.workflow!;
+      const initialStopRead = deferred<void>(), contactAttempt = deferred<number>();
+      const controlledPool = interceptedPool({ before: async (sql, pid) => {
+        if (sql.includes("select email,name from contacts")) contactAttempt.resolve(pid);
+      }, after: async sql => {
+        if (sql.includes("union all select 'REPLY_RECEIVED'")) initialStopRead.resolve();
+      } });
+      const holder = await db.admin.connect();
+      let committed = false;
+      let pending: Promise<{ status: "fulfilled"; value: unknown } | { status: "rejected"; reason: unknown }> | undefined;
+      try {
+        await holder.query("begin");
+        await holder.query("update contacts set consent_label='Abgemeldet' where id=$1", [raceContact]);
+        pending = runWebsiteSalesIrelandCommand(session, command("prepare_offer", { content: offerContent(), expectedEvidenceDigest: row.evidenceDigest },
+          { locationId: observedData.locationId, expectedVersion: row.version }), { pool: controlledPool })
+          .then(value => ({ status: "fulfilled" as const, value }), reason => { initialStopRead.reject(reason); contactAttempt.reject(reason); return { status: "rejected" as const, reason }; });
+        await initialStopRead.promise;
+        const pid = await contactAttempt.promise;
+        let waiting = false;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          waiting = Boolean((await db.admin.query("select exists(select 1 from pg_locks where pid=$1 and not granted) as waiting", [pid])).rows[0].waiting);
+          if (waiting) break;
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        assert.equal(waiting, true, "The actual runtime must be waiting on the held contact row before opt-out commits");
+        await holder.query("commit"); committed = true;
+        const result = await pending;
+        assert.equal(result.status, "rejected");
+        if (result.status === "rejected") assert.equal((result.reason as { code?: string })?.code, "OPT_OUT");
+        assert.equal(Number((await db.admin.query("select count(*) from crm_offers where workspace_id=$1 and deal_id=$2", [ids.workspace, row.dealId])).rows[0].count), 0);
+        const unchanged = (await db.admin.query("select status,version from crm_website_sales_workflows where id=$1", [row.id])).rows[0];
+        assert.equal(unchanged.status, "QUALIFIED"); assert.equal(Number(unchanged.version), row.version);
+      } finally {
+        if (!committed) await holder.query("rollback");
+        holder.release();
+        await pending;
+      }
     });
     await t.test("server recomputes unclear and stale qualification; caller cannot force READY or stale digest", async () => {
       const registered = await register();
