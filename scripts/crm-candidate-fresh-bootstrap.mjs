@@ -181,7 +181,9 @@ export async function main(argv = process.argv.slice(2), stream = process.stdin)
   const manifest = loadCrmCandidateCommittedManifest(headCommit);
   if (mode === '--inspect') {
     console.log(JSON.stringify({ status: 'LOCAL_SOURCE_ONLY_TARGET_PENDING', headCommit, sourceRegistrySha256: crmCandidateSourceManifestSha256,
-      manifestDigest: manifest.sha256, sourceInventorySqlFiles: 169, originalForwardSql: 166, historicalExecutions: 41, expectedLedgerRows: 125,
+      manifestDigest: manifest.sha256, sourceExtensionSha256: manifest.sourceExtensionSha256,
+      sourceInventorySqlFiles: manifest.coverage.sourceInventorySqlFiles, originalForwardSql: manifest.coverage.executedOriginalSqlFiles,
+      historicalExecutions: manifest.coverage.historicalExecutionsBeforeLedger, expectedLedgerRows: manifest.coverage.expectedCanonicalLedgerRows,
       executionVariant: manifest.executionVariant, excluded: manifest.excluded,
       nativeAttestation: false, providerCalls: 0 })); return;
   }

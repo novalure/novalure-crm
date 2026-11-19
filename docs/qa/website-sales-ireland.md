@@ -101,3 +101,18 @@ No runtime acceptance or migration-202 application is inferred. Production alias
 were read back on the prior deployment. Actual build billing is unknown. The
 task branch now has an explicit `git.deploymentEnabled=false` entry in
 `vercel.json`; existing branch and Production settings are unchanged.
+
+## Fresh QA source compatibility
+
+The historical fresh-source registries and their 169-source / 166-execution /
+125-ledger evidence remain unchanged. Migration 202 is registered in the separate,
+checksum-pinned `config/crm-candidate-fresh-website-sales-extension.json`.
+The composed current plan derives 170 sources, 167 selected executions and 126
+canonical ledger entries. Missing, changed, duplicate or unregistered SQL remains
+an error. The official migration planner was checked with the 125 original ledger
+rows and selected exactly the one registered pending migration 202.
+
+Local verification passed 24 bootstrap-contract tests, the application-schema test
+and the final 19 plan tests; these groups overlap. Sales PostgreSQL regression
+remains 17/17. This registers source code for a future authorized QA installation,
+not a new target, permission, provider call or native migration attestation.
