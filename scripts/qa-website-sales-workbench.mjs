@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,6 +20,13 @@ await mkdir(output, { recursive: true });
 const expect = baseExpect.configure({ timeout: 15000 });
 const require = createRequire(import.meta.url);
 const admin = new pg.Pool({ ...fixture.database, user: "qa_admin" });
+// Every rehearsal gets new synthetic companies; append-only evidence is never
+// deleted or rewritten to make retries pass.
+for (const project of fixture.websiteSales.projects) {
+  project.companyId = randomUUID(); project.contactId = randomUUID();
+  await admin.query("insert into organizations(id,workspace_id,project_id,name,type,division,city) values($1,$2,$3,$4,'Unternehmen','WEB_DESIGN',$5)", [project.companyId, fixture.workspaceId, project.projectId, `SYNTHETIC ${project.city} Company`, project.city]);
+  await admin.query("insert into contacts(id,workspace_id,project_id,organization_id,owner_user_id,name,email,role) values($1,$2,$3,$4,$5,$6,$7,'Ansprechpartner')", [project.contactId, fixture.workspaceId, project.projectId, project.companyId, fixture.userId, `SYNTHETIC ${project.city} Contact`, `synthetic-${project.city.toLowerCase()}@example.invalid`]);
+}
 const browser = await chromium.launch({ channel: process.env.CRM_QA_BROWSER_CHANNEL || "chrome", headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: "de-AT", timezoneId: "Europe/Vienna" });
 const page = await context.newPage();
@@ -135,6 +142,7 @@ async function registerLocation(address) {
   await registration.getByRole("button", { name: "Standort erfassen", exact: true }).click();
   await expect(page.locator("[data-website-sales-research]")).toBeVisible();
 }
+let researchSequence = 0;
 async function fillResearch(pathValue = "NO_WEBSITE") {
   const research = page.locator("[data-website-sales-research]");
   await research.getByLabel("Recherchepfad", { exact: false }).selectOption(pathValue);
@@ -150,10 +158,10 @@ async function fillResearch(pathValue = "NO_WEBSITE") {
     await research.getByLabel("Bestehender Buchungsweg", { exact: false }).selectOption("CHECKED_WORKING");
   }
   await research.locator('input[name="identityVerified"]').check();
-  const times = await page.evaluate(() => {
+  const times = await page.evaluate(sequence => {
     const local = value => { const date = new Date(value); return new Date(value - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
-    return { observed: local(Date.now() - 300000), expiry: local(Date.now() + 86400000) };
-  });
+    return { observed: local(Date.now() - 600000 + sequence * 60000), expiry: local(Date.now() + 86400000) };
+  }, researchSequence++);
   for (const fact of await research.locator("[data-website-sales-fact]").all()) {
     const kind = await fact.getAttribute("data-website-sales-fact");
     await fact.getByLabel("Quellen-URL", { exact: false }).fill(`https://example.invalid/evidence/${kind.toLowerCase()}`);
@@ -177,11 +185,12 @@ try {
     await screenshot("workbench-reduced-motion", { width: 1440, height: 1000 });
   });
   await step("invalid registration focuses a linked error summary without a business write", async () => {
+    const before = (await admin.query("select count(*)::int as count from crm_company_locations where workspace_id=$1", [fixture.workspaceId])).rows[0].count;
     const registration = page.locator("[data-website-sales-register]");
     await registration.locator("summary").click();
     await registration.getByRole("button", { name: "Standort erfassen", exact: true }).click();
     await expect(registration.locator('[role="alert"]')).toBeFocused();
-    assert.equal((await admin.query("select count(*)::int as count from crm_company_locations where workspace_id=$1", [fixture.workspaceId])).rows[0].count, 0);
+    assert.equal((await admin.query("select count(*)::int as count from crm_company_locations where workspace_id=$1", [fixture.workspaceId])).rows[0].count, before);
     await registration.locator("summary").click();
   });
   await step("location registration uses canonical company identity and persists unchanged after reload", async () => {
@@ -198,16 +207,32 @@ try {
   let lostBody;
   await step("committed research with a lost response stays UNKNOWN through a hard reload", async () => {
     await fillResearch();
-    await context.route("**/api/crm/website-sales?**", async route => {
-      if (route.request().method() !== "POST" || route.request().postDataJSON().operation !== "observe") return route.continue();
-      lostBody = route.request().postData();
-      const response = await route.fetch();
-      assert.equal(response.status(), 200);
-      await route.abort("failed");
-    }, { times: 1 });
+    await page.evaluate(() => {
+      const realFetch = window.fetch.bind(window);
+      let loseOnce = true;
+      window.fetch = async (input, init) => {
+        const request = new Request(input instanceof Request ? input.clone() : new URL(String(input), location.href), init);
+        const isCommand = request.method === "POST" && new URL(request.url).pathname === "/api/crm/website-sales";
+        const body = isCommand ? await request.clone().text() : null;
+        const lose = loseOnce && body && JSON.parse(body).operation === "observe";
+        // Preserve the genuine browser's cookies, Origin, Fetch Metadata and
+        // one-time CSRF path. Only discard a receipt after actual server IO.
+        const response = await realFetch(input, init);
+        if (lose) {
+          loseOnce = false;
+          window.__websiteSalesLostResponse = { body, status: response.status };
+          if (response.status === 200) { await response.body?.cancel(); throw new TypeError("SYNTHETIC post-commit response loss"); }
+        }
+        return response;
+      };
+    });
     await page.locator("[data-website-sales-research]").getByRole("button", { name: "Recherche speichern", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__websiteSalesLostResponse?.status)).not.toBeUndefined();
+    const lost = await page.evaluate(() => window.__websiteSalesLostResponse);
+    lostBody = lost.body;
+    assert.equal(lost.status, 200, "Lost-response rehearsal requires actual server success through the real browser");
     await expect(page.getByText("Das Speicherergebnis ist unbestätigt.", { exact: false })).toBeVisible();
-    assert.equal((await admin.query("select count(*)::int as count from crm_website_sales_observations where workspace_id=$1", [fixture.workspaceId])).rows[0].count, 1);
+    assert.equal((await admin.query("select count(*)::int as count from crm_website_sales_observations where workspace_id=$1 and company_id=$2", [fixture.workspaceId, fixture.websiteSales.projects[0].companyId])).rows[0].count, 1);
     await page.reload();
     await expect(page.getByRole("button", { name: "Ursprünglichen Vorgang abgleichen", exact: true })).toBeDisabled();
     await expect(page.getByText("Das Speicherergebnis ist unbestätigt.", { exact: false })).toBeVisible();
@@ -219,10 +244,11 @@ try {
     await page.getByRole("button", { name: "Aktuellen Stand lesen", exact: true }).click();
     await expect(page.getByRole("button", { name: "Ursprünglichen Vorgang abgleichen", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Ursprünglichen Vorgang abgleichen", exact: true }).click();
+    await expect(page.getByText("Im CRM gespeichert.", { exact: true })).toBeVisible();
     await expect(page.getByText("Das Speicherergebnis ist unbestätigt.", { exact: false })).toHaveCount(0);
     assert.equal(requests.length, 1);
     assert.equal(requests[0], lostBody);
-    assert.equal((await admin.query("select count(*)::int as count from crm_website_sales_observations where workspace_id=$1", [fixture.workspaceId])).rows[0].count, 1);
+    assert.equal((await admin.query("select count(*)::int as count from crm_website_sales_observations where workspace_id=$1 and company_id=$2", [fixture.workspaceId, fixture.websiteSales.projects[0].companyId])).rows[0].count, 1);
   });
   await step("qualification creates the linked lead, configured pipeline opportunity and next task", async () => {
     const form = page.locator("[data-website-sales-qualification]");
@@ -231,11 +257,11 @@ try {
     await form.getByLabel("Nächste interne Aufgabe", { exact: false }).fill("SYNTHETIC review diagnosis and scope internally");
     await form.getByRole("button", { name: "Verkaufschance und nächste Aufgabe anlegen", exact: true }).click();
     await expect(page.locator("[data-website-sales-offer]")).toBeVisible();
-    const rows = await admin.query("select l.contact_id,d.organization_id,d.stage,t.lead_id from crm_website_sales_workflows w join leads l on l.id=w.lead_id join deals d on d.id=w.deal_id join tasks t on t.id=w.next_task_id where w.workspace_id=$1", [fixture.workspaceId]);
+    const rows = await admin.query("select l.contact_id,d.organization_id,d.stage,t.lead_id from crm_website_sales_workflows w join leads l on l.id=w.lead_id join deals d on d.id=w.deal_id join tasks t on t.id=w.next_task_id where w.workspace_id=$1 and w.company_id=$2", [fixture.workspaceId, fixture.websiteSales.projects[0].companyId]);
     assert.equal(rows.rows.length, 1);
     assert.equal(rows.rows[0].contact_id, fixture.websiteSales.projects[0].contactId);
     assert.equal(rows.rows[0].organization_id, fixture.websiteSales.projects[0].companyId);
-    assert.equal(rows.rows[0].stage, "Research qualified");
+    assert.equal(rows.rows[0].stage, "Research intake", "Use the real configured entry stage when this pipeline has no qualify key");
   });
   await step("canonical proposal draft persists with no approval, delivery or contact authority", async () => {
     const form = page.locator("[data-website-sales-offer]");
@@ -246,7 +272,7 @@ try {
     await form.locator('[name="validUntil"]').fill(await page.evaluate(() => { const date = new Date(Date.now() + 86400000); return new Date(date.valueOf() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }));
     await form.getByRole("button", { name: "Angebotsentwurf speichern", exact: true }).click();
     await expect(page.getByText("Angebot entworfen", { exact: true })).toBeVisible();
-    const rows = await admin.query("select o.status,o.approval_id,(select count(*)::int from crm_offer_deliveries where workspace_id=$1) as deliveries from crm_website_sales_workflows w join crm_offers o on o.id=w.offer_draft_id where w.workspace_id=$1", [fixture.workspaceId]);
+    const rows = await admin.query("select o.status,o.approval_id,(select count(*)::int from crm_offer_deliveries where workspace_id=$1) as deliveries from crm_website_sales_workflows w join crm_offers o on o.id=w.offer_draft_id where w.workspace_id=$1 and w.company_id=$2", [fixture.workspaceId, fixture.websiteSales.projects[0].companyId]);
     assert.equal(rows.rows.length, 1);
     assert.equal(rows.rows[0].status, "DRAFT"); assert.equal(rows.rows[0].approval_id, null); assert.equal(rows.rows[0].deliveries, 0);
     await screenshot("workbench-offer-draft", { width: 1440, height: 1000 });
@@ -270,6 +296,7 @@ try {
     await expect(page.getByText("Befunde bereit", { exact: true })).toBeVisible();
     await fillResearch("PLATFORM_PRIMARY");
     await research.getByRole("button", { name: "Recherche speichern", exact: true }).click();
+    await expect.poll(async () => (await admin.query("select count(*)::int as count from crm_website_sales_observations where workspace_id=$1 and company_id=$2", [fixture.workspaceId, fixture.websiteSales.projects[1].companyId])).rows[0].count).toBe(3);
     await expect(page.getByText("Befunde bereit", { exact: true })).toBeVisible();
     const observations = await admin.query("select prospect->>'path' as path,prospect->>'bookingRoute' as booking_route from crm_website_sales_observations where workspace_id=$1 and company_id=$2 order by created_at", [fixture.workspaceId, fixture.websiteSales.projects[1].companyId]);
     assert.deepEqual(observations.rows.map(row => row.path), ["WEBSITE_OBSTACLE", "WEBSITE_OBSTACLE", "PLATFORM_PRIMARY"]);
@@ -287,12 +314,13 @@ try {
     const row = await admin.query("select status,stop_reason from crm_website_sales_workflows where workspace_id=$1 and company_id=$2", [fixture.workspaceId, fixture.websiteSales.projects[1].companyId]);
     assert.deepEqual(row.rows, [{ status: "STOPPED", stop_reason: "NO_FIT" }]);
   });
-  await step("a real product-role downgrade removes the internal workbench and denies its API", async () => {
+  await step("a real product-role downgrade denies fresh workbench reads and clears the displayed detail", async () => {
     await admin.query("update workspace_users set product_role='viewer' where id=$1 and workspace_id=$2", [fixture.userId, fixture.workspaceId]);
     try {
-      await page.reload();
-      await expect(page.locator(".crm-app")).toBeVisible();
-      await expect(page.locator("[data-website-sales-workbench]")).toHaveCount(0);
+      await page.locator("[data-website-sales-workbench]").getByRole("button", { name: "Aktuellen Stand laden", exact: true }).first().click();
+      await expect(page.getByText("Der aktuelle CRM-Stand konnte nicht geladen werden.", { exact: false })).toBeVisible();
+      await expect(page.locator("[data-website-sales-workbench]")).not.toContainText("SYNTHETIC 2 Platform Street");
+      await expect(page.locator("[data-website-sales-register]").getByRole("button", { name: "Standort erfassen", exact: true })).toBeDisabled();
       const response = await api("/api/crm/website-sales/workbench?view=projects");
       assert.equal(response.status, 403);
       assert.equal(JSON.stringify(response.body).includes("SYNTHETIC Dublin Company"), false);

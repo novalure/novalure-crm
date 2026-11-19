@@ -55,6 +55,19 @@ tablet, phone, reduced-motion and axe evidence is written only to
 given a public-site jury score. Automated accessibility checks do not constitute
 a full WCAG certification.
 
+The lost-response case keeps the browser's actual cookies, Origin, Fetch Metadata
+and one-time CSRF flow. A bounded test adapter discards one successful receipt
+after real server IO; it does not replace the API with a synthetic response.
+Each rehearsal creates fresh synthetic companies rather than deleting immutable
+research history. Private fixture password/TOTP material stays in ignored local
+artifacts and is never included in the public result report.
+
+An existing shell limitation was observed in a negative check: forcing a
+non-internal viewer membership into an internal workspace makes the global home
+page show its generic server-error boundary. The workbench's own refresh and API
+deny current access, remove displayed detail and disable writes. Improving that
+global error presentation is separate from this Sales change.
+
 This implementation does not activate Production, customer communication, a
 paid provider, a demo publication or offer delivery. The exact-revision release
 gates, including genuine Trusted App attestation, remain applicable.

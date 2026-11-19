@@ -2005,6 +2005,7 @@ function SettingsCommandCenter({
 
 function WorkspaceContextBar({
   areaLabel,
+  compact = false,
   copy,
   dataScopeLabel,
   profileLabel,
@@ -2012,6 +2013,7 @@ function WorkspaceContextBar({
   workspaceName,
 }: {
   areaLabel: string;
+  compact?: boolean;
   copy: ReturnType<typeof getDashboardCopy>;
   dataScopeLabel: string;
   profileLabel: string;
@@ -2044,6 +2046,8 @@ function WorkspaceContextBar({
     [contextCopy.dataScope, dataScopeLabel],
   ];
   const breadcrumbItems = [workspaceName, projectLabel, profileLabel, areaLabel];
+
+  if (compact) return <p className="break-words text-sm text-stone-600" data-website-sales-workspace>{contextCopy.workspace}: <strong className="font-semibold text-slate-900">{workspaceName}</strong></p>;
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm" data-crm-context>
@@ -4750,13 +4754,14 @@ export function CrmWorkspace({
           >
             <WorkspaceContextBar
               areaLabel={activeAreaLabel}
+              compact={visibleActiveNavigationEntry.id === "websiteSales"}
               copy={copy}
               dataScopeLabel={projectScopeLabel}
               profileLabel={activePresetProfile.label}
               projectLabel={projectScopeLabel}
               workspaceName={workspaceContext.workspaceName}
             />
-            {scopeHydrated && !projectScopeInvalid && activeProject ? <ProjectWizardSummary
+            {visibleActiveNavigationEntry.id !== "websiteSales" && scopeHydrated && !projectScopeInvalid && activeProject ? <ProjectWizardSummary
               key={`${sessionUserId}:${activeWorkspace.id}:${activeProject.id}`}
               workspaceId={activeWorkspace.id} projectId={activeProject.id} projectType={activeProject.type} language={language}
             /> : null}
