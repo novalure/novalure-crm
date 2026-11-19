@@ -7,6 +7,8 @@
 @import "../styles/public-runtime.css";
 @import "../styles/public-legacy.css";
 @import "../styles/evelyn-design-c.css";
+@import "../styles/crm-brand.css";
+@import "../styles/crm-navigation.css";
 
 :root {
   --background: var(--nl-bg);

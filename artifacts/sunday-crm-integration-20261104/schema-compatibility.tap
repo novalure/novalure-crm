@@ -1,0 +1,14 @@
+▶ isolated Webchat access and released partner/billing guards compose in both migration orders
+  ✔ late 121 preserves the released external-partner denial even with a legacy broad grant (70.0624ms)
+  ✔ the exact later 167 function reproduces the old member incompatibility without opening partners (6.5043ms)
+  ✔ 188 retains both branches and current cross-tenant, membership and account revocation (18.4424ms)
+  ✔ test payments and released real AI billing keep separate restricted executors and unchanged defaults (2.6841ms)
+✔ isolated Webchat access and released partner/billing guards compose in both migration orders (7486.1423ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7712.5806

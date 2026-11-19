@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_PROJECT_SAVE_CONTINUATION_PRODUCER_PASS",
+  "checkedAtUtc": "2026-11-05T00:13:27.984798+00:00",
+  "checkedAtEuropeVienna": "2026-11-05T01:13:27.984798+01:00",
+  "timeZone": "Europe/Vienna",
+  "baseCommit": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "branch": "codex/qa001-history-scope-20261105",
+  "headAtCapture": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "commitNote": "Successor follows producer capture; LF hashes bind runtime content. Independent exact successor check is recorded outside worktree.",
+  "finding": "Old actual project-save success/error/finally continuation overwrites a newer editor/workspace/navigation",
+  "sourceHashes": [
+    {
+      "path": "scripts/qa001-project-save-tests.mjs",
+      "sha256WorktreeBytes": "c7af275446e87ad20263820b0f6ff0664a532d2f8c6f061a1dfe07a9bb6371b0",
+      "sha256LfNormalizedText": "c7af275446e87ad20263820b0f6ff0664a532d2f8c6f061a1dfe07a9bb6371b0"
+    },
+    {
+      "path": "scripts/sales-client-recovery-tests.ts",
+      "sha256WorktreeBytes": "9bffcc896d97b06933d55785fe7fdf39f950f1daace306b7c1cd00456644fc8b",
+      "sha256LfNormalizedText": "6f6f55545b2383364a54c891eab1660a266f008fbbc42ea4f9171e667fe074df"
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "sha256WorktreeBytes": "3acd850b68c0184c24e85d6d6e9ecbd9c5969f5ad1c5b14712bdfba332154125",
+      "sha256LfNormalizedText": "6472eaade25d1982e0e913c4e83ddb127b110135403553680e6d4fde38dfeb03"
+    },
+    {
+      "path": "src/lib/security/crm-safe-client.ts",
+      "sha256WorktreeBytes": "c64600093721c6c879e302b56a98abcf0e382e512a993ccee8cff7cdba200b5d",
+      "sha256LfNormalizedText": "eedc706602952265147b2bf9520511bb073fd3ec6bc5049f4c282dc109163f2f"
+    },
+    {
+      "path": "src/lib/security/crm-sales-client.ts",
+      "sha256WorktreeBytes": "20402fffbf85ebd5caf37ab40abcfa1fee742117f8b68705b54e3cc95d9fe596",
+      "sha256LfNormalizedText": "22bc79692db73902f2d9e359c6554e6d6cfdc21e6d68d2cd5756ee4f7edee920"
+    }
+  ],
+  "compiledRuntimeLfHashes": {
+    "src/components/crm-workspace.tsx": "6472eaade25d1982e0e913c4e83ddb127b110135403553680e6d4fde38dfeb03",
+    "src/lib/crm-core-request-guard.ts": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+    "src/lib/security/crm-sales-client.ts": "22bc79692db73902f2d9e359c6554e6d6cfdc21e6d68d2cd5756ee4f7edee920",
+    "src/lib/security/crm-safe-client.ts": "eedc706602952265147b2bf9520511bb073fd3ec6bc5049f4c282dc109163f2f",
+    "src/lib/security/csrf-client.ts": "4921a72f8436dbfcdec2c7d7f24a392bdfcab817f2abe4c912200db320e5dcbf"
+  },
+  "checks": [
+    {
+      "command": "CRM_QA_PROJECT_SAVE_BASELINE=1 node scripts/qa001-project-save-tests.mjs",
+      "exitCode": 1,
+      "expectedExitCode": 1,
+      "cases": 11,
+      "passed": 3,
+      "failed": 8,
+      "evidence": "baseline-results.json",
+      "qualification": "Regression expectations, not8 independent fully executed causes; overlap blocked before B-start, wrong200 stops before retry"
+    },
+    {
+      "command": "node scripts/qa001-project-save-tests.mjs",
+      "exitCode": 0,
+      "cases": 11,
+      "passed": 11,
+      "failed": 0,
+      "evidence": "results.json",
+      "scope": "Actual UI dialog/fields/Save/Close and real client transport; synthetic local server/authority"
+    },
+    {
+      "command": "node --import tsx --test scripts/sales-client-recovery-tests.ts",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "transport-tests.txt",
+      "originalFourBodiesUnchanged": true,
+      "newValidatorCases": 2
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "evidence": "typecheck.txt"
+    },
+    {
+      "command": "npx eslint <all5changed/newTS/TSX/MJSfiles> --max-warnings 0",
+      "exitCode": 0,
+      "evidence": "eslint.txt"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "reusedEvidence": {
+    "protocol": "evidence-reuse.json",
+    "sourceFilesInspected": 29,
+    "unchangedLfFromBase": 25,
+    "oldEvidenceFiles": 9,
+    "oldEvidenceUnchangedLf": true,
+    "noNew107_7_29_OrN1Run": true,
+    "qualification": "Prior results stay bound to their captured revisions, not relabeled as final runtime results."
+  },
+  "independentReview": {
+    "capturedInProducerCommit": false,
+    "method": "After commit, separate reviewer checks exact revision with11 UI+6 transport cases and bounded source/evidence inspection, outside worktree."
+  },
+  "evidenceHashes": [
+    {
+      "path": "qa/qa001-project-save-20261105/baseline-results.json",
+      "sha256WorktreeBytes": "f3a07dce64af109123ad3861d86007606f309b6dac6a54c4d5b213c62ceb1959",
+      "sha256LfNormalizedText": "f3a07dce64af109123ad3861d86007606f309b6dac6a54c4d5b213c62ceb1959"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/baseline-run.log",
+      "sha256WorktreeBytes": "24691a102576a83f137688846c97f66caf3636d1b05a12303410655bf0c93d96",
+      "sha256LfNormalizedText": "67d3701aecf4e7907df76ed355e58c0c5089594a5833e74b952ad6e3fdd2bda1"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/before-busy-lifecycle-lint/browser-validation.md",
+      "sha256WorktreeBytes": "a45425209f828c6494a77ba7c046d46b30613252fbab1341d45a82a1984cd31a",
+      "sha256LfNormalizedText": "a45425209f828c6494a77ba7c046d46b30613252fbab1341d45a82a1984cd31a"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/before-busy-lifecycle-lint/results.json",
+      "sha256WorktreeBytes": "81e9c93dd0a5ea20eed1a9672e4cbf6fa3d641e9b418c0829b2f69a55a78427b",
+      "sha256LfNormalizedText": "81e9c93dd0a5ea20eed1a9672e4cbf6fa3d641e9b418c0829b2f69a55a78427b"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/before-busy-lifecycle-lint/run.log",
+      "sha256WorktreeBytes": "333369819ec584018b50fe6f7a43dc2d88c3d1b539ac9adb24d3371f59416e07",
+      "sha256LfNormalizedText": "c91e1e9ae2f4766648f746765f5490c511d14838d9317a5ba20abcef81ab86d7"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/browser-validation.md",
+      "sha256WorktreeBytes": "7aa689484df23dbc7a918ace7cd26b30cf40e5276d9db52c0429bbf11367b11e",
+      "sha256LfNormalizedText": "7aa689484df23dbc7a918ace7cd26b30cf40e5276d9db52c0429bbf11367b11e"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/eslint.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/evidence-reuse.json",
+      "sha256WorktreeBytes": "5a1e63e11b3d7b8a5054d38d9941b109ccfaca16dcccbe5d4c0510485aa530a0",
+      "sha256LfNormalizedText": "5a1e63e11b3d7b8a5054d38d9941b109ccfaca16dcccbe5d4c0510485aa530a0"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/lint-product-initial.transport.json",
+      "sha256WorktreeBytes": "8bfd6f16f1ccbfda766a44d510aa88fbe68ff59fab821d8c2cc7d43361e66805",
+      "sha256LfNormalizedText": "8bfd6f16f1ccbfda766a44d510aa88fbe68ff59fab821d8c2cc7d43361e66805"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/lint-product.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/preliminary-eight/baseline-results.json",
+      "sha256WorktreeBytes": "22eefcba7dc55dba6e33806a8159aabd1eceb0db7a5ebb08b839d92aa51f9c37",
+      "sha256LfNormalizedText": "22eefcba7dc55dba6e33806a8159aabd1eceb0db7a5ebb08b839d92aa51f9c37"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/preliminary-eight/baseline-run.log",
+      "sha256WorktreeBytes": "b001b9707f2f0fd5b50008cb9772ed347a300d78ee0550029980c6c9dd870eb7",
+      "sha256LfNormalizedText": "68ef03d00af0c7493c265a5c148585c7fbfc2e646983d318f2bf2df5367e220b"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/preliminary-ten/baseline-results.json",
+      "sha256WorktreeBytes": "2dcc06f1135ee58188b57b5703b35a1d93edc5a00c115049f4030a0007169d56",
+      "sha256LfNormalizedText": "2dcc06f1135ee58188b57b5703b35a1d93edc5a00c115049f4030a0007169d56"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/preliminary-ten/baseline-run.log",
+      "sha256WorktreeBytes": "9654926fec56c647e6561fb0de7971f0ea4ce3f1c1151788a84b6d24e35282bb",
+      "sha256LfNormalizedText": "f2103adcadc82ab3b7b5f86cb1c9b794f15e834ebace2efbe136ede73e8a8887"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/results.json",
+      "sha256WorktreeBytes": "2348f81ea959c71845389a7bbee6e26c9fafc95d5c8431acfc5368bdb0559ac8",
+      "sha256LfNormalizedText": "2348f81ea959c71845389a7bbee6e26c9fafc95d5c8431acfc5368bdb0559ac8"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/run.log",
+      "sha256WorktreeBytes": "333369819ec584018b50fe6f7a43dc2d88c3d1b539ac9adb24d3371f59416e07",
+      "sha256LfNormalizedText": "c91e1e9ae2f4766648f746765f5490c511d14838d9317a5ba20abcef81ab86d7"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/smoke/baseline-results.json",
+      "sha256WorktreeBytes": "2b82b5371014a9bc397a2c0a635a9eb3806ff5a68fc2eac8d91f43b88b6dd8aa",
+      "sha256LfNormalizedText": "2b82b5371014a9bc397a2c0a635a9eb3806ff5a68fc2eac8d91f43b88b6dd8aa"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/smoke/baseline-run.log",
+      "sha256WorktreeBytes": "2cac1f0f8e3e297c2145b2b5528fe21bef8dfcb0baedf799a2629223c9d110c1",
+      "sha256LfNormalizedText": "ab02c64e9f07e7e62817bfda919f1a521af802f145a48adcd701edfbd6235e46"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/smoke/unqualified-notes-selector-results.json",
+      "sha256WorktreeBytes": "c52f7736c57d89909218c572483f10c893bae2e3db42338528bb8067d1df8671",
+      "sha256LfNormalizedText": "c52f7736c57d89909218c572483f10c893bae2e3db42338528bb8067d1df8671"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/smoke/unqualified-notes-selector-run.log",
+      "sha256WorktreeBytes": "8b8dac72ff02d103a3d999124b2782601638e56a9ed8155026a70618c3150bdb",
+      "sha256LfNormalizedText": "3ccfccc962333194080b844c753de99e90323ef41a9b5c730e5dda5fb33bbec8"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/smoke/unqualified-selector-results.json",
+      "sha256WorktreeBytes": "7a207f6ac4f421a19096c1cd669e4064a9c9ff24f7698c66e8c954a1c9c730a6",
+      "sha256LfNormalizedText": "7a207f6ac4f421a19096c1cd669e4064a9c9ff24f7698c66e8c954a1c9c730a6"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/smoke/unqualified-selector-run.log",
+      "sha256WorktreeBytes": "46f52f7de3a8696d7ea0d2f09e0bfd5b3f93abd0e98b54fd13610782f1d0803c",
+      "sha256LfNormalizedText": "c8ff1c3c7618644eb1733b502b5df1484479e1e770841094a087073957037703"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/transport-tests.txt",
+      "sha256WorktreeBytes": "4f56a56cad5a58c6b7bc464c1d5a3a970d3549fd081caf23578e5759c4a076c7",
+      "sha256LfNormalizedText": "4f56a56cad5a58c6b7bc464c1d5a3a970d3549fd081caf23578e5759c4a076c7"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/typecheck.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-project-save-20261105/validation.md",
+      "sha256WorktreeBytes": "943161dd3d3bb3168dced89c4b3bff7c5318b2b7615611b4cd346c9b3ebe3717",
+      "sha256LfNormalizedText": "943161dd3d3bb3168dced89c4b3bff7c5318b2b7615611b4cd346c9b3ebe3717"
+    }
+  ],
+  "limits": [
+    "UI retirement does not cancel/undo already committed server project",
+    "Unknown client transport is RAM/tab-local; no new durable reload/multi-tab recovery claim",
+    "Synthetic HTTP/roles/CSRF-token/server inventory; no actual cookie/API/DB/provider or complete field acceptance",
+    "No broad previous-suite reruns or summed overall CRM acceptance"
+  ],
+  "effects": {
+    "liveActions": 0,
+    "externalCalls": 0,
+    "databaseMigrations": 0,
+    "costs": 0,
+    "pushes": 0,
+    "onlinePRs": 0,
+    "ciRuns": 0,
+    "deployments": 0,
+    "integrationMerges": 0
+  }
+}

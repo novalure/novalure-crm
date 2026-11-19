@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "classification": "VERIFIED_LOCAL_SYNTHETIC_REACHABILITY_NOT_LIVE_ACCEPTANCE",
+  "baseRevision": "954763a6d6c0a6df94eb8c8e564304a879a9560a",
+  "branch": "codex/property-reachability-20261105",
+  "sourceInputs": [
+    {
+      "path": "src/lib/property-expose.ts",
+      "sha256WorkingTreeBytes": "633c7caab1bb994c17f9164cac2ccaf108b125592992997e6282e3f0c2d4460e",
+      "bytes": 3078
+    },
+    {
+      "path": "src/lib/property-expose-pdf.ts",
+      "sha256WorkingTreeBytes": "0d6fe855ac02a61066380beb3a9c9a5b1499b597317bee28373b455859190eec",
+      "bytes": 26936
+    },
+    {
+      "path": "src/lib/property-expose-service.ts",
+      "sha256WorkingTreeBytes": "d552f0c3ba42b21df8f2bf2e99b85bea3cec901bffa933a91c1863c7d8095247",
+      "bytes": 27229
+    },
+    {
+      "path": "src/lib/db/property-expose-repositories.ts",
+      "sha256WorkingTreeBytes": "573941fe94e9a6c6be625c7fa92ec637016d7db9c905c4329d36668d1aabcf12",
+      "bytes": 18880
+    },
+    {
+      "path": "scripts/lib/property-reachability-local-db.mjs",
+      "sha256WorkingTreeBytes": "96caecb249a83b2205c718a12677c684f60417a76da6e3aa677341f07f7e65c1",
+      "bytes": 12100
+    },
+    {
+      "path": "scripts/lib/property-reachability-http-network-guard.mjs",
+      "sha256WorkingTreeBytes": "ac83522589b2c078caf7a6fe5603f18cc8278b1b39c449244ee81e1e280bdc2f",
+      "bytes": 1859
+    },
+    {
+      "path": "scripts/lib/property-reachability-next-http.mjs",
+      "sha256WorkingTreeBytes": "6c0c5462126c436d2239644aa2a4525fc7ce76b39d4b8c742632385e8a99b662",
+      "bytes": 6766
+    },
+    {
+      "path": "scripts/lib/property-reachability-next-server.mjs",
+      "sha256WorkingTreeBytes": "9300562289067570b176d6352d40fed26a66ecacfe3c8019a6ddd79a9d94cc4a",
+      "bytes": 2032
+    },
+    {
+      "path": "scripts/property-reachability-price-tests.ts",
+      "sha256WorkingTreeBytes": "fa29c13e4774f650c759b92e0d80db4ed297b2a2d08b34526f88e04de49dd8e5",
+      "bytes": 17127
+    },
+    {
+      "path": "scripts/property-reachability-output-tests.ts",
+      "sha256WorkingTreeBytes": "2f69e51bcd2f1fdc7e645214f09ca44cb3f8967de7d98019f9b0dab6a4c83c7a",
+      "bytes": 22349
+    },
+    {
+      "path": "scripts/property-reachability-http-probe.ts",
+      "sha256WorkingTreeBytes": "10e090022552925dc261bf0d801b0cf12b6154fd448bee64ccfe4e59ec078249",
+      "bytes": 8709
+    },
+    {
+      "path": "package-lock.json",
+      "sha256WorkingTreeBytes": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea",
+      "bytes": 340718
+    }
+  ],
+  "price": {
+    "before": {
+      "evidence": "ACTUAL_LOCAL_LOOPBACK_POSTGRES_ONLY_NOT_PRODUCTION",
+      "caseId": "ES-RENT-01",
+      "fixtureSource": {
+        "kind": "EXACT_FROZEN_FICTIONAL_ES_RENT_PAYLOAD",
+        "fixtureId": "ES-RENT-01",
+        "sourceRevision": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+        "sha256": "bfca527ea2e23c70be6cd59a009e80c6e2cfdab1ad3199d8bbdae494dd8fd08a"
+      },
+      "requestTransport": "Native Request passed to the actual POST route handler with loopback SQL transport; no HTTP socket server",
+      "postStatus": 200,
+      "nativeSessionRead": true,
+      "csrfValidated": true,
+      "replayedSameProperty": true,
+      "receiptCount": 1,
+      "saved": {
+        "id": "bb14d4a1-b98d-4205-82d8-ad3bb6ff84d4",
+        "unitId": "137dd079-6458-4c21-8d42-c0c44f86bcb5",
+        "targetPriceCents": "31500000",
+        "publicPriceCents": "31500000",
+        "rentPriceCents": "174321",
+        "rentNetCents": "139457",
+        "coreNumericState": {
+          "price": "known",
+          "areaSqm": "known",
+          "version": 1,
+          "rentPrice": "known",
+          "publicPrice": "known"
+        }
+      },
+      "responseAmounts": {
+        "targetPrice": 315000,
+        "publicPrice": 315000,
+        "rentPrice": 1743.21
+      },
+      "webPrice": "1743,21 €",
+      "separatePrice": "Alquiler: 315.000,00 € / mes"
+    },
+    "after": {
+      "evidence": "ACTUAL_LOCAL_LOOPBACK_POSTGRES_ONLY_NOT_PRODUCTION",
+      "caseId": "ES-RENT-01",
+      "fixtureSource": {
+        "kind": "EXACT_FROZEN_FICTIONAL_ES_RENT_PAYLOAD",
+        "fixtureId": "ES-RENT-01",
+        "sourceRevision": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+        "sha256": "bfca527ea2e23c70be6cd59a009e80c6e2cfdab1ad3199d8bbdae494dd8fd08a"
+      },
+      "requestTransport": "Native Request passed to the actual POST route handler with loopback SQL transport; no HTTP socket server",
+      "postStatus": 200,
+      "nativeSessionRead": true,
+      "csrfValidated": true,
+      "replayedSameProperty": true,
+      "receiptCount": 1,
+      "saved": {
+        "id": "2b805612-82b3-45ed-8820-d79e78c4c07a",
+        "unitId": "ea417b1b-873d-47c8-a389-f438c2aaf55d",
+        "targetPriceCents": "31500000",
+        "publicPriceCents": "31500000",
+        "rentPriceCents": "174321",
+        "rentNetCents": "139457",
+        "coreNumericState": {
+          "price": "known",
+          "areaSqm": "known",
+          "version": 1,
+          "rentPrice": "known",
+          "publicPrice": "known"
+        }
+      },
+      "responseAmounts": {
+        "targetPrice": 315000,
+        "publicPrice": 315000,
+        "rentPrice": 1743.21
+      },
+      "webPrice": "1743,21 €",
+      "separatePrice": "Alquiler: 1743,21 € / mes"
+    },
+    "historicalCanonicalAliasSuspicion": "REMAINS_WITHDRAWN_DIFFERENT_CONFIRMED_SELECTOR_PATH"
+  },
+  "checks": {
+    "price": {
+      "nodeTestsIncludingParent": 8,
+      "semanticSubtests": 7,
+      "passed": 8,
+      "failed": 0
+    },
+    "output": {
+      "nodeTestsIncludingParent": 10,
+      "semanticSubtests": 9,
+      "passed": 10,
+      "failed": 0
+    },
+    "existingRegression": {
+      "executed": 19,
+      "passed": 19,
+      "failed": 0,
+      "explicitlyExcluded": [
+        "native and separate OpenImmo details validate against official 1.2.7d XSD (unchanged, out of this change scope)"
+      ]
+    },
+    "typecheckExit": 0,
+    "targetedLintExit": 0,
+    "localHttp": {
+      "schemaVersion": 1,
+      "scope": "ACTUAL_NEXT_LOCAL_HTTP_AND_REAL_PG_SYNTHETIC_ONLY_NOT_BROWSER_OR_PRODUCTION",
+      "startedAt": "2026-11-04T23:53:33.548Z",
+      "method": "NEXT_DOCUMENTED_CUSTOM_SERVER",
+      "remoteCalls": 0,
+      "localFixturePublicationOnly": true,
+      "actualBrowserRun": false,
+      "ok": true,
+      "httpRunDirectory": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-http-PoMMd7",
+      "authDeniedStatus": 401,
+      "csrfDeniedStatus": 403,
+      "createStatus": 200,
+      "savedRentCents": "174321",
+      "savedLocale": "en-IE",
+      "fullReadStatus": 200,
+      "previewStatus": 200,
+      "localPublishStatus": 200,
+      "anonymousLocalHtmlStatus": 200,
+      "previewPrice": "€1,743.21",
+      "previewLocale": "en-IE",
+      "anonymousLocalPdfStatus": 200,
+      "htmlBytes": 24642,
+      "pdfBytes": 21661,
+      "publicHtmlFile": "local-public-page.html",
+      "publicPdfFile": "local-public-expose.pdf",
+      "credentialsOrPublicTokenIncludedInReceipt": false,
+      "httpCleanup": {
+        "ok": true,
+        "runDirectory": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-http-PoMMd7",
+        "blockedNetworkAttempts": 2
+      },
+      "dbCleanup": {
+        "method": "OWN_INSTANCE_NATIVE_PG_CTL_FAST_STOP_WITH_FRESH_SQL_IDENTITY",
+        "stopIdentity": {
+          "directory": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-pg-Gvlqtf",
+          "host": "127.0.0.1",
+          "port": 53849,
+          "startedMs": 1793836413151,
+          "started": "2026-11-04T23:53:33.151Z",
+          "postmasterIdentity": 46780,
+          "version": "PostgreSQL 18.4 on x86_64-windows, compiled by msvc-19.44.35226, 64-bit"
+        },
+        "nativeControl": {
+          "exitCode": 0,
+          "signal": null,
+          "logfile": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-pg-Gvlqtf\\native-stop.log",
+          "logBytesAtExit": 58,
+          "stdio": "OWN_REGULAR_FILE_NO_PIPE",
+          "nativeControlChildHandleRetained": true,
+          "serverLifetimeHandleClaimed": false
+        },
+        "listenerClosed": true,
+        "errors": [],
+        "ok": true,
+        "dataDirectoryRemoved": false,
+        "retainedForEvidence": true,
+        "foreignProcessAction": false,
+        "genericPidGroupOrTreeKill": false
+      },
+      "finishedAt": "2026-11-04T23:53:56.518Z"
+    }
+  },
+  "htmlSummary": {
+    "transport": "REAL_LOCAL_HTTP_200",
+    "browserRun": false,
+    "htmlLanguage": "en",
+    "titlePresent": true,
+    "privateAddressAbsent": true,
+    "bodyExaminedAsSource": true,
+    "exposeMainLanguage": "es"
+  },
+  "pdfOutputs": [
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/baseline-ES-RENT-01.web.pdf",
+      "sha256": "2399bb1dfa2d515124bb8395fde863ca55cc8e9fc2a1dd5ffc981cf3fecfd2c0",
+      "pages": 2,
+      "role": "BASELINE_EXPECTED_WRONG_PRICE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\2399bb1dfa2d\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/baseline-ES-RENT-01.separate.pdf",
+      "sha256": "a1e6820b927083fa7e0b5771a9c1e74234d6fbc85df01681a20be0615df9d493",
+      "pages": 3,
+      "role": "BASELINE_EXPECTED_WRONG_PRICE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\a1e6820b9270\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/fixed-ES-RENT-01.web.pdf",
+      "sha256": "67a38095cfa339c07ecc7ddc53ed8d43c6ff7961a08e84b9c2371e1dd1150585",
+      "pages": 2,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\67a38095cfa3\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/fixed-ES-RENT-01.separate.pdf",
+      "sha256": "1467130bb5ff23651867069f762d55c8625ed0162d38419ffb0c9eec924b76cd",
+      "pages": 3,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\1467130bb5ff\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/NOTLIVEOUTPUT-locale-de.pdf",
+      "sha256": "b050c541bbb89f195cdceb4f9a3fa5560eddc8ddf8e5bf47b5f4918ecf8b560e",
+      "pages": 2,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\b050c541bbb8\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/NOTLIVEOUTPUT-locale-en.pdf",
+      "sha256": "188f95602b788a9475b53720f68d3d2898206bbc4a62e3eee9a04c99d685ecdb",
+      "pages": 2,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\188f95602b78\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/NOTLIVEOUTPUT-locale-es.pdf",
+      "sha256": "a7526deef3a89a7f5ca58956e8fa11c1ffa725df6c5db6b7287cab0524b5b531",
+      "pages": 2,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\a7526deef3a8\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/NOTLIVEOUTPUT-locale-legacy.pdf",
+      "sha256": "184b38c48918c3c7dfba641de6d9c252d89fab31998453842d99c12bb6034c0d",
+      "pages": 1,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\184b38c48918\\contact.png"
+    },
+    {
+      "path": ".npm-cache/qa/property-reachability-final/output/pdf/local-public-expose.pdf",
+      "sha256": "5551e0c697ea3fdfe3a5168cb80f8ea18501d7e64e0dec59ee9c12cac0605a9e",
+      "pages": 2,
+      "role": "FIXED_LOCAL_REFERENCE",
+      "inspection": "ROOT_OPENED_ALL_RENDERED_PAGES_IN_CONTACT_SHEETS",
+      "contact": "C:\\Projects\\novalure-crm-property-reachability-20261105\\.npm-cache\\qa\\property-reachability-visual\\5551e0c697ea\\contact.png"
+    }
+  ],
+  "evidenceTransport": {
+    "path": "docs/testing/evidence/property-reachability-20261105/evidence-transports.json",
+    "sha256": "4a13ef0f266fde4b58cb8e967f0f59e4ad1bdc857ba8c460e30468b97df3cf35",
+    "artifacts": 46
+  },
+  "qualifications": [
+    "18 new Node tests include two parent wrappers; 16 new semantic subtests. The 19 existing tests are additional; no full CI or production suite is claimed.",
+    "The original BASE954 zero-amount substring assertion was too weak; original raw test is preserved, saved amount proves the discrepancy, and final test compares the complete amount token.",
+    "BASE output five failing subtests include three reachable locale cases, the format-only source fingerprint case and a synthetic renderer-boundary guard; this is not five independent production defects.",
+    "Price closure sourceDiffStatus advisory string lists three files; its four production hashes and this actual four-file source inventory are authoritative.",
+    "Historical version availability is metadata-only synthetic fixture evidence. No historical upload, original stored-byte download or automatic replacement/activation was proved.",
+    "Intentional authored monetary prose is an observation separate from automatic private-column leakage. No generic DLP contract or unrestricted media-caption acceptance is asserted.",
+    "HTTP guard recorded two denied network events. remoteCalls:0 in the original probe is not a packet-level measurement or a claim of zero attempted connections.",
+    "HTTP result is raw HTML/JSON and actual PDF bytes, no interactive browser acceptance. PDF contact sheets were visually opened; additional existing regression PDFs were machine-checked only.",
+    "Feature tests use unchanged applySalesSchema with historical migration/vector exclusions; this is not a full production upgrade rehearsal.",
+    "Exact-commit independent review is recorded separately after this evidence commit; it is not Trusted-App attestation.",
+    "No remote publication, customer data, paid provider calls, CI trigger, push, online PR, merge or deployment was performed."
+  ],
+  "secretScanClassification": {
+    "initialCandidate": "bb88619b7263c41ae0501c48835d03d99292b459",
+    "initialScannerExit": 1,
+    "findings": 19,
+    "decodedInventoryScannerExit": 1,
+    "hostClassifiedAsExactReproducedSourceSha256": 19,
+    "unclassified": 0,
+    "transportResolution": "Typed ordered path/SHA256 entries, every checksum plaintext and auditable, exact original bytes reconstructed; detector unchanged and no allowlist added",
+    "finalScan": "SEPARATE_EXACT_SUCCESSOR_COMMIT_REPORT_REQUIRED",
+    "typedManifestScannerExit": 0,
+    "uniqueManifestPaths": 827
+  }
+}

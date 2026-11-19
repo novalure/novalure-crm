@@ -3,14 +3,16 @@ import type { BookingTravelSettings } from "./setup-types";
 export type BookingKind = "phone" | "teams" | "meet" | "office" | "onsite";
 export type BookingProviderName = "microsoft" | "google";
 export type BusyInterval = { startsAt: string; endsAt: string; eventId?: string; calendarId?: string; location?: string | null };
-export type ProviderEvent = { eventId: string; etag: string | null; startsAt: string; endsAt: string; onlineMeetingUrl: string | null; videoStatus: "ready" | "pending" | "unavailable" | "none"; cancelled: boolean };
-export type ProviderWrite = { operationId: string; bookingId: string; title: string; startsAt: string; endsAt: string; timeZone: string; kind: BookingKind; location: string };
+export type BookingInvitation = { email: string; name: string };
+export type ProviderEventContent = { title: string; location: string; attendees: BookingInvitation[]; timeZone: string; operationId: string | null };
+export type ProviderEvent = { eventId: string; etag: string | null; startsAt: string; endsAt: string; onlineMeetingUrl: string | null; videoStatus: "ready" | "pending" | "unavailable" | "none"; cancelled: boolean; content?: ProviderEventContent };
+export type ProviderWrite = { operationId: string; bookingId: string; title: string; startsAt: string; endsAt: string; timeZone: string; kind: BookingKind; location: string; invitation?: BookingInvitation; standaloneAttendees?: BookingInvitation[] };
 export interface BookingProvider {
   listBusy(input: { startsAt: string; endsAt: string; excludeEventId?: string; includeLocations?: boolean }): Promise<BusyInterval[]>;
   create(input: ProviderWrite): Promise<ProviderEvent>;
   lookup(input: { operationId: string; bookingId: string; eventId?: string }): Promise<ProviderEvent | null>;
   update(input: ProviderWrite & { eventId: string; etag: string | null }): Promise<ProviderEvent>;
-  delete(input: { bookingId: string; operationId: string; eventId: string; etag: string | null }): Promise<void>;
+  delete(input: { bookingId: string; operationId: string; eventId: string; etag: string | null; invitation?: BookingInvitation; standaloneAttendees?: BookingInvitation[] }): Promise<void>;
 }
 export type BookingProviderFactory = (scope: TenantScope, provider: BookingProviderName) => Promise<BookingProvider>;
 export type BookingRules = {

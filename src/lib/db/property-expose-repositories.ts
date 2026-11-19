@@ -4,6 +4,8 @@ import { queryOne } from "@/lib/db/client";
 import { queryPropertyMediaMutation } from "@/lib/db/property-media-mutation";
 import { hasProductCapability } from "@/lib/product-model";
 import type { PropertyExposeOptions, PropertyExposeSource } from "@/lib/property-expose";
+import { publicPropertyEnergySql } from "@/lib/property-expose-public-content";
+import { publicPropertyDetailPayloadSql, publicUnitDetailsSql, publicPropertyCostKeys } from "@/lib/property-expose-details";
 
 export class PropertyExposeError extends Error {
   constructor(public readonly code: string, public readonly status: number, message: string) { super(message); }
@@ -19,6 +21,7 @@ export type ExposeStoredVersion = {
   id: string; assetId: string; source: PropertyExposeSource; fileName: string; createdAt: string;
   sizeBytes: number; pageCount: number; versionLabel: string; sourceFingerprint: string; sha256: string;
   options?: PropertyExposeOptions;
+  privateOptions?: PropertyExposeOptions;
   sourceMediaHashes?: Record<string, string>;
 };
 export type ExposeRegistry = { schemaVersion: 1; revision: string; preferredSource: PropertyExposeSource;
@@ -26,7 +29,8 @@ export type ExposeRegistry = { schemaVersion: 1; revision: string; preferredSour
 export type ExposeSource = { listing: Record<string, unknown>; media: Record<string, unknown>[];
   texts: Record<string, unknown>[]; costs: Record<string, unknown>[]; company: Record<string, unknown> | null };
 export type ExposeSnapshot = { propertyId: string; workspaceId: string; projectId: string | null;
-  source: ExposeSource; registryRaw: unknown; registry: ExposeRegistry; sourceFingerprint: string };
+  source: ExposeSource; registryRaw: unknown; registry: ExposeRegistry; sourceFingerprint: string;
+  unconfirmedPositivePublicationPrice?: boolean };
 export function stableExposeJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableExposeJson).join(",")}]`;
   if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
@@ -55,16 +59,33 @@ export function readExposeRegistry(raw: unknown): ExposeRegistry {
 // One statement produces a consistent, explicitly allowlisted saved-data snapshot.
 // No owner/lead fields, internal notes, market valuation, URLs or export registry.
 export const exposeSourceSql = `jsonb_build_object(
-  'listing', jsonb_build_object('id',p.id,'projectId',p.project_id,'title',p.title,'address',p.address,
+  'listing', jsonb_build_object('id',p.id,'projectId',p.project_id,'title',p.title,'address',p.address,'street',p.street,
     'city',p.city,'postalCode',p.postal_code,'region',p.region,'objectType',p.object_type,'areaSqm',p.area_sqm,
     'rooms',p.rooms,'yearBuilt',p.year_built,'objectNumber',p.object_number,'marketingType',p.marketing_type,
     'targetPriceCents',p.target_price_cents,'publicPriceCents',p.public_price_cents,'priceVisibility',p.price_visibility,
+    'developer',coalesce((select pr.developer_organization_id is not null or pr.customer_type='property_developer' or lower(pr.type) like '%bautr%' or w.customer_type='property_developer'
+      from workspaces w left join projects pr on pr.id=p.project_id and pr.workspace_id=w.id where w.id=p.workspace_id),false),
+    'confirmedCurrentPrice',exists(select 1 from property_units u where u.workspace_id=p.workspace_id and u.project_id=p.project_id and u.id=p.unit_id
+      and u.price_cents=case when p.marketing_type='rent' then p.rent_price_cents else coalesce(p.public_price_cents,p.target_price_cents) end
+      and u.metadata->'priceConfirmation'->>'sourceReference' is not null and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text),
     'channelPriceVisibility',p.channel_price_visibility,'rentPriceCents',p.rent_price_cents,'rentNetCents',p.rent_net_cents,
     'monthlyCostsGrossCents',p.monthly_costs_gross_cents,'purchaseAncillaryCostsCents',p.purchase_ancillary_costs_cents,
     'purchaseAncillaryCalculation',p.canonical_payload->'purchaseAncillaryCalculation',
     'contactName',p.contact_name,'contactEmail',p.contact_email,'contactPhone',p.contact_phone,
     'availableFrom',p.available_from,'availableFromText',p.available_from_text,
-    'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until),
+    'energyClass',p.hwb_class,'energyValidUntil',p.energy_certificate_valid_until,
+    'countryCode',p.canonical_payload->'geography'->>'countryCode',
+    'geography',case when p.canonical_payload ? 'geography' then jsonb_strip_nulls(jsonb_build_object(
+      'version',p.canonical_payload->'geography'->'version','countryCode',p.canonical_payload->'geography'->'countryCode',
+      'region',p.canonical_payload->'geography'->'region','displayLocale',p.canonical_payload->'geography'->'displayLocale',
+      'contentLanguage',p.canonical_payload->'geography'->'contentLanguage','currency',p.canonical_payload->'geography'->'currency',
+      'bookingTimezone',p.canonical_payload->'geography'->'bookingTimezone','source',p.canonical_payload->'geography'->'source')) else null end,
+    'energyCertificate',${publicPropertyEnergySql("p")},'coreNumericState',jsonb_strip_nulls(jsonb_build_object(
+      'version',p.canonical_payload->'coreNumericState'->'version',
+      'areaSqm',p.canonical_payload->'coreNumericState'->'areaSqm','price',p.canonical_payload->'coreNumericState'->'price',
+      'publicPrice',p.canonical_payload->'coreNumericState'->'publicPrice','rentPrice',p.canonical_payload->'coreNumericState'->'rentPrice')),
+    'publicDetails',${publicPropertyDetailPayloadSql("p")},
+    'linkedUnitDetails',(select ${publicUnitDetailsSql("u")} from property_units u where u.id=p.unit_id and u.workspace_id=p.workspace_id and u.project_id=p.project_id)),
   'media',coalesce((select jsonb_agg(m.item order by m.item->>'id') from (
     select jsonb_build_object('id',pm.id,'assetId',ma.id,'kind',case when pm.media_type='floorplan' or pm.category='floorplan' then 'floorplan' else 'image' end,
       'title',pm.title,'isCover',pm.is_cover,'position',pm.position,'updatedAt',pm.updated_at,'mimeType',ma.mime_type,
@@ -90,18 +111,27 @@ export const exposeSourceSql = `jsonb_build_object(
   'texts',coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'key',t.text_key,'content',t.content,'updatedAt',t.updated_at) order by t.position,t.id)
     from property_text_blocks t where t.workspace_id=p.workspace_id and t.property_id=p.id and t.project_id is not distinct from p.project_id
       and t.unit_id is null and t.text_key='expose' and t.visibility in ('public','channel') and t.status in ('draft','needs_review','approved','published')),'[]'::jsonb),
-  'costs',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'label',c.label,'monthlyGrossCents',c.monthly_gross_cents,
+  'costs',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'costKey',c.cost_key,'label',c.label,'exposeVisible',true,'monthlyGrossCents',c.monthly_gross_cents,
     'oneTimeGrossCents',c.one_time_gross_cents,'optional',c.optional,'updatedAt',c.updated_at) order by c.position,c.id)
     from property_cost_items c where c.workspace_id=p.workspace_id and c.property_id=p.id and c.project_id is not distinct from p.project_id
-      and c.unit_id is null and c.expose_visible=true),'[]'::jsonb),
+      and (c.unit_id is null or c.unit_id=p.unit_id) and c.expose_visible=true and c.cost_key in (${publicPropertyCostKeys.map(key => `'${key}'`).join(",")})),'[]'::jsonb),
   'company',crm_property_expose_company_profile(p.workspace_id)
 )`;
 const scopedPropertySql = `p.id=$1::uuid and p.workspace_id=$2::uuid and
   (p.project_id is null or exists(select 1 from projects project where project.id=p.project_id and project.workspace_id=p.workspace_id))`;
 export async function loadPropertyExposeSnapshot(workspaceId: string, propertyId: string): Promise<ExposeSnapshot> {
   if (!exposeUuid(workspaceId) || !exposeUuid(propertyId)) throw new PropertyExposeError("EXPOSE_INVALID_SCOPE", 400, "Invalid property scope.");
-  const row = await queryOne<{ projectId: string | null; source: ExposeSource; registryRaw: unknown }>(
-    `select p.project_id as "projectId",p.canonical_payload->'expose' as "registryRaw",${exposeSourceSql} as source
+  const row = await queryOne<{ projectId: string | null; source: ExposeSource; registryRaw: unknown; unconfirmedPositivePublicationPrice: boolean }>(
+    `select p.project_id as "projectId",p.canonical_payload->'expose' as "registryRaw",${exposeSourceSql} as source,
+      (p.project_id is not null and coalesce(p.public_price_cents,p.target_price_cents,0)>0
+        and (p.price_visibility='publish_price' or exists(select 1
+          from jsonb_each_text(case when jsonb_typeof(p.channel_price_visibility)='object' then p.channel_price_visibility else '{}'::jsonb end)
+          where value='publish_price'))
+        and not exists(select 1 from property_units u where u.workspace_id=p.workspace_id and u.project_id=p.project_id and u.id=p.unit_id
+          and u.price_cents=coalesce(p.public_price_cents,p.target_price_cents,0)
+          and u.metadata->'priceConfirmation'->>'sourceReference' is not null
+          and u.metadata->'priceConfirmation'->>'priceCents'=u.price_cents::text)
+      ) as "unconfirmedPositivePublicationPrice"
       from seller_listings p where ${scopedPropertySql}`, [propertyId, workspaceId]);
   if (!row) throw new PropertyExposeError("EXPOSE_NOT_FOUND", 404, "Property not found in this workspace.");
   return { propertyId, workspaceId, ...row, registry: readExposeRegistry(row.registryRaw), sourceFingerprint: exposeFingerprint(row.source) };

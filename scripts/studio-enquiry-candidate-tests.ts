@@ -13,8 +13,8 @@ function profile(): NodeJS.ProcessEnv {
     NODE_ENV: "test",
     STUDIO_ENQUIRY_CANDIDATE_ENABLED: "1", NOVALURE_QA_PROFILE: "isolated-candidate", CI: "true", GITHUB_ACTIONS: "true",
     GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REPOSITORY: "novalure/novalure-crm",
-    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/codex/evelyn-crm-package4-integration",
-    GITHUB_REF: "refs/heads/codex/evelyn-crm-package4-integration", GITHUB_SHA: "a".repeat(40),
+    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/codex/crm-release-20261106",
+    GITHUB_REF: "refs/heads/codex/crm-release-20261106", GITHUB_SHA: "a".repeat(40),
     GITHUB_RUN_ID: "1234567", GITHUB_RUN_ATTEMPT: "2", NOVALURE_QA_RUN_PREFIX: "GOLIVETEST_1234567_2",
     NOVALURE_APP_ORIGIN: origin, NOVALURE_QA_BASE_URL: origin,
     DATABASE_URL: url, NOVALURE_QA_DATABASE_URL: url, NOVALURE_QA_DATABASE_HOST: qaHost,
@@ -37,6 +37,23 @@ test("only the complete local Actions profile yields public target coordinates",
   assert.equal(studioEnquiryCandidateRequestAllowed(request(), profile()), true);
   const optionalOwner = profile(); delete optionalOwner.NOVALURE_QA_MIGRATION_DATABASE_HOST;
   assert.ok(studioEnquiryCandidateBinding(optionalOwner));
+});
+
+test("only the current release ref and its same-ref native workflow provenance are admitted", () => {
+  const legacyRef = "refs/heads/codex/evelyn-crm-package4-integration";
+  const current = profile();
+  assert.ok(studioEnquiryCandidateBinding(current));
+  for (const [ref, workflowRef] of [
+    [legacyRef, `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${legacyRef}`],
+    [legacyRef, current.GITHUB_WORKFLOW_REF!],
+    [current.GITHUB_REF!, `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${legacyRef}`],
+    ["refs/heads/codex/crm-release-20261106-other", "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/codex/crm-release-20261106-other"],
+    [current.GITHUB_REF!, "novalure/novalure-crm/.github/workflows/other.yml@refs/heads/codex/crm-release-20261106"],
+  ]) {
+    const env = { ...profile(), GITHUB_REF: ref, GITHUB_WORKFLOW_REF: workflowRef };
+    assert.equal(studioEnquiryCandidateBinding(env), null);
+    assert.equal(studioEnquiryCandidateRequestAllowed(request(), env), false);
+  }
 });
 
 test("NextRequest loopback normalization retains the exact original candidate Host", () => {

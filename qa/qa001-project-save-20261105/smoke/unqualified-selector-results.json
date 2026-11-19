@@ -1,0 +1,120 @@
+{
+  "capturedAt": "2026-11-05T00:01:28.344Z",
+  "baselineRevision": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "baseline": true,
+  "sourceRevision": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "requestedRevision": null,
+  "harnessSha256": "8c3f1994aa128876def7f398f0316161cbe063613d7100287cd70862bac547a3",
+  "sourceHashes": {
+    "src/components/crm-workspace.tsx": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+    "src/lib/crm-core-request-guard.ts": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452"
+  },
+  "sourceHashNormalization": "CRLF to LF",
+  "actualCrmWorkspace": true,
+  "actualInlineModalAndForm": true,
+  "actualUiSaveAndClose": true,
+  "freshBrowserContextPerCase": true,
+  "readOnlyStateAndCommitObserver": true,
+  "syntheticHttp": true,
+  "authorizationStubbed": true,
+  "databaseIntegration": false,
+  "liveTest": false,
+  "noProjectPostReplay": true,
+  "totals": {
+    "cases": 1,
+    "passed": 0,
+    "failed": 1
+  },
+  "results": [
+    {
+      "name": "late project success after A-to-B cannot overwrite current dialog/navigation/data",
+      "transition": "A-to-B",
+      "outcome": "success",
+      "positive": false,
+      "status": "FAIL",
+      "error": "locator.selectOption: Timeout 3000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Projekt-Wizard', exact: true }).getByLabel('Pipeline', { exact: true })\u001b[22m\n",
+      "freshContext": true,
+      "checkpoints": {
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        }
+      },
+      "posts": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+▶ Studio offers only Teams/phone while signed legacy management and another tenant's Meet remain authorized
+  ✔ publication and issued session expose exactly Teams then phone without mutating the universal publication (139.2665ms)
+  ✔ one session request reuses presentation, prepares only two kinds, and reads availability once (243.6965ms)
+  ✔ a read failure preserves the granted session and never creates an appointment (153.8457ms)
+  ✔ manipulated type IDs and legacy Meet tokens cannot open a new Studio booking or availability (50.6319ms)
+  ✔ a pre-existing authorized Meet booking retains signed status/cancel and tenant isolation (360.1051ms)
+  ✔ fresh signed Studio proof resumes only the same expired session and preserves booking, limits and current authority (540.6165ms)
+  ✔ prepared presentation cannot bypass a changed publication, wrong scope, expiry or disabled organizer (73.6796ms)
+✔ Studio offers only Teams/phone while signed legacy management and another tenant's Meet remain authorized (14851.9818ms)
+✔ initial date projection honors Dublin workdays, notice, DST and exact explicit dates (254.7903ms)
+✔ portal keeps saved extractive summaries distinct from a message preview (4.3322ms)
+✔ portal preview is bounded and does not promote assistant content to visitor facts (0.4379ms)
+✔ configured minor amounts keep exact currency precision including large values (23.5971ms)
+▶ two synthetic Webchat customers complete setup, shared pause and one confirmed test-payment unlock
+  ✔ controlled accounts cannot run on the production target (1.8844ms)
+  ✔ each account consumes one shared allowance across its own bots and records its own conversations (457.6427ms)
+  ✔ request replay cannot invoke another model, change the question or cross an integration scope (44.7ms)
+  ✔ alpha: deliberate order stays paused until confirmed test payment, then provisions once (604.1586ms)
+  ✔ beta: deliberate order stays paused until confirmed test payment, then provisions once (447.4106ms)
+  ✔ a confirmed payment cannot undo a host suspension (81.8463ms)
+  ✔ cached replay revalidates every exposed source, including an uncited source (174.4396ms)
+  ✔ source withdrawal at the completion transaction blocks answer persistence and leaves the uncertain reservation held (83.3726ms)
+  ✔ portal history pages retain every visitor-visible message and exclude technical system messages (152.2916ms)
+  ✔ fresh membership and database privileges preserve customer boundaries after the full flow (32.7125ms)
+✔ two synthetic Webchat customers complete setup, shared pause and one confirmed test-payment unlock (13165.7476ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33435.7016

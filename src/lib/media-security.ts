@@ -19,6 +19,8 @@ const signatures: Record<string, (bytes: Uint8Array) => boolean> = {
   "image/jpeg": (bytes) => startsWith(bytes, [0xff, 0xd8, 0xff]),
   "image/png": (bytes) => startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
   "image/webp": (bytes) => ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP",
+  "video/mp4": (bytes) => bytes.length >= 16 && ascii(bytes, 4, 8) === "ftyp" && !/(?:avif|avis)/.test(ascii(bytes, 8, Math.min(bytes.length, 40))),
+  "video/webm": (bytes) => startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3]),
 };
 
 function startsWith(bytes: Uint8Array, expected: number[]) {

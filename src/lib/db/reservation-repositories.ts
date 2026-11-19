@@ -88,6 +88,7 @@ type UnitRow = {
   status: string | null;
   buyer_contact_id: string | null;
   deal_id: string | null;
+  seller_listing_id: string | null;
   updated_at: Date | string | null;
 };
 
@@ -266,6 +267,7 @@ function toUnit(row: UnitRow, reservationId?: string | null): PropertyUnit {
     buyerContactId: row.buyer_contact_id ?? undefined,
     dealId: row.deal_id ?? undefined,
     reservationId: reservationId ?? undefined,
+    sellerListingId: row.seller_listing_id ?? undefined,
     updatedAt: toIso(row.updated_at),
   };
 }
@@ -326,6 +328,7 @@ async function loadUnit(session: AppSession, unitId: string) {
         status,
         buyer_contact_id,
         deal_id,
+        metadata ->> 'sellerListingId' as seller_listing_id,
         updated_at
       from property_units
       where id = $1::uuid
@@ -783,6 +786,7 @@ async function writeUnitSync(
           status,
           buyer_contact_id,
           deal_id,
+          metadata ->> 'sellerListingId' as seller_listing_id,
           updated_at
       `,
       [
@@ -824,6 +828,7 @@ async function writeUnitSync(
         status,
         buyer_contact_id,
         deal_id,
+        metadata ->> 'sellerListingId' as seller_listing_id,
         updated_at
     `,
     [

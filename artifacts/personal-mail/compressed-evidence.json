@@ -1,0 +1,27 @@
+[
+  {
+    "path": "artifacts/personal-mail/browser.log.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "2764ac7ec426611d234beda21a2a08caa7b7fa5c8a6d4b7dbba7a589f19090b7"
+  },
+  {
+    "path": "artifacts/personal-mail/typecheck.log.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e"
+  },
+  {
+    "path": "artifacts/personal-mail/lint.log.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "artifacts/personal-mail/build.log.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "a9c76acba3df2b548b59e207a80a4f3ee3f6b346a0739acb4e1f2f5eccf4041e"
+  },
+  {
+    "path": "artifacts/personal-mail/targeted-tests-initial-restart-probe-failure.tap.gz",
+    "compression": "gzip",
+    "uncompressedSha256": "37b0ce86bdf3a0e31fd899e7b6146d1d5a183cd4bd0527481ed02a6b4e2e3be3"
+  }
+]

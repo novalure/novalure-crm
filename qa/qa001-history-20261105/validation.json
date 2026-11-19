@@ -1,0 +1,284 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_QA001_NAVIGATION_CORRECTION_PASS_NOT_LIVE_ACCEPTANCE",
+  "checkedAtUtc": "2026-11-04T23:34:46.463106+00:00",
+  "checkedAtEuropeVienna": "2026-11-05T00:34:46.463106+01:00",
+  "timeZone": "Europe/Vienna",
+  "baseCommit": "94838b983df9cfe61d8367d5f2e1ca316bfb8184",
+  "branch": "codex/qa001-history-scope-20261105",
+  "headAtCapture": "94838b983df9cfe61d8367d5f2e1ca316bfb8184",
+  "commitNote": "Coherent local commit follows capture; source LF hashes bind the checked content. Final commit SHA is handed to central coordinator.",
+  "sourceHashes": [
+    {
+      "path": "scripts/crm-core-refresh-ui-tests.mjs",
+      "sha256WorktreeBytes": "d23d91c4f7ec2f342cab6cf2964adf6657b10367cf7471aabe56290b7ce08f52",
+      "sha256LfNormalizedText": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb"
+    },
+    {
+      "path": "scripts/qa001-history-browser-tests.mjs",
+      "sha256WorktreeBytes": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "sha256LfNormalizedText": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a"
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "sha256WorktreeBytes": "3ac3901c37c7bc9a03c8aa7cfa906d7ccfb94931213fc208afa7b3b32664a4ab",
+      "sha256LfNormalizedText": "07567fb384ef6715619b194564e5115ef9531e41143b9ef6caaf45f41344b4fc"
+    },
+    {
+      "path": "src/lib/crm-core-request-guard.ts",
+      "sha256WorktreeBytes": "d1a5892ad658b02681ed3bbc4f78aa65f7f33d9cf004fa9f9354d5caccc20127",
+      "sha256LfNormalizedText": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97"
+    }
+  ],
+  "checks": [
+    {
+      "command": "CRM_QA_HISTORY_BASELINE=1 node scripts/qa001-history-browser-tests.mjs",
+      "exitCode": 1,
+      "expectedExitCode": 1,
+      "cases": 107,
+      "passed": 92,
+      "failed": 15,
+      "qualification": "Expected failed regression expectations; some stop before final DOM assertion. Not15 independent causes.",
+      "evidence": "baseline-browser-results.json"
+    },
+    {
+      "command": "node scripts/qa001-history-browser-tests.mjs",
+      "exitCode": 0,
+      "cases": 107,
+      "passed": 107,
+      "failed": 0,
+      "evidence": "browser-results.json",
+      "scope": "Actual React Shell/navigation and Chrome history, synthetic HTTP/internal workspaces, unrelated panels/Next primitives replaced"
+    },
+    {
+      "command": "node --import tsx scripts/crm-core-refresh-ui-tests.mjs",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "evidence": "refresh-ui-results.json",
+      "qualification": "Parent/property section isolated from unrelated inline Core-GETs; original assertions retained"
+    },
+    {
+      "command": "node --import tsx --test scripts/crm-scope-persistence-smoke-tests.mjs scripts/studio-navigation-profile-tests.ts scripts/workspace-navigation-tests.ts scripts/admin-navigation-smoke-tests.mjs",
+      "exitCode": 0,
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "contracts.txt"
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "evidence": "typecheck.txt"
+    },
+    {
+      "command": "npx eslint <all4changed/newTS/TSX/MJSfiles> --max-warnings 0",
+      "exitCode": 0,
+      "evidence": "eslint.txt"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "initialLoaderCommitWindow": {
+    "verification": "Bounded source review and inclusion in final-source regression run",
+    "separateDynamicReproduction": false
+  },
+  "evidenceHashes": [
+    {
+      "path": "qa/qa001-history-20261105/baseline-browser-results.json",
+      "sha256WorktreeBytes": "60a9920a5bb22235017ba60f55754d19b293764a9712fe1fbca18445394639b7",
+      "sha256LfNormalizedText": "60a9920a5bb22235017ba60f55754d19b293764a9712fe1fbca18445394639b7"
+    },
+    {
+      "path": "qa/qa001-history-20261105/baseline-browser-run.log",
+      "sha256WorktreeBytes": "ab747c60e9d67130046159b4a50887ec27e464451efccf066b63b294318b1ded",
+      "sha256LfNormalizedText": "ff94c514b9d27bc30a7af707c162b6bebd8007fac4a38aa9a22b0c63c23b2fde"
+    },
+    {
+      "path": "qa/qa001-history-20261105/before-initial-loader-guards/browser-results.json",
+      "sha256WorktreeBytes": "47d65f8bdfcca219996c50b1852fde5baab8b1fd793557299938ebdc2f4d4bb3",
+      "sha256LfNormalizedText": "47d65f8bdfcca219996c50b1852fde5baab8b1fd793557299938ebdc2f4d4bb3"
+    },
+    {
+      "path": "qa/qa001-history-20261105/before-initial-loader-guards/browser-run.log",
+      "sha256WorktreeBytes": "127ee429e26391c6c5c15a15bf69c14e7a9ce3ac5801c9922b26a8b10af24671",
+      "sha256LfNormalizedText": "c8ebf447af393482aa1b23858584589c9fec2fe03e6c5d3e982aea0b29aa1287"
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-results.json",
+      "sha256WorktreeBytes": "600e39bd87466686dc188118cb343de4554226c8baade58ecb7de0609374d4c5",
+      "sha256LfNormalizedText": "600e39bd87466686dc188118cb343de4554226c8baade58ecb7de0609374d4c5"
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-run.log",
+      "sha256WorktreeBytes": "127ee429e26391c6c5c15a15bf69c14e7a9ce3ac5801c9922b26a8b10af24671",
+      "sha256LfNormalizedText": "c8ebf447af393482aa1b23858584589c9fec2fe03e6c5d3e982aea0b29aa1287"
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-validation.md",
+      "sha256WorktreeBytes": "6f430656f7514ebb6190241f22483c68a3df68d3b39d4bfb290401a685e5392e",
+      "sha256LfNormalizedText": "6f430656f7514ebb6190241f22483c68a3df68d3b39d4bfb290401a685e5392e"
+    },
+    {
+      "path": "qa/qa001-history-20261105/contracts.txt",
+      "sha256WorktreeBytes": "4570377de311878e7d7d0f68ef3c9610423c03d246078d73398adf14c55f848e",
+      "sha256LfNormalizedText": "123cc88b9fd414f9d6b244c319f80262d014931c6104034a75e6100d223671af"
+    },
+    {
+      "path": "qa/qa001-history-20261105/eslint.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-history-20261105/lint-product-initial.txt",
+      "sha256WorktreeBytes": "9f7be17c05bfdaa4798fdc73581906df8e66f04b5811d81b92d2613498b41552",
+      "sha256LfNormalizedText": "80a0fd6602b4648fbc15c81917475849b01dc3a11caf69cd3b30418be09e234a"
+    },
+    {
+      "path": "qa/qa001-history-20261105/lint-product.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/diagnosis.md",
+      "sha256WorktreeBytes": "c9db7e12322b299cceb5bf000f8c99a37865f3c0be3692086ec5e56c471749f1",
+      "sha256LfNormalizedText": "c9db7e12322b299cceb5bf000f8c99a37865f3c0be3692086ec5e56c471749f1"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/latest-trace-before-isolation.json",
+      "sha256WorktreeBytes": "d5c6ded66154c4a076d2e5de4c6344d4bbce5e7ca2b27438c056f299fbad010e",
+      "sha256LfNormalizedText": "d5c6ded66154c4a076d2e5de4c6344d4bbce5e7ca2b27438c056f299fbad010e"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/original-harness.mjs.txt",
+      "sha256WorktreeBytes": "18cd1d0c31cbd88b12804993e548284efccd9bce7ffd52224460c0440d265b65",
+      "sha256LfNormalizedText": "7f2c969a9668e22fdca48bf198c1e14edd05e9da86499f9e6efee70df9c71127"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/original-red-results.json",
+      "sha256WorktreeBytes": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2",
+      "sha256LfNormalizedText": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/original-red-run.txt",
+      "sha256WorktreeBytes": "5b23b7a3d6055578e887ab404d76ed7f4e92b49707a23770f3ca7e9e3630dceb",
+      "sha256LfNormalizedText": "2e51af9ddb03561deb2a22f6c963693450c56774060bec43e78a4120800ee7fe"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace-results.json",
+      "sha256WorktreeBytes": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "sha256LfNormalizedText": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace-run-2.txt",
+      "sha256WorktreeBytes": "e5490f9b1a8f179fb0ace86ec61ed1a4ba4faeaed65228890fea1379cb5a8267",
+      "sha256LfNormalizedText": "9b77f554e65d7ed1ae1672db6379cb2353333a16a3902e95b0056e3cee6b47a7"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace-run.txt",
+      "sha256WorktreeBytes": "da8bc7a4afd15441f31e1bc0785e20b3f1c1ce817100c3e3cd2e7183aca8c5d0",
+      "sha256LfNormalizedText": "74cfa4f2e740aeb62555ce72a761d686481bef078dac161b66acbd1215186a18"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace.json",
+      "sha256WorktreeBytes": "205a65a8b69f664aab2846dc3c6fee100f678218559870cf5bfdf029e140c525",
+      "sha256LfNormalizedText": "205a65a8b69f664aab2846dc3c6fee100f678218559870cf5bfdf029e140c525"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-final-attempt-failed.json",
+      "sha256WorktreeBytes": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2",
+      "sha256LfNormalizedText": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-final-attempt-failed.txt",
+      "sha256WorktreeBytes": "5b23b7a3d6055578e887ab404d76ed7f4e92b49707a23770f3ca7e9e3630dceb",
+      "sha256LfNormalizedText": "2e51af9ddb03561deb2a22f6c963693450c56774060bec43e78a4120800ee7fe"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-results.json",
+      "sha256WorktreeBytes": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "sha256LfNormalizedText": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611"
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui.txt",
+      "sha256WorktreeBytes": "da8bc7a4afd15441f31e1bc0785e20b3f1c1ce817100c3e3cd2e7183aca8c5d0",
+      "sha256LfNormalizedText": "74cfa4f2e740aeb62555ce72a761d686481bef078dac161b66acbd1215186a18"
+    },
+    {
+      "path": "qa/qa001-history-20261105/typecheck.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/baseline-browser-results-106.json",
+      "sha256WorktreeBytes": "63b4c5e6264f90200726311bffb284019197c9224300638ebea8bc724da38b3a",
+      "sha256LfNormalizedText": "63b4c5e6264f90200726311bffb284019197c9224300638ebea8bc724da38b3a"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/baseline-browser-run-104.log",
+      "sha256WorktreeBytes": "b55e853f44fb6db3939e2194670bb64ae96eb19b773e5adfce693f4bddf8adee",
+      "sha256LfNormalizedText": "161ffd7412fa879bd61b6f1421bca3fefc66c8be1c287e19d5f7960e8cd020ed"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/baseline-browser-run-106.log",
+      "sha256WorktreeBytes": "65d6e4578586daece86cc8adb426938b42c567baaf3b3c9061f6c04bcd8de9d2",
+      "sha256LfNormalizedText": "aa9d65a1c40643cdad2904ce73331225e2d78b6474ad88d60ca6c82d635307bb"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/browser-results-106.json",
+      "sha256WorktreeBytes": "5816c70abe91e0c3ff7afae4dfe015bc71c4a2619af1cc736af988504d38d2d6",
+      "sha256LfNormalizedText": "5816c70abe91e0c3ff7afae4dfe015bc71c4a2619af1cc736af988504d38d2d6"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/browser-run-104.log",
+      "sha256WorktreeBytes": "975bf66ff0e8ec178f756e033b30954f5926399dfdaeb8b4e76c1ce4c03770bb",
+      "sha256LfNormalizedText": "4ca37abb5e816d0e2d98b7735bb24d77e1472dbfe2ba0120dc867d967b6beecf"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/browser-run-106.log",
+      "sha256WorktreeBytes": "6763b5278eb617614788147840386c3af88b36218d48112f54381c0bebab0fad",
+      "sha256LfNormalizedText": "2daa9d53060201d7993c5ca477d00fcf96f7592ecc1c7ac679c135e1375cc738"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/initial-baseline-incomplete.log",
+      "sha256WorktreeBytes": "33299d43b8caa3f5db58182eccb16eeae23d479f93481109b9d1bf8d66ec8815",
+      "sha256LfNormalizedText": "15efecf88d0caf8ddd3926db6b257f2e1d8df57d62fd8cbfb486176915d42da9"
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/initial-fix-incomplete.log",
+      "sha256WorktreeBytes": "5d74bf3ebb7c4015f8780acd4d57c951dc74613c6d0a6e54817c6497d1337553",
+      "sha256LfNormalizedText": "2eb14e4e43350709c02007363859ac8269b5677642c53b9ffbc32858fa175b9b"
+    },
+    {
+      "path": "qa/qa001-history-20261105/validation.md",
+      "sha256WorktreeBytes": "544d8680b8ddaba49bc59b225d2608429a6c5b47704f221f02a84ab6ba4b179a",
+      "sha256LfNormalizedText": "544d8680b8ddaba49bc59b225d2608429a6c5b47704f221f02a84ab6ba4b179a"
+    }
+  ],
+  "liveEffects": {
+    "liveNavigation": 0,
+    "customerData": 0,
+    "providerActions": 0,
+    "databaseMigrations": 0,
+    "productionWrites": 0,
+    "pushes": 0,
+    "onlinePRs": 0,
+    "ciRuns": 0,
+    "deployments": 0
+  },
+  "separateCalendarCommit": "2bcea9f176e05e9e8070b10b013c7f6243d1ac3f",
+  "calendarWorktreeVerifiedUnchanged": true,
+  "openGates": [
+    "Independent exact-commit review and central integration with calendar strand",
+    "Common release build, mandatory CI/App qualification and deployment",
+    "Actual authorized browser-to-server-to-database navigation and production QA001 retest"
+  ],
+  "limits": [
+    "No API/DB authorization or complete role acceptance inferred from synthetic replies",
+    "No15-independent-bug claim and no claim each failed baseline case reached all downstream assertions",
+    "Historical production evidence and175-case matrix unchanged",
+    "Preflight results and prior pre-initial-loader-guard results retained separately, not substituted for final results"
+  ]
+}

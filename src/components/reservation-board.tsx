@@ -41,6 +41,7 @@ const text = {
     status: {
       requested: "Anfrage (unverbindlich)",
       converted: "Umgewandelt",
+      withdrawn: "Zurückgenommen",
       expired: "Abgelaufen",
       hold: "Hold",
       reserved: "Reserviert",
@@ -79,6 +80,7 @@ const text = {
     status: {
       requested: "Request (non-binding)",
       converted: "Converted",
+      withdrawn: "Withdrawn",
       expired: "Expired",
       hold: "Hold",
       reserved: "Reserved",
@@ -114,6 +116,7 @@ const milestoneLabels = {
 const statusStyles: Record<PropertyReservation["status"], string> = {
   requested: "border-violet-200 bg-violet-50 text-violet-900",
   converted: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  withdrawn: "border-stone-200 bg-stone-50 text-stone-700",
   expired: "border-rose-200 bg-rose-50 text-rose-900",
   hold: "border-amber-200 bg-amber-50 text-amber-900",
   reserved: "border-blue-200 bg-blue-50 text-blue-900",
@@ -133,7 +136,7 @@ function daysUntil(value: string) {
 }
 
 function urgency(reservation: PropertyReservation, days: number | null): keyof typeof urgencyStyles {
-  if (reservation.status === "converted" || reservation.status === "expired") return "closed";
+  if (reservation.status === "converted" || reservation.status === "expired" || reservation.status === "withdrawn") return "closed";
   if (days === null) return "normal";
   if (days < 0) return "overdue";
   if (days <= 3) return "critical";
@@ -166,8 +169,8 @@ export function ReservationBoard({
             unit,
           };
         })
-        .filter(({ reservation, unit }) =>
-          reservation.status === "requested" || reservation.status === "hold" || reservation.status === "reserved" || unit?.status === "reserved",
+        .filter(({ reservation }) =>
+          reservation.status === "requested" || reservation.status === "hold" || reservation.status === "reserved",
         )
         .sort((left, right) => (left.days ?? 9999) - (right.days ?? 9999)),
     [contacts, deals, projects, reservations, units],

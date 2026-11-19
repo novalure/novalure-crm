@@ -1,0 +1,247 @@
+{
+  "base": "11c4384c0c5a360e448f441c822edc1057d9fe17",
+  "syntheticOnly": true,
+  "liveCalls": false,
+  "generated": [
+    {
+      "country": "AT",
+      "language": "de",
+      "kind": "web",
+      "bytes": 23171,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "AT",
+      "language": "de",
+      "kind": "property",
+      "bytes": 21428,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "AT",
+      "language": "en",
+      "kind": "web",
+      "bytes": 22610,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "AT",
+      "language": "en",
+      "kind": "property",
+      "bytes": 20828,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "AT",
+      "language": "es",
+      "kind": "web",
+      "bytes": 22891,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "AT",
+      "language": "es",
+      "kind": "property",
+      "bytes": 21229,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "DE",
+      "language": "de",
+      "kind": "web",
+      "bytes": 24876,
+      "pages": 3,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "DE",
+      "language": "de",
+      "kind": "property",
+      "bytes": 22283,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "DE",
+      "language": "en",
+      "kind": "web",
+      "bytes": 24274,
+      "pages": 3,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "DE",
+      "language": "en",
+      "kind": "property",
+      "bytes": 21515,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "DE",
+      "language": "es",
+      "kind": "web",
+      "bytes": 24585,
+      "pages": 3,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "DE",
+      "language": "es",
+      "kind": "property",
+      "bytes": 22071,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "ES",
+      "language": "de",
+      "kind": "web",
+      "bytes": 23392,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "ES",
+      "language": "de",
+      "kind": "property",
+      "bytes": 21654,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "ES",
+      "language": "en",
+      "kind": "web",
+      "bytes": 22627,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "ES",
+      "language": "en",
+      "kind": "property",
+      "bytes": 20801,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "ES",
+      "language": "es",
+      "kind": "web",
+      "bytes": 22925,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "ES",
+      "language": "es",
+      "kind": "property",
+      "bytes": 21178,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "IE",
+      "language": "de",
+      "kind": "web",
+      "bytes": 25068,
+      "pages": 3,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "IE",
+      "language": "de",
+      "kind": "property",
+      "bytes": 22362,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "IE",
+      "language": "en",
+      "kind": "web",
+      "bytes": 24332,
+      "pages": 3,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "IE",
+      "language": "en",
+      "kind": "property",
+      "bytes": 21563,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "IE",
+      "language": "es",
+      "kind": "web",
+      "bytes": 24688,
+      "pages": 3,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    },
+    {
+      "country": "IE",
+      "language": "es",
+      "kind": "property",
+      "bytes": 22104,
+      "pages": 2,
+      "addressHidden": true,
+      "canonicalEnergyPresent": true,
+      "privateMarkersAbsent": true
+    }
+  ]
+}

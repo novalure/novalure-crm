@@ -133,7 +133,7 @@ test("public cookie banner exposes GDPR choices and privacy link", () => {
   assert.match(landing, /privacyHref=\{privacyHref\}/);
 });
 
-test("public landing uses anonymized CRM proof and real privacy content instead of placeholders", () => {
+test("public landing labels fictional project and Webexposé statistics and retains privacy links", () => {
   const i18n = readText("src/lib/i18n.ts");
   const landing = readText("src/components/public-crm-landing.tsx");
   const landingV2Copy = readText("src/lib/public-crm-landing-v2.ts");
@@ -146,13 +146,17 @@ test("public landing uses anonymized CRM proof and real privacy content instead 
   assert.match(i18n, /Anonymisierter Beispielbefund/);
   assert.match(i18n, /Anonymized example finding/);
   assert.match(i18n, /hello@novalure\.eu/);
-  assert.match(landing, /copy\.preview\.columns\.map/);
-  assert.match(landing, /copy\.privacy\.items\.map/);
+  assert.match(landing, /copy\.project\.steps\.map/);
+  assert.match(landing, /copy\.analytics\.imageCaption/);
+  assert.match(landing, /copy\.analytics\.context/);
   assert.match(landing, /publicLegalLinks\.map/);
-  assert.match(landingV2Copy, /Anonymisierte Beispielansicht · keine echten Kundendaten/);
-  assert.match(landingV2Copy, /Schematische Darstellung – keine echten Kundendaten/);
-  assert.match(landingV2Copy, /Anonymised example view · no real customer data/);
-  assert.match(landingV2Copy, /Schematic illustration – no real customer data/);
+  assert.match(landingV2Copy, /fiktiven Projektdaten/);
+  assert.match(landingV2Copy, /fiktiven Nutzungsdaten/);
+  assert.match(landingV2Copy, /fictional project data/);
+  assert.match(landingV2Copy, /fictional usage data/);
+  assert.match(landingV2Copy, /datos ficticios/);
+  assert.match(landingV2Copy, /datos de uso ficticios/);
+  assert.match(landingV2Copy, /Anfragen sind auch ohne Statistik möglich/);
   assert.doesNotMatch(landing, /href="#"/);
   assert.doesNotMatch(landing, /proofPlaceholders/);
 });

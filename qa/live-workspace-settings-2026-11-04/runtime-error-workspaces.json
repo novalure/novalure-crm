@@ -1,0 +1,21 @@
+{
+  "source": "Vercel get_runtime_logs; production; query /api/workspaces; level error; 30-minute window",
+  "observedAtUtc": "2026-11-04T19:54:46.179Z",
+  "logTimestampUtc": "2026-11-04T19:54:01.515Z",
+  "logTimestampVienna": "2026-11-04T20:54:01.515+01:00",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "deploymentId": "dpl_8GGZ6dFQDg8vuR3YXnbhsKptSkzi",
+  "requestId": "55jxn-1793822039899-71baed008af1",
+  "domain": "www.novalure-crm.app",
+  "method": "PATCH",
+  "path": "/api/workspaces",
+  "region": "fra1",
+  "runtime": "nodejs24.x",
+  "level": "error",
+  "stream": "stderr",
+  "excerpt": "Error [NeonDbError]: new row violates row-level security policy for table \"audit_logs\"",
+  "severity": "ERROR",
+  "sqlState": "42501",
+  "routine": "ExecWithCheckOptions",
+  "scopeNote": "Only the error belonging to this QA settings request is retained. No cookies, tokens, credentials, record contents or unrelated customer logs are included."
+}

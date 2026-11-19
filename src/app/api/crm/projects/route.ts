@@ -1,7 +1,34 @@
 import { withCrmSalesWrite } from "@/lib/crm-sales-http";
 import { NextResponse } from "next/server";
-import type { AppSession } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import { createProjectRecord, updateProjectRecord } from "@/lib/db/crm-write-repositories";
+import { getProjectWizardDetails, getProjectWizardOptions } from "@/lib/db/project-wizard-repository";
+import { crmCommandErrorResponse } from "@/lib/crm-command";
+import type { WorkspaceCustomerType, WorkspaceOperatingModel } from "@/lib/product-model";
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const operation = url.searchParams.get("operation");
+  const auth = await resolveWorkspaceScopedSession(request, operation === "wizard-options"
+    ? { permission: "crm:write", capability: "settings:manage" }
+    : { permission: "crm:read" });
+  if (!auth.ok) return auth.response;
+  try {
+    if (url.searchParams.getAll("operation").length !== 1) return NextResponse.json({ error: "Invalid project operation" }, { status: 400 });
+    const data = operation === "wizard-options"
+      ? await getProjectWizardOptions(auth.session, {
+        customerType: (url.searchParams.get("customerType") ?? undefined) as WorkspaceCustomerType | undefined,
+        operatingModel: (url.searchParams.get("operatingModel") ?? undefined) as WorkspaceOperatingModel | undefined,
+      })
+      : operation === "wizard-details"
+        ? await getProjectWizardDetails(auth.session, url.searchParams.get("projectId") ?? "")
+        : null;
+    if (!data) return NextResponse.json({ error: "Invalid project operation" }, { status: 400 });
+    return NextResponse.json({ data }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
+  } catch (error) {
+    return crmCommandErrorResponse(error);
+  }
+}
 
 async function readJson(request: Request) {
   try {

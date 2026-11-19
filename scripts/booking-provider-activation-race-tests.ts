@@ -53,7 +53,7 @@ test("provider mutation boundary rechecks live activation and server authorizati
       title: "Local boundary fixture", kind: "phone", location: "", startsAt: "2027-01-12T10:00:00.000Z", endsAt: "2027-01-12T10:30:00.000Z", timeZone: "UTC" };
     const body = (provider: BookingProviderName) => ({ id: input.eventId, ...(provider === "google" ? { etag: input.etag, status: "confirmed",
       extendedProperties: { private: { novalureBooking: `${scope.workspaceId}:${input.bookingId}` } } } : { "@odata.etag": input.etag, isCancelled: false,
-      singleValueExtendedProperties: [{ id: "String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name NovalureBooking", value: `${scope.workspaceId}:${input.bookingId}` }] }),
+      attendees: [],singleValueExtendedProperties: [{ id: "String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name NovalureBooking", value: `${scope.workspaceId}:${input.bookingId}` }] }),
       start: { dateTime: input.startsAt, timeZone: "UTC" }, end: { dateTime: input.endsAt, timeZone: "UTC" } });
     const beforeWrite = () => withTenantTransaction(scope, async tx => {
       await tx.query("select pg_advisory_xact_lock_shared(hashtextextended($1,0))", [`booking-workspace:${scope.workspaceId}`]);

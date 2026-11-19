@@ -1,0 +1,32 @@
+PASS late confirmed property A save cannot refresh A into the real parent after B is active
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+ExpectError: expect(received).toBe(expected) // Object.is equality
+
+Expected: "SYNTHETIC latest B"
+Received: "SYNTHETIC default 44444444-4444-4444-8444-444444444444"
+
+Call Log:
+- Timeout 5000ms exceeded while waiting on the predicate
+    at captureRawStack (C:\Projects\novalure-crm-sunday-integration-20261104\node_modules\playwright-core\lib\coreBundle.js:8588:17)
+    at callMatcherAsStep (C:\Projects\novalure-crm-sunday-integration-20261104\node_modules\playwright\lib\matchers\expect.js:13310:57)
+    at Object.toBe (C:\Projects\novalure-crm-sunday-integration-20261104\node_modules\playwright\lib\matchers\expect.js:13302:23)
+    at C:\Projects\novalure-crm-history-scope-fix-20261105\scripts\crm-core-refresh-ui-tests.mjs:129:62
+    at async step (C:\Projects\novalure-crm-history-scope-fix-20261105\scripts\crm-core-refresh-ui-tests.mjs:91:34)
+    at async file:///C:/Projects/novalure-crm-history-scope-fix-20261105/scripts/crm-core-refresh-ui-tests.mjs:123:3 {
+  matcherResult: {
+    pass: false,
+    message: 'expect(received).toBe(expected) // Object.is equality\n' +
+      '\n' +
+      'Expected: "SYNTHETIC latest B"\n' +
+      'Received: "SYNTHETIC default 44444444-4444-4444-8444-444444444444"\n' +
+      '\n' +
+      'Call Log:\n' +
+      '- Timeout 5000ms exceeded while waiting on the predicate',
+    name: 'toBe'
+  }
+}
+
+Node.js v24.18.0

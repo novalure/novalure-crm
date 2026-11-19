@@ -36,3 +36,65 @@ test("G06 offer retry uses original envelope even when UI creates fresh metadata
  const retry=await safeSalesFetch(target,{method:"POST",body:JSON.stringify({...original,idempotencyKey:randomUUID(),correlationId:randomUUID()})},perform);
  assert.equal(retry.status,200);assert.equal(writes,1);assert.equal(lookups,2);
 });
+
+test("project validator keeps an invalid 200 unknown until the original receipt becomes valid without another create",async()=>{
+ const workspaceId=randomUUID(),projectId=randomUUID(),target="/api/crm/projects?workspaceId="+workspaceId;
+ const body={project:{name:"SYNTHETIC validated project",workspaceId}},key=randomUUID(),correlation=randomUUID();
+ const init={method:"POST",headers:{"Idempotency-Key":key,"X-Correlation-Id":correlation},body:JSON.stringify(body)};
+ const invalid={persisted:true,project:{id:projectId,workspaceId:randomUUID(),name:body.project.name,version:1}};
+ const valid={persisted:true,project:{id:projectId,workspaceId,name:body.project.name,version:1}};
+ const calls:{path:string;method:string|undefined;body:unknown;key:string|null;correlation:string|null}[]=[],validated:unknown[]=[];
+ let writes=0,lookups=0;
+ const validate=async(response:Response)=>{
+  const result=await response.json();validated.push(result);
+  return response.ok&&result.persisted===true&&result.project?.workspaceId===workspaceId&&result.project?.id===projectId;
+ };
+ const perform=async(path:string,options:RequestInit)=>{
+  const headers=new Headers(options.headers);
+  calls.push({path,method:options.method,body:JSON.parse(String(options.body)),key:headers.get("Idempotency-Key"),correlation:headers.get("X-Correlation-Id")});
+  if(path===target){writes++;return Response.json(invalid)}
+  lookups++;return Response.json(lookups===1?{status:"NOT_FOUND"}:{status:"COMMITTED",response:{status:200,body:valid}});
+ };
+ await assert.rejects(safeSalesFetch(target,init,perform,validate),/CRM_RESULT_UNKNOWN/);
+ assert.equal(writes,1);assert.equal(lookups,1);
+ const recovered=await safeSalesFetch(target,init,perform,validate);
+ assert.deepEqual(await recovered.json(),valid);assert.equal(writes,1);assert.equal(lookups,2);
+ assert.deepEqual(validated,[invalid,valid]);
+ assert.deepEqual(calls.map(call=>({path:call.path,method:call.method,body:call.body})),[
+  {path:target,method:"POST",body},
+  ...Array.from({length:2},()=>({path:"/api/crm/commands/reconcile?workspaceId="+workspaceId,method:"POST",body:{target,method:"POST",body}})),
+ ]);
+ for(const call of calls){assert.equal(call.key,key);assert.equal(call.correlation,correlation)}
+});
+
+test("project validator rejects an invalid committed receipt and keeps changed intents blocked while lookup remains possible",async()=>{
+ const workspaceId=randomUUID(),projectId=randomUUID(),target="/api/crm/projects?workspaceId="+workspaceId;
+ const body={project:{name:"SYNTHETIC pending validation",workspaceId}},key=randomUUID(),correlation=randomUUID();
+ const init={method:"POST",headers:{"Idempotency-Key":key,"X-Correlation-Id":correlation},body:JSON.stringify(body)};
+ const invalid={persisted:false,project:{id:projectId,workspaceId,name:body.project.name,version:1}};
+ const valid={persisted:true,project:{id:projectId,workspaceId,name:body.project.name,version:1}};
+ let writes=0,lookups=0;const calls:{path:string;body:unknown;key:string|null;correlation:string|null}[]=[],validated:unknown[]=[];
+ const validate=async(response:Response)=>{
+  const result=await response.json();validated.push(result);
+  return response.ok&&result.persisted===true&&result.project?.workspaceId===workspaceId;
+ };
+ const perform=async(path:string,options:RequestInit)=>{
+  const headers=new Headers(options.headers);
+  calls.push({path,body:JSON.parse(String(options.body)),key:headers.get("Idempotency-Key"),correlation:headers.get("X-Correlation-Id")});
+  if(path===target){writes++;throw Error("SYNTHETIC response lost after commit")}
+  lookups++;return Response.json({status:"COMMITTED",response:{status:200,body:lookups<3?invalid:valid}});
+ };
+ await assert.rejects(safeSalesFetch(target,init,perform,validate),/CRM_RESULT_UNKNOWN/);
+ await assert.rejects(safeSalesFetch(target,{...init,body:JSON.stringify({project:{...body.project,name:"SYNTHETIC changed intent"}})},perform,validate),/CRM_RESULT_UNKNOWN/);
+ assert.equal(calls.length,2,"the changed intent must not issue a write or lookup");
+ await assert.rejects(safeSalesFetch(target,init,perform,validate),/CRM_RESULT_UNKNOWN/);
+ assert.equal(writes,1);assert.equal(lookups,2);
+ const recovered=await safeSalesFetch(target,init,perform,validate);
+ assert.deepEqual(await recovered.json(),valid);assert.equal(writes,1);assert.equal(lookups,3);
+ assert.deepEqual(validated,[invalid,invalid,valid]);
+ assert.equal(calls[0].path,target);assert.deepEqual(calls[0].body,body);
+ for(const call of calls){
+  assert.equal(call.key,key);assert.equal(call.correlation,correlation);
+  if(call.path!==target){assert.equal(call.path,"/api/crm/commands/reconcile?workspaceId="+workspaceId);assert.deepEqual(call.body,{target,method:"POST",body})}
+ }
+});

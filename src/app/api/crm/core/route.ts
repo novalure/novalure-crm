@@ -14,6 +14,13 @@ export async function GET(request: Request) {
   return NextResponse.json({
     activeWorkspaceId: auth.session.workspaceId,
     activeWorkspaceName: auth.session.workspaceName,
+    workspaceSetup: {
+      id: auth.session.workspaceId,
+      activeCalendarProvider: auth.session.workspaceActiveCalendarProvider ?? "none",
+      customerType: auth.session.workspaceCustomerType ?? "real_estate_broker",
+      operatingModel: auth.session.workspaceOperatingModel ?? "self_service_customer",
+      teamStructure: auth.session.workspaceTeamStructure ?? "small_team",
+    },
     source: data.source,
     collectionCompleteness: data.collectionCompleteness ?? "LIMITED",
     error: data.error ?? null,

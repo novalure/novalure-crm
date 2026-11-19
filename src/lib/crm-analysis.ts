@@ -482,7 +482,7 @@ export function summarizeInventory(
     blocked: units.filter((unit) => unit.status === "blocked").length,
     expiringReservations: reservations.filter((reservation) => {
       const expiresAt = parseDate(reservation.expiresAt);
-      return expiresAt ? minutesBetween(now, expiresAt) <= 2880 && reservation.status !== "converted" : false;
+      return expiresAt ? minutesBetween(now, expiresAt) <= 2880 && ["requested", "hold", "reserved"].includes(reservation.status) : false;
     }),
     reserved: units.filter((unit) => unit.status === "reserved").length,
     sold: units.filter((unit) => unit.status === "sold").length,

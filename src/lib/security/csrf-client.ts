@@ -14,13 +14,14 @@ function requestUrl(input: RequestInfo | URL) {
   return new URL(String(input), window.location.href);
 }
 
-async function requestCsrfToken(method: string, pathname: string) {
+async function requestCsrfToken(method: string, pathname: string, signal?: AbortSignal | null) {
   const params = new URLSearchParams({ method, path: pathname });
   const response = await fetch(`${csrfEndpoint}?${params.toString()}`, {
     cache: "no-store",
     credentials: "same-origin",
     headers: { Accept: "application/json" },
     method: "GET",
+    signal,
   });
   if (!response.ok) throw new Error("CSRF protection is unavailable");
 
@@ -47,7 +48,8 @@ export async function csrfFetch(input: RequestInfo | URL, init?: RequestInit) {
     throw new Error("Unsafe API requests must remain on the current origin");
   }
 
-  const token = await requestCsrfToken(method, url.pathname);
+  const signal = init?.signal !== undefined ? init.signal : input instanceof Request ? input.signal : undefined;
+  const token = await requestCsrfToken(method, url.pathname, signal);
   const headers = new Headers(input instanceof Request ? input.headers : undefined);
   new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
   headers.set(csrfHeaderName, token);

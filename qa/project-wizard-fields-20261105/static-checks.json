@@ -1,0 +1,19 @@
+{
+  "startedAtUtc": "2026-11-05T00:48:27.9936963Z",
+  "finishedAtUtc": "2026-11-05T00:48:36.4903904Z",
+  "typecheckExit": 0,
+  "eslintExit": 0,
+  "lintFiles": [
+    "scripts/project-wizard-fields-browser-tests.mjs",
+    "scripts/project-wizard-persistence-tests.ts",
+    "src/components/project-wizard-fields.tsx",
+    "src/lib/db/project-wizard-repository.ts",
+    "src/lib/project-wizard.ts",
+    "src/app/api/crm/projects/route.ts",
+    "src/components/crm-workspace.tsx",
+    "src/lib/crm-types.ts",
+    "src/lib/db/crm-write-repositories.ts",
+    "src/lib/db/pipeline-default-repositories.ts"
+  ],
+  "diffCheckExit": 0
+}

@@ -1,0 +1,1058 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-04T23:52:56.039Z",
+  "purpose": "Bounded N1 evidence reuse qualification; no suite execution",
+  "repository": "C:\\Projects\\novalure-crm-history-scope-fix-20261105",
+  "immutableEvidenceRevision": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+  "currentHead": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+  "inspectionOnly": true,
+  "browserRuns": 0,
+  "providerRequests": 0,
+  "networkRequests": 0,
+  "productEdits": 0,
+  "testEdits": 0,
+  "summary": {
+    "sourceFilesInspected": 34,
+    "sourceLfUnchanged": 32,
+    "sourceBytesEqualToGitBlob": 1,
+    "changedSourcePaths": [
+      "src/components/crm-workspace.tsx",
+      "src/lib/crm-core-request-guard.ts"
+    ],
+    "oldEvidenceFilesChecked": 34,
+    "allOldEvidenceMatchesDeclaredBytesAndLf": true,
+    "allDeclaredA942SourceLfHashesMatchGit": true,
+    "externalReviewHashesMatch": true,
+    "currentFixtureNodesMatchA942": true,
+    "immutableNavigationInventoryMatchesBaseAndA942": true
+  },
+  "sourceChecks": [
+    {
+      "path": "scripts/qa001-history-browser-tests.mjs",
+      "gitBlobSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "gitBlobLfSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "currentBytesSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "currentLfSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "byteIdenticalToGitBlob": true,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "capturedA942LfSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "capturedByteMatch": true,
+      "capturedLfMatch": true,
+      "declaredCaptureMatchesGitBlobLf": true
+    },
+    {
+      "path": "scripts/crm-core-refresh-ui-tests.mjs",
+      "gitBlobSha256": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb",
+      "gitBlobLfSha256": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb",
+      "currentBytesSha256": "d23d91c4f7ec2f342cab6cf2964adf6657b10367cf7471aabe56290b7ce08f52",
+      "currentLfSha256": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": "d23d91c4f7ec2f342cab6cf2964adf6657b10367cf7471aabe56290b7ce08f52",
+      "capturedA942LfSha256": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb",
+      "capturedByteMatch": true,
+      "capturedLfMatch": true,
+      "declaredCaptureMatchesGitBlobLf": true
+    },
+    {
+      "path": "scripts/crm-scope-persistence-smoke-tests.mjs",
+      "gitBlobSha256": "07f59c5d3fd9d77ef519546ad75b76d1a95205a143e701500ca48c213fd8d4e6",
+      "gitBlobLfSha256": "07f59c5d3fd9d77ef519546ad75b76d1a95205a143e701500ca48c213fd8d4e6",
+      "currentBytesSha256": "16da6c32f27cae18564af9cad0a41897d86b78fd9e5bc39ef812c26ef6a0e4bf",
+      "currentLfSha256": "07f59c5d3fd9d77ef519546ad75b76d1a95205a143e701500ca48c213fd8d4e6",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "scripts/studio-navigation-profile-tests.ts",
+      "gitBlobSha256": "05f50b720856b52bfa644799f34d85c97c3c552e696a2066507cc766eb927fa1",
+      "gitBlobLfSha256": "05f50b720856b52bfa644799f34d85c97c3c552e696a2066507cc766eb927fa1",
+      "currentBytesSha256": "e9861aed5139551d9a2b770726dbdce6fffba9721a39a7604e204e3d122c1df3",
+      "currentLfSha256": "05f50b720856b52bfa644799f34d85c97c3c552e696a2066507cc766eb927fa1",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "scripts/workspace-navigation-tests.ts",
+      "gitBlobSha256": "6ea9276c2903bf63736e2906ae84513d68ce658f72541a63253b599491b726eb",
+      "gitBlobLfSha256": "6ea9276c2903bf63736e2906ae84513d68ce658f72541a63253b599491b726eb",
+      "currentBytesSha256": "943570901f315a7e04a7c540da6298b0471e8401e512fbb4a4b8e51ab44f7fd8",
+      "currentLfSha256": "6ea9276c2903bf63736e2906ae84513d68ce658f72541a63253b599491b726eb",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "scripts/admin-navigation-smoke-tests.mjs",
+      "gitBlobSha256": "5a8c332d0ed6c5b40f912cc3adc02a626f5774c5efd1a30b95930d96aa99ba58",
+      "gitBlobLfSha256": "5a8c332d0ed6c5b40f912cc3adc02a626f5774c5efd1a30b95930d96aa99ba58",
+      "currentBytesSha256": "36495a868f06a5b45e554c2bbf4652980357a32b8fc27db596a93322ba54323b",
+      "currentLfSha256": "5a8c332d0ed6c5b40f912cc3adc02a626f5774c5efd1a30b95930d96aa99ba58",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/lib/crm-scope.ts",
+      "gitBlobSha256": "141948634f2b046eaf87cdccd4ca4870955db25a0ec2abc0d30120bc55101b8b",
+      "gitBlobLfSha256": "141948634f2b046eaf87cdccd4ca4870955db25a0ec2abc0d30120bc55101b8b",
+      "currentBytesSha256": "94c96a207485247598468e2ab97f407392ba0050345d70a7277fcfbb43e27e00",
+      "currentLfSha256": "141948634f2b046eaf87cdccd4ca4870955db25a0ec2abc0d30120bc55101b8b",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/lib/studio-navigation.ts",
+      "gitBlobSha256": "452d027d5c029b9cb59200faaa648f74af1da9318e7d5c4a3071d36ae1e02d4a",
+      "gitBlobLfSha256": "452d027d5c029b9cb59200faaa648f74af1da9318e7d5c4a3071d36ae1e02d4a",
+      "currentBytesSha256": "a2da0e21537c4eed759c7d7323610150486d8395131d6d4670e5f2e81da2d713",
+      "currentLfSha256": "452d027d5c029b9cb59200faaa648f74af1da9318e7d5c4a3071d36ae1e02d4a",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/lib/workspace-navigation.ts",
+      "gitBlobSha256": "b53c84a7557609bec70145c64439f4bdd953df8bb155b20af01e4bf129e981b4",
+      "gitBlobLfSha256": "b53c84a7557609bec70145c64439f4bdd953df8bb155b20af01e4bf129e981b4",
+      "currentBytesSha256": "4dd97550b081ce43108b1fa1001df68ec4f8ff49a43f5748954e5a7a23dcc067",
+      "currentLfSha256": "b53c84a7557609bec70145c64439f4bdd953df8bb155b20af01e4bf129e981b4",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/workspace-navigation.tsx",
+      "gitBlobSha256": "aaf7e57bdd8cc601592fa1a4117be657abf00c1a7eeded2de5c55d65eeeb2a08",
+      "gitBlobLfSha256": "aaf7e57bdd8cc601592fa1a4117be657abf00c1a7eeded2de5c55d65eeeb2a08",
+      "currentBytesSha256": "c71d73cd08499ec3e36d6b04bf014545137a5eeef17d881c8e5317182b045689",
+      "currentLfSha256": "aaf7e57bdd8cc601592fa1a4117be657abf00c1a7eeded2de5c55d65eeeb2a08",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/workspace-section-tabs.tsx",
+      "gitBlobSha256": "3023f3023cbffb3f09a70c50826c60f61ecc5a3dc2057a7ce4b0d28b8ff1e1f0",
+      "gitBlobLfSha256": "3023f3023cbffb3f09a70c50826c60f61ecc5a3dc2057a7ce4b0d28b8ff1e1f0",
+      "currentBytesSha256": "ced55b1bba504199530b8166cecde6d4ba9f819f980683d33bcac5f6f2bddcb5",
+      "currentLfSha256": "3023f3023cbffb3f09a70c50826c60f61ecc5a3dc2057a7ce4b0d28b8ff1e1f0",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/contact-command-center.tsx",
+      "gitBlobSha256": "3e30335370e79944ae62319cb2b35bc08fbc0378c07f2c84686b77ff7fea9cd2",
+      "gitBlobLfSha256": "3e30335370e79944ae62319cb2b35bc08fbc0378c07f2c84686b77ff7fea9cd2",
+      "currentBytesSha256": "46b87eaa283ee627dbdc5d801cc2a0a9c67dba199d1f59f7fa1e4a44c6444f17",
+      "currentLfSha256": "3e30335370e79944ae62319cb2b35bc08fbc0378c07f2c84686b77ff7fea9cd2",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/lead-inbox.tsx",
+      "gitBlobSha256": "5fdef5498f4ef48af62e92a45f0fdfc4b0d969ff5576cdfd126185b2d6a89c81",
+      "gitBlobLfSha256": "5fdef5498f4ef48af62e92a45f0fdfc4b0d969ff5576cdfd126185b2d6a89c81",
+      "currentBytesSha256": "7d0d591643cdc31c7eb2209e45208c523c9590ec0cb47b4eb6ac28e7c4136431",
+      "currentLfSha256": "5fdef5498f4ef48af62e92a45f0fdfc4b0d969ff5576cdfd126185b2d6a89c81",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/task-command-center.tsx",
+      "gitBlobSha256": "3de88cef9fab4f7e4f7cbc0bc843a1f1c308b6c1999b73bc56e1b233068632e4",
+      "gitBlobLfSha256": "3de88cef9fab4f7e4f7cbc0bc843a1f1c308b6c1999b73bc56e1b233068632e4",
+      "currentBytesSha256": "e1eeef1a6a38cc6b00e54cfd58e82d7a56140c5ad75be73bb213f54833ea1d76",
+      "currentLfSha256": "3de88cef9fab4f7e4f7cbc0bc843a1f1c308b6c1999b73bc56e1b233068632e4",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/calendar-command-center.tsx",
+      "gitBlobSha256": "cfb997208d6ae2c0d62d3a5305cf7d9345ce3f03a6513bfba0949c3917f998b6",
+      "gitBlobLfSha256": "cfb997208d6ae2c0d62d3a5305cf7d9345ce3f03a6513bfba0949c3917f998b6",
+      "currentBytesSha256": "8f8a4afe4ed53cd4ec08b6b004d73c4a8f2449c0c77d49922da907bd7ad000fe",
+      "currentLfSha256": "cfb997208d6ae2c0d62d3a5305cf7d9345ce3f03a6513bfba0949c3917f998b6",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/property-command-center.tsx",
+      "gitBlobSha256": "3b07efc7afa40b99ff1e2428d37e27ee7f42c44605bdfb37fe463a18a53167a4",
+      "gitBlobLfSha256": "3b07efc7afa40b99ff1e2428d37e27ee7f42c44605bdfb37fe463a18a53167a4",
+      "currentBytesSha256": "7b3ead202b7a9848b885099cf4a217ec9988e08b2d68320f809ac024dc072ac5",
+      "currentLfSha256": "3b07efc7afa40b99ff1e2428d37e27ee7f42c44605bdfb37fe463a18a53167a4",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/admin/audit-log-panel.tsx",
+      "gitBlobSha256": "e1ae34cfed6115cc0f508e0de27802e18b85d2cb09cf57743bcebd045b7a6760",
+      "gitBlobLfSha256": "e1ae34cfed6115cc0f508e0de27802e18b85d2cb09cf57743bcebd045b7a6760",
+      "currentBytesSha256": "974cd90044f2d844629d77ee6a2ca7f0bc1db919eb9ec66072dd692bc53926de",
+      "currentLfSha256": "e1ae34cfed6115cc0f508e0de27802e18b85d2cb09cf57743bcebd045b7a6760",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/admin/system-releases-panel.tsx",
+      "gitBlobSha256": "45693e1444eec452d12f915fd891f31c1bd2972e16e120af72e986e53aa0b9c7",
+      "gitBlobLfSha256": "45693e1444eec452d12f915fd891f31c1bd2972e16e120af72e986e53aa0b9c7",
+      "currentBytesSha256": "2b2a9e750e650fb654d74fa3516eb266a7edbc2a29d8ea0f11b86171d72db8eb",
+      "currentLfSha256": "45693e1444eec452d12f915fd891f31c1bd2972e16e120af72e986e53aa0b9c7",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/admin/governance-compliance-panel.tsx",
+      "gitBlobSha256": "feb8715ef6060ee75b8d394d022a94eb0f97002f32c0fe019d6cb3379898fd07",
+      "gitBlobLfSha256": "feb8715ef6060ee75b8d394d022a94eb0f97002f32c0fe019d6cb3379898fd07",
+      "currentBytesSha256": "e342b8c486fa02ed88334c64fbcc757a071615e039ee8fe06d60971e45979d8b",
+      "currentLfSha256": "feb8715ef6060ee75b8d394d022a94eb0f97002f32c0fe019d6cb3379898fd07",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/app/api/admin/audit-logs/route.ts",
+      "gitBlobSha256": "8757075ea74dd1c8e97e37e7d72fe6f9c32bb02ceb69a72f757929de8d01381c",
+      "gitBlobLfSha256": "8757075ea74dd1c8e97e37e7d72fe6f9c32bb02ceb69a72f757929de8d01381c",
+      "currentBytesSha256": "d2a8a8e511d92a51940e39f2c77cca90a1d4ca801217fc049becb9f0e0ee20a7",
+      "currentLfSha256": "8757075ea74dd1c8e97e37e7d72fe6f9c32bb02ceb69a72f757929de8d01381c",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/lib/db/admin-repositories.ts",
+      "gitBlobSha256": "6a50ff8169a5e446e57ec7531405a0cccac2d3f14723db58963fa7a471b384c3",
+      "gitBlobLfSha256": "6a50ff8169a5e446e57ec7531405a0cccac2d3f14723db58963fa7a471b384c3",
+      "currentBytesSha256": "d4d066b8a615f291248cda56a819ac27ff14b10eecc402b16f5d65f13f4f901b",
+      "currentLfSha256": "6a50ff8169a5e446e57ec7531405a0cccac2d3f14723db58963fa7a471b384c3",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "gitBlobSha256": "07567fb384ef6715619b194564e5115ef9531e41143b9ef6caaf45f41344b4fc",
+      "gitBlobLfSha256": "07567fb384ef6715619b194564e5115ef9531e41143b9ef6caaf45f41344b4fc",
+      "currentBytesSha256": "bb825a038c2d483bfadf21dc2b0c6fce6d3e1a3686e44eaceb105203a3b58137",
+      "currentLfSha256": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": false,
+      "capturedA942BytesSha256": "3ac3901c37c7bc9a03c8aa7cfa906d7ccfb94931213fc208afa7b3b32664a4ab",
+      "capturedA942LfSha256": "07567fb384ef6715619b194564e5115ef9531e41143b9ef6caaf45f41344b4fc",
+      "capturedByteMatch": false,
+      "capturedLfMatch": false,
+      "declaredCaptureMatchesGitBlobLf": true
+    },
+    {
+      "path": "src/lib/crm-core-request-guard.ts",
+      "gitBlobSha256": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97",
+      "gitBlobLfSha256": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97",
+      "currentBytesSha256": "902ca1f0846292ebcb51cd75c0a2e7cea587e16fb26018dda10782a3892a15aa",
+      "currentLfSha256": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": false,
+      "capturedA942BytesSha256": "d1a5892ad658b02681ed3bbc4f78aa65f7f33d9cf004fa9f9354d5caccc20127",
+      "capturedA942LfSha256": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97",
+      "capturedByteMatch": false,
+      "capturedLfMatch": false,
+      "declaredCaptureMatchesGitBlobLf": true
+    },
+    {
+      "path": "src/lib/auth/session.ts",
+      "gitBlobSha256": "a4abd9efc35227e1f0d15a688ce83c07a100f31862140df551e578a2aa986257",
+      "gitBlobLfSha256": "a4abd9efc35227e1f0d15a688ce83c07a100f31862140df551e578a2aa986257",
+      "currentBytesSha256": "cc13df5bef093b806a5f27203e74ed727296087bbbbd18bf26a6bb3817684960",
+      "currentLfSha256": "a4abd9efc35227e1f0d15a688ce83c07a100f31862140df551e578a2aa986257",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/app/api/crm/core/route.ts",
+      "gitBlobSha256": "27aa9e110abfa4d4d4ca042e190739fca50f6886077c9a1618be5f33f38bbbd4",
+      "gitBlobLfSha256": "27aa9e110abfa4d4d4ca042e190739fca50f6886077c9a1618be5f33f38bbbd4",
+      "currentBytesSha256": "bdfbb3b5cfe01987e6e8aef0826c013454515f37ca701c2dcfaf416a434fa514",
+      "currentLfSha256": "27aa9e110abfa4d4d4ca042e190739fca50f6886077c9a1618be5f33f38bbbd4",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/app/api/workspaces/route.ts",
+      "gitBlobSha256": "ac25d84abbc0c96b23b6f73315c519f10f8e09560ebe676c0ea4df35b74c6d22",
+      "gitBlobLfSha256": "ac25d84abbc0c96b23b6f73315c519f10f8e09560ebe676c0ea4df35b74c6d22",
+      "currentBytesSha256": "6ede3d1c92abbbf264a27c87d05542fdc2898d587c0cae7434442dfb3252f53d",
+      "currentLfSha256": "ac25d84abbc0c96b23b6f73315c519f10f8e09560ebe676c0ea4df35b74c6d22",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/lib/i18n.ts",
+      "gitBlobSha256": "97a9c5bbb2ba0a8e70a958fa3289ddb736e423b08080804173b4af84ece95dd5",
+      "gitBlobLfSha256": "97a9c5bbb2ba0a8e70a958fa3289ddb736e423b08080804173b4af84ece95dd5",
+      "currentBytesSha256": "b1fb0843caf2d041daaabc39f6b3cf80e9a445c55e57a7b515350b2989bc6e7c",
+      "currentLfSha256": "97a9c5bbb2ba0a8e70a958fa3289ddb736e423b08080804173b4af84ece95dd5",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "package.json",
+      "gitBlobSha256": "086c35a451581a708553404afc062c7d7345d245e49b3f844e5b53997a5532dc",
+      "gitBlobLfSha256": "086c35a451581a708553404afc062c7d7345d245e49b3f844e5b53997a5532dc",
+      "currentBytesSha256": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d",
+      "currentLfSha256": "086c35a451581a708553404afc062c7d7345d245e49b3f844e5b53997a5532dc",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "package-lock.json",
+      "gitBlobSha256": "1a4c01c248a8cc66b9b7973e9ce792b11c4878bd699322b6ad9c05cf7bf4e474",
+      "gitBlobLfSha256": "1a4c01c248a8cc66b9b7973e9ce792b11c4878bd699322b6ad9c05cf7bf4e474",
+      "currentBytesSha256": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea",
+      "currentLfSha256": "1a4c01c248a8cc66b9b7973e9ce792b11c4878bd699322b6ad9c05cf7bf4e474",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "tsconfig.json",
+      "gitBlobSha256": "daa633bed56e48b6375171f3fb8662a44c8aa2dc5dee017e26319f94c366ceda",
+      "gitBlobLfSha256": "daa633bed56e48b6375171f3fb8662a44c8aa2dc5dee017e26319f94c366ceda",
+      "currentBytesSha256": "5d6e973a7bbe212d2ba52622aec5930aca878575d6d79220b383531d50759569",
+      "currentLfSha256": "daa633bed56e48b6375171f3fb8662a44c8aa2dc5dee017e26319f94c366ceda",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "src/components/crm-business-visibility.ts",
+      "gitBlobSha256": "6e8a9992c97fb11493a77e5f296013768f0cf18618282ad3a82457d2a682e884",
+      "gitBlobLfSha256": "6e8a9992c97fb11493a77e5f296013768f0cf18618282ad3a82457d2a682e884",
+      "currentBytesSha256": "e9b52201d5cac1d0b39e3c506cb008bd3a17209192cc28093c3d0261110079bb",
+      "currentLfSha256": "6e8a9992c97fb11493a77e5f296013768f0cf18618282ad3a82457d2a682e884",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": ".gitattributes",
+      "gitBlobSha256": "c837c54620166954347f9083091ac5d249acdd2b973cad2284141a32c8434876",
+      "gitBlobLfSha256": "c837c54620166954347f9083091ac5d249acdd2b973cad2284141a32c8434876",
+      "currentBytesSha256": "5590c34159679432cc66e19b6a0ee67d463e676db6f71a09bc5a7a9cfa5b2321",
+      "currentLfSha256": "c837c54620166954347f9083091ac5d249acdd2b973cad2284141a32c8434876",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "eslint.config.mjs",
+      "gitBlobSha256": "a2ec2c32770a628a8d1e4660c0f6cbee45cce9bccf8bf4f96acda7bbf8d8c435",
+      "gitBlobLfSha256": "a2ec2c32770a628a8d1e4660c0f6cbee45cce9bccf8bf4f96acda7bbf8d8c435",
+      "currentBytesSha256": "e4a9447509da44711b2b074da6ef8a7bf7693f028230e14f15bb11f585e3509d",
+      "currentLfSha256": "a2ec2c32770a628a8d1e4660c0f6cbee45cce9bccf8bf4f96acda7bbf8d8c435",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    },
+    {
+      "path": "next.config.ts",
+      "gitBlobSha256": "e3def272be37c76a49cdfb6315ff15e09f956507e9d82d9729fda68c13e5ba2a",
+      "gitBlobLfSha256": "e3def272be37c76a49cdfb6315ff15e09f956507e9d82d9729fda68c13e5ba2a",
+      "currentBytesSha256": "4a16970d352c71f5df4caaf0b6925af5bf5eb0df462a31b78198b96b6018ebf4",
+      "currentLfSha256": "e3def272be37c76a49cdfb6315ff15e09f956507e9d82d9729fda68c13e5ba2a",
+      "byteIdenticalToGitBlob": false,
+      "lfIdenticalToGitBlob": true,
+      "capturedA942BytesSha256": null,
+      "capturedA942LfSha256": null,
+      "capturedByteMatch": null,
+      "capturedLfMatch": null,
+      "declaredCaptureMatchesGitBlobLf": null
+    }
+  ],
+  "evidenceChecks": [
+    {
+      "path": "qa/qa001-history-20261105/baseline-browser-results.json",
+      "sha256": "60a9920a5bb22235017ba60f55754d19b293764a9712fe1fbca18445394639b7",
+      "lfSha256": "60a9920a5bb22235017ba60f55754d19b293764a9712fe1fbca18445394639b7",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/baseline-browser-run.log",
+      "sha256": "ab747c60e9d67130046159b4a50887ec27e464451efccf066b63b294318b1ded",
+      "lfSha256": "ff94c514b9d27bc30a7af707c162b6bebd8007fac4a38aa9a22b0c63c23b2fde",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/before-initial-loader-guards/browser-results.json",
+      "sha256": "47d65f8bdfcca219996c50b1852fde5baab8b1fd793557299938ebdc2f4d4bb3",
+      "lfSha256": "47d65f8bdfcca219996c50b1852fde5baab8b1fd793557299938ebdc2f4d4bb3",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/before-initial-loader-guards/browser-run.log",
+      "sha256": "127ee429e26391c6c5c15a15bf69c14e7a9ce3ac5801c9922b26a8b10af24671",
+      "lfSha256": "c8ebf447af393482aa1b23858584589c9fec2fe03e6c5d3e982aea0b29aa1287",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-results.json",
+      "sha256": "600e39bd87466686dc188118cb343de4554226c8baade58ecb7de0609374d4c5",
+      "lfSha256": "600e39bd87466686dc188118cb343de4554226c8baade58ecb7de0609374d4c5",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-run.log",
+      "sha256": "127ee429e26391c6c5c15a15bf69c14e7a9ce3ac5801c9922b26a8b10af24671",
+      "lfSha256": "c8ebf447af393482aa1b23858584589c9fec2fe03e6c5d3e982aea0b29aa1287",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-validation.md",
+      "sha256": "6f430656f7514ebb6190241f22483c68a3df68d3b39d4bfb290401a685e5392e",
+      "lfSha256": "6f430656f7514ebb6190241f22483c68a3df68d3b39d4bfb290401a685e5392e",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/contracts.txt",
+      "sha256": "4570377de311878e7d7d0f68ef3c9610423c03d246078d73398adf14c55f848e",
+      "lfSha256": "123cc88b9fd414f9d6b244c319f80262d014931c6104034a75e6100d223671af",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/eslint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lfSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/lint-product-initial.txt",
+      "sha256": "9f7be17c05bfdaa4798fdc73581906df8e66f04b5811d81b92d2613498b41552",
+      "lfSha256": "80a0fd6602b4648fbc15c81917475849b01dc3a11caf69cd3b30418be09e234a",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/lint-product.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lfSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/diagnosis.md",
+      "sha256": "c9db7e12322b299cceb5bf000f8c99a37865f3c0be3692086ec5e56c471749f1",
+      "lfSha256": "c9db7e12322b299cceb5bf000f8c99a37865f3c0be3692086ec5e56c471749f1",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/latest-trace-before-isolation.json",
+      "sha256": "d5c6ded66154c4a076d2e5de4c6344d4bbce5e7ca2b27438c056f299fbad010e",
+      "lfSha256": "d5c6ded66154c4a076d2e5de4c6344d4bbce5e7ca2b27438c056f299fbad010e",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/original-harness.mjs.txt",
+      "sha256": "18cd1d0c31cbd88b12804993e548284efccd9bce7ffd52224460c0440d265b65",
+      "lfSha256": "7f2c969a9668e22fdca48bf198c1e14edd05e9da86499f9e6efee70df9c71127",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/original-red-results.json",
+      "sha256": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2",
+      "lfSha256": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/original-red-run.txt",
+      "sha256": "5b23b7a3d6055578e887ab404d76ed7f4e92b49707a23770f3ca7e9e3630dceb",
+      "lfSha256": "2e51af9ddb03561deb2a22f6c963693450c56774060bec43e78a4120800ee7fe",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace-results.json",
+      "sha256": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "lfSha256": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace-run-2.txt",
+      "sha256": "e5490f9b1a8f179fb0ace86ec61ed1a4ba4faeaed65228890fea1379cb5a8267",
+      "lfSha256": "9b77f554e65d7ed1ae1672db6379cb2353333a16a3902e95b0056e3cee6b47a7",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace-run.txt",
+      "sha256": "da8bc7a4afd15441f31e1bc0785e20b3f1c1ce817100c3e3cd2e7183aca8c5d0",
+      "lfSha256": "74cfa4f2e740aeb62555ce72a761d686481bef078dac161b66acbd1215186a18",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-investigation/trace.json",
+      "sha256": "205a65a8b69f664aab2846dc3c6fee100f678218559870cf5bfdf029e140c525",
+      "lfSha256": "205a65a8b69f664aab2846dc3c6fee100f678218559870cf5bfdf029e140c525",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-final-attempt-failed.json",
+      "sha256": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2",
+      "lfSha256": "32c79f30948b56e0216e34750e3c55f688e4585a12a1f8e13891198de6e3fca2",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-final-attempt-failed.txt",
+      "sha256": "5b23b7a3d6055578e887ab404d76ed7f4e92b49707a23770f3ca7e9e3630dceb",
+      "lfSha256": "2e51af9ddb03561deb2a22f6c963693450c56774060bec43e78a4120800ee7fe",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-results.json",
+      "sha256": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "lfSha256": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui.txt",
+      "sha256": "da8bc7a4afd15441f31e1bc0785e20b3f1c1ce817100c3e3cd2e7183aca8c5d0",
+      "lfSha256": "74cfa4f2e740aeb62555ce72a761d686481bef078dac161b66acbd1215186a18",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/typecheck.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lfSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/baseline-browser-results-106.json",
+      "sha256": "63b4c5e6264f90200726311bffb284019197c9224300638ebea8bc724da38b3a",
+      "lfSha256": "63b4c5e6264f90200726311bffb284019197c9224300638ebea8bc724da38b3a",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/baseline-browser-run-104.log",
+      "sha256": "b55e853f44fb6db3939e2194670bb64ae96eb19b773e5adfce693f4bddf8adee",
+      "lfSha256": "161ffd7412fa879bd61b6f1421bca3fefc66c8be1c287e19d5f7960e8cd020ed",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/baseline-browser-run-106.log",
+      "sha256": "65d6e4578586daece86cc8adb426938b42c567baaf3b3c9061f6c04bcd8de9d2",
+      "lfSha256": "aa9d65a1c40643cdad2904ce73331225e2d78b6474ad88d60ca6c82d635307bb",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/browser-results-106.json",
+      "sha256": "5816c70abe91e0c3ff7afae4dfe015bc71c4a2619af1cc736af988504d38d2d6",
+      "lfSha256": "5816c70abe91e0c3ff7afae4dfe015bc71c4a2619af1cc736af988504d38d2d6",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/browser-run-104.log",
+      "sha256": "975bf66ff0e8ec178f756e033b30954f5926399dfdaeb8b4e76c1ce4c03770bb",
+      "lfSha256": "4ca37abb5e816d0e2d98b7735bb24d77e1472dbfe2ba0120dc867d967b6beecf",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/browser-run-106.log",
+      "sha256": "6763b5278eb617614788147840386c3af88b36218d48112f54381c0bebab0fad",
+      "lfSha256": "2daa9d53060201d7993c5ca477d00fcf96f7592ecc1c7ac679c135e1375cc738",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/initial-baseline-incomplete.log",
+      "sha256": "33299d43b8caa3f5db58182eccb16eeae23d479f93481109b9d1bf8d66ec8815",
+      "lfSha256": "15efecf88d0caf8ddd3926db6b257f2e1d8df57d62fd8cbfb486176915d42da9",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/unqualified-preflight/initial-fix-incomplete.log",
+      "sha256": "5d74bf3ebb7c4015f8780acd4d57c951dc74613c6d0a6e54817c6497d1337553",
+      "lfSha256": "2eb14e4e43350709c02007363859ac8269b5677642c53b9ffbc32858fa175b9b",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/validation.md",
+      "sha256": "544d8680b8ddaba49bc59b225d2608429a6c5b47704f221f02a84ab6ba4b179a",
+      "lfSha256": "544d8680b8ddaba49bc59b225d2608429a6c5b47704f221f02a84ab6ba4b179a",
+      "manifestByteMatch": true,
+      "manifestLfMatch": true,
+      "gitBlobLfMatch": true
+    }
+  ],
+  "originalManifest": {
+    "path": "qa/qa001-history-20261105/validation.json",
+    "sha256": "ec41f27849f26fdeb3cef7f05acc56727e2c08d753717cd6d07359a034bfea49",
+    "gitBlobLfMatch": true
+  },
+  "originalBrowserBindings": {
+    "candidate": [
+      {
+        "path": "src/components/crm-workspace.tsx",
+        "declaredLfSha256": "07567fb384ef6715619b194564e5115ef9531e41143b9ef6caaf45f41344b4fc",
+        "gitLfSha256": "07567fb384ef6715619b194564e5115ef9531e41143b9ef6caaf45f41344b4fc",
+        "match": true
+      },
+      {
+        "path": "src/lib/crm-core-request-guard.ts",
+        "declaredLfSha256": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97",
+        "gitLfSha256": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97",
+        "match": true
+      }
+    ],
+    "baseline": [
+      {
+        "path": "src/components/crm-workspace.tsx",
+        "declaredLfSha256": "0edf19c0b815e4acfc9888faec062470eb9520d92545c688d45742552513d682",
+        "gitLfSha256": "0edf19c0b815e4acfc9888faec062470eb9520d92545c688d45742552513d682",
+        "match": true
+      },
+      {
+        "path": "src/lib/crm-core-request-guard.ts",
+        "declaredLfSha256": "3be5eb824e2ca50a1f8e7d5d6a3308beb462a0dc4ddb5e4c8054a087ca297c7e",
+        "gitLfSha256": "3be5eb824e2ca50a1f8e7d5d6a3308beb462a0dc4ddb5e4c8054a087ca297c7e",
+        "match": true
+      }
+    ],
+    "harnessMatchesGit": true,
+    "orderedCaseNamesIdentical": true,
+    "candidateTotals": {
+      "cases": 107,
+      "passed": 107,
+      "failed": 0
+    },
+    "baselineTotals": {
+      "cases": 107,
+      "passed": 92,
+      "failed": 15
+    }
+  },
+  "fixtureReview": {
+    "historyHarness": "Inline synthetic workspace/project/core/permission fixtures and observer are inside the unchanged history harness. Data-only navigation inventory is extracted from immutable 94838b9 shell, not from a replacement resolver.",
+    "refreshHarness": "Inline synthetic workspaces/core/HTTP and real PropertyCommandCenter path remain byte-identical to captured a942 harness. Result has no embedded source hashes; old validation manifest is the binding.",
+    "fixtureNodes": [
+      {
+        "name": "navigationEntries",
+        "kind": "variable",
+        "baseLfSha256": "f516a6ec23e4b632a36ccf8779df88abf68488b3962077140ff54a168e5cd83c",
+        "a942LfSha256": "f516a6ec23e4b632a36ccf8779df88abf68488b3962077140ff54a168e5cd83c",
+        "currentLfSha256": "f516a6ec23e4b632a36ccf8779df88abf68488b3962077140ff54a168e5cd83c",
+        "baseMatchesA942": true,
+        "a942MatchesCurrent": true
+      },
+      {
+        "name": "navigationPresets",
+        "kind": "variable",
+        "baseLfSha256": "b3b94a514ea69e78d0311a1eda81275e678030f1d8dc6f60fc884a97be401eeb",
+        "a942LfSha256": "b3b94a514ea69e78d0311a1eda81275e678030f1d8dc6f60fc884a97be401eeb",
+        "currentLfSha256": "b3b94a514ea69e78d0311a1eda81275e678030f1d8dc6f60fc884a97be401eeb",
+        "baseMatchesA942": true,
+        "a942MatchesCurrent": true
+      },
+      {
+        "name": "navigationEntryHashes",
+        "kind": "variable",
+        "baseLfSha256": "24e09a611a3b7e61cbcc83086b8260038e91990289bf6c0e39fe6846ddcf1005",
+        "a942LfSha256": "24e09a611a3b7e61cbcc83086b8260038e91990289bf6c0e39fe6846ddcf1005",
+        "currentLfSha256": "24e09a611a3b7e61cbcc83086b8260038e91990289bf6c0e39fe6846ddcf1005",
+        "baseMatchesA942": true,
+        "a942MatchesCurrent": true
+      },
+      {
+        "name": "NavigationEntryId",
+        "kind": "type",
+        "baseLfSha256": "717ce3b03c687067460d182518d9e11915799ad3895bfeac826cc7fdb597607c",
+        "a942LfSha256": "717ce3b03c687067460d182518d9e11915799ad3895bfeac826cc7fdb597607c",
+        "currentLfSha256": "717ce3b03c687067460d182518d9e11915799ad3895bfeac826cc7fdb597607c",
+        "baseMatchesA942": true,
+        "a942MatchesCurrent": true
+      },
+      {
+        "name": "readInitialSection",
+        "kind": "function",
+        "baseLfSha256": "a1f454846eeb04831c80f8ed3a77415753023236fe747121cc66d63f5c8ddc49",
+        "a942LfSha256": "fbc8150ba11fa49d7ea731c59df440a1b29d6653f55839a2fe4e76da413ee68f",
+        "currentLfSha256": "fbc8150ba11fa49d7ea731c59df440a1b29d6653f55839a2fe4e76da413ee68f",
+        "baseMatchesA942": false,
+        "a942MatchesCurrent": true
+      },
+      {
+        "name": "readInitialSection.sections",
+        "kind": "data-only alias initializer",
+        "baseLfSha256": "9cd6b1b91d931e8e7f568499c79f4b14d7630518cb7e9ced51025eb56785f613",
+        "a942LfSha256": "91f0204c3f258d997ff32673167b6e461faab321ba379dd762051cd3704621e5",
+        "currentLfSha256": "91f0204c3f258d997ff32673167b6e461faab321ba379dd762051cd3704621e5",
+        "baseMatchesA942": false,
+        "a942MatchesCurrent": true
+      }
+    ],
+    "serverAuthorization": "Stubbed synthetic HTTP; neither 107 nor 7 attests cookie/CSRF/DB/roles.",
+    "aliasResolverQualification": "readInitialSection and its sections alias map intentionally changed from 94838b9 to a942049c: communication and the normalized objectsmandates alias were added. Both function and alias map remain identical from a942049c to the current N1 snapshot. The history harness intentionally derives its expectation inventory from immutable base data; these earlier differences are not new N1 fixture drift.",
+    "fixtureIdentityScope": "Inline synthetic fixture source is byte-identical to the captured a942 harnesses. AST hashes also verify navigationEntries/navigationPresets/navigationEntryHashes/NavigationEntryId across 94838b9, a942 and current. readInitialSection has its earlier deliberate alias changes, recorded separately."
+  },
+  "reuseDecision": [
+    {
+      "evidence": "qa/qa001-history-20261105/browser-results.json",
+      "originalResult": "107/107 on a942049c",
+      "classification": "HISTORICAL_RUNTIME_REGRESSION_EVIDENCE_ONLY",
+      "reason": "Both Shell and Guard changed; unchanged harness/fixtures do not make the old result an execution of N1.",
+      "allowedUse": "Retain as a942 broad baseline and source-delta context. Do not relabel as 107/107 on the N1 final hash."
+    },
+    {
+      "evidence": "qa/qa001-history-20261105/refresh-ui-results.json",
+      "originalResult": "7/7 on a942049c",
+      "classification": "HISTORICAL_MANIFEST_BOUND_RUNTIME_EVIDENCE_ONLY",
+      "reason": "Runtime Shell/Guard differ; result itself has no embedded source hashes.",
+      "allowedUse": "Retain qualified prior regression coverage; no new final 7/7 claim."
+    },
+    {
+      "evidence": "qa/qa001-history-20261105/contracts.txt",
+      "originalResult": "29/29 producer execution on a942049c",
+      "classification": "REUSABLE_UNCHANGED_CONTRACT_EVIDENCE_WITH_DELTA_QUALIFICATION",
+      "reason": "All four scripts and their direct helper/component fixtures remain LF-identical. 13 source-dependent assertions also read changed Shell; N1 adds only a handler guard outside inspected navigation declarations/effects. The old 29 aggregate remains an old execution, not a final rerun.",
+      "unchangedDirectOnlyCases": 16,
+      "shellReadingCases": 13,
+      "allowedUse": "Describe 29 prior checks reused after byte/LF and bounded source inspection; never state newly executed 29/29."
+    },
+    {
+      "evidence": "qa/qa001-history-20261105/baseline-browser-results.json",
+      "originalResult": "92/107;15 regression expectation failures on 94838b9",
+      "classification": "HISTORICAL_IMMUTABLE_COMPARISON_VALID",
+      "reason": "Unchanged evidence, same ordered 107 inventory and exact embedded base source hashes. 15 failures are not 15 independent causes."
+    },
+    {
+      "evidence": "qa/qa001-history-20261105/typecheck.txt + eslint.txt + lint-product.txt",
+      "originalResult": "Producer reported exit0 on a942049c",
+      "classification": "HISTORICAL_ONLY_NEW_CHANGED_FILES_NEED_CURRENT_TARGETED_QUALIFICATION",
+      "reason": "Old empty stdout hashes establish file integrity only; final source needs its own recorded type/lint result."
+    },
+    {
+      "evidence": "external independent N1 reproduction",
+      "originalResult": "94838b9 1/1 pass; a942 0/1 fail",
+      "classification": "VALID_IMMUTABLE_NEGATIVE_CONTROL",
+      "reason": "Keep the defect proof against a942; final N1 harness must record its own source hashes and result."
+    }
+  ],
+  "contractInventory": [
+    {
+      "path": "scripts/crm-scope-persistence-smoke-tests.mjs",
+      "testNames": [
+        "CRM scope uses URL, then user/workspace preference, then deliberate All",
+        "CRM scope parser rejects partial, duplicate and unsafe URL candidates",
+        "foreign, deleted and wrong-workspace project scopes remain visibly invalid",
+        "preference keys isolate user and workspace and stale preferences fail closed",
+        "scope serialization preserves module hash and unrelated query state",
+        "reload restores a listed URL workspace before resolving its project",
+        "reload preserves explicit All instead of applying a stored project",
+        "reload never restores absent duplicate malformed or unlisted workspace URLs",
+        "shell persists history and all five audited drafts have no first-project fallback"
+      ]
+    },
+    {
+      "path": "scripts/studio-navigation-profile-tests.ts",
+      "testNames": [
+        "Studio selects its authorized project rather than the first available project",
+        "Studio project selection denies missing access and foreign workspace matches",
+        "Studio preferences are isolated by user with encoded key components",
+        "other workspaces keep their legacy preference key without reusing Studio preferences",
+        "business enquiries include only real Studio submissions, including unmarked records",
+        "the separate test view retains only accepted synthetic Studio enquiries"
+      ]
+    },
+    {
+      "path": "scripts/workspace-navigation-tests.ts",
+      "testNames": [
+        "all workspace entries remain reachable once with no new permissions or lost labels",
+        "every actual navigation preset partitions within eight primary areas",
+        "restricted views gain no entries and contacts plus enquiries stay in primary areas",
+        "future authorized modules fall back to reachable management without exposing others",
+        "area selection preserves the current original entry or chooses an authorized entry in preset order",
+        "primary labels stay stable in DE, EN and ES even when only one module is authorized",
+        "sidebar marks the active area and keeps management out of primary navigation",
+        "content navigation preserves every authorized subpage label and original navigation ID",
+        "clicking the active area or tab preserves dynamic page context while other entries navigate by original ID"
+      ]
+    },
+    {
+      "path": "scripts/admin-navigation-smoke-tests.mjs",
+      "testNames": [
+        "three admin entries have distinct stable hashes and dedicated panels",
+        "admin navigation restores browser history and gates restricted roles",
+        "active navigation and central language updates control the browser title, language and breadcrumb",
+        "audit log is read-only, workspace-bound, filtered and paginated",
+        "system and governance panels distinguish code evidence from operational gates"
+      ]
+    }
+  ],
+  "minimalFinalProtocol": [
+    "Freeze final N1 Shell, Guard and targeted two-case harness; record exact HEAD or dirty-source byte/LF hashes at execution. Preserve old qa001-history evidence unchanged.",
+    "Only execute the targeted stale-A continuation versus B-to-C and genuine current-B selection cancellation cases, plus targeted typecheck/lint already owned by root/UI agent; this inspection executes none.",
+    "Record targeted old-a942 negative control and corrected result separately; verify test names, actual-component provenance, harness hash, Shell/Guard hashes, stdout hashes and external-request/browser-error counts.",
+    "Carry 107/7/29 as prior qualified evidence with exact a942 revision and clear reuse labels. Do not sum them into new final passes, claim a broad rerun, or infer real API/DB/roles/live acceptance.",
+    "If any unchanged harness/helper/fixture listed here changes before final handoff, invalidate the relevant reuse conclusion and inspect that delta; broad rerun is not implied.",
+    "N1 workspace equality rejects stale A while B is active and a pending C exists; it does not independently detect an A-to-B-to-A old-A continuation. Retain that boundary in the handoff."
+  ],
+  "externalEvidence": [
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-independent.json",
+      "sha256": "c6bff81cc9423425d0dcec87e5c4640763da42debfbd0f1d4fa279f8cf63eeec"
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-evidence-inspection.json",
+      "sha256": "482f21c878ab285c9190d9e32db5152074663e9010ad913e123bddbc6f01c3e6"
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-stale-selection.mjs",
+      "sha256": "73b1a2853bb82b54f3f16d8f6d77bbafc5dc217494f5d63fd02901256eb7a651"
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-stale-selection/baseline/baseline-browser-results.json",
+      "sha256": "a7604fe64b72577690fb5183228821089480843378ef2edb2e1712fad6e20458"
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-stale-selection/fixed/browser-results.json",
+      "sha256": "1983def542926ec3736ded0e1880d46aef5c59c20abb9082b6df60daa999643a"
+    }
+  ],
+  "externalExpectedChecks": [
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-stale-selection.mjs",
+      "expectedSha256": "73b1a2853bb82b54f3f16d8f6d77bbafc5dc217494f5d63fd02901256eb7a651",
+      "actualSha256": "73b1a2853bb82b54f3f16d8f6d77bbafc5dc217494f5d63fd02901256eb7a651",
+      "matches": true
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-stale-selection/baseline/baseline-browser-results.json",
+      "expectedSha256": "a7604fe64b72577690fb5183228821089480843378ef2edb2e1712fad6e20458",
+      "actualSha256": "a7604fe64b72577690fb5183228821089480843378ef2edb2e1712fad6e20458",
+      "matches": true
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-stale-selection/fixed/browser-results.json",
+      "expectedSha256": "1983def542926ec3736ded0e1880d46aef5c59c20abb9082b6df60daa999643a",
+      "actualSha256": "1983def542926ec3736ded0e1880d46aef5c59c20abb9082b6df60daa999643a",
+      "matches": true
+    },
+    {
+      "path": "C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-evidence-inspection.json",
+      "expectedSha256": "482f21c878ab285c9190d9e32db5152074663e9010ad913e123bddbc6f01c3e6",
+      "actualSha256": "482f21c878ab285c9190d9e32db5152074663e9010ad913e123bddbc6f01c3e6",
+      "matches": true
+    }
+  ],
+  "limits": [
+    "Working tree is shared and root/UI may edit after checkedAtUtc; current hashes are a snapshot, not the future final commit.",
+    "Byte comparisons to Git blobs may be false only because checkout CRLF differs from Git LF; LF hashes are recorded explicitly. Captured raw-byte hashes are checked separately when the old manifest supplies them.",
+    "No browser, provider, live, database, CI, typecheck or lint run by this inspection.",
+    "No combined calendar/navigation or release approval.",
+    "node_modules binary/module contents were not hashed; package/lock/config source identity is verified, with no claim of a new toolchain execution."
+  ],
+  "currentProductDelta": {
+    "capturedAtUtc": "2026-11-04T23:52:35.638Z",
+    "paths": [
+      "src/components/crm-workspace.tsx",
+      "src/lib/crm-core-request-guard.ts"
+    ],
+    "unifiedDiff": "diff --git a/src/components/crm-workspace.tsx b/src/components/crm-workspace.tsx\nindex 615b4c8..84cd28d 100644\n--- a/src/components/crm-workspace.tsx\n+++ b/src/components/crm-workspace.tsx\n@@ -4100,6 +4100,7 @@ export function CrmWorkspace({\n   }\n \n   function handleProjectScopeChange(projectId: string, scopeProjects = allProjects) {\n+    if (!coreRequestGuard.isActiveWorkspace(activeWorkspace.id)) return;\n     coreRequestGuard.cancelSwitch();\n     setWorkspaceSwitchState(\"idle\");\n     setCoreDataStatus(\"idle\");\ndiff --git a/src/lib/crm-core-request-guard.ts b/src/lib/crm-core-request-guard.ts\nindex e682695..0db25c2 100644\n--- a/src/lib/crm-core-request-guard.ts\n+++ b/src/lib/crm-core-request-guard.ts\n@@ -18,6 +18,9 @@ export function createCrmCoreRequestGuard(initialWorkspaceId: string) {\n       latestRefresh = null;\n       pendingSwitch = null;\n     },\n+    isActiveWorkspace(workspaceId: string) {\n+      return mounted && activeWorkspaceId === workspaceId;\n+    },\n     beginRefresh(workspaceId: string): CoreRequestTicket | null {\n       if (!mounted || pendingSwitch || workspaceId !== activeWorkspaceId) return null;\n       latestRefresh = { id: ++sequence, workspaceId };\n",
+    "qualification": "Snapshot only. Root owns product changes; final execution must bind the final source again."
+  },
+  "finalInspectionHead": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8"
+}

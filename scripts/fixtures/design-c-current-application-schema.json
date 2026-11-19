@@ -1,0 +1,884 @@
+{
+  "schema": "crm.design-c-current-application-original-schema/v1",
+  "sqlSourceCommit": "f0e2c2a3be5eaf242dd76c550027c2a8507b78a6",
+  "scope": "Explicit disposable-loopback current UI acceptance only; preserves historical manual062 and optional RAG exclusions, no production/schema-restore equivalence",
+  "originalLedgerVersions": 124,
+  "legacyPortableNonRagBaselineUnchanged": true,
+  "retainedStagedPrerequisite": "staged/087_d11_crm_source_of_truth_contract.sql",
+  "excludedNonRequiredManualSources": [
+    "062_private_media_contract_cutover.sql",
+    "097_studio_sales_calendar_bridge.sql",
+    "098_studio_enquiry_handoff.sql",
+    "099_studio_enquiry_public_launch.sql"
+  ],
+  "migrations": [
+    {
+      "version": "041_schema_ledger_baseline",
+      "file": "041_schema_ledger_baseline.sql",
+      "name": "schema_ledger_baseline",
+      "sha256": "24f8937ca066775e7cc93e6ea61c07798183e143c3bd0e04023f7ee7c8f93045",
+      "manualCutover": false
+    },
+    {
+      "version": "042_teams_notification_reservation_workflow_constraint",
+      "file": "042_teams_notification_reservation_workflow_constraint.sql",
+      "name": "teams_notification_reservation_workflow_constraint",
+      "sha256": "c51f01cfe6a8081e2d741b733b79ae7ddfc7795a2d86143c3b8442b69118b38f",
+      "manualCutover": false
+    },
+    {
+      "version": "043_leads_idempotency",
+      "file": "043_leads_idempotency.sql",
+      "name": "leads_idempotency",
+      "sha256": "a3c0f025781067cb22f1fc7c09a5b5dd14c7cd368993695a8d98a1b1f71238d6",
+      "manualCutover": false
+    },
+    {
+      "version": "044_fk_performance_indexes",
+      "file": "044_fk_performance_indexes.sql",
+      "name": "fk_performance_indexes",
+      "sha256": "e94833d9e8bf85c537a585e2f05216b33503a36eadd0154292e692bbc3bb231c",
+      "manualCutover": false
+    },
+    {
+      "version": "045_media_schema",
+      "file": "045_media_schema.sql",
+      "name": "media_schema",
+      "sha256": "caa10d953f41f0f9a4a9351c5cea3c27a6ddc2c62cea2dfb3b63836310c6a2db",
+      "manualCutover": false
+    },
+    {
+      "version": "046_schema_residual_reconciliation",
+      "file": "046_schema_residual_reconciliation.sql",
+      "name": "schema_residual_reconciliation",
+      "sha256": "39b4a114922912de86192dccab8740441b92511651c33c925d5456b628535ec9",
+      "manualCutover": false
+    },
+    {
+      "version": "047_deals_idempotency",
+      "file": "047_deals_idempotency.sql",
+      "name": "deals_idempotency",
+      "sha256": "ef1309f10a9772ea934e401f039035dd36035014460e66daee8c38b484d3d5a6",
+      "manualCutover": false
+    },
+    {
+      "version": "048_bot_webhook_integrity",
+      "file": "048_bot_webhook_integrity.sql",
+      "name": "bot_webhook_integrity",
+      "sha256": "f5993d9f44ad61f71862570a702c14a7f549269f0a30b57bc007e57b06115b9d",
+      "manualCutover": false
+    },
+    {
+      "version": "049_property_inventory_tenant_guards",
+      "file": "049_property_inventory_tenant_guards.sql",
+      "name": "property_inventory_tenant_guards",
+      "sha256": "ffd4be362a4a25a324067c0621a3de8438d0da97d02acf41159b6e8f7eed942b",
+      "manualCutover": false
+    },
+    {
+      "version": "050_durable_job_leasing",
+      "file": "050_durable_job_leasing.sql",
+      "name": "durable_job_leasing",
+      "sha256": "62dc4b16f770aadeb5e4557a90fe34d93d62e859494aed806d8e7a9d742f4439",
+      "manualCutover": false
+    },
+    {
+      "version": "051_private_media_access",
+      "file": "051_private_media_access.sql",
+      "name": "private_media_access",
+      "sha256": "2222942814ab1db328acee645439f9dd9ec2200be4ca3b01d133601ae1f4c12b",
+      "manualCutover": false
+    },
+    {
+      "version": "052_validate_property_inventory_tenant_guards",
+      "file": "052_validate_property_inventory_tenant_guards.sql",
+      "name": "validate_property_inventory_tenant_guards",
+      "sha256": "a8f10a4f62e10da8e4c099383decc3805520a1d755e1c8c2a2994f297aeb0233",
+      "manualCutover": false
+    },
+    {
+      "version": "053_oauth_state_integrity",
+      "file": "053_oauth_state_integrity.sql",
+      "name": "oauth_state_integrity",
+      "sha256": "c78f509d09ddb6ff8f6d445e60c2d06e0620c578f1e7a1995c5f8b189d881b28",
+      "manualCutover": false
+    },
+    {
+      "version": "054_csrf_token_integrity",
+      "file": "054_csrf_token_integrity.sql",
+      "name": "csrf_token_integrity",
+      "sha256": "d6cba6c9cd616c4b4a52ecc3b251f412150d479cefcd2fc71abd90de99ae5504",
+      "manualCutover": false
+    },
+    {
+      "version": "055_public_submission_abuse_guards",
+      "file": "055_public_submission_abuse_guards.sql",
+      "name": "public_submission_abuse_guards",
+      "sha256": "f0ddb2b3103ba7d6d70b5a41883f768831b1cffc3fc8d689254aa408ca0ac358",
+      "manualCutover": false
+    },
+    {
+      "version": "056_auth_identity_sessions_mfa",
+      "file": "056_auth_identity_sessions_mfa.sql",
+      "name": "auth_identity_sessions_mfa",
+      "sha256": "621d5c856a80ab10b4700642e53d42e821a6c7b9048ad434200df5caec66deba",
+      "manualCutover": false
+    },
+    {
+      "version": "057_bot_webhook_legacy_index_cutover",
+      "file": "057_bot_webhook_legacy_index_cutover.sql",
+      "name": "bot_webhook_legacy_index_cutover",
+      "sha256": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f",
+      "manualCutover": true
+    },
+    {
+      "version": "060_tenant_rls_pilot_prepare",
+      "file": "060_tenant_rls_pilot_prepare.sql",
+      "name": "tenant_rls_pilot_prepare",
+      "sha256": "b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf",
+      "manualCutover": true
+    },
+    {
+      "version": "061_validate_and_activate_tenant_rls_pilot",
+      "file": "061_validate_and_activate_tenant_rls_pilot.sql",
+      "name": "validate_and_activate_tenant_rls_pilot",
+      "sha256": "0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23",
+      "manualCutover": true
+    },
+    {
+      "version": "064_notification_provider_and_lead_assignee_integrity",
+      "file": "064_notification_provider_and_lead_assignee_integrity.sql",
+      "name": "notification_provider_and_lead_assignee_integrity",
+      "sha256": "bb70c95a27cedc065535e689390036262084759aed7e3fd932d12a5c61ae130e",
+      "manualCutover": false
+    },
+    {
+      "version": "065_notification_guard_search_path_hardening",
+      "file": "065_notification_guard_search_path_hardening.sql",
+      "name": "notification_guard_search_path_hardening",
+      "sha256": "1f944f5d2d315de4c960ffa574dfe78af4828b5ad9739a2b16bf490cc7a84b3b",
+      "manualCutover": true
+    },
+    {
+      "version": "066_oauth_state_workspace_user_guard",
+      "file": "066_oauth_state_workspace_user_guard.sql",
+      "name": "oauth_state_workspace_user_guard",
+      "sha256": "dca5893b5bf788b1b0ecac798b0ed965977678b5ca5a6e37b936214dcce717f0",
+      "manualCutover": false
+    },
+    {
+      "version": "067_app_role_runtime_grants",
+      "file": "067_app_role_runtime_grants.sql",
+      "name": "app_role_runtime_grants",
+      "sha256": "c48afb3409308f74ee03743ec0932c7fc3460bf3085c55c5b8ae753c545f2f3e",
+      "manualCutover": false
+    },
+    {
+      "version": "068_qa_batch_reset_safety",
+      "file": "068_qa_batch_reset_safety.sql",
+      "name": "qa_batch_reset_safety",
+      "sha256": "9f93c0f8e1b03544285bf0b118c78355190f8d6ef78e62b0348b7eb37ff704a3",
+      "manualCutover": false
+    },
+    {
+      "version": "069_property_unit_idempotency",
+      "file": "069_property_unit_idempotency.sql",
+      "name": "property_unit_idempotency",
+      "sha256": "5d8807bea865dbc12e4492277f400931252cad115c686c8a0d22a5138ec28cc7",
+      "manualCutover": false
+    },
+    {
+      "version": "070_funnel_submission_idempotency_recovery",
+      "file": "070_funnel_submission_idempotency_recovery.sql",
+      "name": "funnel_submission_idempotency_recovery",
+      "sha256": "14fee3cca4530a5ab93b18aa9291837dc055a9f0b3f7132a11bb0ddbc1cc1598",
+      "manualCutover": false
+    },
+    {
+      "version": "071_forms_owner_tenant_guard",
+      "file": "071_forms_owner_tenant_guard.sql",
+      "name": "forms_owner_tenant_guard",
+      "sha256": "504180c4f5f7da5f3e7b57547b3b07023fd83edcd29a452a1b0175edf5637011",
+      "manualCutover": false
+    },
+    {
+      "version": "072_form_submission_atomicity",
+      "file": "072_form_submission_atomicity.sql",
+      "name": "form_submission_atomicity",
+      "sha256": "5313d802ed2087c64d859292e8851a5817cda174be8470d70514ba54c7cd311d",
+      "manualCutover": false
+    },
+    {
+      "version": "073_launch_tenant_relation_guards",
+      "file": "073_launch_tenant_relation_guards.sql",
+      "name": "launch_tenant_relation_guards",
+      "sha256": "5e65eb70b7c5e20e66ed921f52539dde141bb5c02fd974c1a38164803e05e80d",
+      "manualCutover": false
+    },
+    {
+      "version": "074_validate_launch_tenant_relation_guards",
+      "file": "074_validate_launch_tenant_relation_guards.sql",
+      "name": "validate_launch_tenant_relation_guards",
+      "sha256": "a644091fc9c2239968c9934651f8992bc913e1740077c907839b647dae6246e9",
+      "manualCutover": false
+    },
+    {
+      "version": "075_public_funnel_visit_truth",
+      "file": "075_public_funnel_visit_truth.sql",
+      "name": "public_funnel_visit_truth",
+      "sha256": "0b0e5d08e6e82ef5a0a01c4514ea9c4a907ef8508f9f0a464b9eb5e27c710466",
+      "manualCutover": false
+    },
+    {
+      "version": "076_bot_webhook_durable_processing",
+      "file": "076_bot_webhook_durable_processing.sql",
+      "name": "bot_webhook_durable_processing",
+      "sha256": "c440582584555c006845f99a7c71ceab5318cd1acbd1138325b2034d4f0f0086",
+      "manualCutover": false
+    },
+    {
+      "version": "077_schema_ledger_runtime_projection",
+      "file": "077_schema_ledger_runtime_projection.sql",
+      "name": "schema_ledger_runtime_projection",
+      "sha256": "6465c9173b38198f1000204acee5d18ef3c370f32755454570aa983d0c46d6ae",
+      "manualCutover": false
+    },
+    {
+      "version": "078_company_profile_approval_integrity",
+      "file": "078_company_profile_approval_integrity.sql",
+      "name": "company_profile_approval_integrity",
+      "sha256": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339",
+      "manualCutover": false
+    },
+    {
+      "version": "079_public_funnel_visit_role_boundary",
+      "file": "079_public_funnel_visit_role_boundary.sql",
+      "name": "public_funnel_visit_role_boundary",
+      "sha256": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432",
+      "manualCutover": false
+    },
+    {
+      "version": "080_crm_command_safety",
+      "file": "080_crm_command_safety.sql",
+      "name": "crm_command_safety",
+      "sha256": "9f401db3b2d08cd4458c5a4b3ab0d114d76bdc2ae87e5a1528de3309b379174e",
+      "manualCutover": false
+    },
+    {
+      "version": "081_crm_offer_workflow",
+      "file": "081_crm_offer_workflow.sql",
+      "name": "crm_offer_workflow",
+      "sha256": "ce629bd48ef61d96fa8be4e7a75e4dbaff0f80dc6f6b5844340ece7e30bb0f54",
+      "manualCutover": false
+    },
+    {
+      "version": "082_crm_property_sales_workflow",
+      "file": "082_crm_property_sales_workflow.sql",
+      "name": "crm_property_sales_workflow",
+      "sha256": "7266aba1e0f6a1f597465ba2ae730520c571be6c6e31c3a5155093b7761182bb",
+      "manualCutover": false
+    },
+    {
+      "version": "083_crm_core_cas",
+      "file": "083_crm_core_cas.sql",
+      "name": "crm_core_cas",
+      "sha256": "0ca41b859e15cd92c173e1da239e98c1b9c7c82f1afdb78bd04dc9eaf06e864a",
+      "manualCutover": false
+    },
+    {
+      "version": "084_crm_contract_service_boundary",
+      "file": "084_crm_contract_service_boundary.sql",
+      "name": "crm_contract_service_boundary",
+      "sha256": "3258b3a4e99d2a78bd4cdb06ad88c9aa699fd9a1ed1dd98fd31804deeccc1a11",
+      "manualCutover": false
+    },
+    {
+      "version": "085_crm_approval_evidence",
+      "file": "085_crm_approval_evidence.sql",
+      "name": "crm_approval_evidence",
+      "sha256": "0d2f9aa924f8199798b2af5040033c6b3579d5639652861f8980540a365759f9",
+      "manualCutover": false
+    },
+    {
+      "version": "086_crm_evelyn_preview_contract",
+      "file": "086_crm_evelyn_preview_contract.sql",
+      "name": "crm_evelyn_preview_contract",
+      "sha256": "31609898bb8ed86e46a350c2262e91e361cb199b946509253705ecf75fc6af81",
+      "manualCutover": false
+    },
+    {
+      "version": "087_d11_crm_source_of_truth_closure",
+      "file": "087_d11_crm_source_of_truth_closure.sql",
+      "name": "d11_crm_source_of_truth_closure",
+      "sha256": "c618a95363ade2705ba1345bf647822c8d1dc4e834b7c0d15136d936b766eeb4",
+      "manualCutover": false
+    },
+    {
+      "version": "088_property_media_runtime_access",
+      "file": "088_property_media_runtime_access.sql",
+      "name": "property_media_runtime_access",
+      "sha256": "4588186cd69c9c59a1d51a8e8f70473d2572527bdeee8000a768e294c2fa78bd",
+      "manualCutover": false
+    },
+    {
+      "version": "089_property_surface_runtime_access",
+      "file": "089_property_surface_runtime_access.sql",
+      "name": "property_surface_runtime_access",
+      "sha256": "a03daea3b2252cf6d5b5e4a1866be1537adcef75e7f991c494d77170b021deac",
+      "manualCutover": false
+    },
+    {
+      "version": "090_property_media_delete_runtime",
+      "file": "090_property_media_delete_runtime.sql",
+      "name": "property_media_delete_runtime",
+      "sha256": "39d566b4575f90b72b84ac08f5df9ffd603392dcba33e48ebf5b7eec211ecb0c",
+      "manualCutover": false
+    },
+    {
+      "version": "091_production_runtime_forced_rls_cutover",
+      "file": "091_production_runtime_forced_rls_cutover.sql",
+      "name": "production_runtime_forced_rls_cutover",
+      "sha256": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155",
+      "manualCutover": true
+    },
+    {
+      "version": "092_crm_production_machine_identity",
+      "file": "092_crm_production_machine_identity.sql",
+      "name": "crm_production_machine_identity",
+      "sha256": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104",
+      "manualCutover": true
+    },
+    {
+      "version": "093_crm_machine_internal_context",
+      "file": "093_crm_machine_internal_context.sql",
+      "name": "crm_machine_internal_context",
+      "sha256": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a",
+      "manualCutover": true
+    },
+    {
+      "version": "094_website_sales_ingestion",
+      "file": "094_website_sales_ingestion.sql",
+      "name": "website_sales_ingestion",
+      "sha256": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac",
+      "manualCutover": false
+    },
+    {
+      "version": "095_form_tenant_isolation",
+      "file": "095_form_tenant_isolation.sql",
+      "name": "form_tenant_isolation",
+      "sha256": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219",
+      "manualCutover": true
+    },
+    {
+      "version": "096_public_integration_gateway",
+      "file": "096_public_integration_gateway.sql",
+      "name": "public_integration_gateway",
+      "sha256": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000",
+      "manualCutover": true
+    },
+    {
+      "version": "100_studio_enquiry_production",
+      "file": "100_studio_enquiry_production.sql",
+      "name": "studio_enquiry_production",
+      "sha256": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778",
+      "manualCutover": true
+    },
+    {
+      "version": "101_knowledge_center",
+      "file": "101_knowledge_center.sql",
+      "name": "knowledge_center",
+      "sha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "manualCutover": false
+    },
+    {
+      "version": "102_knowledge_document_processing",
+      "file": "102_knowledge_document_processing.sql",
+      "name": "knowledge_document_processing",
+      "sha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "manualCutover": false
+    },
+    {
+      "version": "103_knowledge_assistant_service",
+      "file": "103_knowledge_assistant_service.sql",
+      "name": "knowledge_assistant_service",
+      "sha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "manualCutover": false
+    },
+    {
+      "version": "104_knowledge_publication_workflow",
+      "file": "104_knowledge_publication_workflow.sql",
+      "name": "knowledge_publication_workflow",
+      "sha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "manualCutover": false
+    },
+    {
+      "version": "105_knowledge_website_monitoring",
+      "file": "105_knowledge_website_monitoring.sql",
+      "name": "knowledge_website_monitoring",
+      "sha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "manualCutover": false
+    },
+    {
+      "version": "106_crm_operational_readers",
+      "file": "106_crm_operational_readers.sql",
+      "name": "crm_operational_readers",
+      "sha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "manualCutover": false
+    },
+    {
+      "version": "108_knowledge_connected_assistant_quota",
+      "file": "108_knowledge_connected_assistant_quota.sql",
+      "name": "knowledge_connected_assistant_quota",
+      "sha256": "4738538ac4a74bb571b1baf6b5c41583ba77e23d55acdec9489e8979189470aa",
+      "manualCutover": false
+    },
+    {
+      "version": "108_universal_booking",
+      "file": "108_universal_booking.sql",
+      "name": "universal_booking",
+      "sha256": "97c2ce591e021467262e1ed5b54485e985f9cb0004f0df52dd8caf77e6ab6b56",
+      "manualCutover": true
+    },
+    {
+      "version": "109_booking_setup_communications",
+      "file": "109_booking_setup_communications.sql",
+      "name": "booking_setup_communications",
+      "sha256": "355ddb8efd897cb2c719e0247e4c06afa8c4e0d48e22ef10201efd758e05fc9f",
+      "manualCutover": true
+    },
+    {
+      "version": "110_account_ui_language_preference",
+      "file": "110_account_ui_language_preference.sql",
+      "name": "account_ui_language_preference",
+      "sha256": "7240fc49d85caf159e3321e9ccf95ca939f0a9a2a41532749e02dae7f86ed788",
+      "manualCutover": true
+    },
+    {
+      "version": "111_booking_public_channels",
+      "file": "111_booking_public_channels.sql",
+      "name": "booking_public_channels",
+      "sha256": "518c070635e38306eeaae50210f9394b6b31be12c5c985d93172f058c3c2df11",
+      "manualCutover": true
+    },
+    {
+      "version": "112_booking_production_activation",
+      "file": "112_booking_production_activation.sql",
+      "name": "booking_production_activation",
+      "sha256": "58b79c43f11840b62b0de513b56d20964b87db9a3f14c35a46dcd71fbec72a3b",
+      "manualCutover": true
+    },
+    {
+      "version": "113_meeting_reminder_admission",
+      "file": "113_meeting_reminder_admission.sql",
+      "name": "meeting_reminder_admission",
+      "sha256": "86e0e1349ea36ae1df7deea1bf9c90e2d523cfaf76169e69b5a6d76885849920",
+      "manualCutover": true
+    },
+    {
+      "version": "114_customer_workspace_provisioning",
+      "file": "114_customer_workspace_provisioning.sql",
+      "name": "customer_workspace_provisioning",
+      "sha256": "6c42ba6c8541c8b03c2d0600dfad495527b0106259267bb6316d2285e4319994",
+      "manualCutover": true
+    },
+    {
+      "version": "115_shared_behavior_foundation",
+      "file": "115_shared_behavior_foundation.sql",
+      "name": "shared_behavior_foundation",
+      "sha256": "3e00721474c52707bafde0675879aa0a347046b813fc7de73c9a1a8f70a00cf9",
+      "manualCutover": true
+    },
+    {
+      "version": "116_shared_behavior_package2",
+      "file": "116_shared_behavior_package2.sql",
+      "name": "shared_behavior_package2",
+      "sha256": "0f73b7b79cee3585a61cb134714b1d2094d9d178c54576fba6381f387e023bd9",
+      "manualCutover": true
+    },
+    {
+      "version": "117_shared_behavior_package3",
+      "file": "117_shared_behavior_package3.sql",
+      "name": "shared_behavior_package3",
+      "sha256": "24f7baf8acee246cf3ef7e4a951e0d087a10247f448b499ae96558f5b8fa162d",
+      "manualCutover": true
+    },
+    {
+      "version": "118_shared_behavior_personal_runtime",
+      "file": "118_shared_behavior_personal_runtime.sql",
+      "name": "shared_behavior_personal_runtime",
+      "sha256": "30fdebf0b386a751342867afc1db931c8970e6d26df8cd1d55214590d1974484",
+      "manualCutover": true
+    },
+    {
+      "version": "119_shared_behavior_revocable_operation",
+      "file": "119_shared_behavior_revocable_operation.sql",
+      "name": "shared_behavior_revocable_operation",
+      "sha256": "9590b94e58df2b665e8f0b1669065c021ef142a356ae76e5d5607cf2aeefca23",
+      "manualCutover": false
+    },
+    {
+      "version": "120_shared_behavior_package4",
+      "file": "120_shared_behavior_package4.sql",
+      "name": "shared_behavior_package4",
+      "sha256": "889ab12192322abaf8582e569e02d155c5fb35912ebe37b306d9af08252cba7f",
+      "manualCutover": true
+    },
+    {
+      "version": "121_webchat_customer_product",
+      "file": "121_webchat_customer_product.sql",
+      "name": "webchat_customer_product",
+      "sha256": "c23498e03c62cf16f965340e7e6b7d2ca5ed1a138d75f65539fc411e3c5f21d2",
+      "manualCutover": false
+    },
+    {
+      "version": "146_ai_credit_billing",
+      "file": "146_ai_credit_billing.sql",
+      "name": "ai_credit_billing",
+      "sha256": "5a675cbdcf1135247404eed0ea02d9fa2d818373a698a49055a0abde3451190b",
+      "manualCutover": false
+    },
+    {
+      "version": "152_ai_billing_admin",
+      "file": "152_ai_billing_admin.sql",
+      "name": "ai_billing_admin",
+      "sha256": "e91b6bb840bc4958b859f8f78b5f471889f1d8d4a8c87915d9bbce44ac496ad6",
+      "manualCutover": false
+    },
+    {
+      "version": "153_ai_billing_runtime_acl",
+      "file": "153_ai_billing_runtime_acl.sql",
+      "name": "ai_billing_runtime_acl",
+      "sha256": "558a4e968403a44f5b635df33a04e48b4dffd8a515ae3d4fd655949c6bbe33d0",
+      "manualCutover": false
+    },
+    {
+      "version": "154_automation_graph",
+      "file": "154_automation_graph.sql",
+      "name": "automation_graph",
+      "sha256": "fce6dc363d9e735da755829896ccd077f6364d0a4cbc04b2eebc4f5eb728b672",
+      "manualCutover": false
+    },
+    {
+      "version": "155_web_expose",
+      "file": "155_web_expose.sql",
+      "name": "web_expose",
+      "sha256": "b6cf2893e000c8213b8a5e3bf5e458aee46eb5d90d013d4b430d6e62709e77d7",
+      "manualCutover": false
+    },
+    {
+      "version": "156_property_portal_exports",
+      "file": "156_property_portal_exports.sql",
+      "name": "property_portal_exports",
+      "sha256": "a8283ef287c346cacb144037ddfb1487cfcaec9385a02a21cd8905b2f518ea84",
+      "manualCutover": false
+    },
+    {
+      "version": "157_newsletter_workspace",
+      "file": "157_newsletter_workspace.sql",
+      "name": "newsletter_workspace",
+      "sha256": "f8d8b63e9219030cb8cf0b92da642c98ca2bdb5a55f17fc443a9c2f4377385a6",
+      "manualCutover": false
+    },
+    {
+      "version": "158_web_expose_retention",
+      "file": "158_web_expose_retention.sql",
+      "name": "web_expose_retention",
+      "sha256": "68b5453b886dfa852791e7e827b8e1aa9d2ec046f8b1a6251958aecce4dd5a41",
+      "manualCutover": false
+    },
+    {
+      "version": "159_lead_qualification",
+      "file": "159_lead_qualification.sql",
+      "name": "lead_qualification",
+      "sha256": "da496ab98ce485af20d1f2cf0a954382a1fc7b59b484720274d0fa23122559d4",
+      "manualCutover": false
+    },
+    {
+      "version": "160_project_sales_report_settings",
+      "file": "160_project_sales_report_settings.sql",
+      "name": "project_sales_report_settings",
+      "sha256": "f7b8a3738211895931d94811eba727f0ddcb29b22eed1f421a32136ed9ed1e06",
+      "manualCutover": false
+    },
+    {
+      "version": "161_crm_notification_preferences",
+      "file": "161_crm_notification_preferences.sql",
+      "name": "crm_notification_preferences",
+      "sha256": "085f0553566080691d79b84e178bb4bb83adb56fa21ab4ee3c4f5406302f9235",
+      "manualCutover": false
+    },
+    {
+      "version": "162_lead_customer_requests",
+      "file": "162_lead_customer_requests.sql",
+      "name": "lead_customer_requests",
+      "sha256": "099f867d70c16df5eaa7a3cadb62003c0e66addd42b6a9f8034ab569f9cdad01",
+      "manualCutover": false
+    },
+    {
+      "version": "163_web_expose_resources",
+      "file": "163_web_expose_resources.sql",
+      "name": "web_expose_resources",
+      "sha256": "2ed0aacda1246ca858fc16bbac63bcadc2b98bb0110678e7e98e3f883162a35b",
+      "manualCutover": false
+    },
+    {
+      "version": "164_crm_onboarding_examples",
+      "file": "164_crm_onboarding_examples.sql",
+      "name": "crm_onboarding_examples",
+      "sha256": "176192aa17fda68e07479e3e78510b064ac0a1d42115a0228fdee571fdf17959",
+      "manualCutover": false
+    },
+    {
+      "version": "165_automation_mail",
+      "file": "165_automation_mail.sql",
+      "name": "automation_mail",
+      "sha256": "77294699ef413fd3cdc6e19ffb2534513d5120ce76cb39a96209bf8f0f75a9c0",
+      "manualCutover": false
+    },
+    {
+      "version": "166_web_expose_live_inventory",
+      "file": "166_web_expose_live_inventory.sql",
+      "name": "web_expose_live_inventory",
+      "sha256": "ac628b41cc76e9b04a34efd0924123d015c4b7efe9168fad4c379759e2ae9354",
+      "manualCutover": false
+    },
+    {
+      "version": "167_crm_partner_cooperation",
+      "file": "167_crm_partner_cooperation.sql",
+      "name": "crm_partner_cooperation",
+      "sha256": "ceb4c8924613a212a1d47f05f083e2482ebfa2e16a30294da7779a2e92a36963",
+      "manualCutover": false
+    },
+    {
+      "version": "168_crm_integrations",
+      "file": "168_crm_integrations.sql",
+      "name": "crm_integrations",
+      "sha256": "648131a0bf742b2193ada1675db92dcedca58b220ef65d11b7e1df2716d8b18a",
+      "manualCutover": false
+    },
+    {
+      "version": "169_property_meeting_context",
+      "file": "169_property_meeting_context.sql",
+      "name": "property_meeting_context",
+      "sha256": "055aa9ef571a434d43f82c4fafd9f5b828e7a3df353b32e4762e6eb48454cc1c",
+      "manualCutover": false
+    },
+    {
+      "version": "170_crm_personal_mailbox",
+      "file": "170_crm_personal_mailbox.sql",
+      "name": "crm_personal_mailbox",
+      "sha256": "1cf5a164c6bcac6330b1839db01a9d5e53d75744c30fff819506cb274eb7624a",
+      "manualCutover": false
+    },
+    {
+      "version": "171_property_inquiry_assignments",
+      "file": "171_property_inquiry_assignments.sql",
+      "name": "property_inquiry_assignments",
+      "sha256": "f88c3dde0b695e81a683d422d125a6a1c8e98026a59085ed61f65d4c8d5f1ce7",
+      "manualCutover": false
+    },
+    {
+      "version": "172_property_portal_release_checks",
+      "file": "172_property_portal_release_checks.sql",
+      "name": "property_portal_release_checks",
+      "sha256": "2de41b296242ec7762c62a09484384a740fd821f2858da2974311906c3f7de3a",
+      "manualCutover": false
+    },
+    {
+      "version": "173_property_creation_drafts",
+      "file": "173_property_creation_drafts.sql",
+      "name": "property_creation_drafts",
+      "sha256": "b87584a6e03372eb0c5755e1afc982e568b4a6edc88a5bf083060ce40cf1a820",
+      "manualCutover": false
+    },
+    {
+      "version": "174_lead_qualification_plan",
+      "file": "174_lead_qualification_plan.sql",
+      "name": "lead_qualification_plan",
+      "sha256": "ad95128bd21b4eeae90e449a4bc537bf795a52a24fc405694e78daa6cb01e1fd",
+      "manualCutover": false
+    },
+    {
+      "version": "175_web_expose_templates",
+      "file": "175_web_expose_templates.sql",
+      "name": "web_expose_templates",
+      "sha256": "fa0fad0e463717282727f5583b0c90a636665163e0de319da71ef6513270b570",
+      "manualCutover": false
+    },
+    {
+      "version": "176_newsletter_schedules",
+      "file": "176_newsletter_schedules.sql",
+      "name": "newsletter_schedules",
+      "sha256": "c91e9a18c73efac1e7f50587f3b480514347f6b5bdb9e4ba1e3acfe76338ce67",
+      "manualCutover": false
+    },
+    {
+      "version": "177_crm_notification_email",
+      "file": "177_crm_notification_email.sql",
+      "name": "crm_notification_email",
+      "sha256": "9bf9fe69187eb5f0b87696f8cf353cd9b1b428760d52ff26b5bd57e6e316c13e",
+      "manualCutover": false
+    },
+    {
+      "version": "178_personal_mailbox_triage",
+      "file": "178_personal_mailbox_triage.sql",
+      "name": "personal_mailbox_triage",
+      "sha256": "009949fbe4f577fcfdab6d0881a4f78b9331f2e51127a131d2247b52c416e7cb",
+      "manualCutover": false
+    },
+    {
+      "version": "179_lead_proof_retention",
+      "file": "179_lead_proof_retention.sql",
+      "name": "lead_proof_retention",
+      "sha256": "fba4114a20f001862954e44975590c1097e20f6b43243f08d44476b16ffd473b",
+      "manualCutover": false
+    },
+    {
+      "version": "180_marketing_data",
+      "file": "180_marketing_data.sql",
+      "name": "marketing_data",
+      "sha256": "0be3b58a19af4c81233be374a5d142f10b0b5343786e3b609603199eadba5324",
+      "manualCutover": false
+    },
+    {
+      "version": "181_funnel_live_templates",
+      "file": "181_funnel_live_templates.sql",
+      "name": "funnel_live_templates",
+      "sha256": "405d70da3529410e94f27266dd9f0f5441da9996bdde4a3e7b18c3e6b3433fc3",
+      "manualCutover": false
+    },
+    {
+      "version": "182_personal_mailbox_sync",
+      "file": "182_personal_mailbox_sync.sql",
+      "name": "personal_mailbox_sync",
+      "sha256": "fb69d00ea24df4eea3cf9bcc2e023deac8219d73fedd68c83bc63fd0bc531786",
+      "manualCutover": false
+    },
+    {
+      "version": "183_marketing_contact_policy",
+      "file": "183_marketing_contact_policy.sql",
+      "name": "marketing_contact_policy",
+      "sha256": "9d99ac15b574a207b07e80cb6ca3c208e4accfd65d46267537fb6290ec14c102",
+      "manualCutover": false
+    },
+    {
+      "version": "184_web_expose_brand_layout",
+      "file": "184_web_expose_brand_layout.sql",
+      "name": "web_expose_brand_layout",
+      "sha256": "bc0601343c06f421961d0909bf2616611004651d8f86f48e9b08fb434bfd250b",
+      "manualCutover": false
+    },
+    {
+      "version": "185_property_matching_details",
+      "file": "185_property_matching_details.sql",
+      "name": "property_matching_details",
+      "sha256": "04a1cc3bd363b91f9bb8b7f1b95e1748d9a27130787039a2ba30201aa214a71b",
+      "manualCutover": false
+    },
+    {
+      "version": "186_property_unit_details",
+      "file": "186_property_unit_details.sql",
+      "name": "property_unit_details",
+      "sha256": "ff0e205129c90f102f0c6be8712c36e07d72c5c45d894f801867ab785e660ea1",
+      "manualCutover": false
+    },
+    {
+      "version": "187_property_fragment_editing",
+      "file": "187_property_fragment_editing.sql",
+      "name": "property_fragment_editing",
+      "sha256": "8de59b10441d7ea2882274e6cd5ad61766425a1a017d529b2c7892f208e6a9f8",
+      "manualCutover": false
+    },
+    {
+      "version": "188_crm_ai_assistant",
+      "file": "188_crm_ai_assistant.sql",
+      "name": "crm_ai_assistant",
+      "sha256": "fe191389d3035aaad4c84e275bd56db101c47448e2a2d4850f1829b2c6a49396",
+      "manualCutover": false
+    },
+    {
+      "version": "189_property_media_project_access",
+      "file": "189_property_media_project_access.sql",
+      "name": "property_media_project_access",
+      "sha256": "41b79d335caf691da4c4d6ba8eb4df94241ccd310763170983ab70c3a6e158ca",
+      "manualCutover": false
+    },
+    {
+      "version": "190_property_inventory_knownness",
+      "file": "190_property_inventory_knownness.sql",
+      "name": "property_inventory_knownness",
+      "sha256": "d9d8d521f3867f8c7eecb8c6b57836b29fa68bd8d2eb9b2fd5e5d48498781d78",
+      "manualCutover": false
+    },
+    {
+      "version": "191_webchat_partner_access_compatibility",
+      "file": "191_webchat_partner_access_compatibility.sql",
+      "name": "webchat_partner_access_compatibility",
+      "sha256": "8be701476f2fdc2ecf3c965944d781ab067ca4034ec328859213540581d6ec00",
+      "manualCutover": false
+    },
+    {
+      "version": "192_personal_mail_reply_and_attachments",
+      "file": "192_personal_mail_reply_and_attachments.sql",
+      "name": "personal_mail_reply_and_attachments",
+      "sha256": "c4c446ce73d27b7c983fd9ef26ece2383ad4eceae65e30cc9d487260d9ac500b",
+      "manualCutover": false
+    },
+    {
+      "version": "193_personal_crm_calendar",
+      "file": "193_personal_crm_calendar.sql",
+      "name": "personal_crm_calendar",
+      "sha256": "b994627d285b7d1dd18144454ac400f9724fe5eda1a94e052949a0e110e38639",
+      "manualCutover": false
+    },
+    {
+      "version": "194_qa_registered_batch_lock",
+      "file": "194_qa_registered_batch_lock.sql",
+      "name": "qa_registered_batch_lock",
+      "sha256": "7db093a4beb5efa1cdaf95ce0b138eaf6bf65802c7e5769d89debcbfdac1c108",
+      "manualCutover": false
+    },
+    {
+      "version": "195_qa_legacy_provenance_snapshot",
+      "file": "195_qa_legacy_provenance_snapshot.sql",
+      "name": "qa_legacy_provenance_snapshot",
+      "sha256": "5cd4fe285c3f11cedb4b33a0e140d88cb767c47f02d14c7cbad9bc3c49f2dfe9",
+      "manualCutover": false
+    },
+    {
+      "version": "197_project_wizard_fields",
+      "file": "197_project_wizard_fields.sql",
+      "name": "project_wizard_fields",
+      "sha256": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1",
+      "manualCutover": false
+    },
+    {
+      "version": "198_property_website_price_visibility",
+      "file": "198_property_website_price_visibility.sql",
+      "name": "property_website_price_visibility",
+      "sha256": "17c1a2ef4ed44794a2f73b41528a10fbdd4a11889de3ab9c186910d48d0b20d7",
+      "manualCutover": false
+    },
+    {
+      "version": "199_private_expose_price_hidden_draft",
+      "file": "199_private_expose_price_hidden_draft.sql",
+      "name": "private_expose_price_hidden_draft",
+      "sha256": "cc40ba833aa10bea895ac200f6ea0a2bf52fd318d482a39fc4396a0e4e059593",
+      "manualCutover": false
+    },
+    {
+      "version": "200_property_reservation_withdrawal",
+      "file": "200_property_reservation_withdrawal.sql",
+      "name": "property_reservation_withdrawal",
+      "sha256": "417035be66edab35bada63d588ffeffb0a527e7250fbb2bc852d23624e52f654",
+      "manualCutover": false
+    },
+    {
+      "version": "201_internal_calendar_archive",
+      "file": "201_internal_calendar_archive.sql",
+      "name": "internal_calendar_archive",
+      "sha256": "f2356ef941849b7ba0e53b807bdd97e9ca1a075a6d4bcfb86a9b9ba553cfc944",
+      "manualCutover": false
+    }
+  ]
+}

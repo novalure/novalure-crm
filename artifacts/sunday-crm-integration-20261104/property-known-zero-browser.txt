@@ -1,0 +1,9 @@
+PASS decimal area, fractional rooms and cents reach the selected workspace and project
+PASS negative values and fractions of a cent do not submit
+PASS uncertain response freezes inputs and replays the exact request and identifiers
+PASS malformed success, wrong workspace and server failure retain the original attempt
+PASS terminal validation allows correction and uses a fresh intent
+PASS a double submit during a delayed response sends one command
+PASS refresh failure after confirmed persistence cannot replay the completed command
+PASS an unconfirmed create cannot be retargeted to another workspace
+PASS overview distinguishes explicit scalar area zero from unknown without certifying an unconfirmed unit price

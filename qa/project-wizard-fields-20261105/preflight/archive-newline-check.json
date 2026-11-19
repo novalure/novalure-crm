@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "baseline": true,
+  "baselineRevision": "3492729aa8cb48459bad650fca91c9095aa9534e",
+  "harnessSha256": "09626b2391768359b7f51c710da56c7f46221a840cc4286001fcfc0eff7f1780",
+  "scope": "ACTUAL_LOOPBACK_BROWSER_LOGIN_MFA_COOKIE_CSRF_NEXT_API_AND_POSTGRES_SYNTHETIC_DATA_ONLY",
+  "noHttpMocks": true,
+  "noSessionSeed": true,
+  "noProviderOrCloudCalls": true,
+  "startedAt": "2026-11-05T00:27:04.101Z",
+  "checks": [],
+  "failure": {
+    "name": "AssertionError",
+    "message": "baseline app must be captured from exact 349 commit\n+ actual - expected\n\n+ '3bb6f6d2577aeffda4b32fcfee3baad15e91656b91a96043f52a791340cae388'\n- '4fa6326dc7dbf5b093f4da2adef670806e2a17b2c2bd6d8385a624d8d8d72900'\n"
+  },
+  "finishedAt": "2026-11-05T00:27:04.146Z",
+  "projectPosts": [],
+  "projectResponses": [],
+  "browserErrors": [],
+  "serverErrors": [],
+  "externalBrowserRequests": [],
+  "totals": {
+    "checks": 0,
+    "passed": 0,
+    "failed": 0
+  }
+}

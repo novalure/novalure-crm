@@ -101,19 +101,34 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     }
     return token;
   };
+  const providerStage = (path, method) => {
+    const root = `/projects/${segment(config.neonProjectId)}`;
+    if (method === 'GET' && (path === root || path.startsWith(root + '/branches?') ||
+      path === root + '/endpoints/' + segment(config.productionEndpointId))) return 'PRODUCTION_BINDING_READ';
+    if (method === 'GET' && path === root + '/snapshots') return 'SNAPSHOT_READ';
+    if (method === 'POST' && path.startsWith(root + '/snapshots/') && path.endsWith('/restore')) return 'SNAPSHOT_RESTORE';
+    if (method === 'POST' && path === root + '/endpoints') return 'ISOLATED_ENDPOINT_CREATE';
+    if (method === 'PATCH' && path.startsWith(root + '/endpoints/')) return 'ISOLATED_ENDPOINT_UPDATE';
+    if (method === 'GET' && path.startsWith(root + '/connection_uri?')) return 'ISOLATED_CONNECTION_READ';
+    if (method === 'GET' && path.startsWith(root + '/operations/')) return 'OPERATION_READ';
+    if (method === 'GET' && (path.startsWith(root + '/branches/') || path.startsWith(root + '/endpoints/'))) return 'ISOLATED_RESOURCE_READ';
+    return 'NEON_REQUEST';
+  };
   const neon = async (path, { method = 'GET', body } = {}) => {
     await authenticate();
     requireValue(path.startsWith(`/projects/${segment(config.neonProjectId)}`) && !path.includes('..'), 'NEON_REQUEST_SCOPE_MISMATCH');
+    const stage = providerStage(path, method);
     try {
       const response = await request(API + path, { method, redirect: 'error', signal: AbortSignal.timeout(20000),
         headers: { authorization: `Bearer ${env.NEON_API_KEY}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) });
       if (!response.ok) {
         const status = response.status;
-        throw new CrmBackupError(Number.isInteger(status) && status >= 100 && status <= 599 ? `NEON_HTTP_${status}` : 'NEON_REQUEST_FAILED');
+        throw new CrmBackupError(Number.isInteger(status) && status >= 100 && status <= 599 ? `NEON_HTTP_${status}` : 'NEON_REQUEST_FAILED',
+          { providerStage: stage, providerHttpStatus: status });
       }
       return await response.json();
-    } catch (error) { throw safeFailure(error); }
+    } catch (error) { throw error instanceof CrmBackupError ? error : new CrmBackupError('BACKUP_PROVIDER_REQUEST_FAILED', { providerStage: stage }); }
   };
   const projectPath = `/projects/${segment(config.neonProjectId)}`;
   async function listBranches() {

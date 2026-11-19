@@ -1,7 +1,21 @@
 "use client";
 
-import { useCallback, useSyncExternalStore, type SetStateAction } from "react";
-import { type PropertyDraft, type PropertyDraftStore } from "@/lib/property-draft-store";
+import { useCallback, useEffect, useMemo, useSyncExternalStore, type SetStateAction } from "react";
+import { createPropertyDraftStore, protectPropertyDraftUnload, type PropertyDraft, type PropertyDraftStore } from "@/lib/property-draft-store";
+
+/** Kept above section navigation; each signed-in identity receives fresh RAM only. */
+export function usePropertyDraftSessionStore(userId: string) {
+  const store = useMemo(() => createPropertyDraftStore(userId), [userId]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { protectPropertyDraftUnload(store, event); };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      store.clearAll();
+    };
+  }, [store]);
+  return store;
+}
 
 export function usePropertyDraft(store: PropertyDraftStore, scopeKey: string, initialDraft: PropertyDraft) {
   const getSnapshot = useCallback(() => store.read(scopeKey) ?? initialDraft, [initialDraft, scopeKey, store]);

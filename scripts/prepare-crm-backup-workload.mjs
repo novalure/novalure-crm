@@ -14,6 +14,7 @@ const files = Object.freeze([
   'scripts/lib/crm-full-backup.mjs',
   'scripts/lib/crm-full-backup-providers.mjs',
   'scripts/lib/crm-full-backup-http.mjs',
+  'scripts/lib/crm-backup-failure-warning.mjs',
   'scripts/lib/studio-stage3-qa-fingerprint.mjs',
   'scripts/lib/neon-061-compat.mjs',
 ]);

@@ -11,3 +11,4 @@ qa/knowledge-center-completion-2026-10-19/typecheck.log whitespace=-blank-at-eof
 qa/knowledge-center-package3-2026-10-19/build.txt whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
 qa/knowledge-center-package3-2026-10-19/lint.txt whitespace=-blank-at-eof
 qa/knowledge-center-package3-2026-10-19/typecheck.txt whitespace=-blank-at-eof
+qa/live-workspace-settings-2026-11-04/before-fix-tests.txt whitespace=-blank-at-eol

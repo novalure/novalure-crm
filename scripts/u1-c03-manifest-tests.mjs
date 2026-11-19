@@ -35,6 +35,9 @@ test("environment manifest separates expected names from unverified remote parit
   assert.equal(manifest.valueInspection, "FORBIDDEN");
   assert.equal(manifest.remoteComparison.valuesRead, false);
   assert.equal(manifest.remoteComparison.status, "PARTIAL");
+  // The isolated Webchat switch is classification metadata, never Production authority.
+  assert.ok(manifest.previewOnlyOrTestOnly.includes("NOVALURE_WEBCHAT_PRODUCT_ISOLATED_ENABLED"));
+  assert.ok(manifest.forbiddenInProduction.includes("NOVALURE_WEBCHAT_PRODUCT_ISOLATED_ENABLED"));
   for (const name of manifest.forbiddenInProduction) {
     assert.ok(
       manifest.previewOnlyOrTestOnly.includes(name) || name === "NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS",

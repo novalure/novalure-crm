@@ -1,0 +1,5 @@
+PASS stale A selection cannot cancel current B-to-C switch or overwrite pending scope/URL
+PASS genuine current B project selection still cancels pending C and preserves explicit All
+PASS old B selection cannot overwrite an already accepted C scope or URL
+PASS callback from retired login identity cannot overwrite current same-workspace All URL
+{"cases":4,"passed":4,"failed":0}

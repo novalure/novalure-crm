@@ -1,0 +1,19 @@
+# QA001 N1: Abbruchautorität eines alten Workspace-Rückrufs
+
+Ausgangsstand: `a942049c967009f6df09bf2eb905f8d5ba5e5ac8`. Der unabhängige Review liegt unter `C:/Projects/crm-live-acceptance-20261104/reviews/navigation-a942049c-independent.json`. Diese Korrektur bleibt auf dessen Finding N1 begrenzt.
+
+Ein in Workspace A eingefangener Projekt-Auswahlhandler konnte später den gemeinsamen Request-Guard abbrechen, obwohl inzwischen B aktiv war und ein neuer berechtigter Wechsel nach C lief. Seine anschließenden Scope-/URL-Änderungen ließen B mit einem ungültigen A-Scope zurück. Die vorhandene Serverautorisierung wurde dabei nicht umgangen.
+
+Der Handler prüft jetzt vor jedem Abbruch und vor allen State-/URL-Änderungen seinen eingefangenen Workspace gegen seinen eingefangenen Guard. Dieser bestätigt nur eine weiterhin aktive Komponenten-/Identitätslebensdauer und denselben aktuell akzeptierten Workspace. Während B aktiv und C noch ausstehend ist, darf eine echte lokale B-Auswahl weiterhin C abbrechen. Ein alter A-Rückruf oder ein bereits deaktivierter Identitätsguard erhält diese Autorität nicht. Zwischen Prüfung und Abbruch liegt kein asynchroner Abschnitt.
+
+Die Produktänderung umfasst vier Zeilen in `crm-workspace.tsx` und `crm-core-request-guard.ts`. Sie führt keine allgemeine Generationserkennung aller asynchronen Fortsetzungen ein: Ein alter A-Rückruf nach A → B → A wird durch bloße Workspace-Gleichheit nicht erkannt. Weitere schon zuvor mögliche Save-/Notice-/Section-Nachläufe gehören nicht zu diesem Finding.
+
+Die neuen Browserfälle verwenden die tatsächliche React-Shell unter StrictMode und vorhandene Auswahl-/Wechselhandler. Jeder Fall erhält einen frischen Browserkontext. Das direkte spätere Aufrufen eines eingefangenen Handlers bildet die im unabhängigen Review quellenbelegte Projekt-Speicherfortsetzung nach. Der vollständige Formular-/POST-/Dialogschließablauf wird dadurch nicht als Ende-zu-Ende geprüft behauptet. HTTP, Workspaces und Rechte sind synthetisch; nicht beteiligte Panels und Next-Primitiven sind ersetzt. Alle Aufrufe bleiben lokal.
+
+Die historischen Nachweise zu 107 Navigationsfällen, sieben Refresh-Fällen und 29 Verträgen bleiben unverändert. `evidence-reuse.json` prüft ihre Bindung an den alten Commit und trennt unveränderte Quellen von den beiden geänderten Produktdateien. Aus den alten Shell-/Guard-Läufen wird kein erneuter Lauf des neuen Gesamtstands abgeleitet. Die neuen gezielten Fälle und die abschließende Prüfung des exakten Nachfolgercommits qualifizieren ausschließlich den N1-Delta.
+
+Ergebnisse, Quellhashes und Befehle stehen in `validation.json` und `browser-validation.md`. TypeScript, gezieltes ESLint und Diffprüfung werden am finalen Source festgehalten. Der unabhängige Nachlauf des fertigen Commits wird außerhalb dieser Arbeitskopie protokolliert, damit der geprüfte Commit selbst unverändert bleibt.
+
+Keine produktive oder externe Aktion, Kundendaten, Provideraktion, Migration, Kosten, Push, Online-PR, CI, Veröffentlichung oder zentrale Integration. Die Kalenderarbeitskopie und historischen QA-Matrizen bleiben unverändert. Zusammenführung und Live-Abnahme liegen weiterhin bei der zentralen Koordination.
+
+Gezielter Producer-Paarvergleich mit identischem Harness: a942-Baseline vier Fälle, ein Erfolg und drei fehlgeschlagene Erwartungen; Korrektur vier Erfolge. Die echte aktuelle B-Auswahl besteht auf beiden Ständen und bricht C weiterhin ab. Der neue Bestand prüft außerdem den alten Rückruf nach bereits akzeptiertem C und eine beendete React-Identitätsinstanz im gleichen Workspace. Keine Browserfehler oder erfassten externen Netzversuche. Die alten 107/7-Läufe bleiben historische Runtime-Evidenz; 29 Vertragschecks werden qualifiziert als Vorprüfung übernommen, ohne sie als neuen Endlauf zu zählen. Aktueller Typecheck und ESLint der drei geänderten/neuen Quelldateien: Exit0.

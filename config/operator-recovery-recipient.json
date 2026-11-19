@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "purpose": "NOVALURE_OPERATOR_ISOLATED_APPLICATION_RECOVERY",
+  "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+  "operatorUserId": "bf34e694-7aba-4359-b027-f43a68255523",
+  "operatorCentralIdentityId": "39b26ee4-4ac8-43cd-8243-97be71d64729",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAtkpEcGPSuFzZNOeyWD+0\ngs2RXyOyPgCSC/EqqOl/58tkMnR4rQPNYKeEIhn+B5PTA+10UiK5uX9nslvud0TQ\nAPrQY9GYHIAYAs31PVCHnqjcbeRzrVfuhhZMsHBM290qv/NgKgucsDtG/rzKkocv\nbjMNMX7hIPPwPO6CusZDxJEa+seqTvDheJ/SpphKZaC+vSYU5OmvkyphnRJKb32T\nsU5nbdBNSOUrExXH7paNMocojsUiPIm7pnDVXgqXfElAUjGsKRd7Srx/a0/APkWh\nTLk+4Fb66yFBiqQUmZSTIp/TJ7nfwujp0aG9mnZ66dIrOOjwLPtePHweHGVYh8vn\nuOnNyIipWyWwrNVYEH+E2uOm/VtwRzxBaJvHlEQmAmI3kh0D8Y+Cg1K6gWjBuIlV\nxrBtzxduO51Ecewt3CpH1HiJTbnFxyhbCuZuKLVSHDTlK2QkdRl3gT7acI63h1BC\nfaZoNbWAGeZV+0qzSoawIgKIJCwpfL+qVmSTEQIR3r+aMbiRoBH9YbhT7yXB0kPp\nSTAVR5Ygp8yIDGhvntsz8pVBd02MRvCiHwNc7/2UUlCk7NVcLrcDaQNxvoLIZJ/b\njYip/xhgmDGCyWAzYCzfVuxRuK+9VFx7NjL5HpORP5/igcsb+HSQb0b5Dp38txrq\nxINMI8DNL9Qr4Z4UBdlzhAECAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "recipientSha256": "1a7700a6a2c39a5b65e7d2db614de43897200811480cad75751392b02cae9a23"
+}

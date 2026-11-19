@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requirePermissionAndProductCapability } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { getStoredFunnel } from "@/lib/funnel-store";
 import { upsertFunnelDraft } from "@/lib/db/crm-write-repositories";
 import { runEditorPreflight } from "@/lib/db/editor-preflight-repositories";
 
@@ -25,7 +26,7 @@ function getFunnelWriteStatus(reason: string) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermissionAndProductCapability(request, "crm:write", "funnels:publish");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "funnels:publish" });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);
@@ -41,19 +42,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing funnel" }, { status: 400 });
   }
 
+  // This endpoint saves the overview draft. Publication is a separate reviewed
+  // designer action; preserve a previously published immutable blueprint.
+  const existing = typeof funnel.id === "string" ? await getStoredFunnel(funnel.id, auth.session) : null;
+  const hasPublication = Boolean(existing?.tracking.livePublication);
+  const draftFunnel = { ...funnel, status: "entwurf" };
   const preflight = await runEditorPreflight({
     editorType: "funnel",
     entityId: typeof funnel.id === "string" ? funnel.id : null,
-    payload: funnel,
+    payload: draftFunnel,
     projectId: typeof funnel.projectId === "string" ? funnel.projectId : null,
     session: auth.session,
   });
-  const targetStatus = typeof funnel.status === "string" ? funnel.status : "";
-  if (preflight.status === "blocked" && targetStatus !== "entwurf" && targetStatus !== "draft") {
-    return NextResponse.json({ error: "Funnel preflight blocked publish", preflight }, { status: 409 });
-  }
-
-  const result = await upsertFunnelDraft({ funnel, session: auth.session, steps });
+  const result = await upsertFunnelDraft({ funnel: { ...draftFunnel, status: hasPublication ? "aktiv" : "entwurf" }, session: auth.session, steps });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getFunnelWriteStatus(result.reason) });

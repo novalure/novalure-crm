@@ -1,0 +1,11 @@
+✔ fixture fallback, absent provenance and malformed customer responses cannot become loaded data (1.3102ms)
+✔ an explicitly empty database response remains an authoritative empty collection (0.1761ms)
+✔ initial customer rendering waits for the API without showing passed fixture names, metrics or actions (14.8372ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 712.7182

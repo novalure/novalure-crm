@@ -201,7 +201,7 @@ try{
   unit=(await api('/api/crm/units',{projectId:fixture.projectId,unitNumber:'SYN-BROWSER-'+randomUUID().slice(0,5),floor:1,rooms:3,areaSqm:80,status:'available',priceCents:0,idempotencyKey:randomUUID(),correlationId:randomUUID()})).data;
   assert.ok(unit?.id);
  });
- await page.goto(fixture.baseUrl+'/?lang=de&workspaceId='+fixture.workspaceId+'&projectId=all');await page.getByRole('button',{name:'Einheiten / Bestand',exact:true}).click();
+ await page.goto(fixture.baseUrl+'/?lang=de&workspaceId='+fixture.workspaceId+'&projectId=all');await page.getByRole('button',{name:'Immobilien & Projekte',exact:true}).click();await page.getByRole('button',{name:'Einheiten / Bestand',exact:true}).click();
  const sales=page.locator('#property-sales-workflow');
  await expect(sales).toBeVisible({timeout:30000});await sales.getByLabel('Projekt',{exact:true}).selectOption(fixture.projectId);await sales.getByRole('button',{name:'Prozess laden / aktualisieren'}).click();
  async function action(value){await sales.getByLabel('Nächster Schritt').selectOption(value)}

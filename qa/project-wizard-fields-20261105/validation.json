@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-11-05T00:50:06.828842+00:00",
+  "timezone": "Europe/Vienna",
+  "baseCommit": "3492729aa8cb48459bad650fca91c9095aa9534e",
+  "branch": "codex/project-wizard-fields-20261105",
+  "commitBinding": "This pre-commit producer manifest binds exact product/test source content. The independent reviewer binds the resulting commit object separately.",
+  "scope": "LOCAL_PROJECT_WIZARD_ATOMIC_PERSISTENCE_RELOAD_AND_CURRENT_AUTHORIZATION",
+  "productSources": [
+    {
+      "path": "src/app/api/crm/projects/route.ts",
+      "sha256WorktreeBytes": "c8b9de52f1bd9ed49c037fd6e183ff9dc535b2f5e3d73643465a6223ef3e926d",
+      "bytes": 4178,
+      "sha256LfNormalizedText": "bad8564e3a0088ee2a24e3c792edc410200207ef1efe7873f0ab61822e1ca0d2"
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "sha256WorktreeBytes": "ff5ab53aa460a7e9537dcadccbf82e366977f82b5ffc95c761dabffeb12f815a",
+      "bytes": 269392,
+      "sha256LfNormalizedText": "bf63d6c87e805034f9e665158a77db4666097324e22f96c86be8bb0feb818804"
+    },
+    {
+      "path": "src/components/project-wizard-fields.tsx",
+      "sha256WorktreeBytes": "694ef05625206b71fe61d31bef11ec669ca0d1aacedac14ff3b29018aa5e73ee",
+      "bytes": 6620,
+      "sha256LfNormalizedText": "694ef05625206b71fe61d31bef11ec669ca0d1aacedac14ff3b29018aa5e73ee"
+    },
+    {
+      "path": "src/lib/project-wizard.ts",
+      "sha256WorktreeBytes": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689",
+      "bytes": 1420,
+      "sha256LfNormalizedText": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689"
+    },
+    {
+      "path": "src/lib/crm-types.ts",
+      "sha256WorktreeBytes": "609e55243122c986fc8616d29f1d7590aaf45575ea2e65e0ca8a6b2ce36ff268",
+      "bytes": 33369,
+      "sha256LfNormalizedText": "15820ce8b6417e0bb7292d980ac6af869a7db9c615103b2d799fa2469b68c646"
+    },
+    {
+      "path": "src/lib/db/project-wizard-repository.ts",
+      "sha256WorktreeBytes": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd",
+      "bytes": 10406,
+      "sha256LfNormalizedText": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd"
+    },
+    {
+      "path": "src/lib/db/crm-write-repositories.ts",
+      "sha256WorktreeBytes": "007ffd6e1629fb417ac407ba675821c3394fbe75cbcfa142dd503c1a62e1ba48",
+      "bytes": 164891,
+      "sha256LfNormalizedText": "9aec1a517efd24125937a7dea70d57ccce3dda1cbe4ebc1fd99a11148ee90b1a"
+    },
+    {
+      "path": "src/lib/db/pipeline-default-repositories.ts",
+      "sha256WorktreeBytes": "7a687b4f1937795820851a991d9e12278460a4563fcc2803df2e940a116c94a3",
+      "bytes": 11288,
+      "sha256LfNormalizedText": "a04a0aae55b18f5cc56bc25b2d2b2031a0b3636675f979163b51610e13554784"
+    },
+    {
+      "path": "migrations/197_project_wizard_fields.sql",
+      "sha256WorktreeBytes": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1",
+      "bytes": 9645,
+      "sha256LfNormalizedText": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1"
+    }
+  ],
+  "testSources": [
+    {
+      "path": "scripts/project-wizard-fields-browser-tests.mjs",
+      "sha256WorktreeBytes": "4ab894f26f2ee7010fe6d1a8a499c989f0f33a11b55fe6e90b1fb5b4cf308e5c",
+      "bytes": 30164,
+      "sha256LfNormalizedText": "4ab894f26f2ee7010fe6d1a8a499c989f0f33a11b55fe6e90b1fb5b4cf308e5c"
+    },
+    {
+      "path": "scripts/project-wizard-persistence-tests.ts",
+      "sha256WorktreeBytes": "d0c99a05ab869a9960d45ded948e90e57d98359f64fe910f3a6f27103e4a177f",
+      "bytes": 26630,
+      "sha256LfNormalizedText": "d0c99a05ab869a9960d45ded948e90e57d98359f64fe910f3a6f27103e4a177f"
+    }
+  ],
+  "baseline": {
+    "revision": "3492729aa8cb48459bad650fca91c9095aa9534e",
+    "totals": {
+      "checks": 9,
+      "passed": 5,
+      "failed": 4
+    },
+    "inventoryComparableToFixed": false,
+    "meaning": "Nine historical observations, including four reproduced old field losses; not an identical red/green inventory."
+  },
+  "checks": {
+    "actualLoopback": {
+      "exitCode": 0,
+      "totals": {
+        "checks": 15,
+        "passed": 15,
+        "failed": 0
+      },
+      "httpMocks": false,
+      "sessionSeed": false,
+      "regularPasswordAndTotpIdentities": 2,
+      "appInputFilesCapturedAndMatched": 852,
+      "runtimeRole": {
+        "role": "sales_qa_167953ab3e1e",
+        "rolsuper": false,
+        "rolbypassrls": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false
+      },
+      "exactReceiptAuditBinding": true
+    },
+    "targetedPostgres": {
+      "exitCode": 0,
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "parentIncluded": true,
+      "nestedCases": 9,
+      "postExecutionTypeOnlyAnnotation": {
+        "testFile": "scripts/project-wizard-persistence-tests.ts",
+        "change": "Explicit result-row type annotation after the final functional pipeline-lock run; no assertion or emitted JavaScript changed.",
+        "testRerunAfterAnnotation": false,
+        "actualRecordedPreAnnotationLfSha256": "196fdd20b9a5df327c5192da2f02125a04cfbb0481fb58c8380b4b23f1e8b3de",
+        "reconstructedPreAnnotationMatchesActualCapture": true,
+        "currentLfSha256": "d0c99a05ab869a9960d45ded948e90e57d98359f64fe910f3a6f27103e4a177f",
+        "generatedJavaScriptExactlyIdentical": true,
+        "generatedJavaScriptSha256": "fcb851d128cd81ecfed7b0eb41938351338ed145cad2d925dd4f609523459d19"
+      }
+    },
+    "static": {
+      "startedAtUtc": "2026-11-05T00:48:27.9936963Z",
+      "finishedAtUtc": "2026-11-05T00:48:36.4903904Z",
+      "typecheckExit": 0,
+      "eslintExit": 0,
+      "lintFiles": [
+        "scripts/project-wizard-fields-browser-tests.mjs",
+        "scripts/project-wizard-persistence-tests.ts",
+        "src/components/project-wizard-fields.tsx",
+        "src/lib/db/project-wizard-repository.ts",
+        "src/lib/project-wizard.ts",
+        "src/app/api/crm/projects/route.ts",
+        "src/components/crm-workspace.tsx",
+        "src/lib/crm-types.ts",
+        "src/lib/db/crm-write-repositories.ts",
+        "src/lib/db/pipeline-default-repositories.ts"
+      ],
+      "diffCheckExit": 0
+    }
+  },
+  "networkQualification": {
+    "browserExternalRequests": 0,
+    "nodeFinalBlockedAttempts": 2,
+    "nodePreWizardCount": null,
+    "nodePostWizardCount": null,
+    "blockedTargetsAndTimingNotReported": true,
+    "qualifiedClaim": "The unchanged strict Node guard prevented the two unclassified connection attempts; none is treated as a send/funnel/provider action or as zero attempts. No external connection was permitted by this guarded app."
+  },
+  "cleanup": {
+    "http": {
+      "ok": true,
+      "runDirectory": "C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\.npm-cache\\qa\\property-reachability-http-tSaXvo",
+      "blockedNetworkAttempts": 2
+    },
+    "postgres": {
+      "method": "OWN_INSTANCE_NATIVE_PG_CTL_FAST_STOP_WITH_FRESH_SQL_IDENTITY",
+      "stopIdentity": {
+        "directory": "C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\.npm-cache\\qa\\property-reachability-pg-sFRkDg",
+        "host": "127.0.0.1",
+        "port": 56330,
+        "startedMs": 1793839342669,
+        "started": "2026-11-05T00:42:22.669Z",
+        "postmasterIdentity": 31028,
+        "version": "PostgreSQL 18.4 on x86_64-windows, compiled by msvc-19.44.35226, 64-bit"
+      },
+      "nativeControl": {
+        "exitCode": 0,
+        "signal": null,
+        "logfile": "C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\.npm-cache\\qa\\property-reachability-pg-sFRkDg\\native-stop.log",
+        "logBytesAtExit": 58,
+        "stdio": "OWN_REGULAR_FILE_NO_PIPE",
+        "nativeControlChildHandleRetained": true,
+        "serverLifetimeHandleClaimed": false
+      },
+      "listenerClosed": true,
+      "errors": [],
+      "ok": true,
+      "dataDirectoryRemoved": false,
+      "retainedForEvidence": true,
+      "foreignProcessAction": false,
+      "genericPidGroupOrTreeKill": false
+    }
+  },
+  "separatePrivateNoteReadPath": true,
+  "responsibilityCreatesAcl": false,
+  "funnelSemantics": "Optional internal existing authorized reference, no copy/move/activate/send; title needs fresh source and target project access.",
+  "pipelineSemantics": "Existing real compatible getDefaultPipelineTemplates catalog key to actual new own-project UUID/stages; no invented buyer/investment definitions.",
+  "migration": {
+    "number": 197,
+    "localRoleHelper196Included": false,
+    "localRoleHelper196Applied": false
+  },
+  "independentReview": {
+    "status": "pending exact resulting commit",
+    "producerArtifactsMustRemainUnchanged": true
+  },
+  "excludedPreflights": [
+    "preflight/",
+    "early-loopback-pre-freeze/",
+    "fixed/failure.png (unchanged stale screenshot from the excluded 00:38 UTC Core-assumption preflight; final run began 00:42 UTC)"
+  ],
+  "limits": [
+    "No full original CRM matrix or live acceptance inferred.",
+    "Sales schema fixture documents unrelated/manual historical omissions and optional Vector adjustment; not a production-owner migration rehearsal.",
+    "No Cloud, paid calls, production migration, push, CI or deployment in this candidate.",
+    "Two manager identities and targeted negative cases are not a full role matrix.",
+    "Buyer/investment pipeline definitions and actual funnel template copying remain distinct product decisions."
+  ],
+  "evidenceHashes": [
+    {
+      "path": "qa/project-wizard-fields-20261105/backend-tests-before-pipeline-lock.txt",
+      "sha256WorktreeBytes": "c10e16b7aba0d3fc8e3fa758c8d03211585c4cf8a5da21ddf0b2b854d45ea2cd",
+      "bytes": 1664,
+      "sha256LfNormalizedText": "c10e16b7aba0d3fc8e3fa758c8d03211585c4cf8a5da21ddf0b2b854d45ea2cd"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/backend-tests.txt",
+      "sha256WorktreeBytes": "49595508f8f703acf4df6a42a0b5a51b584941d89a3ac8854d4b86af59cb8928",
+      "bytes": 5395,
+      "sha256LfNormalizedText": "49595508f8f703acf4df6a42a0b5a51b584941d89a3ac8854d4b86af59cb8928"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/backend-typecheck.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/backend-validation.json",
+      "sha256WorktreeBytes": "da96d6a9535685c22ef0cd5a790d76b64567798dff024c2d96a9f44041f08e6b",
+      "bytes": 7359,
+      "sha256LfNormalizedText": "da96d6a9535685c22ef0cd5a790d76b64567798dff024c2d96a9f44041f08e6b"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/baseline/harness.mjs.txt",
+      "sha256WorktreeBytes": "15ba6f0d2d6183b3688e2a81468a4068d8ead7fa1813c45f2191f92cb252d710",
+      "bytes": 15676,
+      "sha256LfNormalizedText": "15ba6f0d2d6183b3688e2a81468a4068d8ead7fa1813c45f2191f92cb252d710"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/baseline/results.json",
+      "sha256WorktreeBytes": "5b27e94aa2bec347734d55738c233ce3544e298afa67430d65b7e765226f519e",
+      "bytes": 112747,
+      "sha256LfNormalizedText": "5b27e94aa2bec347734d55738c233ce3544e298afa67430d65b7e765226f519e"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/baseline/run.txt",
+      "sha256WorktreeBytes": "f5195f179c4857ee28f1094e4f6176b1198268155ea5e4359de317d054329fe0",
+      "bytes": 992,
+      "sha256LfNormalizedText": "908fc99c9ec08636af20c232b51ee3f8b91e9c70a2d6fccdb39c00330feb7e35"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/browser-source-bindings.json",
+      "sha256WorktreeBytes": "9afb467c5a3cf1f36dea2979ec8feb9927c205462511498a2233f0a16c1f8ed6",
+      "bytes": 4612,
+      "sha256LfNormalizedText": "9afb467c5a3cf1f36dea2979ec8feb9927c205462511498a2233f0a16c1f8ed6"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/browser-validation.md",
+      "sha256WorktreeBytes": "f70a60e145dc4e8e0813657ae94ceef1a76c43fbc7bc9ea14d335247730b8929",
+      "bytes": 9870,
+      "sha256LfNormalizedText": "f70a60e145dc4e8e0813657ae94ceef1a76c43fbc7bc9ea14d335247730b8929"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/early-loopback-pre-freeze/assigned-manager-reloaded-summary.png",
+      "sha256WorktreeBytes": "c3c4afb48e6838c117eb4f92055fefca77d097cc361b12a519ab7ce57f4f8fea",
+      "bytes": 26958
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/early-loopback-pre-freeze/creator-reloaded-summary.png",
+      "sha256WorktreeBytes": "ffbff12d6d0aa53b84e02759a4c664c0bf497de6cd4eeaaa8660993e2cd0f943",
+      "bytes": 29588
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/early-loopback-pre-freeze/results.json",
+      "sha256WorktreeBytes": "1fa5534767980caa42487769c5b2c64871dc3a7ce550c1412a32299b58a6c017",
+      "bytes": 133417,
+      "sha256LfNormalizedText": "1fa5534767980caa42487769c5b2c64871dc3a7ce550c1412a32299b58a6c017"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/early-loopback-pre-freeze/run.txt",
+      "sha256WorktreeBytes": "ebee9ecf77b23894103d57cb407cd9fe7ce71ca887aac40a382fa2bb6d5a87c7",
+      "bytes": 1501,
+      "sha256LfNormalizedText": "57fb73e7956a4cabf36815ed0f506ea2802d4bf0273440538ee708f05849931f"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/eslint.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/fixed/assigned-manager-reloaded-summary.png",
+      "sha256WorktreeBytes": "c3c4afb48e6838c117eb4f92055fefca77d097cc361b12a519ab7ce57f4f8fea",
+      "bytes": 26958
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/fixed/creator-reloaded-summary.png",
+      "sha256WorktreeBytes": "ffbff12d6d0aa53b84e02759a4c664c0bf497de6cd4eeaaa8660993e2cd0f943",
+      "bytes": 29588
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/fixed/failure.png",
+      "sha256WorktreeBytes": "3e83da10e5a2541bcead93051ce5111db5904a27bf226e76c18b602df55e8884",
+      "bytes": 134691
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/fixed/results.json",
+      "sha256WorktreeBytes": "a8eead96ef674f25b8838a9ffab2dd4aa19518b744b7fddba3f5f635215d5b4e",
+      "bytes": 135256,
+      "sha256LfNormalizedText": "a8eead96ef674f25b8838a9ffab2dd4aa19518b744b7fddba3f5f635215d5b4e"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/fixed/run.txt",
+      "sha256WorktreeBytes": "03dc6ab2ba5bea6455f4fbbecdd4bcbb553e67139393b16073f6392adf1c8961",
+      "bytes": 1573,
+      "sha256LfNormalizedText": "3bba1743359ba974e43cb6ace24fc336214b5c1a01c219f0371868e35142d346"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/archive-newline-check.json",
+      "sha256WorktreeBytes": "78d6673ad7be6e93c580a43260a28a6e2ee6eaf8c34f5ed152a5c7c845de633f",
+      "bytes": 964,
+      "sha256LfNormalizedText": "78d6673ad7be6e93c580a43260a28a6e2ee6eaf8c34f5ed152a5c7c845de633f"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/archive-newline-check.txt",
+      "sha256WorktreeBytes": "f94ed8d5cb6c40b7a3d470a3a01029969d5bb302743cb5d2e1f344203a7bd1d8",
+      "bytes": 682,
+      "sha256LfNormalizedText": "a7d58808aefc60c547fa1a07eb9d66a0ab4344bbbc7981f29e8d14504a4f6f82"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/first-authenticated-ui-attempt.json",
+      "sha256WorktreeBytes": "9fd96e8a9a05b2fd81e4391b448cf29a6409bbc2844427e9796cbe8c29cb71b3",
+      "bytes": 105355,
+      "sha256LfNormalizedText": "9fd96e8a9a05b2fd81e4391b448cf29a6409bbc2844427e9796cbe8c29cb71b3"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/first-authenticated-ui-attempt.txt",
+      "sha256WorktreeBytes": "0f7083ec80d5bfc6b64fe43f1c24d493e8f7cf4c053926e2a0aa0f2e02fbefa7",
+      "bytes": 1280,
+      "sha256LfNormalizedText": "871b44d46899f4c88bbd5f7eb96374b75c17b0a2dc981b339e2b7355b3efedbe"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/first-fixed-type-selector.json",
+      "sha256WorktreeBytes": "9de5cda0fbe7d9c6ade3604c46a932bc479e6b9d08ba1614e9b7cccb7e3ab8f3",
+      "bytes": 124081,
+      "sha256LfNormalizedText": "9de5cda0fbe7d9c6ade3604c46a932bc479e6b9d08ba1614e9b7cccb7e3ab8f3"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/first-fixed-type-selector.txt",
+      "sha256WorktreeBytes": "f7b4afc4cee5181bcc27fc9292d4905d04abedab6b1ae4c40f5767709bcf0f88",
+      "bytes": 916,
+      "sha256LfNormalizedText": "e0cc3cda3da2bbaf18da438c42c39c7a49a46d47bd1a939faa2e3f7b5f3426af"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/fixed-uncontracted-core-wizard-assumption.json",
+      "sha256WorktreeBytes": "c464d1dc5ad19aa0085c36ca406ac596be864c683c8cb3172a5e7869996ee84d",
+      "bytes": 129119,
+      "sha256LfNormalizedText": "c464d1dc5ad19aa0085c36ca406ac596be864c683c8cb3172a5e7869996ee84d"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/preflight/fixed-uncontracted-core-wizard-assumption.txt",
+      "sha256WorktreeBytes": "c5a8c184ce45d0c1d8e0f3578eef5dd4650883658ebf6977d1dd3a91dea622cd",
+      "bytes": 1479,
+      "sha256LfNormalizedText": "36b91129001422c3826e0b0c84fe06ca89a29bb9feb770e9731550794dd20c04"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/static-checks.json",
+      "sha256WorktreeBytes": "92792d0f95a2df73f3e04eec2831f078521837e6972b66f6b73a2a6220c2297c",
+      "bytes": 645,
+      "sha256LfNormalizedText": "ffa0da97817df2a14392cfb0b0ffff08242860dff8f23e5e60e59cd559ba7cc8"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/typecheck.txt",
+      "sha256WorktreeBytes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sha256LfNormalizedText": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/project-wizard-fields-20261105/validation.md",
+      "sha256WorktreeBytes": "cc2dc5e81fc433d6364c8fa58f7c6dafe1a1099e14f71466503cf861afc71893",
+      "bytes": 7086,
+      "sha256LfNormalizedText": "cc2dc5e81fc433d6364c8fa58f7c6dafe1a1099e14f71466503cf861afc71893"
+    }
+  ]
+}

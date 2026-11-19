@@ -1,0 +1,71 @@
+TAP version 13
+# Subtest: legacy protocol admits provenance only and rejects supplied authority or classification
+ok 1 - legacy protocol admits provenance only and rejects supplied authority or classification
+  ---
+  duration_ms: 2.6621
+  type: 'test'
+  ...
+# Subtest: legacy double-provenance evidence never classifies or retires a tenant
+    # Subtest: real receipt and both audits bind exact IDs; evidence is durable and all eight groups stay limited
+    ok 1 - real receipt and both audits bind exact IDs; evidence is durable and all eight groups stay limited
+      ---
+      duration_ms: 1350.1595
+      type: 'test'
+      ...
+    # Subtest: mixed tenant/audit/draft references, another origin admin and target-only session are denied
+    ok 2 - mixed tenant/audit/draft references, another origin admin and target-only session are denied
+      ---
+      duration_ms: 36.5274
+      type: 'test'
+      ...
+    # Subtest: current persisted MFA, role and session authority are required even for successful replay
+    ok 3 - current persisted MFA, role and session authority are required even for successful replay
+      ---
+      duration_ms: 119.3445
+      type: 'test'
+      ...
+    # Subtest: withdrawn target membership and actual identity mismatch cannot be replaced by caller claims
+    ok 4 - withdrawn target membership and actual identity mismatch cannot be replaced by caller claims
+      ---
+      duration_ms: 8.5185
+      type: 'test'
+      ...
+    # Subtest: successful evidence replay still rejects a changed current settings fingerprint
+    ok 5 - successful evidence replay still rejects a changed current settings fingerprint
+      ---
+      duration_ms: 190.3178
+      type: 'test'
+      ...
+    # Subtest: exact ID/count/hash/confirmation, expiry and fresh state/schema CAS are enforced
+    ok 6 - exact ID/count/hash/confirmation, expiry and fresh state/schema CAS are enforced
+      ---
+      duration_ms: 965.5574
+      type: 'test'
+      ...
+    # Subtest: invoker contract restores origin context on success and failure; runtime ACLs stay unchanged
+    ok 7 - invoker contract restores origin context on success and failure; runtime ACLs stay unchanged
+      ---
+      duration_ms: 59.3494
+      type: 'test'
+      ...
+    # Subtest: real cookie/CSRF route stores only evidence and rejects missing CSRF and extra selectors
+    ok 8 - real cookie/CSRF route stores only evidence and rejects missing CSRF and extra selectors
+      ---
+      duration_ms: 309.9341
+      type: 'test'
+      ...
+    1..8
+ok 2 - legacy double-provenance evidence never classifies or retires a tenant
+  ---
+  duration_ms: 12206.345
+  type: 'test'
+  ...
+1..2
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 13327.1376

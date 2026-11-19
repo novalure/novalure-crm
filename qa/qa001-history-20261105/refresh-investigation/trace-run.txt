@@ -1,0 +1,7 @@
+PASS late confirmed property A save cannot refresh A into the real parent after B is active
+PASS delayed A refresh cannot commit after the real parent switches and refreshes B
+PASS an older same-workspace failure cannot override the newest successful refresh
+PASS a previous identity refresh cannot commit into the newly mounted identity session
+PASS failed workspace switch keeps A authoritative and permits a fresh A retry
+PASS the previous identity guard is retired by the synchronous commit layout boundary
+PASS URL restoration uses the guarded workspace switch and preserves explicit All

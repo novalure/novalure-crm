@@ -1,0 +1,20 @@
+"use client";
+import { useEffect, useState } from "react";
+import type { InquirySourceReport as Report } from "@/lib/inquiry-sources";
+export function InquirySourceReport({workspaceId,projectId,language}:{workspaceId:string;projectId?:string|null;language:string}){
+  const [days,setDays]=useState<30|90>(30),[data,setData]=useState<Report|null>(null),[notice,setNotice]=useState("");
+  const de=language==="de";
+  useEffect(()=>{
+    const controller=new AbortController();
+    void fetch(`/api/crm/inquiry-sources?workspaceId=${encodeURIComponent(workspaceId)}&days=${days}${projectId?`&projectId=${encodeURIComponent(projectId)}`:""}`,{cache:"no-store",signal:controller.signal}).then(async response=>{
+      const result=await response.json() as {data?:Report;error?:string};if(!response.ok||!result.data)throw new Error(result.error||"Source report unavailable");
+      setData(result.data);setNotice("");
+    }).catch((error:unknown)=>{if(!controller.signal.aborted){setData(null);setNotice(error instanceof Error?error.message:"Source report unavailable");}});
+    return()=>controller.abort();
+  },[workspaceId,projectId,days]);
+  const current=data?.projectId===(projectId??null)&&data.days===days?data:null;
+  return <section className="my-5 rounded-xl border border-stone-200 bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-4"><div><h3 className="text-xl font-semibold">{de?"Herkunft gespeicherter Anfragen":"Sources of saved enquiries"}</h3><p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{de?"Gezählt werden erstmals eingegangene CRM-Leads in deiner Datensicht. Wiederholte Nachrichten sind kein neuer Lead. Der aktuelle Qualifizierungsstatus ist eine Momentaufnahme.":"Counts first received CRM leads visible to you. Repeated messages are not new leads. Current qualification is a snapshot."}</p></div><label className="text-sm">{de?"Zeitraum":"Period"}<select className="ml-3 rounded-lg border border-stone-300 p-2" value={days} onChange={e=>setDays(Number(e.target.value) as 30|90)}><option value={30}>{de?"30 Tage":"30 days"}</option><option value={90}>{de?"90 Tage":"90 days"}</option></select></label></div>
+    {notice?<p role="status" className="mt-4 text-sm">{notice}</p>:!current?<p role="status" className="mt-4 text-sm">{de?"Quellen werden geladen …":"Loading sources …"}</p>:<><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-3">{de?"Gespeicherte Quelle":"Recorded source"}</th><th className="p-3">{de?"Leads":"Leads"}</th><th className="p-3">{de?"Aktuell qualifiziert / Übergabe":"Currently qualified / handover"}</th><th className="p-3">{de?"Archiviert":"Archived"}</th></tr></thead><tbody>{current.sources.map(source=><tr key={`${source.kind}:${source.label}`} className="border-t border-stone-100"><td className="p-3">{source.label}<span className="ml-2 text-xs text-stone-500">{source.kind==="crm"?"CRM":source.kind==="expose_channel"?(de?"Exposé-Kanal":"Exposé channel"):(de?"Empfängerlink":"Recipient link")}</span></td><td className="p-3">{source.leads}</td><td className="p-3">{source.qualified}</td><td className="p-3">{source.archived}</td></tr>)}</tbody></table>{!current.sources.length?<p className="p-3 text-sm text-stone-500">{de?"Keine gespeicherten Anfragen im gewählten Zeitraum.":"No saved enquiries in this period."}</p>:null}</div><p className="mt-3 text-xs text-stone-500">{de?"Stand: ":"As of: "}{new Date(current.asOf).toLocaleString(de?"de-AT":"en-IE")}</p></>}
+    <p className="mt-4 text-xs leading-5 text-stone-500">{de?"Kanalzuordnung belegt den verwendeten Link. Sie bestätigt weder die Identität des Besuchers noch eine Anzeigenzustellung. Werbekosten, Impressionen und tatsächliche Kampagnenzustellung benötigen den jeweiligen Anbieteranschluss. Betreute Anzeigenleistungen werden separat beauftragt.":"Attribution identifies the link used. It does not confirm visitor identity or ad delivery. Advertising cost, impressions and actual campaign delivery require the relevant provider connection. Managed advertising services require a separate engagement."}</p>
+  </section>;
+}

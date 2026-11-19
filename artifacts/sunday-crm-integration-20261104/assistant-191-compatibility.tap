@@ -1,0 +1,35 @@
+▶ assistant guarded receipts, concurrency and late authority remain enforced under the runtime role
+  ✔ runtime cannot finalize a receipt with NULL, malformed or incorrect digests (144.6952ms)
+  ✔ concurrent requests with the same key make one provider call and the second receives processing (169.433ms)
+  ✔ a stale processing request becomes terminal unknown without a second provider call (70.7452ms)
+  ✔ a fresh role revocation during the provider call prevents delivery and completed persistence (37.2807ms)
+  ✔ ordinary team and backoffice members with project grants can use the assistant without bot publication rights (120.5218ms)
+  ✔ completed replay rechecks fresh authority after its first transaction commits (49.1195ms)
+  ✔ metrics count records beyond the detail limit and today follows the selected European time zone (131.9811ms)
+✔ assistant guarded receipts, concurrency and late authority remain enforced under the runtime role (10178.505ms)
+✔ assistant payloads and email outputs are bounded and explicit (26.9397ms)
+▶ real assistant HTTP flow stays tenant scoped, metered and idempotent
+  ✔ only durable sessions with CSRF and explicit scope can generate (250.4012ms)
+  ✔ a real metered call generates one durable response and retry is free (162.7004ms)
+  ✔ lead email and property tasks use the selected server records (213.2583ms)
+  ✔ provider rejection is terminal, refunds reservation and never becomes a fake answer (184.9777ms)
+  ✔ unknown provider outcome keeps its hold and does not retry remotely (132.3831ms)
+  ✔ malformed email is a charged terminal failure and is not shown as completed (171.0453ms)
+  ✔ a different company and forged headers cannot retrieve private work products (46.3009ms)
+  ✔ disabled modules and fresh role revocation stop generation and cached answers (43.1375ms)
+  ✔ production default grants cannot write assistant receipts directly (1.6737ms)
+✔ real assistant HTTP flow stays tenant scoped, metered and idempotent (12920.6848ms)
+▶ isolated Webchat access and released partner/billing guards compose in both migration orders
+  ✔ late 121 preserves the released external-partner denial even with a legacy broad grant (412.7746ms)
+  ✔ the exact later 167 function reproduces the old member incompatibility without opening partners (6.5185ms)
+  ✔ 191 retains both branches and current cross-tenant, membership and account revocation (16.8902ms)
+  ✔ test payments and released real AI billing keep separate restricted executors and unchanged defaults (2.0268ms)
+✔ isolated Webchat access and released partner/billing guards compose in both migration orders (16614.7534ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42083.9821

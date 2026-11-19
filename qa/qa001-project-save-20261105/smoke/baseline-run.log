@@ -1,0 +1,2 @@
+FAIL late project success after A-to-B cannot overwrite current dialog/navigation/data: Old save completion must not alter the current form, scope, URL, projects, counters or notices
+{"cases":1,"passed":0,"failed":1}

@@ -63,6 +63,7 @@ function errorMessage(code: string, language: LanguageCode) {
     invalid_rules: ["Bitte die Terminregeln prüfen.", "Please check the appointment rules."],
     invalid_time_zone: ["Bitte eine gültige Zeitzone eingeben.", "Please enter a valid time zone."],
     calendar_connection_required: ["Bitte zuerst einen Kalender verbinden und auswählen.", "Connect and select a calendar first."],
+    calendar_not_connected: ["Bitte zuerst einen Kalender verbinden und auswählen.", "Connect and select a calendar first."],
     booking_not_found: ["Dieser Vorgang ist nicht verfügbar.", "This booking is unavailable."],
     cancellation_deadline_passed: ["Die Stornierungsfrist ist abgelaufen.", "The cancellation deadline has passed."],
     reschedule_deadline_passed: ["Die Umbuchungsfrist ist abgelaufen.", "The rescheduling deadline has passed."],

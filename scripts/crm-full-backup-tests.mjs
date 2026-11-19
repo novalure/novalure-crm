@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateBackupConfig, validatePrivateManifest, runCrmFullBackup, readCrmBackupIndex, planBackupRetention, sha256, BACKUP_SCOPE, CrmBackupError } from './lib/crm-full-backup.mjs';
 import { createCrmBackupProviderPorts } from './lib/crm-full-backup-providers.mjs';
+import { createCrmBackupHttpHandler } from './lib/crm-full-backup-http.mjs';
+import { createCrmBackupFailureNotifier } from './lib/crm-backup-failure-warning.mjs';
 
 const NOW = '2026-11-01T20:00:00.000Z';
 const backupId = 'backup-20261101-proof';
@@ -82,6 +84,82 @@ function fixture(overrides = {}) {
   return { config: { ...config }, ports, events, writes, target, files, inventory, production, endpoint, receipt, run: () => runCrmFullBackup({ config: { ...config }, ports, now: NOW, backupId }) };
 }
 const assertNoFull = f => assert.equal(f.writes.filter(write => isFull(write.pathname)).length, 0, 'A failed backup must not leave a FULL completion marker');
+
+test('actual backup failures reach the signed warning bridge without new FULL or production mutations', async t => {
+  const cases = [
+    ['missing credential', 'CREDENTIALS_UNAVAILABLE', f => { f.ports.credentialsReady = async () => ({ neonApiKey: false }); }],
+    ['provider failure', 'PROVIDER_UNAVAILABLE', f => { f.ports.snapshotInfo = async () => { throw new CrmBackupError('NEON_REQUEST_FAILED'); }; }],
+    ['wrong snapshot', 'SNAPSHOT_UNAVAILABLE', f => { f.ports.snapshotInfo = async () => ({ id: f.config.snapshotId, sourceBranchId: 'br-foreign-snapshot', createdAt: NOW }); }],
+    ['missing private file', 'DATA_INTEGRITY_FAILED', f => { f.files.delete(assetId); }],
+    ['corrupt private bytes', 'DATA_INTEGRITY_FAILED', f => { f.files.set(assetId, Buffer.from('SYNTHETIC corrupt source')); }],
+    ['target write failure', 'PROVIDER_UNAVAILABLE', f => { f.ports.writeTarget = async () => { throw new CrmBackupError('BACKUP_PROVIDER_REQUEST_FAILED'); }; }],
+    ['cleanup not idle', 'CLEANUP_UNCONFIRMED', f => { f.ports.disableIsolatedEndpoint = async ep => ({ ...ep, disabled: true, currentState: 'active' }); }],
+    ['production drift', 'PRODUCTION_BINDING_CHANGED', f => {
+      const read = f.ports.readProductionBinding;
+      f.ports.readProductionBinding = async () => { const value = await read(); if (f.events.includes('restoreSnapshot')) value.defaultBranchId = 'br-unexpected-default'; return value; };
+    }],
+    ['unknown I/O exception', 'PROVIDER_UNAVAILABLE', f => { f.ports.snapshotInfo = async () => { throw new Error('SYNTHETIC_PRIVATE_PROVIDER_ERROR_MUST_NOT_LEAK'); }; }],
+    ['snapshot already claimed', 'SNAPSHOT_ALREADY_CLAIMED', async f => { await f.run(); }],
+  ];
+  for (const [name, failureClass, change] of cases) await t.test(name, async () => {
+    const f = fixture();
+    await change(f);
+    const fullBefore = f.writes.filter(write => isFull(write.pathname)).length;
+    const restoresBefore = f.events.filter(value => value === 'restoreSnapshot').length;
+    const runId = '99999999-9999-4999-8999-999999999999';
+    const bridgeEnv = { VERCEL_ENV: 'production', VERCEL_PROJECT_ID: config.backupProjectId,
+      VERCEL_TEAM_ID: config.teamId, CRM_FULL_BACKUP_ENABLED: 'true',
+      CRON_SECRET: 'SYNTHETIC_CRON_SECRET_WITH_AT_LEAST_THIRTY_TWO_BYTES',
+      CRM_BACKUP_WARNING_ENABLED: 'true', CRM_BACKUP_WARNING_HMAC_KEY: '1'.repeat(64) };
+    const warnings = [], logs = [];
+    const oidcClaims = { iss: 'https://oidc.vercel.com/novalure', aud: 'https://vercel.com/novalure',
+      sub: 'owner:novalure:project:synthetic-backup:environment:production', project_id: config.backupProjectId,
+      owner_id: config.teamId, environment: 'production', iat: Date.parse(NOW) / 1000 - 30, exp: Date.parse(NOW) / 1000 + 3600 };
+    const oidcToken = [JSON.stringify({ alg: 'RS256', kid: 'synthetic' }), JSON.stringify(oidcClaims), 'synthetic-signature']
+      .map(part => Buffer.from(part).toString('base64url')).join('.');
+    const notify = createCrmBackupFailureNotifier({ env: bridgeEnv,
+      endpoint: 'https://evelyn-canary.novalure.eu/api/ops/backup-failure', now: () => Date.parse(NOW),
+      request: async (_url, init) => {
+        const envelope = JSON.parse(init.body);
+        warnings.push(envelope);
+        assert.equal(init.headers['x-novalure-backup-timestamp'], NOW);
+        assert.match(init.headers['x-novalure-backup-signature'], /^[a-f0-9]{64}$/u);
+        // This is deliberately a local transport fixture, not a live delivery claim.
+        return Response.json({ status: 'DELIVERED', eventId: envelope.eventId, receiptSha256: 'a'.repeat(64) });
+      } });
+    const handler = createCrmBackupHttpHandler({ env: bridgeEnv, createRunId: () => runId,
+      now: () => Date.parse(NOW), getOidcToken: () => oidcToken, notifyFailure: notify, log: value => logs.push(value),
+      run: async (argv, _env, capture) => {
+        assert.deepEqual(argv, ['--execute', '--backup-id', `backup-${runId}`]);
+        try {
+          const result = await runCrmFullBackup({ config: f.config, ports: f.ports, now: NOW, backupId: argv[2] });
+          capture({ status: result.status }); return 0;
+        } catch (error) {
+          capture({ status: 'INCOMPLETE', code: error instanceof CrmBackupError ? error.code : 'BACKUP_CONFIGURATION_OR_IO_FAILED', fullBackupClaimed: false });
+          return 1;
+        }
+      } });
+    const response = await handler(new Request('https://synthetic-backup.example.invalid/api/backup',
+      { headers: { authorization: `Bearer ${bridgeEnv.CRON_SECRET}` } }));
+    assert.equal(response.status, 503);
+    const result = await response.json();
+    assert.equal(result.alarmStatus, 'DELIVERED');
+    assert.equal(result.status, 'INCOMPLETE');
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].failureClass, failureClass);
+    assert.equal(warnings[0].runId, runId);
+    assert.equal(f.writes.filter(write => isFull(write.pathname)).length, fullBefore);
+    if (name === 'snapshot already claimed') assert.equal(f.events.filter(value => value === 'restoreSnapshot').length, restoresBefore);
+    if (name === 'production drift') assert.equal(f.events.includes('disableIsolatedEndpoint'), false, 'Unknown production state prevents further Neon mutation');
+    for (const text of [JSON.stringify(result), JSON.stringify(warnings), JSON.stringify(logs)]) {
+      assert.equal(text.includes('SYNTHETIC_PRIVATE_PROVIDER_ERROR_MUST_NOT_LEAK'), false);
+      assert.equal(text.includes(bridgeEnv.CRON_SECRET), false);
+      assert.equal(text.includes(bridgeEnv.CRM_BACKUP_WARNING_HMAC_KEY), false);
+      assert.equal(text.includes(oidcToken), false);
+    }
+    assert.equal(f.production.defaultBranchId, config.sourceBranchId, 'Fault injection never mutates the retained production object');
+  });
+});
 
 test('backup scope cannot reuse its private source store as target', () => {
   assert.throws(() => validateBackupConfig({ ...config, targetStoreId: config.sourceStoreId }), hasSafeCode);
@@ -298,4 +376,19 @@ test('a failed production guard after an uncertain FULL write remains INCOMPLETE
   assert.equal(incomplete.productionVerification.status, 'UNCONFIRMED_OR_CHANGED');
   assert.equal(incomplete.fullMarkerState, 'MAY_EXIST_BUT_SUPPRESSED');
   assert.deepEqual(await readCrmBackupIndex({ config, ports: f.ports }), []);
+});
+
+test('allowlisted primary provider diagnostics survive orchestration and private INCOMPLETE evidence', async () => {
+  const f = fixture();
+  f.ports.restoreSnapshot = async () => { throw new CrmBackupError('NEON_HTTP_422', { providerStage: 'SNAPSHOT_RESTORE', providerHttpStatus: 422 }); };
+  await assert.rejects(f.run(), error => error.code === 'NEON_HTTP_422' && error.providerStage === 'SNAPSHOT_RESTORE' && error.providerHttpStatus === 422);
+  const incomplete = JSON.parse(f.target.get(`crm-full-backups/sets/${backupId}/INCOMPLETE.json`).toString('utf8'));
+  assert.equal(incomplete.failureCode, 'NEON_HTTP_422');
+  assert.equal(incomplete.providerStage, 'SNAPSHOT_RESTORE');
+  assert.equal(incomplete.providerHttpStatus, 422);
+  assertNoFull(f);
+  const unsafe = new CrmBackupError('NEON_HTTP_422', { providerStage: 'SYNTHETIC_PRIVATE_PROVIDER_PATH', providerHttpStatus: 422, responseBody: 'SYNTHETIC_PRIVATE_ERROR' });
+  assert.equal(unsafe.providerStage, undefined);
+  assert.equal(unsafe.providerHttpStatus, undefined);
+  assert.equal(unsafe.responseBody, undefined);
 });

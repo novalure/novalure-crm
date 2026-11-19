@@ -1,6 +1,8 @@
+import type { PropertyDisplayLocale } from "./property-country";
+
 /** Client-safe contract. Only the server builds document content from saved, scoped records. */
 export type PropertyExposeSource = "generated" | "uploaded";
-export type PropertyExposeLanguage = "de" | "en";
+export type PropertyExposeLanguage = "de" | "en" | "es";
 export type PropertyExposeOptions = {
   template: "compact" | "full";
   language: PropertyExposeLanguage;
@@ -69,12 +71,15 @@ export type PropertyExposeImage = {
 export type PropertyExposeDocument = {
   template: "compact" | "full";
   language: PropertyExposeLanguage;
+  /** Saved display format, independent of content language. Legacy inputs may omit it. */
+  locale?: PropertyDisplayLocale;
   title: string;
   reference: string;
   createdAt: string;
   address?: string;
   price?: string;
   facts: PropertyExposeFact[];
+  detailGroups?: { id: string; heading: string; facts: PropertyExposeFact[] }[];
   sections: PropertyExposeSection[];
   costs: PropertyExposeFact[];
   energy: PropertyExposeFact[];

@@ -1,0 +1,108 @@
+PASS direct B/project deep link and actual reload retain workspace, project and properties
+FAIL A to B to real Back to real Forward restores dataset and project without new history entries: expect(received).toEqual(expected) // deep equality
+PASS explicit All Projects survives project history Back Forward and reload
+PASS section history preserves explicit nested buyer-leads and properties
+FAIL delayed B switch is cancelled when user selects already active A: expect(received).toEqual(expected) // deep equality
+FAIL local project selection cancels pending B and late B cannot replace explicit All in A: expect(received).toEqual(expected) // deep equality
+FAIL Back A request delayed then Forward B cannot commit late A or grow history: expect(received).toBe(expected) // Object.is equality
+PASS unknown workspace direct link blocks business scope without adopting foreign data
+FAIL known target revoked by core 403 remains blocked and URL is not rewritten to a false success: expect(received).toBe(expected) // Object.is equality
+FAIL pending B response cannot commit after real Forward to absent workspace: Expected values to be strictly equal:
+FAIL wrong activeWorkspaceId in core 200 cannot be adopted as requested B: Expected values to be strictly equal:
+PASS foreign project ID is invalid and never falls back to first project
+PASS authorized B core 200 with revoked project filtered out blocks the requested project without fallback
+FAIL legacy camelCase #objectsMandates restores its allowed section: expect(received).toBe(expected) // Object.is equality
+FAIL #billing never renders old-workspace panel while target pending or revoked: expect(received).toBe(expected) // Object.is equality
+FAIL #billing never renders panel for unknown-workspace direct URL: Expected values to be strictly equal:
+FAIL #ai-billing-admin never renders old-workspace panel while target pending or revoked: expect(received).toBe(expected) // Object.is equality
+FAIL #ai-billing-admin never renders panel for unknown-workspace direct URL: Expected values to be strictly equal:
+FAIL #ai-assistant never renders old-workspace panel while target pending or revoked: expect(received).toBe(expected) // Object.is equality
+FAIL #ai-assistant never renders panel for unknown-workspace direct URL: Expected values to be strictly equal:
+PASS canonical hash #marketing restores allowed section marketing
+PASS canonical hash #analysis restores allowed section analysis
+PASS canonical hash #analytics restores allowed section analytics
+PASS canonical hash #settings restores allowed section settings
+PASS canonical hash #bots restores allowed section bots
+PASS canonical hash #meetings restores allowed section calendar
+PASS canonical hash #managed-service restores allowed section managedService
+PASS canonical hash #leadInbox restores allowed section leadInbox
+PASS canonical hash #objects-mandates restores allowed section objectsMandates
+PASS canonical hash #contacts restores allowed section contacts
+FAIL canonical hash #communication restores allowed section communication: expect(received).toBe(expected) // Object.is equality
+PASS canonical hash #customer-access restores allowed section customerAccess
+PASS canonical hash #customer-success restores allowed section customerSuccess
+PASS canonical hash #dashboard restores allowed section dashboard
+PASS canonical hash #daily-queue restores allowed section dailyQueue
+PASS canonical hash #data-hygiene restores allowed section dataHygiene
+PASS canonical hash #onboarding restores allowed section onboarding
+PASS canonical hash #pipelines restores allowed section pipelines
+PASS canonical hash #forms restores allowed section forms
+PASS canonical hash #tasks restores allowed section tasks
+PASS canonical hash #funnels restores allowed section funnels
+PASS canonical hash #knowledge restores allowed section knowledge
+PASS canonical hash #newsletter restores allowed section newsletter
+PASS canonical hash #sequences restores allowed section sequences
+PASS canonical hash #properties restores allowed section properties
+PASS canonical hash #projects restores allowed section projects
+PASS canonical hash #reservations restores allowed section reservations
+PASS canonical hash #units restores allowed section units
+PASS explicit nested hash #marketing restores marketing
+PASS explicit nested hash #audit-log restores auditLog
+PASS explicit nested hash #billing restores billing
+PASS explicit nested hash #ai-billing-admin restores aiBillingAdmin
+PASS explicit nested hash #ai-assistant restores aiAssistant
+PASS explicit nested hash #buyer-leads restores buyerLeads
+PASS explicit nested hash #buyer-profiles restores buyerProfiles
+PASS explicit nested hash #daily-queue restores dailyQueue
+PASS explicit nested hash #leads restores developerLeads
+PASS explicit nested hash #governance-compliance restores governanceCompliance
+PASS explicit nested hash #objects-mandates restores objectsMandates
+PASS explicit nested hash #properties restores properties
+PASS explicit nested hash #analytics restores projectAnalytics
+PASS explicit nested hash #projects restores projectOverview
+PASS explicit nested hash #projects restores projects
+PASS explicit nested hash #reservations restores reservations
+PASS explicit nested hash #seller-leads restores sellerLeads
+PASS explicit nested hash #settings restores settings
+PASS explicit nested hash #system-releases restores systemReleases
+PASS explicit nested hash #website-enquiries restores studioWebsiteEnquiries
+PASS explicit nested hash #studio-knowledge-ai restores studioKnowledgeAi
+PASS explicit nested hash #workspaces restores workspaces
+PASS legacy alias #analyse restores allowed section analysis
+PASS legacy alias #analyse-bot restores allowed section analysis
+PASS legacy alias #calendar restores allowed section calendar
+PASS legacy alias #customer restores allowed section customerAccess
+PASS legacy alias #customeraccess restores allowed section customerAccess
+PASS legacy alias #datahygiene restores allowed section dataHygiene
+PASS legacy alias #datenhygiene restores allowed section dataHygiene
+PASS legacy alias #daten-hygiene restores allowed section dataHygiene
+PASS legacy alias #dailyqueue restores allowed section dailyQueue
+PASS legacy alias #einstellungen restores allowed section settings
+PASS legacy alias #form restores allowed section forms
+PASS legacy alias #formulare restores allowed section forms
+PASS legacy alias #formular restores allowed section forms
+PASS legacy alias #kalender restores allowed section calendar
+PASS legacy alias #customers restores allowed section managedService
+PASS legacy alias #hygiene restores allowed section dataHygiene
+PASS legacy alias #kunden restores allowed section managedService
+PASS legacy alias #leadinbox restores allowed section leadInbox
+PASS legacy alias #lead-inbox restores allowed section leadInbox
+PASS legacy alias #jarvis restores allowed section analysis
+PASS legacy alias #meeting restores allowed section calendar
+PASS legacy alias #mandates restores allowed section objectsMandates
+PASS legacy alias #mandate restores allowed section objectsMandates
+PASS legacy alias #immobilien restores allowed section properties
+PASS legacy alias #property restores allowed section properties
+PASS legacy alias #real-estate restores allowed section properties
+PASS legacy alias #realestate restores allowed section properties
+PASS legacy alias #objects restores allowed section objectsMandates
+PASS legacy alias #managedservice restores allowed section managedService
+PASS legacy alias #customersuccess restores allowed section customerSuccess
+PASS legacy alias #overview restores allowed section dashboard
+PASS legacy alias #projekte restores allowed section projects
+PASS legacy alias #reservierungen restores allowed section reservations
+PASS legacy alias #einheiten restores allowed section units
+PASS legacy alias #inventory restores allowed section units
+PASS legacy alias #sequence restores allowed section sequences
+PASS legacy alias #sequenzen restores allowed section sequences
+{"cases":107,"passed":92,"failed":15}

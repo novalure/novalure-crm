@@ -1,0 +1,3962 @@
+{
+  "capturedAt": "2026-11-05T00:07:55.626Z",
+  "baselineRevision": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "baseline": true,
+  "sourceRevision": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "requestedRevision": null,
+  "harnessSha256": "c7af275446e87ad20263820b0f6ff0664a532d2f8c6f061a1dfe07a9bb6371b0",
+  "sourceHashes": {
+    "src/components/crm-workspace.tsx": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+    "src/lib/crm-core-request-guard.ts": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+    "src/lib/security/crm-sales-client.ts": "debbb4d1a039cbbcc08aade25994ce005e3c5131af06275247d330ac4bc64d78",
+    "src/lib/security/crm-safe-client.ts": "67b707b7d5ca7a4f7cca8744d3eb4b076b2e86356478f40c4fcb91a9d61a4784",
+    "src/lib/security/csrf-client.ts": "4921a72f8436dbfcdec2c7d7f24a392bdfcab817f2abe4c912200db320e5dcbf"
+  },
+  "sourceHashNormalization": "CRLF to LF",
+  "actualCrmWorkspace": true,
+  "actualInlineModalAndForm": true,
+  "actualUiSaveAndClose": true,
+  "actualSaveHandlerPromiseObserved": true,
+  "freshBrowserContextPerCase": true,
+  "readOnlyStateAndCommitObserver": true,
+  "syntheticHttp": true,
+  "authorizationStubbed": true,
+  "databaseIntegration": false,
+  "liveTest": false,
+  "noProjectPostReplay": true,
+  "totals": {
+    "cases": 11,
+    "passed": 3,
+    "failed": 8
+  },
+  "results": [
+    {
+      "name": "late project success after A-to-B cannot overwrite current dialog/navigation/data",
+      "transition": "A-to-B",
+      "outcome": "success",
+      "mode": "normal",
+      "positive": false,
+      "status": "FAIL",
+      "error": "Old save completion must not alter the current form, scope, URL, projects, counters or notices\n+ actual - expected\n... Skipped lines\n\n  {\n    activeProjects: 1,\n    draft: {\n      calendarProvider: 'none',\n      customerType: 'hybrid_real_estate',\n...\n      meetingProvider: 'manual-link',\n+     name: '',\n+     notes: '',\n-     name: 'SYNTHETIC newer unsaved input',\n-     notes: 'SYNTHETIC newer unsaved notes',\n      operatingModel: 'novalure_internal',\n      ownerUserId: 'SYNTHETIC-project-user-A',\n      pipelineId: 'pipeline_standard_sales',\n      teamStructure: 'small_team',\n      type: 'real_estate_project'\n...\n    modal: 'project',\n+   notice: 'Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.',\n-   notice: '',\n    noticeTone: 'success',\n    projects: [\n      {\n+       id: '99999999-9999-4999-8999-999999999999',\n+       name: 'SYNTHETIC submitted project A',\n+       workspaceId: '11111111-1111-4111-8111-111111111111'\n+     },\n+     {\n        id: '55555555-5555-4555-8555-555555555555',\n        name: 'SYNTHETIC initial 44444444-4444-4444-8444-444444444444',\n        workspaceId: '44444444-4444-4444-8444-444444444444'\n      }\n    ],\n...\n    },\n+   section: 'dashboard',\n+   url: '/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555',\n-   section: 'properties',\n-   url: '/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties',\n    workspaceId: '44444444-4444-4444-8444-444444444444'\n  }\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            },
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "44444444-4444-4444-8444-444444444444",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              },
+              {
+                "id": "55555555-5555-4555-8555-555555555555",
+                "workspaceId": "44444444-4444-4444-8444-444444444444",
+                "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+              }
+            ],
+            "scope": {
+              "projectId": "55555555-5555-4555-8555-555555555555",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "44444444-4444-4444-8444-444444444444"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "44444444-4444-4444-8444-444444444444",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              },
+              {
+                "id": "55555555-5555-4555-8555-555555555555",
+                "workspaceId": "44444444-4444-4444-8444-444444444444",
+                "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+              }
+            ],
+            "scope": {
+              "projectId": "55555555-5555-4555-8555-555555555555",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "44444444-4444-4444-8444-444444444444"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "44444444-4444-4444-8444-444444444444",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              },
+              {
+                "id": "55555555-5555-4555-8555-555555555555",
+                "workspaceId": "44444444-4444-4444-8444-444444444444",
+                "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+              }
+            ],
+            "scope": {
+              "projectId": "55555555-5555-4555-8555-555555555555",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "44444444-4444-4444-8444-444444444444"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555"
+          }
+        ],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            },
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "e4b584c0-7a58-42fb-999e-cb5e318602bd"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "late project error after A-to-B cannot overwrite current dialog/navigation/data",
+      "transition": "A-to-B",
+      "outcome": "error",
+      "mode": "normal",
+      "positive": false,
+      "status": "FAIL",
+      "error": "Old save completion must not alter the current form, scope, URL, projects, counters or notices\n+ actual - expected\n... Skipped lines\n\n  {\n    activeProjects: 1,\n    draft: {\n      calendarProvider: 'none',\n      customerType: 'hybrid_real_estate',\n...\n    modal: 'project',\n+   notice: 'SYNTHETIC definitive project rejection',\n+   noticeTone: 'error',\n-   notice: '',\n-   noticeTone: 'success',\n    projects: [\n      {\n        id: '55555555-5555-4555-8555-555555555555',\n        name: 'SYNTHETIC initial 44444444-4444-4444-8444-444444444444',\n        workspaceId: '44444444-4444-4444-8444-444444444444'\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "SYNTHETIC definitive project rejection",
+          "noticeTone": "error",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "44444444-4444-4444-8444-444444444444",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "55555555-5555-4555-8555-555555555555",
+                "workspaceId": "44444444-4444-4444-8444-444444444444",
+                "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+              }
+            ],
+            "scope": {
+              "projectId": "55555555-5555-4555-8555-555555555555",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "44444444-4444-4444-8444-444444444444"
+            },
+            "section": "properties",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "SYNTHETIC newer unsaved input",
+              "notes": "SYNTHETIC newer unsaved notes",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "SYNTHETIC definitive project rejection",
+            "noticeTone": "error",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+          }
+        ],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "SYNTHETIC definitive project rejection",
+          "noticeTone": "error",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "a895706b-fe45-4b0c-bbb9-d4d4d1f66aaa"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "late project success after A-to-B-to-A cannot overwrite current dialog/navigation/data",
+      "transition": "A-to-B-to-A",
+      "outcome": "success",
+      "mode": "normal",
+      "positive": false,
+      "status": "FAIL",
+      "error": "Old save completion must not alter the current form, scope, URL, projects, counters or notices\n+ actual - expected\n... Skipped lines\n\n  {\n+   activeProjects: 2,\n-   activeProjects: 1,\n    draft: {\n      calendarProvider: 'none',\n      customerType: 'hybrid_real_estate',\n      division: 'REAL_ESTATE_GROWTH',\n      funnelTemplateId: '',\n      meetingProvider: 'manual-link',\n+     name: '',\n+     notes: '',\n-     name: 'SYNTHETIC newer unsaved input',\n-     notes: 'SYNTHETIC newer unsaved notes',\n      operatingModel: 'novalure_internal',\n      ownerUserId: 'SYNTHETIC-project-user-A',\n      pipelineId: 'pipeline_standard_sales',\n      teamStructure: 'small_team',\n      type: 'real_estate_project'\n...\n    modal: 'project',\n+   notice: 'Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.',\n-   notice: '',\n    noticeTone: 'success',\n    projects: [\n      {\n        id: '22222222-2222-4222-8222-222222222222',\n        name: 'SYNTHETIC initial 11111111-1111-4111-8111-111111111111',\n        workspaceId: '11111111-1111-4111-8111-111111111111'\n      },\n+     {\n+       id: '99999999-9999-4999-8999-999999999999',\n+       name: 'SYNTHETIC submitted project A',\n+       workspaceId: '11111111-1111-4111-8111-111111111111'\n+     }\n    ],\n    saving: false,\n    scope: {\n+     projectId: '99999999-9999-4999-8999-999999999999',\n-     projectId: '22222222-2222-4222-8222-222222222222',\n      source: 'user',\n      status: 'valid',\n      version: 1,\n      workspaceId: '11111111-1111-4111-8111-111111111111'\n    },\n+   section: 'dashboard',\n+   url: '/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999',\n-   section: 'properties',\n-   url: '/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties',\n    workspaceId: '11111111-1111-4111-8111-111111111111'\n  }\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            },
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              },
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "properties",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": true,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999#properties"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              },
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              },
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+          }
+        ],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            },
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "7495343b-1fc7-4b5f-94c2-4a6efc54c475"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "late project error after A-to-B-to-A cannot overwrite current dialog/navigation/data",
+      "transition": "A-to-B-to-A",
+      "outcome": "error",
+      "mode": "normal",
+      "positive": false,
+      "status": "FAIL",
+      "error": "Old save completion must not alter the current form, scope, URL, projects, counters or notices\n+ actual - expected\n... Skipped lines\n\n  {\n    activeProjects: 1,\n    draft: {\n      calendarProvider: 'none',\n      customerType: 'hybrid_real_estate',\n...\n    modal: 'project',\n+   notice: 'SYNTHETIC definitive project rejection',\n+   noticeTone: 'error',\n-   notice: '',\n-   noticeTone: 'success',\n    projects: [\n      {\n        id: '22222222-2222-4222-8222-222222222222',\n        name: 'SYNTHETIC initial 11111111-1111-4111-8111-111111111111',\n        workspaceId: '11111111-1111-4111-8111-111111111111'\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "SYNTHETIC definitive project rejection",
+          "noticeTone": "error",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "projectId": "22222222-2222-4222-8222-222222222222",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "properties",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "SYNTHETIC newer unsaved input",
+              "notes": "SYNTHETIC newer unsaved notes",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "SYNTHETIC definitive project rejection",
+            "noticeTone": "error",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+          }
+        ],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "SYNTHETIC definitive project rejection",
+          "noticeTone": "error",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "efb75f78-20cd-4f61-a00a-89ee04029060"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "late project success after identity-change cannot overwrite current dialog/navigation/data",
+      "transition": "identity-change",
+      "outcome": "success",
+      "mode": "normal",
+      "positive": false,
+      "status": "FAIL",
+      "error": "Old save completion must not alter the current form, scope, URL, projects, counters or notices\n+ actual - expected\n... Skipped lines\n\n  {\n    activeProjects: 1,\n    draft: {\n      calendarProvider: 'none',\n      customerType: 'hybrid_real_estate',\n...\n    section: 'properties',\n+   url: '/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222',\n-   url: '/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties',\n    workspaceId: '11111111-1111-4111-8111-111111111111'\n  }\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-B",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-B",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+        },
+        "responseCommits": [],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-B",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "c6eac15f-30f0-49aa-8184-846f3da2e788"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "late project error after identity-change cannot overwrite current dialog/navigation/data",
+      "transition": "identity-change",
+      "outcome": "error",
+      "mode": "normal",
+      "positive": false,
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-B",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-B",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-B",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "responseCommits": [],
+        "dialogCount": 1
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "95a418bd-5a1f-46c7-a39b-f9f2d5a488d3"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "current project success remains functional",
+      "transition": "current",
+      "outcome": "success",
+      "mode": "normal",
+      "positive": true,
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            },
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              },
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "properties",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": true,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999#properties"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              },
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              },
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+          }
+        ],
+        "dialogCount": 1
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "ff7300d5-36bf-4bcd-900c-01409f3a0ab6"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "current project error remains functional",
+      "transition": "current",
+      "outcome": "error",
+      "mode": "normal",
+      "positive": true,
+      "status": "PASS",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "SYNTHETIC definitive project rejection",
+          "noticeTone": "error",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "projectId": "22222222-2222-4222-8222-222222222222",
+              "source": "url",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "properties",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "SYNTHETIC submitted project A",
+              "notes": "SYNTHETIC submitted notes A",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "SYNTHETIC definitive project rejection",
+            "noticeTone": "error",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+          }
+        ],
+        "dialogCount": 1
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "a3406924-2aef-4ba5-a5bd-2ffe52088f89"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "old uncertain A finally cannot release newer B saving; reconcile never repeats create",
+      "transition": "A-to-B",
+      "outcome": "unknown",
+      "mode": "overlap",
+      "positive": false,
+      "status": "FAIL",
+      "error": "expect(locator).toBeEnabled() failed\n\nLocator:  getByRole('dialog', { name: 'Projekt-Wizard', exact: true }).getByRole('button', { name: /^(Projekt anlegen|Projekt wird gespeichert)/ })\nExpected: enabled\nReceived: disabled\nTimeout:  1000ms\n\nCall log:\n  - Expect \"toBeEnabled\" getByRole('dialog', { name: 'Projekt-Wizard', exact: true }).getByRole('button', { name: /^(Projekt anlegen|Projekt wird gespeichert)/ }) with timeout 1000ms\n  - waiting for getByRole('dialog', { name: 'Projekt-Wizard', exact: true }).getByRole('button', { name: /^(Projekt anlegen|Projekt wird gespeichert)/ })\n    10 × locator resolved to <button disabled type=\"button\" class=\"rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400\">Projekt wird gespeichert...</button>\n       - unexpected value \"disabled\"\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "closedDuringPost": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": null,
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeDistinctBSubmit": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+        },
+        "overlapPrerequisiteBlocked": true,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "workspaceId": "44444444-4444-4444-8444-444444444444",
+              "name": "SYNTHETIC initial 44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "scope": {
+            "projectId": "55555555-5555-4555-8555-555555555555",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "44444444-4444-4444-8444-444444444444"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=44444444-4444-4444-8444-444444444444&projectId=55555555-5555-4555-8555-555555555555#properties"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "85171d56-9ced-489e-b2af-6a4f298fda88"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "44444444-4444-4444-8444-444444444444"
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "continuation retired during its own core refresh cannot navigate after dialog reopen",
+      "transition": "current-close-reopen",
+      "outcome": "success",
+      "mode": "refresh",
+      "positive": false,
+      "status": "FAIL",
+      "error": "Retired post-refresh continuation cannot alter url\n+ actual - expected\n\n+ '/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999'\n- '/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999#properties'\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "duringOwnRefresh": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            },
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              },
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "SYNTHETIC newer unsaved input",
+              "notes": "SYNTHETIC newer unsaved notes",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              },
+              {
+                "id": "99999999-9999-4999-8999-999999999999",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC submitted project A"
+              }
+            ],
+            "scope": {
+              "projectId": "99999999-9999-4999-8999-999999999999",
+              "source": "user",
+              "status": "valid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "SYNTHETIC newer unsaved input",
+              "notes": "SYNTHETIC newer unsaved notes",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+          }
+        ],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 2,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            },
+            {
+              "id": "99999999-9999-4999-8999-999999999999",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC submitted project A"
+            }
+          ],
+          "scope": {
+            "projectId": "99999999-9999-4999-8999-999999999999",
+            "source": "user",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC newer unsaved input",
+            "notes": "SYNTHETIC newer unsaved notes",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=99999999-9999-4999-8999-999999999999"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "95a2180a-83b4-4385-a0c6-7ceec33ec1a9"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    },
+    {
+      "name": "wrong-workspace 200 remains unconfirmed and identical UI retry performs only reconcile",
+      "transition": "current",
+      "outcome": "wrong200",
+      "mode": "wrong200",
+      "positive": true,
+      "status": "FAIL",
+      "error": "Expected values to be strictly equal:\n\n'success' !== 'error'\n",
+      "freshContext": true,
+      "checkpoints": {
+        "submitted": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "beforeResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "projectId": "22222222-2222-4222-8222-222222222222",
+            "source": "url",
+            "status": "valid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "properties",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "SYNTHETIC submitted project A",
+            "notes": "SYNTHETIC submitted notes A",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "",
+          "noticeTone": "success",
+          "saving": true,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+        },
+        "afterResponse": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "invalidReason": "project_not_available",
+            "projectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "requestedProjectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "requestedWorkspaceId": "11111111-1111-4111-8111-111111111111",
+            "source": "user",
+            "status": "invalid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+        },
+        "responseCommits": [
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                "workspaceId": "44444444-4444-4444-8444-444444444444",
+                "name": "SYNTHETIC submitted project A"
+              },
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "invalidReason": "project_not_available",
+              "projectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedProjectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedWorkspaceId": "11111111-1111-4111-8111-111111111111",
+              "source": "user",
+              "status": "invalid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "properties",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": true,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222#properties"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 2,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "invalidReason": "project_not_available",
+              "projectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedProjectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedWorkspaceId": "11111111-1111-4111-8111-111111111111",
+              "source": "user",
+              "status": "invalid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "invalidReason": "project_not_available",
+              "projectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedProjectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedWorkspaceId": "11111111-1111-4111-8111-111111111111",
+              "source": "user",
+              "status": "invalid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+          },
+          {
+            "identity": "SYNTHETIC-project-user-A",
+            "workspaceId": "11111111-1111-4111-8111-111111111111",
+            "activeProjects": 1,
+            "projects": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "workspaceId": "11111111-1111-4111-8111-111111111111",
+                "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+              }
+            ],
+            "scope": {
+              "invalidReason": "project_not_available",
+              "projectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedProjectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "requestedWorkspaceId": "11111111-1111-4111-8111-111111111111",
+              "source": "user",
+              "status": "invalid",
+              "version": 1,
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            },
+            "section": "dashboard",
+            "draft": {
+              "calendarProvider": "none",
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "funnelTemplateId": "",
+              "meetingProvider": "manual-link",
+              "name": "",
+              "notes": "",
+              "operatingModel": "novalure_internal",
+              "ownerUserId": "SYNTHETIC-project-user-A",
+              "pipelineId": "pipeline_standard_sales",
+              "teamStructure": "small_team",
+              "type": "real_estate_project"
+            },
+            "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+            "noticeTone": "success",
+            "saving": false,
+            "modal": "project",
+            "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+          }
+        ],
+        "dialogCount": 1,
+        "failure": {
+          "identity": "SYNTHETIC-project-user-A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "activeProjects": 1,
+          "projects": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "workspaceId": "11111111-1111-4111-8111-111111111111",
+              "name": "SYNTHETIC initial 11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "scope": {
+            "invalidReason": "project_not_available",
+            "projectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "requestedProjectId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "requestedWorkspaceId": "11111111-1111-4111-8111-111111111111",
+            "source": "user",
+            "status": "invalid",
+            "version": 1,
+            "workspaceId": "11111111-1111-4111-8111-111111111111"
+          },
+          "section": "dashboard",
+          "draft": {
+            "calendarProvider": "none",
+            "customerType": "hybrid_real_estate",
+            "division": "REAL_ESTATE_GROWTH",
+            "funnelTemplateId": "",
+            "meetingProvider": "manual-link",
+            "name": "",
+            "notes": "",
+            "operatingModel": "novalure_internal",
+            "ownerUserId": "SYNTHETIC-project-user-A",
+            "pipelineId": "pipeline_standard_sales",
+            "teamStructure": "small_team",
+            "type": "real_estate_project"
+          },
+          "notice": "Projekt \"SYNTHETIC submitted project A\" wurde gespeichert.",
+          "noticeTone": "success",
+          "saving": false,
+          "modal": "project",
+          "url": "/?workspaceId=11111111-1111-4111-8111-111111111111&projectId=22222222-2222-4222-8222-222222222222"
+        }
+      },
+      "posts": [
+        {
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "body": {
+            "project": {
+              "customerType": "hybrid_real_estate",
+              "division": "REAL_ESTATE_GROWTH",
+              "defaultOperatingModel": "novalure_internal",
+              "defaultPipelineId": "pipeline_standard_sales",
+              "name": "SYNTHETIC submitted project A",
+              "setupDefaults": {
+                "calendarProvider": "none",
+                "meetingProvider": "manual-link",
+                "teamStructure": "small_team"
+              },
+              "status": "Aktiv",
+              "type": "Immobilienprojekt",
+              "workspaceId": "11111111-1111-4111-8111-111111111111"
+            }
+          },
+          "idempotencyKey": "5b6c84b7-8b9a-4dc3-bf44-d044190aafb0"
+        }
+      ],
+      "reconciliations": [],
+      "requests": [
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/session",
+          "method": "POST",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/auth/csrf",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/projects",
+          "method": "POST",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/crm/team",
+          "method": "GET",
+          "workspaceId": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "path": "/api/crm/core",
+          "method": "GET",
+          "workspaceId": null
+        },
+        {
+          "path": "/api/workspaces",
+          "method": "GET",
+          "workspaceId": null
+        }
+      ],
+      "browserErrors": [],
+      "blockedNetwork": []
+    }
+  ]
+}

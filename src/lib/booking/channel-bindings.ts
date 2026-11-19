@@ -11,7 +11,7 @@ import { BookingError } from "./types";
 type Principal = { id: string; workspace_id: string; actor_user_id: string; identity_id: string; data_context: string };
 export type BookingChannelAuthority = {
   publicId: string; workspaceId: string; bindingId: string; typeIds: string[];
-  relation?: { source: "machine" | "external_chat" | "studio_handoff"; sourceId: string; leadId?: string; contactId?: string };
+  relation?: { source: "machine" | "external_chat" | "studio_handoff" | "studio_voice"; sourceId: string; leadId?: string; contactId?: string };
 };
 export type BookingMachineOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions };
 const authenticationSql = "select * from public.crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)";

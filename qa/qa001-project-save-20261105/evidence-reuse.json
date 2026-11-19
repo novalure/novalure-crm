@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-05T00:09:56.719Z",
+  "baseRevision": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "headAtInspection": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+  "purpose": "Bounded project-save continuation: preserve exact older evidence without relabeling it as a final full-suite execution.",
+  "freshExecution": {
+    "command": "node --import tsx --test scripts/sales-client-recovery-tests.ts",
+    "evidence": "qa/qa001-project-save-20261105/transport-tests.txt",
+    "evidenceSha256": "4f56a56cad5a58c6b7bc464c1d5a3a970d3549fd081caf23578e5759c4a076c7",
+    "node": "v24.18.0",
+    "startedAtUtc": "2026-11-05T00:07:43.551Z",
+    "endedAtUtc": "2026-11-05T00:07:44.093Z",
+    "exitCode": 0,
+    "tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "oldCasesRerun": 4,
+    "newValidatorCases": 2,
+    "sourceBeforeAndAfterUnchanged": true,
+    "sourceStillMatchesCapturedRun": true,
+    "sourceLfHashes": {
+      "src/lib/security/crm-safe-client.ts": "eedc706602952265147b2bf9520511bb073fd3ec6bc5049f4c282dc109163f2f",
+      "src/lib/security/crm-sales-client.ts": "22bc79692db73902f2d9e359c6554e6d6cfdc21e6d68d2cd5756ee4f7edee920",
+      "scripts/sales-client-recovery-tests.ts": "6f6f55545b2383364a54c891eab1660a266f008fbbc42ea4f9171e667fe074df"
+    },
+    "coverage": [
+      "Invalid semantic 200 remains unknown through NOT_FOUND; later valid COMMITTED lookup resolves without a second create.",
+      "Invalid COMMITTED receipt remains pending across repeated lookups; changed body causes neither write nor lookup.",
+      "Exact original target/query/body/Idempotency-Key/X-Correlation-Id retained.",
+      "Existing four loss/rejection/recovery cases rerun unchanged."
+    ],
+    "boundary": "Injected simulated transport and representative validator callbacks only; actual Shell DTO validator is covered by the separately owned real-dialog harness, not these six tests."
+  },
+  "summary": {
+    "sourceFilesChecked": 29,
+    "unchangedLfFromA9": 25,
+    "changedProductPaths": [
+      "src/components/crm-workspace.tsx",
+      "src/lib/security/crm-safe-client.ts",
+      "src/lib/security/crm-sales-client.ts"
+    ],
+    "expectedThreeProductPathsOnly": true,
+    "originalFourTestBodiesUnchanged": true,
+    "oldEvidenceFilesChecked": 9,
+    "allOldEvidenceUnchangedLf": true,
+    "a9MatchesPriorN1RecordedSource": true
+  },
+  "sources": [
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "baseGitBlobLfSha256": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+      "currentBytesSha256": "3acd850b68c0184c24e85d6d6e9ecbd9c5969f5ad1c5b14712bdfba332154125",
+      "currentLfSha256": "6472eaade25d1982e0e913c4e83ddb127b110135403553680e6d4fde38dfeb03",
+      "unchangedLfFromBase": false
+    },
+    {
+      "path": "src/lib/security/crm-sales-client.ts",
+      "baseGitBlobLfSha256": "debbb4d1a039cbbcc08aade25994ce005e3c5131af06275247d330ac4bc64d78",
+      "currentBytesSha256": "20402fffbf85ebd5caf37ab40abcfa1fee742117f8b68705b54e3cc95d9fe596",
+      "currentLfSha256": "22bc79692db73902f2d9e359c6554e6d6cfdc21e6d68d2cd5756ee4f7edee920",
+      "unchangedLfFromBase": false
+    },
+    {
+      "path": "src/lib/security/crm-safe-client.ts",
+      "baseGitBlobLfSha256": "67b707b7d5ca7a4f7cca8744d3eb4b076b2e86356478f40c4fcb91a9d61a4784",
+      "currentBytesSha256": "c64600093721c6c879e302b56a98abcf0e382e512a993ccee8cff7cdba200b5d",
+      "currentLfSha256": "eedc706602952265147b2bf9520511bb073fd3ec6bc5049f4c282dc109163f2f",
+      "unchangedLfFromBase": false
+    },
+    {
+      "path": "scripts/sales-client-recovery-tests.ts",
+      "baseGitBlobLfSha256": "5b2fb5a7c986fd574ae9b41d600e6f2b7c9b43d15dd937d782a657b471dc734e",
+      "currentBytesSha256": "9bffcc896d97b06933d55785fe7fdf39f950f1daace306b7c1cd00456644fc8b",
+      "currentLfSha256": "6f6f55545b2383364a54c891eab1660a266f008fbbc42ea4f9171e667fe074df",
+      "unchangedLfFromBase": false
+    },
+    {
+      "path": "src/lib/security/csrf-client.ts",
+      "baseGitBlobLfSha256": "4921a72f8436dbfcdec2c7d7f24a392bdfcab817f2abe4c912200db320e5dcbf",
+      "currentBytesSha256": "887a594c14537f20c2ac717a2489d785147f746459615074193a587e4870ff0f",
+      "currentLfSha256": "4921a72f8436dbfcdec2c7d7f24a392bdfcab817f2abe4c912200db320e5dcbf",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/crm-core-request-guard.ts",
+      "baseGitBlobLfSha256": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+      "currentBytesSha256": "902ca1f0846292ebcb51cd75c0a2e7cea587e16fb26018dda10782a3892a15aa",
+      "currentLfSha256": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/crm-sales-http.ts",
+      "baseGitBlobLfSha256": "fb8dc0dd3de0c72f6682b61d518150843e35b0e6a28fd33083a522eb968c9319",
+      "currentBytesSha256": "761f17081dc9d0c892fef2b327bda329057141539d80e55936d339ee132f0bfc",
+      "currentLfSha256": "fb8dc0dd3de0c72f6682b61d518150843e35b0e6a28fd33083a522eb968c9319",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/crm-command.ts",
+      "baseGitBlobLfSha256": "6cbce3ce5ae0e1c7fdc8cd19015443287d3b89d9fbf2509796b6fdebe73e42a9",
+      "currentBytesSha256": "d56be76b2ce89c49861061c7663f88d3884602777100ea30ac799702cea328e7",
+      "currentLfSha256": "6cbce3ce5ae0e1c7fdc8cd19015443287d3b89d9fbf2509796b6fdebe73e42a9",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/db/crm-write-repositories.ts",
+      "baseGitBlobLfSha256": "c4569a53e3c66abc0c58e25997ed03ac5ab9b6f71972d0a99e94123eb2949e52",
+      "currentBytesSha256": "895542482062d620709a4b7513f882c2ac81a4d838a527c0c12991557deb2607",
+      "currentLfSha256": "c4569a53e3c66abc0c58e25997ed03ac5ab9b6f71972d0a99e94123eb2949e52",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/auth/session.ts",
+      "baseGitBlobLfSha256": "a4abd9efc35227e1f0d15a688ce83c07a100f31862140df551e578a2aa986257",
+      "currentBytesSha256": "cc13df5bef093b806a5f27203e74ed727296087bbbbd18bf26a6bb3817684960",
+      "currentLfSha256": "a4abd9efc35227e1f0d15a688ce83c07a100f31862140df551e578a2aa986257",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/crm-types.ts",
+      "baseGitBlobLfSha256": "77afe69c24c6aec8bd10150ae9e4d27872c000c798ed61570a88021a26771b05",
+      "currentBytesSha256": "6f0e753128f00c01bd6fe3cd4830d0b77a9cb47a0d5451524810978642b62e1e",
+      "currentLfSha256": "77afe69c24c6aec8bd10150ae9e4d27872c000c798ed61570a88021a26771b05",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/app/api/crm/projects/route.ts",
+      "baseGitBlobLfSha256": "b97c4472904cb435efa45a2c2d0390430888f1914a663faca2ed347d06a013b6",
+      "currentBytesSha256": "ed68e15d7fd6f3d5f84f668792380ee9374e210f7cd680c8520e884b4c62cffa",
+      "currentLfSha256": "b97c4472904cb435efa45a2c2d0390430888f1914a663faca2ed347d06a013b6",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/app/api/crm/commands/reconcile/route.ts",
+      "baseGitBlobLfSha256": "11be7494e16c439f6076f4c24b43862be780ab5302f775f3551a61a0b938d090",
+      "currentBytesSha256": "bee2ba42a54bbb421aed079385e4ad9616cb30e0360d908f36aa56fcf279bd1c",
+      "currentLfSha256": "11be7494e16c439f6076f4c24b43862be780ab5302f775f3551a61a0b938d090",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/app/api/crm/core/route.ts",
+      "baseGitBlobLfSha256": "27aa9e110abfa4d4d4ca042e190739fca50f6886077c9a1618be5f33f38bbbd4",
+      "currentBytesSha256": "bdfbb3b5cfe01987e6e8aef0826c013454515f37ca701c2dcfaf416a434fa514",
+      "currentLfSha256": "27aa9e110abfa4d4d4ca042e190739fca50f6886077c9a1618be5f33f38bbbd4",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/app/api/workspaces/route.ts",
+      "baseGitBlobLfSha256": "ac25d84abbc0c96b23b6f73315c519f10f8e09560ebe676c0ea4df35b74c6d22",
+      "currentBytesSha256": "6ede3d1c92abbbf264a27c87d05542fdc2898d587c0cae7434442dfb3252f53d",
+      "currentLfSha256": "ac25d84abbc0c96b23b6f73315c519f10f8e09560ebe676c0ea4df35b74c6d22",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/qa001-history-browser-tests.mjs",
+      "baseGitBlobLfSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "currentBytesSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "currentLfSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/crm-core-refresh-ui-tests.mjs",
+      "baseGitBlobLfSha256": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb",
+      "currentBytesSha256": "d23d91c4f7ec2f342cab6cf2964adf6657b10367cf7471aabe56290b7ce08f52",
+      "currentLfSha256": "f358136ea0e363ad73945e0377f08a0c5e63ff82d81a8b88a55e231b566962eb",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/qa001-stale-selection-tests.mjs",
+      "baseGitBlobLfSha256": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+      "currentBytesSha256": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+      "currentLfSha256": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/sales-http-receipt-tests.ts",
+      "baseGitBlobLfSha256": "e60dd20547c320894b40e1162ef742fc25fd5c4f77ceadb26983bb5b761c0292",
+      "currentBytesSha256": "ee5215ebbf043fe0ff93e58ce28c1fc95c38aabb58d8952833900093badb6986",
+      "currentLfSha256": "e60dd20547c320894b40e1162ef742fc25fd5c4f77ceadb26983bb5b761c0292",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/sales-route-integration-tests.ts",
+      "baseGitBlobLfSha256": "da898e868f7e07e1c6ff073098e42899b29e9caa7c1b62c810b3586f3559f1ad",
+      "currentBytesSha256": "a120dadb879db10741626eca134a6df4b73d158eef1e43760a20f657cf0a12d6",
+      "currentLfSha256": "da898e868f7e07e1c6ff073098e42899b29e9caa7c1b62c810b3586f3559f1ad",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/core-cas-tests.ts",
+      "baseGitBlobLfSha256": "622172dafcd35af328154154e9df9ddf70d58d4f257b567d61cbc8afdadc4f2b",
+      "currentBytesSha256": "d184d690b7ba5c872087084ff354181ec33e52f417511425ac134895347bb7f2",
+      "currentLfSha256": "622172dafcd35af328154154e9df9ddf70d58d4f257b567d61cbc8afdadc4f2b",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/lib/local-sales-db.mjs",
+      "baseGitBlobLfSha256": "33e57ef41f60ce24693479f84e63f369969448c409767df560f50694f5d7b855",
+      "currentBytesSha256": "739387e9f076d78b1a2079cc10dfcbf763207b3a344ee869d725bd8448c47a55",
+      "currentLfSha256": "33e57ef41f60ce24693479f84e63f369969448c409767df560f50694f5d7b855",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/crm-scope-persistence-smoke-tests.mjs",
+      "baseGitBlobLfSha256": "07f59c5d3fd9d77ef519546ad75b76d1a95205a143e701500ca48c213fd8d4e6",
+      "currentBytesSha256": "16da6c32f27cae18564af9cad0a41897d86b78fd9e5bc39ef812c26ef6a0e4bf",
+      "currentLfSha256": "07f59c5d3fd9d77ef519546ad75b76d1a95205a143e701500ca48c213fd8d4e6",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/studio-navigation-profile-tests.ts",
+      "baseGitBlobLfSha256": "05f50b720856b52bfa644799f34d85c97c3c552e696a2066507cc766eb927fa1",
+      "currentBytesSha256": "e9861aed5139551d9a2b770726dbdce6fffba9721a39a7604e204e3d122c1df3",
+      "currentLfSha256": "05f50b720856b52bfa644799f34d85c97c3c552e696a2066507cc766eb927fa1",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/workspace-navigation-tests.ts",
+      "baseGitBlobLfSha256": "6ea9276c2903bf63736e2906ae84513d68ce658f72541a63253b599491b726eb",
+      "currentBytesSha256": "943570901f315a7e04a7c540da6298b0471e8401e512fbb4a4b8e51ab44f7fd8",
+      "currentLfSha256": "6ea9276c2903bf63736e2906ae84513d68ce658f72541a63253b599491b726eb",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "scripts/admin-navigation-smoke-tests.mjs",
+      "baseGitBlobLfSha256": "5a8c332d0ed6c5b40f912cc3adc02a626f5774c5efd1a30b95930d96aa99ba58",
+      "currentBytesSha256": "36495a868f06a5b45e554c2bbf4652980357a32b8fc27db596a93322ba54323b",
+      "currentLfSha256": "5a8c332d0ed6c5b40f912cc3adc02a626f5774c5efd1a30b95930d96aa99ba58",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/crm-scope.ts",
+      "baseGitBlobLfSha256": "141948634f2b046eaf87cdccd4ca4870955db25a0ec2abc0d30120bc55101b8b",
+      "currentBytesSha256": "94c96a207485247598468e2ab97f407392ba0050345d70a7277fcfbb43e27e00",
+      "currentLfSha256": "141948634f2b046eaf87cdccd4ca4870955db25a0ec2abc0d30120bc55101b8b",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/studio-navigation.ts",
+      "baseGitBlobLfSha256": "452d027d5c029b9cb59200faaa648f74af1da9318e7d5c4a3071d36ae1e02d4a",
+      "currentBytesSha256": "a2da0e21537c4eed759c7d7323610150486d8395131d6d4670e5f2e81da2d713",
+      "currentLfSha256": "452d027d5c029b9cb59200faaa648f74af1da9318e7d5c4a3071d36ae1e02d4a",
+      "unchangedLfFromBase": true
+    },
+    {
+      "path": "src/lib/workspace-navigation.ts",
+      "baseGitBlobLfSha256": "b53c84a7557609bec70145c64439f4bdd953df8bb155b20af01e4bf129e981b4",
+      "currentBytesSha256": "4dd97550b081ce43108b1fa1001df68ec4f8ff49a43f5748954e5a7a23dcc067",
+      "currentLfSha256": "b53c84a7557609bec70145c64439f4bdd953df8bb155b20af01e4bf129e981b4",
+      "unchangedLfFromBase": true
+    }
+  ],
+  "originalTransportCases": [
+    {
+      "name": "G06 client reconciles a lost success using the original metadata without another write",
+      "lfSha256": "fc35d43ad14883e7dbc9ef1ac1652edbf33ffc220b2ded030a334bfaf3c0658d",
+      "sameCurrentName": true,
+      "unchangedLfSource": true
+    },
+    {
+      "name": "G06 missing receipt stays unknown and blocks changed requests; retry is lookup only",
+      "lfSha256": "ba61c2f5ac2e31e95a2c5f198ef6ea8b72ca028a7334fe796f0b586c8650418d",
+      "sameCurrentName": true,
+      "unchangedLfSource": true
+    },
+    {
+      "name": "G06 explicit validation rejection permits corrected intent and does not reconcile",
+      "lfSha256": "6035cfa35956592ab53d98e481581e3d6307bcfb9e4004d1a8a8f5e4a2050a15",
+      "sameCurrentName": true,
+      "unchangedLfSource": true
+    },
+    {
+      "name": "G06 offer retry uses original envelope even when UI creates fresh metadata",
+      "lfSha256": "6be38542452848bffb6f5a18fdbcb514cad24c34e7c92d10715628012c0ae1da",
+      "sameCurrentName": true,
+      "unchangedLfSource": true
+    }
+  ],
+  "oldEvidence": [
+    {
+      "path": "qa/qa001-history-20261105/validation.json",
+      "bytesSha256": "ec41f27849f26fdeb3cef7f05acc56727e2c08d753717cd6d07359a034bfea49",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/browser-results.json",
+      "bytesSha256": "600e39bd87466686dc188118cb343de4554226c8baade58ecb7de0609374d4c5",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/baseline-browser-results.json",
+      "bytesSha256": "60a9920a5bb22235017ba60f55754d19b293764a9712fe1fbca18445394639b7",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/refresh-ui-results.json",
+      "bytesSha256": "36cba63d9785f62dfff68f6d4080f1fc4f0dee2a3d0be41d4beec532dc270611",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-history-20261105/contracts.txt",
+      "bytesSha256": "4570377de311878e7d7d0f68ef3c9610423c03d246078d73398adf14c55f848e",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-n1-20261105/validation.json",
+      "bytesSha256": "4867382ae17abf18701587ba71f68c51060e722a184d6dffbba8f1c5c9181a75",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-n1-20261105/results.json",
+      "bytesSha256": "44cdf019027f011af56fe6b54da47e1fd13f35a3d61da60ee398c225cbccb36a",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-n1-20261105/baseline-results.json",
+      "bytesSha256": "90efc1ee67b52591922261e9e61a8680e6fa5b905f6db81e7c740e6200213b21",
+      "unchangedLfFromBaseGit": true
+    },
+    {
+      "path": "qa/qa001-n1-20261105/evidence-reuse.json",
+      "bytesSha256": "2bdf2438c5c7dd85026c5d59343e489eea1422652ebf0dc48fb8e738f4aed4c6",
+      "unchangedLfFromBaseGit": true
+    }
+  ],
+  "priorN1SourceBindings": [
+    {
+      "path": "scripts/qa001-stale-selection-tests.mjs",
+      "recordedLfSha256": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+      "baseGitBlobLfSha256": "58627134f3c5178036f6cefb21124c1ba4b5546dd471e25f06d274f6a7160c15",
+      "matches": true
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "recordedLfSha256": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+      "baseGitBlobLfSha256": "fbb0346cb944eb429bf3b0237545c640c145e98b056891cb6a16f755a5815ab7",
+      "matches": true
+    },
+    {
+      "path": "src/lib/crm-core-request-guard.ts",
+      "recordedLfSha256": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+      "baseGitBlobLfSha256": "d7e88bacb1b0a810c17c993993cd27b23aea16141832b6482132fd8f7a44b452",
+      "matches": true
+    }
+  ],
+  "reuse": [
+    {
+      "originalRevision": "a942049c967009f6df09bf2eb905f8d5ba5e5ac8",
+      "evidence": "qa/qa001-history-20261105",
+      "checks": "107 navigation + 7 refresh; 29 contracts",
+      "classification": "Historical runtime evidence and qualified prior contract inspection only.",
+      "reason": "Whole Shell differs, and Guard changed in the N1 successor. No old runtime count is promoted onto this project-save delta. The 29 aggregate remains an earlier execution despite unchanged contract scripts/helpers."
+    },
+    {
+      "originalRevision": "a9df44d5900f25659c7a2f153277eaa2755f9bf7",
+      "evidence": "qa/qa001-n1-20261105",
+      "checks": "4 targeted N1 cases; base 1 pass/3 fail",
+      "classification": "Historical immutable N1 producer evidence only.",
+      "reason": "Guard and old N1 harness remain LF-identical, but the Shell now changes. Existing N1 results are retained as prior coverage rather than re-executed final coverage."
+    },
+    {
+      "evidence": "scripts/sales-client-recovery-tests.ts",
+      "checks": "Previous 4 transport cases",
+      "classification": "RERUN_NOW_AS_PART_OF_6_OF_6",
+      "reason": "Old case bodies are LF-identical; changed transport helpers are bound to the new run. Do not count historical 4 again."
+    },
+    {
+      "evidence": "Historical G06 sales-http-receipt-tests/sales-route-integration-tests/core-cas logs",
+      "classification": "HISTORICAL_ONLY_NOT_RERUN",
+      "reason": "Server project/reconcile routes, receipt/repository/auth sources and DB fixture are unchanged from a9. Earlier September/October full-stack dependencies are not all identical; no new DB/cookie/CSRF/authorization pass is inferred."
+    }
+  ],
+  "minimumFinalHandoff": [
+    "Bind real-dialog targeted results to final Shell/client/harness hashes and retain exact original request/no-second-create observations.",
+    "Record current targeted type/lint qualification owned by root; this protocol claims only the six transport tests it ran.",
+    "Preserve old qa001-history and qa001-n1 evidence unchanged and label previous revision, reused inspection, and fresh execution separately.",
+    "If the two client sources or transport test changes after this run, mark its result stale for the changed content; do not silently relabel it."
+  ],
+  "limits": [
+    "Memory-only pending transport state is not a durable server draft or reload/cross-tab lock.",
+    "Source LF equality is distinct from raw checkout byte equality; both current raw and LF hashes are recorded.",
+    "No DB, browser, provider, live, external network, CI, deployment, merge or calendar action by this subtask.",
+    "Final combined navigation/calendar integration and genuine authenticated acceptance remain separate gates."
+  ],
+  "productChangesByThisAgent": 0,
+  "testEditsByThisAgent": [
+    "scripts/sales-client-recovery-tests.ts"
+  ],
+  "newTestCount": 2,
+  "metadataRefresh": {
+    "atUtc": "2026-11-05T00:09:56.719Z",
+    "reason": "Root lifecycle lint correction removes layout-effect state update and binds busy state to state.guard === coreRequestGuard; ref cleanup remains an effect.",
+    "previousShellLfSha256": "e0deba51b3b5a812d2ac69fb61bd4f45b83c8cd39103bc3cb9a1a6570e62d74c",
+    "currentShellLfSha256": "6472eaade25d1982e0e913c4e83ddb127b110135403553680e6d4fde38dfeb03",
+    "transportModulesAndTestsUnchanged": true,
+    "transportRerun": false,
+    "qualification": "Existing six-case transport execution remains bound to unchanged captured client/test hashes. Updated Shell hash is inventory only; separately owned 11-case fixed Shell run must attest this final Shell content."
+  }
+}

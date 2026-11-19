@@ -16,11 +16,11 @@ const props = {
   showPropertySalesWorkflow: false,
 };
 
-test("missing related adapters label consent and history unknown while preserving real lead work", () => {
+test("missing related adapters hide unverified conversations while scoped activity loads independently", () => {
   const html = renderToStaticMarkup(createElement(LeadInbox, { ...props, relatedDataAvailable: false }));
   assert.match(html, /AUTHORIZED_LIVE_LEAD/);
   assert.match(html, /<span>Consent<\/span><span[^>]*>Unavailable<\/span>/);
-  assert.match(html, /Conversation history and consent data are currently unavailable/);
+  assert.match(html, /<section aria-label="Activity history"[^>]*>[\s\S]*?<p[^>]*role="status">Loading activity…<\/p>/u);
   assert.doesNotMatch(html, /UNVERIFIED_CONVERSATION_SENTINEL/);
 });
 
@@ -28,5 +28,5 @@ test("an explicitly available related adapter keeps the existing consent and his
   const html = renderToStaticMarkup(createElement(LeadInbox, { ...props, relatedDataAvailable: true }));
   assert.match(html, /<span>Consent<\/span><span[^>]*>done<\/span>/);
   assert.match(html, /UNVERIFIED_CONVERSATION_SENTINEL/);
-  assert.doesNotMatch(html, /Conversation history and consent data are currently unavailable/);
+  assert.doesNotMatch(html, /<span>Consent<\/span><span[^>]*>Unavailable<\/span>/);
 });

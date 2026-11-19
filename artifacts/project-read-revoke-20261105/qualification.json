@@ -1,0 +1,165 @@
+{
+  "classification": "LOCAL_SYNTHETIC_PROJECT_GRANT_QUALIFICATION_NOT_LIVE_ACCEPTANCE",
+  "sourceFreeze": "85fca24a476bf927c62eb5a715fdfbcc88c1cf09",
+  "base": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+  "branch": "codex/project-read-revoke-20261105",
+  "worktree": "C:/Projects/novalure-crm-project-read-revoke-20261105",
+  "runtimeFiles": [
+    "src/lib/db/customer-project-grant-repository.ts",
+    "src/lib/db/customer-access-repositories.ts",
+    "src/app/api/crm/customer-access/route.ts",
+    "src/components/customer-access-cockpit.tsx"
+  ],
+  "tests": [
+    {
+      "command": "node --conditions=react-server --import tsx --test scripts/customer-project-grant-revoke-tests.ts",
+      "exitCode": 0,
+      "nodeCasesPassed": 13,
+      "subcases": 12,
+      "parentCases": 1,
+      "failed": 0,
+      "database": "isolated local PostgreSQL18",
+      "log": "postgres-final.log"
+    },
+    {
+      "command": "node scripts/customer-project-grant-browser-tests.mjs",
+      "environment": "CRM_QA_CHROMIUM_PATH=C:/Program Files/Google/Chrome/Application/chrome.exe",
+      "exitCode": 0,
+      "scenariosPassed": 4,
+      "failed": 0,
+      "classification": "LOCAL_UI_WITH_STUBBED_HTTP_NOT_AUTH_OR_PROVIDER_ACCEPTANCE",
+      "log": "browser-final.log"
+    },
+    {
+      "command": "node --import tsx --test scripts/customer-access-presentation-tests.ts",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "log": "presentation-final.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "typecheck-final.log"
+    },
+    {
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 src/lib/db/customer-project-grant-repository.ts src/lib/db/customer-access-repositories.ts src/app/api/crm/customer-access/route.ts src/components/customer-access-cockpit.tsx scripts/customer-project-grant-revoke-tests.ts scripts/customer-project-grant-browser-tests.mjs",
+      "exitCode": 0,
+      "stdout": "empty"
+    },
+    {
+      "command": "node node_modules/next/dist/bin/next build --webpack",
+      "exitCode": 0,
+      "staticGenerationCompleted": "188/188",
+      "log": "build-webpack-final.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "originalFailures": [
+    {
+      "scope": "historical test fixture",
+      "errors": [
+        "095 ledger guard: executed predecessor checksum missing from test ledger",
+        "42501 absent bootstrap CRUD ACLs",
+        "customer_owner lacks customer-access:manage",
+        "auth_sessions revoked_reason check"
+      ],
+      "resolution": "actual migration ledger + real-catalog ACLs reproduced only in local fixture; valid existing administrator capability; synthetic revocation reason",
+      "productGuardsWeakened": false
+    },
+    {
+      "scope": "TypeScript development",
+      "error": "nullable narrowing with arrow never helper",
+      "resolution": "named never-returning failure function"
+    },
+    {
+      "scope": "browser harness",
+      "error": "bundled Chromium absent",
+      "resolution": "existing local Chrome, no installation"
+    },
+    {
+      "scope": "browser harness",
+      "error": "strict locator matched nested sections",
+      "resolution": "direct heading parent selector",
+      "log": "browser-selector-original-failure.log"
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 1,
+      "error": "Turbopack cannot resolve Next outside workspace through existing node_modules junction",
+      "log": "turbopack-junction-original-failure.log",
+      "originalStatus": "FAIL",
+      "separateSupportedBuild": "Webpack explicit invocation, no production config changed"
+    }
+  ],
+  "fixtureBoundary": {
+    "fullNativePg17Upgrade": false,
+    "allMigrationRunnerAcceptance": false,
+    "historicalSalesBootstrap": "through090 with existing portable vector boundary; actual required 092-096,101-110,114,146,152,153,167,188,121,191",
+    "forceRlsPreparation": "existing191 compatibility fixture pattern before092 inventory",
+    "localOnlyExistingAclMirrors": [
+      "customer_workspace_access",
+      "customer_project_access",
+      "project_pipeline_permissions",
+      "workspace_users"
+    ],
+    "existingAclRole": "novalure_app",
+    "existingAclPrivileges": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "catalogSource": "C:/Projects/crm-live-acceptance-20261104/db-upgrade/full-source-catalog.json",
+    "catalogSha256": "56de3bfa00448df9cb3dcb3b7919f795d13de731a554874918e4ebc6f2ccd9ff",
+    "newProductionGrants": false,
+    "migrationAdded": false
+  },
+  "verifiedBehavior": [
+    "same persisted old subject session loses actual crm_project_access and protected property workspace read after last owned grant revocation",
+    "two actual simultaneous same-before-image writers yield one commit and one CAS conflict",
+    "existing target FK row lock blocks independently administered missing-row insertion",
+    "other active business source preserves read and unaffected other-tenant pipeline/workspace/user/customer rows remain identical",
+    "manual and legacy merged source projections fail closed without adoption",
+    "current stored actor role and session revocation defeat stale in-memory claims",
+    "audit failure atomically rolls back business grant, projection and receipt",
+    "workspace manager independent authority remains effective",
+    "mounted UI ignores late selection response; retry keeps command identity and obtains fresh CSRF token"
+  ],
+  "remainingGates": [
+    "independent exact-source review by Root pending",
+    "legacy merged v1 or independent pipeline provenance needs separate verified lineage/administration; blocked here",
+    "central integration and its exact-revision gates pending",
+    "no real password/MFA/17-role acceptance, no live QA identity pool created",
+    "native Pg17 original restore and upgrade remain separately blocked",
+    "general workspace-member mutation CAS/atomicity outside this path remains unqualified",
+    "live runtime and exact existing ACL binding must be requalified before release"
+  ],
+  "externalActions": [],
+  "costsOrPaidCalls": 0,
+  "pushed": false,
+  "released": false,
+  "logSha256": {
+    "browser-final.log": "f3d9225c20dd13775930a056aa2eab173395bd61cf87e775bd426dbb78b90318",
+    "browser-selector-original-failure.log": "841adcc22dbbe8b3e20cf7032c53f5b90d17b696c68e13804e8a5c2a3d5aefd7",
+    "build-webpack-final.log": "85d1ca3bb43c2ba4ff6c0b06afc92d6001f3eb17ec0bc0f99ae97de5f986097f",
+    "postgres-final.log": "d126aa39a1de153303b7127d1080f2c0c3d18eaf3992b46017047c59cb48c6fd",
+    "presentation-final.log": "6ad8d1e29f6cf2cedd3d3a9aff722a83e92c468bdab2c0c7007dc423762b07bc",
+    "turbopack-junction-original-failure.log": "ad3ad5f77ced6f46f2d9feb9ef6cccbcea5bec2e287199af599c8eb24a026107",
+    "typecheck-final.log": "b482bb2bb172af88d5d30b5c5f8b92280cc1b5ec58b6df9c1e5bbbaaa4ce92ce"
+  },
+  "consoleNormalization": "Only trailing horizontal whitespace and terminal empty lines removed for Git; semantic console text preserved. Raw captured copies remain in campaign folder.",
+  "rawConsoleDirectory": "C:/Projects/crm-live-acceptance-20261104/reviews/project-read-revoke-20261105/raw-console",
+  "rawConsoleSha256": {
+    "browser-final.log": "aa546f4eed4e80db7353c76cd7eabaf39f5c4efe442839a0429b3ec4bd0c6761",
+    "browser-selector-original-failure.log": "9bab8918e1bdc483aa82ff94da30ab4b8ef1e5f7a23338288ca0581ec6ec1d31",
+    "build-webpack-final.log": "172354104094d36ec3f0d77b7c4a7185ec083e80909008e439216a1b094c675c",
+    "postgres-final.log": "928b1602bb9690d5a6676453ddcc5bab4916071a784d14d3fe7e51f87ca586db",
+    "presentation-final.log": "b577d8654e6e9c47d60d70740e04f8b28ec454dd1b7385700377a125b8e989c4",
+    "turbopack-junction-original-failure.log": "a9cc648e4360dbce67085f83ddd9ba60a84688767f7d2c57251330eca29ddca7",
+    "typecheck-final.log": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e"
+  }
+}

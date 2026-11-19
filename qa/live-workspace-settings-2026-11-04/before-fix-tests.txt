@@ -1,0 +1,121 @@
+▶ workspace settings commit with their audit and fail atomically
+  ✖ workspace summaries count active projects in each membership scope (10.7848ms)
+  ✖ scoped admin cookie updates the target workspace and writes the matching RLS audit (13.8511ms)
+  ✖ audit failure rolls back the settings and returns a safe JSON failure (69.5203ms)
+  ✔ current viewer membership cannot change settings through an existing internal cookie (56.2458ms)
+  ✖ project-restricted membership summaries count only readable projects (13.904ms)
+✖ workspace settings commit with their audit and fail atomically (6862.047ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7794.0109
+
+✖ failing tests:
+
+test at scripts\workspace-settings-route-tests.ts:2:4563
+✖ workspace summaries count active projects in each membership scope (10.7848ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:60:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:52:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts\workspace-settings-route-tests.ts:2:5696
+✖ scoped admin cookie updates the target workspace and writes the matching RLS audit (13.8511ms)
+  error: new row violates row-level security policy for table "audit_logs"
+      at C:\Users\Franz\Documents\ChatGPT\Novalure CRM\property-completeness-source-20261104\node_modules\pg-pool\index.js:45:11
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async queryRows (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\lib\db\client.ts:70:22)
+      at async queryOne (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\lib\db\client.ts:83:16)
+      at async writeAuditLog (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\lib\db\runtime-repositories.ts:198:3)
+      at async PATCH (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\app\api\workspaces\route.ts:229:3)
+      at async TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:66:24)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:65:5)
+      at async Test.run (node:internal/test_runner/test:1332:7) {
+    length: 133,
+    severity: 'ERROR',
+    code: '42501',
+    detail: undefined,
+    hint: undefined,
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'execMain.c',
+    line: '2340',
+    routine: 'ExecWithCheckOptions'
+  }
+
+test at scripts\workspace-settings-route-tests.ts:2:7080
+✖ audit failure rolls back the settings and returns a safe JSON failure (69.5203ms)
+  error: SYNTHETIC audit unavailable
+      at C:\Users\Franz\Documents\ChatGPT\Novalure CRM\property-completeness-source-20261104\node_modules\pg-pool\index.js:45:11
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async queryRows (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\lib\db\client.ts:70:22)
+      at async queryOne (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\lib\db\client.ts:83:16)
+      at async writeAuditLog (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\lib\db\runtime-repositories.ts:198:3)
+      at async PATCH (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\src\app\api\workspaces\route.ts:229:3)
+      at async TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:89:26)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:84:5)
+      at async Test.run (node:internal/test_runner/test:1332:7) {
+    length: 168,
+    severity: 'ERROR',
+    code: 'P0001',
+    detail: undefined,
+    hint: undefined,
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: 'PL/pgSQL function synthetic_reject_workspace_settings_audit() line 1 at RAISE',
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'pl_exec.c',
+    line: '3923',
+    routine: 'exec_stmt_raise'
+  }
+
+test at scripts\workspace-settings-route-tests.ts:2:8729
+✖ project-restricted membership summaries count only readable projects (13.904ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:114:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async TestContext.<anonymous> (C:\Users\Franz\Documents\ChatGPT\Novalure CRM\qa-workspace-settings-fix-20261104\scripts\workspace-settings-route-tests.ts:107:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

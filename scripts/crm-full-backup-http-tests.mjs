@@ -4,6 +4,7 @@ import { createCrmBackupHttpHandler } from './lib/crm-full-backup-http.mjs';
 import { defaultCrmBackupConfig } from './lib/crm-full-backup.mjs';
 
 const cronSecret = 'SYNTHETIC_CRON_SECRET_WITH_AT_LEAST_THIRTY_TWO_BYTES';
+const runId = '99999999-9999-4999-8999-999999999999';
 const workload = Object.freeze({
   CRON_SECRET: cronSecret,
   VERCEL_ENV: 'production',
@@ -17,6 +18,7 @@ const request = ({ method = 'GET', authorization = `Bearer ${cronSecret}`, query
 function fixture({ env = workload, output = { status: 'BLOCKED', code: 'BLOCKED_NEON_API_KEY_REQUIRED' }, exitCode = 0, run } = {}) {
   const calls = [], logs = [];
   const handler = createCrmBackupHttpHandler({ env,
+    createRunId: () => runId,
     run: run ?? (async (argv, actualEnv, capture) => { calls.push({ argv, env: actualEnv }); capture(output); return exitCode; }),
     log: payload => logs.push(payload),
   });
@@ -29,7 +31,8 @@ function privateHeaders(response) {
 function safeLogs(logs) {
   for (const payload of logs) {
     assert.equal(payload !== null && typeof payload === 'object' && !Array.isArray(payload), true);
-    assert.equal(Object.keys(payload).every(key => ['status', 'code', 'failureCode'].includes(key)), true);
+    assert.equal(Object.keys(payload).every(key => ['status', 'code', 'failureCode', 'alarmStatus', 'eventId', 'providerStage', 'providerHttpStatus'].includes(key)), true);
+    if (payload.alarmStatus !== undefined) assert.ok(['DELIVERED', 'ALARM_UNCONFIRMED'].includes(payload.alarmStatus));
     if (payload.failureCode !== undefined) assert.match(payload.failureCode, /^[A-Z][A-Z0-9_]{1,100}$/u);
     assert.equal(JSON.stringify(payload).includes(cronSecret), false);
   }
@@ -131,7 +134,7 @@ test('only exact enabled execution with a successful FULL result returns HTTP 20
   const response = await f.handler(request());
   assert.equal(response.status, 200);
   assert.equal((await response.json()).status, 'FULL');
-  assert.deepEqual(f.calls[0].argv, ['--execute']);
+  assert.deepEqual(f.calls[0].argv, ['--execute', '--backup-id', `backup-${runId}`]);
   privateHeaders(response);
   safeLogs(f.logs);
 });
@@ -141,7 +144,7 @@ test('blocked, incomplete and inconsistent execution results are unavailable', a
     const f = fixture({ env: { ...workload, CRM_FULL_BACKUP_ENABLED: 'true' }, output: { status }, exitCode });
     const response = await f.handler(request());
     assert.equal(response.status, 503);
-    assert.deepEqual(f.calls[0].argv, ['--execute']);
+    assert.deepEqual(f.calls[0].argv, ['--execute', '--backup-id', `backup-${runId}`]);
     privateHeaders(response);
     safeLogs(f.logs);
   }
@@ -325,4 +328,28 @@ test('validated CLI failure codes remain visible without exposing unsafe runner 
       privateHeaders(response);
     }
   });
+});
+
+test('HTTP exposes only allowlisted provider stage and matching numeric status', async () => {
+  const f = fixture({ env: { ...workload, CRM_FULL_BACKUP_ENABLED: 'true' }, exitCode: 1,
+    output: { status: 'INCOMPLETE', code: 'NEON_HTTP_422', providerStage: 'SNAPSHOT_RESTORE', providerHttpStatus: 422 } });
+  const response = await f.handler(request());
+  const result = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(result.failureCode, 'NEON_HTTP_422');
+  assert.equal(result.providerStage, 'SNAPSHOT_RESTORE');
+  assert.equal(result.providerHttpStatus, 422);
+  safeLogs(f.logs);
+  for (const extra of [{ providerStage: 'SYNTHETIC_PRIVATE_PATH', providerHttpStatus: 422 },
+    { providerStage: 'SNAPSHOT_RESTORE', providerHttpStatus: '422' },
+    { providerStage: 'SNAPSHOT_RESTORE', providerHttpStatus: 401 }, { providerHttpStatus: 422 },
+    { providerStage: 'SNAPSHOT_RESTORE', providerHttpStatus: 999 }]) {
+    const invalid = fixture({ env: { ...workload, CRM_FULL_BACKUP_ENABLED: 'true' }, exitCode: 1,
+      output: { status: 'INCOMPLETE', code: 'NEON_HTTP_422', ...extra } });
+    const body = await (await invalid.handler(request())).json();
+    assert.equal(body.code, 'BACKUP_HTTP_RESULT_INVALID');
+    assert.equal(body.providerStage, undefined);
+    assert.equal(body.providerHttpStatus, undefined);
+    assert.equal(JSON.stringify(invalid.logs).includes('SYNTHETIC_PRIVATE_PATH'), false);
+  }
 });

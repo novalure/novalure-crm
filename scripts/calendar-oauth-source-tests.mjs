@@ -9,6 +9,7 @@ import { CalendarCommandCenter } from "../src/components/calendar-command-center
 import { getCalendarCommandCenterCopy } from "../src/lib/i18n.ts";
 
 const source = await readFile(new URL("../src/components/calendar-command-center.tsx", import.meta.url), "utf8");
+const personalSource = await readFile(new URL("../src/components/personal-calendar-workspace.tsx", import.meta.url), "utf8");
 const loaderSource = source.slice(source.indexOf("async function loadOAuthStatus()"), source.indexOf("    loadOAuthStatus();"));
 const compiledLoader = ts.transpileModule(loaderSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
@@ -46,7 +47,52 @@ test("calendar initially renders an unknown connection state in both languages",
   }
 });
 
-test("managed workspace reads use the selected workspace and expose read-only connections", async () => {
+test("manual calendar provider stays manual in the real detail panel under either workspace default", () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = () => { fetches += 1; throw new Error("Unexpected network call during static component render"); };
+  const startsAt = new Date().toISOString(), endsAt = new Date(Date.now() + 3_600_000).toISOString();
+  const variants = [
+    { calendarProvider: "manual", internalManual: true, expected: "manual" },
+    { calendarProvider: "manual", expected: "manual" },
+    { internalManual: true, expected: "manual" },
+    { calendarProvider: "google", expected: "google" },
+    { calendarProvider: "microsoft", expected: "microsoft" },
+    { expected: "default" },
+  ];
+  try {
+    for (const language of ["de", "en"]) for (const fallback of ["microsoft", "google"]) for (const variant of variants) {
+      Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { search: "?calendar_connected=" + fallback } } });
+      const copy = getCalendarCommandCenterCopy(language), provider = variant.expected === "default" ? fallback : variant.expected;
+      const expectedLabel = provider === "manual" ? language === "de" ? "Manuell" : "Manual"
+        : copy.calendarProviders.find(option => option.id === provider).label;
+      const html = renderToStaticMarkup(createElement(CalendarCommandCenter, {
+        activeProjectId: null, contacts: [], events: [{
+          id: "11111111-1111-4111-8111-111111111111", workspaceId: "home", projectId: "", title: "SYNTHETIC provider label",
+          startsAt, endsAt, location: "Telefon", status: "geplant", preparation: [], outcomeGoal: "SYNTHETIC internal review",
+          ...(variant.calendarProvider ? { calendarProvider: variant.calendarProvider } : {}),
+          ...(variant.internalManual ? { internalManual: true } : {}),
+        }], language, leads: [], projectLabel: "Synthetic workspace", projects: [], sessionUserId: "", sessionUserName: "",
+        tasks: [], users: [], workspaceId: "home", sessionWorkspaceId: "home",
+      }));
+      const detail = html.match(/<aside\b[^>]*>[\s\S]*?<\/aside>/)?.[0];
+      assert.ok(detail, "real selected-event detail panel must render");
+      const label = detail.indexOf(">" + copy.calendarLabel + "</p>");
+      assert.ok(label >= 0);
+      const calendarRow = detail.slice(label, detail.indexOf("</div>", label));
+      assert.ok(calendarRow.includes(">" + expectedLabel + "</p>"), `${language}/${fallback}/${variant.expected}: calendar label`);
+      assert.ok(detail.includes(copy.graphFields.provider + " · " + provider), `${language}/${fallback}/${variant.expected}: mapping provider`);
+    }
+    assert.equal(fetches, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else delete globalThis.window;
+  }
+});
+
+test("managed workspace retains legacy read-only boundaries and uses the scoped personal calendar bridge", async () => {
   const result = await runLoader({ ok: true, json: async () => ({ source: "database", google: { connected: true }, microsoft: { connected: false } }) }, { workspaceId: "managed-workspace" });
   assert.equal(result.status, "ready");
   assert.equal(result.integrations.google.connected, true);
@@ -58,7 +104,12 @@ test("managed workspace reads use the selected workspace and expose read-only co
   assert.match(html, /Calendar connections are read-only here/);
   assert.doesNotMatch(html, /id="calendar-default-provider"/);
   assert.ok(!/<button[^>]*>Connect (?:Microsoft|Google)/.test(html), "managed context must hide OAuth start buttons");
-  assert.match(html, /<button[^>]*disabled=""[^>]*>Sync with Microsoft/);
+  // The always-create legacy sync action was intentionally retired. Its old
+  // disabled-button assertion would require retaining an unsafe, obsolete path.
+  assert.doesNotMatch(html, /Sync with Microsoft/);
+  assert.match(html, />Open personal calendar<\/button>/);
+  assert.match(html, /href="\/api\/crm\/personal-calendar\/connect\/microsoft\?workspaceId=managed-workspace"/);
+  assert.match(html, /href="\/api\/crm\/personal-calendar\/connect\/google\?workspaceId=managed-workspace"/);
   assert.match(html, /Bookings, notifications and sharing links are unavailable/);
   assert.doesNotMatch(html, /origin-public-key|id="calendar-share-output"/);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Create appointment/);
@@ -76,7 +127,12 @@ test("managed workspace reads use the selected workspace and expose read-only co
 
 test("managed workspace context cannot invoke origin-workspace connection or settings writers", async () => {
   const ast = ts.createSourceFile("calendar.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["connectCalendarProvider", "connectMeetingProvider", "disconnectCalendarProvider", "syncLiveTeamsMeeting", "saveMeetingSettings", "sendMeetingTestNotification", "createCalendarEvent", "copyShareArtifact", "confirmBooking", "retryNotification"]);
+  // All nine remaining legacy origin-workspace writers keep their home guard.
+  // The tenth, syncLiveTeamsMeeting, is absent rather than granted a bypass.
+  const names = new Set(["connectCalendarProvider", "connectMeetingProvider", "disconnectCalendarProvider", "saveMeetingSettings", "sendMeetingTestNotification", "createCalendarEvent", "copyShareArtifact", "confirmBooking", "retryNotification"]);
+  assert.doesNotMatch(source, /syncLiveTeamsMeeting|["']\/api\/calendar\/(?:google|microsoft)["']/);
+  assert.match(personalSource, /\/api\/crm\/personal-calendar\?workspaceId=\$\{encodeURIComponent\(workspaceId\)\}/);
+  assert.match(personalSource, /expectedActorId:\s*data\.actorId/);
   const functions = [];
   function visit(node) {
     if (ts.isVariableDeclaration(node) && names.has(node.name.getText(ast))) functions.push({ name: node.name.getText(ast), declaration: `const ${node.name.getText(ast)} = ${node.initializer.getText(ast)}` });

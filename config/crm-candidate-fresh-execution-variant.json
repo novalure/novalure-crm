@@ -1,0 +1,35 @@
+{
+  "format": "crm-candidate-execution-variant-v1",
+  "id": "STANDALONE_100_WITHOUT_PREVIEW_097_098_099",
+  "sourceRegistrySha256": "c6823ea7e096242923db1038975cb59d48974fac64fc8742a693a1310f358487",
+  "sourceInventorySqlFiles": 169,
+  "executedOriginalSqlFiles": 166,
+  "historicalExecutionsBeforeLedger": 41,
+  "expectedCanonicalLedgerRows": 125,
+  "requiredStandaloneSource": {
+    "path": "migrations/100_studio_enquiry_production.sql",
+    "sha256": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778",
+    "manual": true
+  },
+  "excluded": [
+    {
+      "path": "migrations/097_studio_sales_calendar_bridge.sql",
+      "sha256": "9b3f6e0b7c960133422901c3d28486a2e3a864299fb3a397671df90ecd6b48ab",
+      "manual": true,
+      "execution": "NOT_EXECUTED_INCOMPATIBLE_PREVIEW_VARIANT"
+    },
+    {
+      "path": "migrations/098_studio_enquiry_handoff.sql",
+      "sha256": "46f94dfae6870a1722a4b1b87947b1d82d46968f5ac0f49c5fb76bd2dfc3a81e",
+      "manual": true,
+      "execution": "NOT_EXECUTED_INCOMPATIBLE_PREVIEW_VARIANT"
+    },
+    {
+      "path": "migrations/099_studio_enquiry_public_launch.sql",
+      "sha256": "867ad5dcc486423371b8c7f7ca2099603c743273ab6c6a795cd8fed064db08f9",
+      "manual": true,
+      "execution": "NOT_EXECUTED_INCOMPATIBLE_PREVIEW_VARIANT"
+    }
+  ],
+  "reason": "Unchanged original100 rejects097/098/099 ledger rows or their Preview handoff tables. This is the existing standalone100 product variant, not missing execution evidence or a weakened guard."
+}

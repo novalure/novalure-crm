@@ -1,0 +1,104 @@
+{
+  "command": "node --conditions=react-server --import tsx --test scripts/project-wizard-persistence-tests.ts",
+  "startedAtUtc": "2026-11-05T00:39:20.375Z",
+  "endedAtUtc": "2026-11-05T00:39:31.549Z",
+  "exitCode": 0,
+  "node": "v24.18.0",
+  "localOnly": true,
+  "realPostgres": true,
+  "live": false,
+  "sourceHashesBefore": [
+    {
+      "path": "migrations/197_project_wizard_fields.sql",
+      "sha256WorktreeBytes": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1",
+      "sha256LfNormalizedText": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1"
+    },
+    {
+      "path": "src/lib/db/project-wizard-repository.ts",
+      "sha256WorktreeBytes": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd",
+      "sha256LfNormalizedText": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd"
+    },
+    {
+      "path": "src/lib/db/crm-write-repositories.ts",
+      "sha256WorktreeBytes": "007ffd6e1629fb417ac407ba675821c3394fbe75cbcfa142dd503c1a62e1ba48",
+      "sha256LfNormalizedText": "9aec1a517efd24125937a7dea70d57ccce3dda1cbe4ebc1fd99a11148ee90b1a"
+    },
+    {
+      "path": "src/lib/db/pipeline-default-repositories.ts",
+      "sha256WorktreeBytes": "7a687b4f1937795820851a991d9e12278460a4563fcc2803df2e940a116c94a3",
+      "sha256LfNormalizedText": "a04a0aae55b18f5cc56bc25b2d2b2031a0b3636675f979163b51610e13554784"
+    },
+    {
+      "path": "src/lib/project-wizard.ts",
+      "sha256WorktreeBytes": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689",
+      "sha256LfNormalizedText": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689"
+    },
+    {
+      "path": "src/lib/crm-types.ts",
+      "sha256WorktreeBytes": "609e55243122c986fc8616d29f1d7590aaf45575ea2e65e0ca8a6b2ce36ff268",
+      "sha256LfNormalizedText": "15820ce8b6417e0bb7292d980ac6af869a7db9c615103b2d799fa2469b68c646"
+    },
+    {
+      "path": "scripts/project-wizard-persistence-tests.ts",
+      "sha256WorktreeBytes": "196fdd20b9a5df327c5192da2f02125a04cfbb0481fb58c8380b4b23f1e8b3de",
+      "sha256LfNormalizedText": "196fdd20b9a5df327c5192da2f02125a04cfbb0481fb58c8380b4b23f1e8b3de"
+    }
+  ],
+  "sourceHashesAfter": [
+    {
+      "path": "migrations/197_project_wizard_fields.sql",
+      "sha256WorktreeBytes": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1",
+      "sha256LfNormalizedText": "5d43b02c14011b11415e915d981df047581fb483bc1a145ee98b7c75cd071af1"
+    },
+    {
+      "path": "src/lib/db/project-wizard-repository.ts",
+      "sha256WorktreeBytes": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd",
+      "sha256LfNormalizedText": "6118245fa3a00f9cdf10ff6c3f9d0926583138b3a5929cb4c3900c5f04240efd"
+    },
+    {
+      "path": "src/lib/db/crm-write-repositories.ts",
+      "sha256WorktreeBytes": "007ffd6e1629fb417ac407ba675821c3394fbe75cbcfa142dd503c1a62e1ba48",
+      "sha256LfNormalizedText": "9aec1a517efd24125937a7dea70d57ccce3dda1cbe4ebc1fd99a11148ee90b1a"
+    },
+    {
+      "path": "src/lib/db/pipeline-default-repositories.ts",
+      "sha256WorktreeBytes": "7a687b4f1937795820851a991d9e12278460a4563fcc2803df2e940a116c94a3",
+      "sha256LfNormalizedText": "a04a0aae55b18f5cc56bc25b2d2b2031a0b3636675f979163b51610e13554784"
+    },
+    {
+      "path": "src/lib/project-wizard.ts",
+      "sha256WorktreeBytes": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689",
+      "sha256LfNormalizedText": "4596bab42dffe081506cb01d09a456f0974319128fa2869a73d5f6c1d6bfd689"
+    },
+    {
+      "path": "src/lib/crm-types.ts",
+      "sha256WorktreeBytes": "609e55243122c986fc8616d29f1d7590aaf45575ea2e65e0ca8a6b2ce36ff268",
+      "sha256LfNormalizedText": "15820ce8b6417e0bb7292d980ac6af869a7db9c615103b2d799fa2469b68c646"
+    },
+    {
+      "path": "scripts/project-wizard-persistence-tests.ts",
+      "sha256WorktreeBytes": "196fdd20b9a5df327c5192da2f02125a04cfbb0481fb58c8380b4b23f1e8b3de",
+      "sha256LfNormalizedText": "196fdd20b9a5df327c5192da2f02125a04cfbb0481fb58c8380b4b23f1e8b3de"
+    }
+  ]
+}
+
+▶ project wizard: atomic local PostgreSQL persistence, references and actor-private notes
+  ✔ options use current compatible catalogs and only eligible active responsible users (92.4604ms)
+  ✔ preflight rejects stale actor, foreign or ineligible owner, source and incompatible pipeline before any project INSERT (49.4906ms)
+  ✔ one command saves actual pipeline/stages, safe immutable receipt and exact actor-only notes across reload (167.3786ms)
+  ✔ raw runtime RLS hides private text even from another manager and rejects forged authors and tenants (25.9153ms)
+  ✔ reference names disappear after source access or recipient eligibility is revoked (20.8793ms)
+  ✔ private-note failure rolls back project, pipelines, settings, audit and command receipt (85.565ms)
+  ✔ explicit PATCH pipeline must belong to this exact project; legacy type and null choices remain supported (460.0361ms)
+  ✔ all five stable types and all four real compatible pipeline catalogs persist their actual stages (304.6854ms)
+  ✔ responsible membership share lock fences a concurrent suspension until the create transaction ends (189.4196ms)
+✔ project wizard: atomic local PostgreSQL persistence, references and actor-private notes (10084.8417ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11096.7568

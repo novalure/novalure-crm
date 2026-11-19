@@ -1,4 +1,5 @@
 import type { AppSession } from "@/lib/auth/session";
+import { CrmCommandError } from "@/lib/crm-command";
 import type { Project } from "@/lib/crm-types";
 import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -91,12 +92,17 @@ export async function ensureProjectDefaultPipelines(input: {
   projectId: string;
   session: AppSession;
   setupDefaults?: Project["setupDefaults"] | null;
+  pipelineTemplateKey?: string;
 }): Promise<DefaultPipelineSetupResult> {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.projectId)) {
     return { defaultPipelineId: null, pipelineIds: [], stageCount: 0 };
   }
 
-  const templates = getDefaultPipelineTemplates(input.customerType, input.operatingModel);
+  const availableTemplates = getDefaultPipelineTemplates(input.customerType, input.operatingModel);
+  const templates = input.pipelineTemplateKey === undefined
+    ? availableTemplates
+    : availableTemplates.filter(template => template.key === input.pipelineTemplateKey);
+  if (!templates.length) throw new CrmCommandError("INVALID_PIPELINE_TEMPLATE", "Die Pipeline passt nicht zum aktuellen Kundentyp und Betriebsmodell.");
   const pipelineIds: string[] = [];
   let defaultPipelineId: string | null = null;
   let stageCount = 0;

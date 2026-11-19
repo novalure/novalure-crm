@@ -1,0 +1,19 @@
+PHASE owned local PostgreSQL and unchanged historical schema
+PHASE immutable app-byte capture and real local Next server
+PHASE actual password and rendered TOTP enrollment
+PASS actual password/TOTP flow issued opaque HttpOnly MFA session
+PHASE actual project wizard and single real create
+PASS real project POST passed server authorization and CSRF
+PASS one create with real browser CSRF and command identity
+PASS real reload/Core and RLS-scoped runtime SQL agree on the created project
+PASS wizard POST uses resolved actor, stable type and server-listed references/template
+PASS receipt metadata matches exactly and fresh Core/receipt omit private text
+PASS actor-private wizard-details roundtrip resolves exact references and a new own pipeline
+PASS actual page reload displays persisted authorized project summary and private note
+PASS RLS runtime SQL confirms settings plus actor-private storage and no funnel clone
+FAIL private marker absent from stored command receipts and audits
+PASS fresh real cookie/CSRF rejects changed expected actor with no project insertion
+PASS separately authenticated assigned manager reads metadata but not creator private note
+PASS separate manager reload renders authorized shared fields and no creator private note
+PASS no browser exception or external browser request
+{"output":"C:\\Projects\\novalure-crm-project-wizard-fields-20261105\\qa\\project-wizard-fields-20261105\\fixed","totals":{"checks":14,"passed":13,"failed":1},"failure":null}

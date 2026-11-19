@@ -1,0 +1,68 @@
+▶ partner cooperation isolates explicit shares and uses the existing reservation request
+  ✔ legacy broad/owned grants reveal no source CRM rows or private files (80.8294ms)
+  ✔ independent shares disclose only reviewed object facts or neutral lead status (44.3289ms)
+  ✔ partner request is nonbinding, scoped, deduplicated and becomes only canonical requested (63.549ms)
+  ✔ withdrawal and grant revocation are immediate without affecting another share (43.8581ms)
+  ✔ projection and guards work with a non-BYPASS table/function owner under FORCE RLS (57.0293ms)
+✔ partner cooperation isolates explicit shares and uses the existing reservation request (4504.482ms)
+✔ portal keeps saved extractive summaries distinct from a message preview (1.3913ms)
+✔ portal preview is bounded and does not promote assistant content to visitor facts (0.2051ms)
+✔ configured minor amounts keep exact currency precision including large values (20.8324ms)
+▶ two synthetic Webchat customers complete setup, shared pause and one confirmed test-payment unlock
+  ✔ controlled accounts cannot run on the production target (1.156ms)
+  ✔ each account consumes one shared allowance across its own bots and records its own conversations (425.4554ms)
+  ✔ request replay cannot invoke another model, change the question or cross an integration scope (56.9683ms)
+  ✔ alpha: deliberate order stays paused until confirmed test payment, then provisions once (580.035ms)
+  ✔ beta: deliberate order stays paused until confirmed test payment, then provisions once (518.6041ms)
+  ✔ a confirmed payment cannot undo a host suspension (75.7752ms)
+  ✔ cached replay revalidates every exposed source, including an uncited source (187.7062ms)
+  ✔ source withdrawal at the completion transaction blocks answer persistence and leaves the uncertain reservation held (101.5029ms)
+  ✔ portal history pages retain every visitor-visible message and exclude technical system messages (137.8147ms)
+  ✔ fresh membership and database privileges preserve customer boundaries after the full flow (26.314ms)
+✔ two synthetic Webchat customers complete setup, shared pause and one confirmed test-payment unlock (9703.3925ms)
+✖ workspace settings commit with their audit and fail atomically (7174.2954ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 20
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25333.2766
+
+✖ failing tests:
+
+test at scripts\workspace-settings-route-tests.ts:2:1348
+✖ workspace settings commit with their audit and fail atomically (7174.2954ms)
+  Error: Local schema migration 188_webchat_partner_access_compatibility.sql failed: Webchat/partner compatibility requires both unchanged predecessors
+      at applySalesSchema (C:\Projects\novalure-crm-sunday-integration-20261104\scripts\lib\local-sales-db.mjs:179:13)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (C:\Projects\novalure-crm-sunday-integration-20261104\scripts\workspace-settings-route-tests.ts:17:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    [cause]: error: Webchat/partner compatibility requires both unchanged predecessors
+        at C:\Projects\novalure-crm-sunday-integration-20261104\node_modules\pg\lib\client.js:694:17
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async applySalesSchema (C:\Projects\novalure-crm-sunday-integration-20261104\scripts\lib\local-sales-db.mjs:171:7)
+        at async TestContext.<anonymous> (C:\Projects\novalure-crm-sunday-integration-20261104\scripts\workspace-settings-route-tests.ts:17:5)
+        at async Test.run (node:internal/test_runner/test:1332:7)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+      length: 181,
+      severity: 'ERROR',
+      code: 'P0001',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: 'PL/pgSQL function inline_code_block line 4 at RAISE',
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'pl_exec.c',
+      line: '3923',
+      routine: 'exec_stmt_raise'
+    }
+  }

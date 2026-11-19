@@ -1,0 +1,63 @@
+PASS direct B/project deep link and actual reload retain workspace, project and properties
+PASS A to B to real Back to real Forward restores dataset and project without new history entries
+PASS explicit All Projects survives project history Back Forward and reload
+PASS section history preserves explicit nested buyer-leads and properties
+PASS delayed B switch is cancelled when user selects already active A
+PASS Back A request delayed then Forward B cannot commit late A or grow history
+PASS unknown workspace direct link blocks business scope without adopting foreign data
+PASS known target revoked by core 403 remains blocked and URL is not rewritten to a false success
+PASS pending B response cannot commit after real Forward to absent workspace
+PASS wrong activeWorkspaceId in core 200 cannot be adopted as requested B
+PASS foreign project ID is invalid and never falls back to first project
+PASS #billing never renders old-workspace panel while target pending or revoked
+PASS #billing never renders panel for unknown-workspace direct URL
+FAIL #ai-billing-admin never renders old-workspace panel while target pending or revoked: expect(locator).toHaveCount(expected) failed
+FAIL #ai-billing-admin never renders panel for unknown-workspace direct URL: Expected values to be strictly equal:
+PASS #ai-assistant never renders old-workspace panel while target pending or revoked
+PASS #ai-assistant never renders panel for unknown-workspace direct URL
+PASS canonical hash #marketing restores allowed section marketing
+PASS canonical hash #analysis restores allowed section analysis
+PASS canonical hash #analytics restores allowed section analytics
+PASS canonical hash #settings restores allowed section settings
+PASS canonical hash #bots restores allowed section bots
+PASS canonical hash #meetings restores allowed section calendar
+PASS canonical hash #managed-service restores allowed section managedService
+PASS canonical hash #leadInbox restores allowed section leadInbox
+PASS canonical hash #objects-mandates restores allowed section objectsMandates
+PASS canonical hash #contacts restores allowed section contacts
+PASS canonical hash #communication restores allowed section communication
+PASS canonical hash #customer-access restores allowed section customerAccess
+PASS canonical hash #customer-success restores allowed section customerSuccess
+PASS canonical hash #dashboard restores allowed section dashboard
+PASS canonical hash #daily-queue restores allowed section dailyQueue
+PASS canonical hash #data-hygiene restores allowed section dataHygiene
+PASS canonical hash #onboarding restores allowed section onboarding
+PASS canonical hash #pipelines restores allowed section pipelines
+PASS canonical hash #forms restores allowed section forms
+PASS canonical hash #tasks restores allowed section tasks
+PASS canonical hash #funnels restores allowed section funnels
+PASS canonical hash #knowledge restores allowed section knowledge
+PASS canonical hash #newsletter restores allowed section newsletter
+PASS canonical hash #sequences restores allowed section sequences
+PASS canonical hash #properties restores allowed section properties
+PASS canonical hash #projects restores allowed section projects
+PASS canonical hash #reservations restores allowed section reservations
+PASS canonical hash #units restores allowed section units
+PASS explicit nested hash #marketing restores marketing
+PASS explicit nested hash #audit-log restores auditLog
+{"cases":47,"passed":45,"failed":2}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: an unambiguous profile exists for billing
+    at file:///C:/Projects/novalure-crm-history-scope-fix-20261105/scripts/qa001-history-browser-tests.mjs:142:75 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.18.0

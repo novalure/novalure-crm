@@ -11,6 +11,12 @@ import { assertExposeRevision, canWritePropertyExpose, exposeUuid, findPropertyE
   persistPropertyExposeChange, PropertyExposeError, type ExposeSnapshot, type ExposeStoredVersion } from "@/lib/db/property-expose-repositories";
 import { validatePropertyExposePdf } from "@/lib/property-expose-pdf-validation";
 import { renderPropertyExposePdf } from "@/lib/property-expose-pdf";
+import { formatApprovedPropertyCosts, publicPropertyDetailGroups, publicPropertyLocale, publicPropertyUnitFacts, readPublicPropertyDetails, type PublicPropertyUnitDetails } from "@/lib/property-expose-details";
+import { propertyDetailNumber } from "@/lib/property-details";
+import { propertyCoreNumberIsKnown, propertyOptionalPriceIsKnown } from "@/lib/property-core-numbers";
+import { publicPropertyEnergyFacts, sanitizePropertyExposeAddress } from "@/lib/property-expose-public-content";
+import { normalizePropertyGeography, readPropertyGeography } from "@/lib/property-country";
+import { webExposePropertyType } from "@/lib/web-expose";
 
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const iso = () => new Date().toISOString();
@@ -19,7 +25,7 @@ export function parsePropertyExposeOptions(value: unknown): PropertyExposeOption
   const o = value as Record<string, unknown>;
   const allowed = ["template", "language", "address", "showPrice", "showContact", "imageIds", "floorPlanIds", "title", "description"];
   if (Object.keys(o).some(k => !allowed.includes(k)) || !["compact", "full"].includes(String(o.template)) ||
-      !["de", "en"].includes(String(o.language)) || !["city", "full", "hidden"].includes(String(o.address)) ||
+      !["de", "en", "es"].includes(String(o.language)) || !["city", "full", "hidden"].includes(String(o.address)) ||
       typeof o.showPrice !== "boolean" || typeof o.showContact !== "boolean" ||
       !Array.isArray(o.imageIds) || !Array.isArray(o.floorPlanIds) || o.imageIds.length > PROPERTY_EXPOSE_MAX_IMAGES ||
       o.floorPlanIds.length > PROPERTY_EXPOSE_MAX_FLOORPLANS || o.imageIds.some(v => !exposeUuid(v)) ||
@@ -74,7 +80,7 @@ async function stateFromSnapshot(snapshot: ExposeSnapshot, session: AppSession):
       return { id: version.id, source: version.source, fileName: version.fileName, createdAt: version.createdAt,
         sizeBytes: version.sizeBytes, pageCount: version.pageCount, versionLabel: version.versionLabel,
         sourceFingerprint: version.sourceFingerprint, stale: version.sourceFingerprint !== snapshot.sourceFingerprint,
-        available, options: version.options, previewUrl: exposeUrl(snapshot, version.id), downloadUrl: exposeUrl(snapshot, version.id, true) };
+        available, options: version.options ?? version.privateOptions, previewUrl: exposeUrl(snapshot, version.id), downloadUrl: exposeUrl(snapshot, version.id, true) };
     })));
   }
   const media = snapshot.source.media.map(m => ({ id: String(m.id), title: text(m.title), kind: m.kind as "image" | "floorplan",
@@ -93,72 +99,90 @@ async function stateFromSnapshot(snapshot: ExposeSnapshot, session: AppSession):
 export async function getPropertyExposeState(session: AppSession, propertyId: string) {
   return stateFromSnapshot(await loadPropertyExposeSnapshot(session.workspaceId, propertyId), session);
 }
+function propertyExposePriceVisibility(listing: ExposeSnapshot["source"]["listing"]) {
+  const channel = listing.channelPriceVisibility && typeof listing.channelPriceVisibility === "object" ? listing.channelPriceVisibility as Record<string, unknown> : {};
+  return ["publish_price", "price_on_request", "hide_price"].includes(String(channel.Exposé)) ? channel.Exposé : listing.priceVisibility;
+}
+
 export function buildPropertyExposeDocument(snapshot: ExposeSnapshot, options: PropertyExposeOptions, images: PropertyExposeImage[]): PropertyExposeDocument {
-  const p = snapshot.source.listing, de = options.language === "de";
+  const p = snapshot.source.listing;
+  const t = (de: string, en: string, es: string) => options.language === "de" ? de : options.language === "es" ? es : en;
+  const geography = p.geography == null ? null : normalizePropertyGeography(p.geography);
+  if (p.geography != null && !geography) throw new PropertyExposeError("EXPOSE_GEOGRAPHY_INVALID", 400, "Saved property geography is invalid.");
+  const locale = geography?.displayLocale ?? publicPropertyLocale(options.language, text(p.countryCode));
+  const publicSource = p.publicDetails && typeof p.publicDetails === "object" ? p.publicDetails as Record<string, unknown> : {};
+  const details = readPublicPropertyDetails(publicSource);
+  const detailGroups = publicPropertyDetailGroups(publicSource, options.language, locale, ["rooms.zimmer", "construction.baujahr"]);
+  const unitFacts = p.linkedUnitDetails && typeof p.linkedUnitDetails === "object" ? publicPropertyUnitFacts(p.linkedUnitDetails as PublicPropertyUnitDetails, options.language, locale) : [];
+  if (unitFacts.length) detailGroups.push({ id: "linked-unit", heading: t("Ausgewählte Einheit", "Selected unit", "Unidad seleccionada"), facts: unitFacts });
   const money = (value: unknown) => {
-    const cents = parsePropertyIntegerCents(value); return cents === null ? null : new Intl.NumberFormat(de ? "de-AT" : "en-GB", { style: "currency", currency: "EUR" }).format(cents / 100);
+    const cents = parsePropertyIntegerCents(value); return cents === null ? null : new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(cents / 100);
   };
-  const sanitizeAddress = (value: unknown) => {
-    let result = text(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
-    if (options.address !== "full") for (const privatePart of [text(p.address)]) {
-      if (privatePart.length >= 3) result = result.split(privatePart).join(de ? "[Adresse ausgeblendet]" : "[address hidden]");
-    }
-    return result;
-  };
-  const channel = p.channelPriceVisibility && typeof p.channelPriceVisibility === "object" ? p.channelPriceVisibility as Record<string, unknown> : {};
-  const visibility = ["publish_price", "price_on_request", "hide_price"].includes(String(channel.Exposé)) ? channel.Exposé : p.priceVisibility;
+  const sanitizeAddress = (value: unknown) => sanitizePropertyExposeAddress(value, p.address, options.address === "full", options.language, p.street);
+  const numericState = { coreNumericState: p.coreNumericState };
+  const visibility = propertyExposePriceVisibility(p);
   const visibleMoney = options.showPrice && visibility === "publish_price";
   const rental = p.marketingType === "rent";
   const supportedMarketing = ["sale", "rent", "sale_or_rent"].includes(String(p.marketingType));
   if (!supportedMarketing) throw new PropertyExposeError("EXPOSE_MARKETING_INVALID", 400, "Purchase or rental marketing type must be saved before export.");
-  // Public price is authoritative when set. A valuation/unit sum is NEVER a fallback.
-  const selectedPrice = p.publicPriceCents ?? (rental ? p.rentPriceCents ?? p.rentNetCents : p.targetPriceCents);
+  // Rental output uses the saved gross rent, as the website projection does.
+  // An asking/public purchase price or private net rent cannot replace it.
+  const targetPrice = propertyCoreNumberIsKnown(numericState, "price", p.targetPriceCents) ? p.targetPriceCents : null;
+  const selectedPrice = rental
+    ? propertyOptionalPriceIsKnown(numericState, "rentPrice", p.rentPriceCents) ? p.rentPriceCents : null
+    : p.publicPriceCents !== null && p.publicPriceCents !== undefined
+      ? propertyOptionalPriceIsKnown(numericState, "publicPrice", p.publicPriceCents) ? p.publicPriceCents : null
+      : targetPrice;
   const priceAmount = money(selectedPrice);
-  const notices = [de ? "Dieses Exposé wurde aus dem gespeicherten Objektstand erstellt. Angaben und Verfügbarkeit bitte vor Weitergabe prüfen." :
-    "This brochure was created from the saved property record. Please verify the information and availability before sharing."];
+  const notices = [t("Dieses Exposé wurde aus dem gespeicherten Objektstand erstellt. Angaben und Verfügbarkeit bitte vor Weitergabe prüfen.",
+    "This brochure was created from the saved property record. Please verify the information and availability before sharing.", "Este dossier se ha creado a partir del inmueble guardado. Compruebe los datos y la disponibilidad antes de compartirlo.")];
   if (visibleMoney && priceAmount === null) throw new PropertyExposeError("EXPOSE_PRICE_MISSING", 400, "A valid saved display price is missing. Choose price on request or hide the price explicitly.");
+  if (visibleMoney && p.developer === true && p.confirmedCurrentPrice !== true && (!rental || parsePropertyIntegerCents(selectedPrice) === 0)) {
+    throw new PropertyExposeError("EXPOSE_PRICE_UNCONFIRMED", 409, "A visible developer price requires the matching authorized unit-price confirmation.");
+  }
   const facts = [];
-  if (text(p.objectType)) facts.push({ label: de ? "Objektart" : "Property type", value: text(p.objectType) });
-  for (const [field, label, suffix] of [["areaSqm", de ? "Fläche" : "Area", " m²"], ["rooms", de ? "Zimmer" : "Rooms", ""], ["yearBuilt", de ? "Baujahr" : "Year built", ""]]) {
-    if (p[field] !== null && p[field] !== undefined && Number.isFinite(Number(p[field])) && Number(p[field]) > 0) {
-      facts.push({ label, value: new Intl.NumberFormat(de ? "de-AT" : "en-GB").format(Number(p[field])) + suffix });
+  if (text(p.objectType)) facts.push({ label: t("Objektart", "Property type", "Tipo de inmueble"), value: webExposePropertyType(text(p.objectType), options.language) });
+  for (const [value, label, suffix] of [
+    [detailGroups.some(group => group.id === "areas") || !propertyCoreNumberIsKnown(numericState, "areaSqm", p.areaSqm) ? null : p.areaSqm, t("Fläche", "Area", "Superficie"), " m²"],
+    [propertyDetailNumber(details, "rooms.zimmer") ?? p.rooms, t("Zimmer", "Rooms", "Habitaciones"), ""],
+    [propertyDetailNumber(details, "construction.baujahr") ?? p.yearBuilt, t("Baujahr", "Year built", "Año de construcción"), ""],
+  ] as const) {
+    if (value !== null && value !== undefined && Number.isFinite(Number(value)) && (Number(value) > 0 || suffix === " m²" && Number(value) === 0)) {
+      facts.push({ label, value: label === t("Baujahr", "Year built", "Año de construcción") ? String(value) : new Intl.NumberFormat(locale).format(Number(value)) + suffix });
     }
   }
   const availability = text(p.availableFromText) || text(p.availableFrom);
-  if (availability) facts.push({ label: de ? "Verfügbar" : "Available", value: availability });
+  if (availability) facts.push({ label: t("Verfügbar", "Available", "Disponible"), value: availability });
   const costs = [];
   // Hiding price also hides all price-derived totals/rates, preventing reconstruction.
   if (visibleMoney) {
     const calculation = normalizePurchaseAncillaryCalculation(p.purchaseAncillaryCalculation);
     const differentBasis = calculation && parsePropertyIntegerCents(selectedPrice) !== parsePropertyIntegerCents(p.targetPriceCents);
-    const ancillary = !rental && !differentBasis ? money(p.purchaseAncillaryCostsCents) : null;
-    if (!rental && differentBasis) notices.push(de ? "Automatische Kaufnebenkosten wurden nicht ausgegeben, da ihre Berechnungsbasis vom freigegebenen Anzeigepreis abweicht." : "Automatic purchase ancillary costs were omitted because their calculation basis differs from the approved display price.");
+    const ancillary = !rental && !differentBasis && (parsePropertyIntegerCents(p.purchaseAncillaryCostsCents) ?? 0) > 0 ? money(p.purchaseAncillaryCostsCents) : null;
+    if (!rental && differentBasis) notices.push(t("Automatische Kaufnebenkosten wurden nicht ausgegeben, da ihre Berechnungsbasis vom freigegebenen Anzeigepreis abweicht.", "Automatic purchase ancillary costs were omitted because their calculation basis differs from the approved display price.", "Se han omitido los gastos de compra automáticos porque su base difiere del precio autorizado."));
     if (ancillary !== null) {
-      costs.push({ label: de ? "Kaufnebenkosten (Auswahl/Pauschale)" : "Purchase ancillary costs (selection/allowance)", value: ancillary });
-      if (calculation) costs.push({ label: de ? "Berechnungsbasis" : "Calculation basis", value: `${new Intl.NumberFormat(de ? "de-AT" : "en-GB").format(calculation.rateBps / 100)} % × ${money(p.targetPriceCents) ?? "—"}` });
-      notices.push(de ? "Die Kaufnebenkosten sind eine bearbeitbare Auswahl/Pauschale, keine vollständige gesetzliche Gesamtkostenberechnung. Individuelle Kosten und Ausnahmen sind gesondert zu prüfen." :
-        "Purchase ancillary costs are an editable selection/allowance, not a complete statutory total. Individual costs and exemptions require separate review.");
+      costs.push({ label: t("Kaufnebenkosten (Auswahl/Pauschale)", "Purchase ancillary costs (selection/allowance)", "Gastos de compra (selección/estimación)"), value: ancillary });
+      if (calculation) costs.push({ label: t("Berechnungsbasis", "Calculation basis", "Base de cálculo"), value: `${new Intl.NumberFormat(locale).format(calculation.rateBps / 100)} % × ${money(p.targetPriceCents) ?? "—"}` });
+      notices.push(t("Die Kaufnebenkosten sind eine bearbeitbare Auswahl/Pauschale, keine vollständige gesetzliche Gesamtkostenberechnung. Individuelle Kosten und Ausnahmen sind gesondert zu prüfen.",
+        "Purchase ancillary costs are an editable selection/allowance, not a complete statutory total. Individual costs and exemptions require separate review.", "Los gastos de compra son una selección/estimación editable, no un cálculo legal completo. Los gastos y exenciones particulares requieren revisión."));
     }
-    for (const c of snapshot.source.costs) {
-      const monthly = money(c.monthlyGrossCents), once = money(c.oneTimeGrossCents);
-      if (monthly !== null && Number(c.monthlyGrossCents) !== 0) costs.push({ label: `${sanitizeAddress(c.label)} (${de ? "monatlich" : "monthly"})`, value: monthly });
-      if (once !== null && Number(c.oneTimeGrossCents) !== 0) costs.push({ label: `${sanitizeAddress(c.label)} (${de ? "einmalig" : "one-time"})`, value: once });
-    }
+    costs.push(...formatApprovedPropertyCosts(snapshot.source.costs, options.language, locale));
   }
   const description = sanitizeAddress(options.description ?? snapshot.source.texts[0]?.content);
-  const energy = [];
-  if (text(p.energyClass)) energy.push({ label: de ? "Energieklasse (gespeichert)" : "Energy class (saved)", value: text(p.energyClass) });
-  if (text(p.energyValidUntil)) energy.push({ label: de ? "Energieausweis gültig bis" : "Energy certificate valid until", value: text(p.energyValidUntil) });
-  if (!energy.length) notices.push(de ? "Energieangaben fehlen im gespeicherten Objektstand." : "Energy information is missing from the saved property.");
+  const country = geography?.countryCode ?? readPropertyGeography({ countryCode: p.countryCode, region: p.region })?.countryCode;
+  const energy = publicPropertyEnergyFacts(p.energyCertificate, country, options.language, locale, { energyClass: p.energyClass, energyValidUntil: p.energyValidUntil })
+    .map(fact => ({ ...fact, value: sanitizeAddress(fact.value) }));
+  if (!energy.length) notices.push(t("Energieangaben fehlen im gespeicherten Objektstand.", "Energy information is missing from the saved property.", "Faltan los datos energéticos del inmueble guardado."));
   const company = snapshot.source.company;
   const contact = options.showContact ? { name: text(p.contactName) || undefined, email: text(p.contactEmail) || text(company?.email) || undefined,
     phone: text(p.contactPhone) || text(company?.phone) || undefined, company: text(company?.name) || undefined } : undefined;
-  if (options.showContact && !contact?.email && !contact?.phone) notices.push(de ? "Ein öffentlicher Ansprechpartner fehlt." : "A public contact is missing.");
-  return { template: options.template, language: options.language, title: sanitizeAddress(options.title || p.title).slice(0, 180),
+  if (options.showContact && !contact?.email && !contact?.phone) notices.push(t("Ein öffentlicher Ansprechpartner fehlt.", "A public contact is missing.", "Falta un contacto público."));
+  return { template: options.template, language: options.language, ...(geography ? { locale: geography.displayLocale } : {}), title: sanitizeAddress(options.title || p.title).slice(0, 180),
     reference: sanitizeAddress(p.objectNumber) || snapshot.propertyId.slice(0, 8), createdAt: iso(),
     address: options.address === "full" ? text(p.address) : options.address === "city" ? [text(p.postalCode), text(p.city) || text(p.region)].filter(Boolean).join(" ") : undefined,
-    price: options.showPrice && visibility === "price_on_request" ? (de ? "Preis auf Anfrage" : "Price on request") : visibleMoney ? `${rental ? (de ? "Miete" : "Rent") : (de ? "Kaufpreis" : "Purchase price")}: ${priceAmount}${rental ? (de ? " / Monat" : " / month") : ""}` : undefined,
-    facts, sections: description ? [{ heading: de ? "Beschreibung" : "Description", text: description }] : [], costs, energy, contact, images, notices };
+    price: options.showPrice && visibility === "price_on_request" ? t("Preis auf Anfrage", "Price on request", "Precio a consultar") : visibleMoney ? `${rental ? t("Miete", "Rent", "Alquiler") : t("Kaufpreis", "Purchase price", "Precio de compra")}: ${priceAmount}${rental ? t(" / Monat", " / month", " / mes") : ""}` : undefined,
+    facts: facts.map(fact => ({ ...fact, value: sanitizeAddress(fact.value) })), detailGroups: detailGroups.map(group => ({ ...group, facts: group.facts.map(fact => ({ ...fact, value: sanitizeAddress(fact.value) })) })),
+    sections: description ? [{ heading: t("Beschreibung", "Description", "Descripción"), text: description }] : [], costs, energy, contact, images: images.map(image => ({ ...image, caption: sanitizeAddress(image.caption) })), notices };
 }
 async function selectedImages(snapshot: ExposeSnapshot, options: PropertyExposeOptions) {
   const output: PropertyExposeImage[] = [];
@@ -176,7 +200,7 @@ async function selectedImages(snapshot: ExposeSnapshot, options: PropertyExposeO
     totalInput += bytes.length;
     if (totalInput > 60 * 1024 * 1024) throw new PropertyExposeError("EXPOSE_MEDIA_BUDGET", 413, "Selected images exceed the 60 MB source budget. Select fewer images.");
     const caption = options.address === "full" ? text(selected.title) :
-      `${options.language === "de" ? (kind === "floorplan" ? "Grundriss" : "Objektfoto") : (kind === "floorplan" ? "Floor plan" : "Property photo")} ${output.length + floorPlanPdfs.length + 1}`;
+      `${options.language === "de" ? (kind === "floorplan" ? "Grundriss" : "Objektfoto") : options.language === "es" ? (kind === "floorplan" ? "Plano" : "Foto del inmueble") : (kind === "floorplan" ? "Floor plan" : "Property photo")} ${output.length + floorPlanPdfs.length + 1}`;
     if (asset.mimeType === "application/pdf" && kind === "floorplan") {
       const { pageCount } = await validatePropertyExposePdf(bytes);
       floorPlanPages += pageCount;
@@ -218,10 +242,17 @@ export async function mutatePropertyExpose(session: AppSession, input: Record<st
     if (snapshot.registry.versions.length >= 100) throw new PropertyExposeError("EXPOSE_VERSION_LIMIT", 409, "The 100-version limit has been reached.");
     let bytes: Uint8Array, options: PropertyExposeOptions | undefined;
     let sourceMediaHashes: Record<string, string> | undefined;
+    let privatePriceHidden = false;
     let name: string;
     if (operation === "generate") {
       if (input.confirmed !== true) throw new PropertyExposeError("EXPOSE_CONFIRMATION_REQUIRED", 400, "Confirm the selected saved information for this private PDF.");
       options = parsePropertyExposeOptions(input.options);
+      const visibility = propertyExposePriceVisibility(snapshot.source.listing);
+      privatePriceHidden = snapshot.source.listing.developer === true && snapshot.unconfirmedPositivePublicationPrice === true
+        && (!options.showPrice || visibility === "hide_price" || visibility === "price_on_request");
+      if (privatePriceHidden && options.floorPlanIds.length > 0) {
+        throw new PropertyExposeError("EXPOSE_FLOORPLAN_PRICE_REVIEW", 409, "Remove the floor plans before generating a private PDF without a confirmed price.");
+      }
       const selected = await selectedImages(snapshot, options);
       sourceMediaHashes = selected.sourceMediaHashes;
       bytes = await renderPropertyExposePdf({ ...buildPropertyExposeDocument(snapshot, options, selected.images), floorPlanPdfs: selected.floorPlanPdfs });
@@ -238,7 +269,7 @@ export async function mutatePropertyExpose(session: AppSession, input: Record<st
       workspaceId: session.workspaceId, folder: `properties/${snapshot.propertyId}` });
     const version: ExposeStoredVersion = { id: randomUUID(), assetId: asset.id, source: operation === "generate" ? "generated" : "uploaded",
       fileName: name, createdAt: iso(), sizeBytes: bytes.byteLength, pageCount, versionLabel: `v${snapshot.registry.versions.length + 1}`,
-      sourceFingerprint: snapshot.sourceFingerprint, sha256: createHash("sha256").update(bytes).digest("hex"), ...(options ? { options, sourceMediaHashes } : {}) };
+      sourceFingerprint: snapshot.sourceFingerprint, sha256: createHash("sha256").update(bytes).digest("hex"), ...(options ? { ...(privatePriceHidden ? { privateOptions: options } : { options }), sourceMediaHashes } : {}) };
     // Storage and SQL cannot commit atomically. An uncertain write never deletes
     // the new private asset automatically (it may already have a committed reference).
     await persistPropertyExposeChange({ snapshot, session, expectedRevision: input.expectedRevision, operation: "version", version });
@@ -246,6 +277,10 @@ export async function mutatePropertyExpose(session: AppSession, input: Record<st
   }
   if (operation === "activate") {
     if (input.confirmed !== true || !exposeUuid(input.documentId)) throw new PropertyExposeError("EXPOSE_CONFIRMATION_REQUIRED", 400, "Review and confirm the exact PDF before activation.");
+    if (snapshot.source.listing.developer === true && snapshot.unconfirmedPositivePublicationPrice === true
+        && snapshot.registry.versions.some(version => version.id === input.documentId && version.privateOptions)) {
+      throw new PropertyExposeError("EXPOSE_ACTIVATION_PRICE_REVIEW", 409, "Confirm the current authorized unit price before activating this private PDF.");
+    }
     await readPropertyExposePdf(session, snapshot.propertyId, input.documentId);
     await persistPropertyExposeChange({ snapshot, session, expectedRevision: input.expectedRevision, operation, documentId: input.documentId });
   } else if (operation === "deactivate") {

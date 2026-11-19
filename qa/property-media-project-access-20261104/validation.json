@@ -1,0 +1,52 @@
+{
+  "status": "Lokal qualifiziert und korrigiert; nicht veröffentlicht oder live nachgetestet",
+  "finding": "SRC-01",
+  "baseCommit": "11c4384c0c5a360e448f441c822edc1057d9fe17",
+  "branch": "fix/property-media-project-access-20261104",
+  "validatedAt": "2026-11-04T22:04:46+01:00",
+  "deploymentChanged": false,
+  "productionDatabaseChanged": false,
+  "paidCalls": 0,
+  "newInvitations": 0,
+  "environment": "Disposable loopback PostgreSQL and synthetic local private bytes only. Runtime and independent definer owner have no superuser or BYPASSRLS; FORCE RLS stays enabled.",
+  "localQualification": "At migration188, a project-A-only member could retrieve project-B ordinary private file metadata and bytes and an otherwise hidden property attachment. This is a local reproduction, not an observed unauthorized production access.",
+  "implementation": [
+    "Migration189 restricts media rows by canonical property folder and every media/document binding, including hidden, multiple, projectless, mismatched and unit bindings.",
+    "Units use existing metadata sellerListingId and seller_listings.unit_id links. No new unit schema field is introduced.",
+    "Generic API checks precede metadata/byte exposure, publication and file storage; direct SQL is independently covered by RLS.",
+    "Share rows require project write access for creation and mutation. Anonymous lookup is limited to a valid active unexpired token hash, public asset and ordinary folder.",
+    "Shared quota uses an active-tenant aggregate byte count, including hidden files, without file/project IDs or counts.",
+    "External-partner and case-insensitive Knowledge/Proof exclusions remain; dedicated private Knowledge/Proof workflows still work. External-partner generic listing remains empty with zero disclosed usage."
+  ],
+  "checks": [
+    {
+      "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/property-media-project-access-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/web-expose-media-tests.ts scripts/web-expose-brand-layout-tests.ts scripts/web-expose-db-tests.ts",
+      "passed": 55,
+      "failed": 0,
+      "skipped": 0
+    },
+    { "command": "npx tsc --noEmit --pretty false", "exitCode": 0 },
+    {
+      "command": "npx eslint --max-warnings=0 src/lib/media-store.ts src/app/api/media/route.ts src/app/api/media/files/[assetId]/route.ts scripts/property-media-project-access-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/web-expose-brand-layout-tests.ts scripts/web-expose-media-tests.ts scripts/lib/media-project-runtime-fixture.mjs",
+      "exitCode": 0
+    },
+    { "command": "git diff --check", "exitCode": 0 }
+  ],
+  "coverage": [
+    "Real cookie and CSRF list, upload, private-byte and publish/revoke handlers: own project allowed, other project and hidden references404, denied uploads403 before disk changes.",
+    "Raw SQL: invisible SELECT/UPDATE, forbidden insertion and folder laundering, forged binding, read-only share minting, unauthorized share extension and share-asset rewiring denied.",
+    "Folder-only, attachment-only, multiple references with one unauthorized project, mismatched parent, null/missing parent project, both unit-link paths and project-only unit attachment.",
+    "Existing cookie immediately loses private access after project-grant revocation; owner retains access. Inactive membership and foreign scope denied.",
+    "Actual anonymous byte route200 for an active share and404 after expiry/revocation; unknown token denied.",
+    "Hidden project fills quota: permitted-project upload409 before storage; listing shows no hidden file metadata.",
+    "Existing Knowledge extraction/replacement/replay/approval/rollback/ambiguous-COMMIT handling and private lifecycle checks.",
+    "Existing resource upload/review/CAS, artwork layout/PDF/public revocation, and exposé public capability/inquiry/consent/RLS checks."
+  ],
+  "limits": [
+    "Peer review was bounded and source-based, not a complete security audit. It identified unit-link and hidden-byte quota regressions; both were corrected and covered before the final55/55 run.",
+    "No production migration, deployment or live retest was performed. The live finding remains unconfirmed until a coordinated live role-bound retest.",
+    "Apply189 under the existing schema owner after184/188 and before publishing the application changes. No permissive missing-function fallback exists.",
+    "The disposable sales bootstrap omits its documented historical/manual cutovers and optional vector extension; this is not a complete production upgrade rehearsal.",
+    "Historical106/108 fixtures load only the actual189 scalar runtime primitives; the new project-access suite applies full189 and separately verifies non-BYPASS owner behavior."
+  ]
+}

@@ -1,0 +1,44 @@
+✔ typed property details retain unknowns, invalid historical values and explicit cleared features (6.7898ms)
+▶ all125 property details roundtrip through real tenant create, full edit and optimistic conflict checks
+  ✔ each original registry field has a retained or canonical bound stored value (0.578ms)
+  ✔ reload retains canonical details and exact typed values while old imports survive (9.9486ms)
+  ✔ stale edits cannot overwrite the saved full property (23.9205ms)
+  ✔ intentional optional money clearing persists null and foreign scope cannot read details (40.9722ms)
+  ✔ typed legacy database columns are visible before a complete canonical edit (9.5965ms)
+  ✔ a final audit failure rolls the full edit and its earlier audit back together (45.0889ms)
+✔ all125 property details roundtrip through real tenant create, full edit and optimistic conflict checks (9800.5856ms)
+✔ legacy zero stays unknown while versioned explicit zero and missing values remain distinct (2.6661ms)
+▶ country persistence and optimistic certificate updates run in an isolated tenant database
+  ✔ AT, DE, ES and IE keep their own region, locale and language after create (219.7471ms)
+  ✔ certificate data persists, rejects stale edits and retains the original region (78.159ms)
+  ✔ geography CAS and use CAS prevent one browser from overwriting another (50.9111ms)
+  ✔ legacy region-only updates remain coherent without changing the explicit country or guessing a foreign one (76.831ms)
+✔ country persistence and optimistic certificate updates run in an isolated tenant database (10567.2688ms)
+✔ guided draft shares strict property values while retaining incomplete numbers for correction (50.2455ms)
+▶ guided creation stores private resumable drafts and commits the existing property model atomically
+  ✔ partial state resumes in a fresh transaction, retries once and rejects stale or foreign modifications (148.5562ms)
+  ✔ missing required data never creates a listing or advances the draft (16.524ms)
+  ✔ all four countries create real persisted properties and replay without duplicate entities (273.6476ms)
+  ✔ guided blank and explicit zero create distinct persisted numeric states (73.3872ms)
+  ✔ failure in the final audit rolls back the listing, helper unit and draft together (56.384ms)
+  ✔ project rights are rechecked for resumed drafts and revocation blocks writes (15.9795ms)
+✔ guided creation stores private resumable drafts and commits the existing property model atomically (10493.2243ms)
+▶ property direct creation validates, commits once and rechecks cookie authority
+  ✔ unsigned requests and missing one-use CSRF cannot create records (98.5743ms)
+  ✔ server rejects malformed supplied numbers, classifications, dates and links (330.5992ms)
+  ✔ parallel retries create one property, one default unit and one receipt (111.5804ms)
+  ✔ same operation replays after response loss but changed content/key reuse conflicts (44.3526ms)
+  ✔ complete editor explicitly clears optional stored numbers and keeps zero distinct (170.4026ms)
+  ✔ known area/price clear to unknown and explicit zero survives a complete reload (135.3648ms)
+  ✔ existing cookie and receipt cannot bypass a newly restricted membership/project (17.1982ms)
+  ✔ audit failure rolls back property, default unit, receipt and domain events (44.7717ms)
+✔ property direct creation validates, commits once and rechecks cookie authority (11537.0198ms)
+✔ creation rejects invalid supplied values before normalization can turn them into unknowns (5.5887ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13602.7416

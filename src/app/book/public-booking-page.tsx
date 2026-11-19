@@ -7,10 +7,12 @@ import {
   getPublicMeetingBookingActionState,
   getPublicMeetingPageSettings,
 } from "@/lib/db/meeting-repositories";
-import { getLocale, getPublicBookingPageCopy, type LanguageCode } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n";
+import { getPropertyBookingPageCopy as getPublicBookingPageCopy } from "@/lib/property-booking-copy";
 import { buildPublicMeetingPath } from "@/lib/public-routing";
-import { resolvePublicLanguage } from "@/lib/public-language";
+import { resolvePublicSiteLanguage as resolvePublicLanguage,type PublicLanguageCode } from "@/lib/public-language";
 import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
+import { getPropertyBookingActionPageSettings,getPublicPropertyMeetingPageSettings,resolvePublicPropertyBookingContext } from "@/lib/property-booking-repository";
 import {
   buildPublicSubmissionScope,
   createPublicSubmissionProof,
@@ -21,6 +23,7 @@ type BookingPageProps = {
   slug: string;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
   workspacePublicKey: string;
+  propertyContext?: string;
 };
 
 type PublicMeetingAutomation = {
@@ -63,6 +66,7 @@ function getMeetingLabel(meeting: string, copy: ReturnType<typeof getPublicBooki
 }
 
 function getCalendarLabel(calendar: string, copy: ReturnType<typeof getPublicBookingPageCopy>) {
+  if(calendar==='none')return 'CRM';
   return calendar === "google" ? copy.calendarLabels.google : copy.calendarLabels.microsoft;
 }
 
@@ -70,8 +74,8 @@ function getStatusText(error: string, copy: ReturnType<typeof getPublicBookingPa
   return copy.status.errors[error as keyof typeof copy.status.errors] ?? copy.status.errors.fallback;
 }
 
-function formatMonth(dateKey: string, language: LanguageCode, timeZone = "Europe/Vienna") {
-  return new Intl.DateTimeFormat(getLocale(language), {
+function formatMonth(dateKey: string, language: PublicLanguageCode, timeZone = "Europe/Vienna") {
+  return new Intl.DateTimeFormat(language==="es"?"es-ES":getLocale(language), {
     month: "long",
     timeZone,
     year: "numeric",
@@ -90,8 +94,8 @@ function formatDateKey(value: string | Date, timeZone = "Europe/Vienna") {
   return `${partByType.year}-${partByType.month}-${partByType.day}`;
 }
 
-function formatDateTime(value: string | Date, language: LanguageCode, timeZone = "Europe/Vienna") {
-  return new Intl.DateTimeFormat(getLocale(language), {
+function formatDateTime(value: string | Date, language: PublicLanguageCode, timeZone = "Europe/Vienna") {
+  return new Intl.DateTimeFormat(language==="es"?"es-ES":getLocale(language), {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
@@ -107,12 +111,13 @@ function buildDateHref(input: {
   date: string;
   meeting: string;
   mode: "booking" | "reschedule";
-  language: LanguageCode;
+  language: PublicLanguageCode;
   slug: string;
   source: string;
   theme: string;
   token: string;
   workspacePublicKey: string;
+  propertyContext?: string;
 }) {
   const params = new URLSearchParams({
     calendar: input.calendar,
@@ -122,6 +127,7 @@ function buildDateHref(input: {
     theme: input.theme,
     utm_source: input.source,
   });
+  if(input.propertyContext)params.set('property_context',input.propertyContext);
 
   if (input.mode === "reschedule") {
     params.set("booking", input.bookingId);
@@ -167,12 +173,17 @@ export async function renderPublicBookingPage({
     requestedLanguage: query.lang,
   });
   const copy = getPublicBookingPageCopy(language);
-  const savedPage = await getPublicMeetingPageSettings({ slug, workspacePublicKey });
+  const propertyContext=getQueryValue(query.property_context);
+  const bookingId=getQueryValue(query.booking),token=getQueryValue(query.token);
+  const actionPage=bookingId&&token?await getPropertyBookingActionPageSettings(bookingId,token).catch(()=>null):null;
+  const savedPage = actionPage??(propertyContext?await getPublicPropertyMeetingPageSettings(propertyContext).catch(()=>null):await getPublicMeetingPageSettings({ slug, workspacePublicKey }));
+  const propertyOffer=propertyContext?await resolvePublicPropertyBookingContext(propertyContext).catch(()=>null):null;
+  const validPropertyOffer=propertyOffer?.meetingPageId===savedPage?.id&&propertyOffer?.workspaceId===savedPage?.workspaceId&&savedPage?.slug===slug&&savedPage?.workspacePublicKey===workspacePublicKey;
   const savedCalendar = (savedPage?.calendarIntegrations ?? {}) as PublicMeetingCalendarConfig;
   const savedShare = (savedPage?.shareConfig ?? {}) as PublicMeetingShareConfig;
   const savedAutomation = (savedPage?.automation ?? {}) as PublicMeetingAutomation;
-  const calendar = getQueryValue(query.calendar, savedCalendar.defaultProvider ?? "microsoft");
-  const meeting = getQueryValue(query.meeting, savedCalendar.defaultMeetingProvider ?? "microsoft-teams");
+  const calendar = propertyContext||actionPage?savedCalendar.defaultProvider??'none':getQueryValue(query.calendar, savedCalendar.defaultProvider ?? "microsoft");
+  const meeting = propertyContext||actionPage?savedCalendar.defaultMeetingProvider??'manual-link':getQueryValue(query.meeting, savedCalendar.defaultMeetingProvider ?? "microsoft-teams");
   const theme = getQueryValue(query.theme, savedShare.theme ?? "light");
   const source = getQueryValue(query.utm_source, "crm");
   const requestedDate = getQueryValue(query.date) || undefined;
@@ -183,8 +194,6 @@ export async function renderPublicBookingPage({
   const bookingError = getQueryValue(query.error);
   const queuedMessages = getQueryValue(query.queued, "0");
   const sentMessages = getQueryValue(query.sent, "0");
-  const bookingId = getQueryValue(query.booking);
-  const token = getQueryValue(query.token);
   const cancelMode = getQueryValue(query.cancel) === "1";
   const rescheduleMode = getQueryValue(query.reschedule) === "1";
   const actionState =
@@ -193,19 +202,29 @@ export async function renderPublicBookingPage({
       : null;
   const replacement = savedPage?.id && savedPage.workspaceId ? await getLegacyBookingReplacement(savedPage.workspaceId, savedPage.id) : null;
   if (replacement && !cancelMode) {
-    if (rescheduleMode && actionState) return <main className="novalure-public-runtime mx-auto max-w-xl p-6">
-      <h1>{language === "de" ? "Bestehenden Termin umbuchen" : "Reschedule your existing appointment"}</h1>
-      <p>{language === "de" ? "Bitte kontaktieren Sie den Veranstalter zur Umbuchung dieses bestehenden Termins. Es wurde kein neuer Termin gebucht." : "Please contact the organizer to reschedule this existing appointment. No new appointment has been booked."}</p>
+    if (rescheduleMode && actionState) return <main lang={language} className="novalure-public-runtime mx-auto max-w-xl p-6">
+      <h1>{language === "de" ? "Bestehenden Termin umbuchen" : language === "es" ? "Cambiar su cita existente" : "Reschedule your existing appointment"}</h1>
+      <p>{language === "de" ? "Bitte kontaktieren Sie den Veranstalter zur Umbuchung dieses bestehenden Termins. Es wurde kein neuer Termin gebucht." : language === "es" ? "Contacte con la empresa para cambiar esta cita existente. No se ha reservado una cita nueva." : "Please contact the organizer to reschedule this existing appointment. No new appointment has been booked."}</p>
       <p>{actionState.title} · {formatDateTime(actionState.startsAt, language)}</p>
     </main>;
-    if (!replacement.enabled || !replacement.channels.link) return <main className="novalure-public-runtime mx-auto max-w-xl p-6">
-      <h1>{language === "de" ? "Termin anfragen" : "Request an appointment"}</h1>
-      <p>{language === "de" ? "Bitte kontaktieren Sie den Veranstalter für einen Termin. Für diese Terminseite sind derzeit keine Buchungszeiten freigegeben." : "Please contact the organizer to request an appointment. Booking times are currently unavailable for this appointment page."}</p>
+    if (!replacement.enabled || !replacement.channels.link) return <main lang={language} className="novalure-public-runtime mx-auto max-w-xl p-6">
+      <h1>{language === "de" ? "Termin anfragen" : language === "es" ? "Solicitar una cita" : "Request an appointment"}</h1>
+      <p>{language === "de" ? "Bitte kontaktieren Sie den Veranstalter für einen Termin. Für diese Terminseite sind derzeit keine Buchungszeiten freigegeben." : language === "es" ? "Contacte con la empresa para solicitar una cita. Esta página no ofrece horarios de reserva en este momento." : "Please contact the organizer to request an appointment. Booking times are currently unavailable for this appointment page."}</p>
+    </main>;
+    if (language === "es") return <main lang="es" className="novalure-public-runtime mx-auto grid max-w-xl gap-4 p-6">
+      <h1 className="text-2xl font-semibold">Elegir el idioma de la reserva</h1>
+      <p>Este formulario de reserva está disponible en alemán o inglés. El formulario de la empresa puede tener un idioma fijo. Elija el idioma con el que desea continuar; todavía no se ha reservado ninguna cita.</p>
+      <div className="flex flex-wrap gap-3">
+        <a className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2 font-semibold" href={`/appointments/${encodeURIComponent(replacement.publicId)}?lang=en`} hrefLang="en">Solicitar formulario en inglés</a>
+        <a className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2 font-semibold" href={`/appointments/${encodeURIComponent(replacement.publicId)}?lang=de`} hrefLang="de">Solicitar formulario en alemán</a>
+      </div>
     </main>;
     return <PublicBookingForm publicId={replacement.publicId} channel="link" initialLanguage={language} />;
   }
   const actionDate = actionState ? formatDateKey(actionState.startsAt) : undefined;
   const availability = await getPublicMeetingAvailability({
+    propertyContext:propertyContext||undefined,
+    bookingAction:actionPage?.bookingAction,
     date: requestedDate || (actionState ? actionDate : undefined),
     slug,
     workspacePublicKey,
@@ -229,6 +248,7 @@ export async function renderPublicBookingPage({
       : copy.descriptions.booking;
   const actionTimeZone = availability?.rules.timeZone ?? "Europe/Vienna";
   const actionDateTime = actionState ? formatDateTime(actionState.startsAt, language, actionTimeZone) : null;
+  const propertyActionHref=(action:'cancel'|'reschedule')=>`${buildPublicMeetingPath({slug,workspacePublicKey})}?${new URLSearchParams({booking:bookingId,token,lang:language,property_context:propertyContext,[action]:'1'})}`;
   const isDark = theme === "dark";
   const activeReminderCount =
     savedAutomation.reminderEnabled && Array.isArray(savedAutomation.reminders)
@@ -247,6 +267,7 @@ export async function renderPublicBookingPage({
 
   return (
     <main
+      lang={language}
       className={`novalure-public-runtime min-h-screen px-4 py-8 ${
         isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-950"
       }`}
@@ -262,6 +283,7 @@ export async function renderPublicBookingPage({
           <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300">
             {pageDescription}
           </p>
+          {propertyContext&&<div className="mt-5 rounded-lg border border-white/15 p-4 text-sm"><p className="font-semibold">{validPropertyOffer?`${propertyOffer?.title} · ${propertyOffer?.unitNumber}`:language==='de'?'Besichtigungsangebot nicht verfügbar':language==='es'?'Visita no disponible':'Viewing offer unavailable'}</p><p className="mt-2 text-slate-300">{language==='de'?'Dies ist eine Terminanfrage. Der tatsächliche Teilnehmer und die Besichtigung werden persönlich geprüft und bestätigt. Ein Exposélink bestätigt keine Identität.':language==='es'?'Esto es una solicitud de cita. Un asesor revisará al participante y confirmará la visita. Un enlace al inmueble no verifica la identidad.':'This is an appointment request. An adviser will review the actual participant and confirm the viewing. A property link does not verify identity.'}</p></div>}
 
           <div className="mt-8 grid gap-3 text-sm sm:grid-cols-3 lg:grid-cols-1">
             <div className="rounded-lg border border-white/10 bg-white/5 p-4">
@@ -353,6 +375,7 @@ export async function renderPublicBookingPage({
                     theme,
                     token,
                     workspacePublicKey,
+                    propertyContext,
                   })}
                   key={item.date}
                 >
@@ -448,9 +471,9 @@ export async function renderPublicBookingPage({
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                   {copy.reschedule}
                 </p>
-                <h2 className="mt-1 text-xl font-semibold">{copy.confirmNewTime}</h2>
+                <h2 className="mt-1 text-xl font-semibold">{actionPage?(language==="de"?"Neue Zeit anfragen":language==="es"?"Solicitar nueva hora":"Request new time"):copy.confirmNewTime}</h2>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  {copy.rescheduleDescription}
+                  {actionPage?(language==="de"?"Die neue Zeit wird angefragt und vor der fachlichen Bestätigung erneut geprüft.":language==="es"?"Un asesor revisará la nueva hora antes de confirmar la visita.":"The new time is requested and reviewed before the viewing is confirmed again."):copy.rescheduleDescription}
                 </p>
                 <button
                   className="mt-4 w-full rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
@@ -461,6 +484,8 @@ export async function renderPublicBookingPage({
                 </button>
               </div>
             </form>
+          ) : actionPage ? (
+            <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm">{language==='de'?'Ihre gespeicherte Terminanfrage ist oben dargestellt. Nutzen Sie die persönlichen Links zum Verschieben oder Absagen.':language==='es'?'Su solicitud guardada aparece arriba. Utilice sus enlaces personales para cambiarla o cancelarla.':'Your saved appointment request is shown above. Use your personal links to reschedule or cancel it.'}</p>
           ) : (
             <form action="/api/meetings/bookings" className="grid gap-5 lg:grid-cols-[0.8fr_1fr]" method="post">
               <input name="slug" type="hidden" value={slug} />
@@ -471,6 +496,7 @@ export async function renderPublicBookingPage({
               <input name="selectedDate" type="hidden" value={selectedDate} />
               <input name="theme" type="hidden" value={theme} />
               <input name="utm_source" type="hidden" value={source} />
+              {propertyContext&&<input name="property_context" type="hidden" value={propertyContext}/>}
               {submissionProof ? (
                 <>
                   <input
@@ -578,10 +604,10 @@ export async function renderPublicBookingPage({
                 </div>
                 <button
                   className="mt-4 w-full rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  disabled={!defaultSlot}
+                  disabled={!defaultSlot||(!!propertyContext&&!validPropertyOffer)}
                   type="submit"
                 >
-                  {copy.book}
+                  {propertyContext?(language==='de'?'Besichtigung anfragen':language==='es'?'Solicitar visita':'Request viewing'):copy.book}
                 </button>
               </div>
             </form>
@@ -593,7 +619,7 @@ export async function renderPublicBookingPage({
             </p>
           ) : submitted ? (
             <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold leading-5 text-emerald-900">
-              {confirmed
+              {propertyContext?(actionState?(language==='de'?'Ihre Terminanfrage ist eingegangen. Die Besichtigung wird nach persönlicher Prüfung bestätigt.':language==='es'?'Hemos recibido su solicitud. La visita se confirmará tras la revisión personal.':'Your appointment request has been received. The viewing will be confirmed after personal review.'):(language==='de'?'Der Eingang konnte noch nicht bestätigt werden. Bitte den ursprünglichen Vorgang erneut prüfen.':language==='es'?'Aún no se ha confirmado la recepción. Compruebe la solicitud original.':'Receipt has not yet been confirmed. Please check the original request again.')):confirmed
                 ? copy.status.confirmed(sentMessages)
                 : copy.status.booked(queuedMessages, sentMessages)}
             </p>
@@ -603,15 +629,16 @@ export async function renderPublicBookingPage({
             </p>
           ) : rescheduled ? (
             <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold leading-5 text-emerald-900">
-              {copy.status.rescheduled}
+              {actionPage?(language==='de'?'Die neue Zeit wurde angefragt. Ihre Besichtigung wird nach erneuter persönlicher Prüfung bestätigt.':language==='es'?'Se ha solicitado la nueva hora. Un asesor revisará y confirmará la visita.':'The new time has been requested. Your adviser will review and confirm the viewing again.'):copy.status.rescheduled}
             </p>
           ) : null}
+          {(propertyContext||actionPage)&&actionState&&actionState.status!=='cancelled'&&<div className="flex flex-wrap gap-3">{savedAutomation.allowReschedule!==false&&<a className="inline-flex min-h-11 items-center rounded-lg border border-stone-300 px-4 text-sm" rel="noreferrer" href={propertyActionHref('reschedule')}>{copy.reschedule}</a>}{savedAutomation.allowCancel!==false&&<a className="inline-flex min-h-11 items-center rounded-lg border border-stone-300 px-4 text-sm" rel="noreferrer" href={propertyActionHref('cancel')}>{copy.cancel}</a>}</div>}
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               {copy.afterBooking}
             </p>
-            <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-3">
+            {propertyContext||actionPage?<p className="mt-3 text-sm text-slate-700">{language==='de'?'Ihr Ansprechpartner prüft Teilnehmer und Termin. Bewahren Sie Ihren persönlichen Verwaltungslink auf. Eine automatische E-Mail oder Kalendereinladung wird hier nicht zugesagt.':language==='es'?'Su asesor revisará el participante y la cita. Guarde su enlace personal de gestión. Aquí no se promete un correo ni una invitación automática.':'Your adviser will review the participant and appointment. Keep your personal management link. An automatic email or calendar invitation is not promised here.'}</p>:<div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-3">
               <span className="rounded-lg bg-slate-50 px-3 py-2">
                 {savedAutomation.confirmationEnabled === false
                   ? copy.noConfirmation
@@ -627,7 +654,7 @@ export async function renderPublicBookingPage({
                     }${savedAutomation.allowCancel ? copy.cancel : ""}`
                   : copy.selfServiceOff}
               </span>
-            </div>
+            </div>}
           </div>
         </div>
       </section>

@@ -9,15 +9,18 @@ import { createServer, type Server } from "node:http";
 import { startLocalSalesDb,applySalesSchema } from "./lib/local-sales-db.mjs";
 import { CRM_CONTRACT_SCOPES,parseCrmContractRequest } from "../src/lib/crm-service-contract";
 import { crmPayloadDigest } from "../src/lib/crm-command";
+import { createSignedOAuthState, encryptOAuthStateSecret, hashOAuthState } from "../src/lib/integrations/calendar-oauth-state";
 
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 type Handler=(request:Request,context:{params:Promise<Record<string,string>>})=>Promise<Response>;
 const routes=new Map<string,Record<string,Handler>>();
+const mailboxCallbackPath="/api/crm/mailbox/oauth/google/callback";
 let db:Awaited<ReturnType<typeof startLocalSalesDb>>,server:Server,baseUrl:string;
 const w=randomUUID(),actor=randomUUID(),project=randomUUID(),hidden=randomUUID(),foreignW=randomUUID(),foreignProject=randomUUID(),foreignActor=randomUUID();
 const contact=randomUUID(),hiddenContact=randomUUID(),privateContact=randomUUID(),unknownContact=randomUUID(),task=randomUUID(),principalId=randomUUID();
 const token="qa-crm-v1."+randomBytes(32).toString("base64url");
-const savedEnv={NODE_ENV:process.env.NODE_ENV,DATABASE_URL:process.env.DATABASE_URL,CRM_LOCAL_TEST_DATABASE:process.env.CRM_LOCAL_TEST_DATABASE};
+const providerCredentialNames=["GOOGLE_CLIENT_ID","GOOGLE_CLIENT_SECRET","MICROSOFT_CLIENT_ID","MICROSOFT_CLIENT_SECRET"] as const;
+const savedEnv={NODE_ENV:process.env.NODE_ENV,DATABASE_URL:process.env.DATABASE_URL,CRM_LOCAL_TEST_DATABASE:process.env.CRM_LOCAL_TEST_DATABASE,NOVALURE_APP_ORIGIN:process.env.NOVALURE_APP_ORIGIN,OAUTH_STATE_SECRET:process.env.OAUTH_STATE_SECRET,...Object.fromEntries(providerCredentialNames.map(name=>[name,process.env[name]]))};
 const sim=()=> "sim-"+randomUUID();
 const envelope=(extra:Record<string,unknown>={})=>({contractVersion:"crm-integration-v1",environment:"simulation",synthetic:true,operation:"Read",entity:"Contact",tenantId:"sim-qa-tenant",resourceId:"sim-contact",actorId:"sales",correlationId:sim(),idempotencyKey:sim(),expectedVersion:null,approvalReference:null,auditReference:sim(),validation:{status:"VALIDATED",schemaVersion:"crm-integration-v1"},patch:{},...extra});
 async function register(r:ReturnType<typeof envelope>) {
@@ -29,7 +32,7 @@ async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
  if(target.origin!==new URL(baseUrl).origin)throw new Error("Test HTTP target is not the owned loopback server");
  const headers=new Headers(init.headers);headers.set("connection","close");
  try {
-  const response=await fetch(target,{...init,headers,signal:AbortSignal.timeout(15_000)});
+  const response=await fetch(target,{...init,headers,redirect:"manual",signal:AbortSignal.timeout(15_000)});
   assert.equal(response.headers.get("connection"),"close","Harness must not pool connections between test cases");
   return response;
  } catch(error) {
@@ -41,6 +44,7 @@ async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>=
  return {status:response.status,body:await response.json() as {projection?: {data:Record<string,unknown>;sourceId:string}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
 }
 before(async()=>{
+ for(const name of providerCredentialNames)delete process.env[name];
  db=await startLocalSalesDb();await applySalesSchema(db);
  Object.assign(process.env,{NODE_ENV:"test"});process.env.CRM_LOCAL_TEST_DATABASE="1";process.env.DATABASE_URL=`postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
  await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC QA','managed_by_novalure','{\"syntheticQa\":true}'),($2,'SYNTHETIC FOREIGN','managed_by_novalure','{\"syntheticQa\":true}')",[w,foreignW]);
@@ -66,7 +70,7 @@ before(async()=>{
  for(const relative of await readdir("src/app/api/crm",{recursive:true})) {
   if(!String(relative).endsWith("route.ts"))continue;
   const routeModule=await import(pathToFileURL(path.resolve("src/app/api/crm",String(relative))).href) as Record<string,unknown>;
-  const pathname="/api/crm/"+String(relative).replaceAll("\\","/").replace(/\/route.ts$/,"").replace(/\[[^\]]+\]/g,contact);
+  const pathname="/api/crm/"+String(relative).replaceAll("\\","/").replace(/\/route.ts$/,"").replaceAll("[provider]","google").replace(/\[[^\]]+\]/g,contact);
   const handlers:Record<string,Handler>={};
   for(const method of ["GET","POST","PATCH","PUT","DELETE"])if(typeof routeModule[method]==="function")handlers[method]=routeModule[method] as Handler;
   routes.set(pathname,handlers);
@@ -78,11 +82,13 @@ before(async()=>{
    let body="";for await(const part of req)body+=part;
    const headers=new Headers();for(const [key,value]of Object.entries(req.headers))if(value)headers.set(key,Array.isArray(value)?value.join(","):value);
    const target=new URL(req.url??"/",baseUrl);const method=req.method??"GET";const handler=routes.get(target.pathname)?.[method];if(!handler){res.writeHead(404);res.end();return;}
-   const response=await handler(new Request(target,{method,headers,...(["GET","HEAD"].includes(method)?{}:{body})}),{params:Promise.resolve({dealId:contact,notificationId:contact})});
+   const response=await handler(new Request(target,{method,headers,...(["GET","HEAD"].includes(method)?{}:{body})}),{params:Promise.resolve({dealId:contact,notificationId:contact,provider:"google"})});
    res.writeHead(response.status,Object.fromEntries(response.headers));res.end(await response.text());
   }catch{res.writeHead(500);res.end("failed");}
  });
  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));baseUrl=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/crm/contract/v1`;
+ process.env.NOVALURE_APP_ORIGIN=new URL(baseUrl).origin;
+ process.env.OAUTH_STATE_SECRET=randomBytes(32).toString("hex");
 });
 after(async()=>{
  if(server)await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
@@ -172,14 +178,38 @@ test("HTTP: semantic-gap entities and unclassified legacy communication remain c
  const r=envelope({entity:"Communication",resourceId:"sim-unclassified-communication"});await register(r);assert.equal((await call(r)).status,403);
 });
 test("HTTP: every legacy CRM method rejects service bearer plus forged owner headers",async()=>{
- let checked=0;
+ let checked=0, mailboxCallbacks=0;
  for(const [pathname,methods]of routes) {
   if(pathname==="/api/crm/contract/v1")continue;
   for(const method of Object.keys(methods)) {
-   const result=await fetchLocal(new URL(pathname,baseUrl),{method,headers:{authorization:"Bearer "+token,"content-type":"application/json","x-novalure-role":"owner","x-novalure-user-id":actor,"x-novalure-workspace-id":w},...(["GET","HEAD"].includes(method)?{}:{body:"{}"})});
-   assert.ok([401,403].includes(result.status),method+" "+pathname+" status="+result.status+" "+await result.text());checked++;
+   const url=new URL(pathname,baseUrl);
+   const mailboxCallback=pathname===mailboxCallbackPath&&method==="GET";
+   let stateHash:string|undefined;
+   if(mailboxCallback){
+    const signed=createSignedOAuthState({provider:"google",userId:actor,workspaceId:w,returnTo:"/?mailbox=connected"});
+    stateHash=hashOAuthState(signed.state);
+    await db.admin.query(
+      "insert into crm_mailbox_oauth_states(state_hash,workspace_id,user_id,provider,nonce_hash,verifier_encrypted,expires_at) values($1,$2,$3,'google',$4,$5,to_timestamp($6))",
+      [stateHash,w,actor,hashOAuthState(signed.nonce),encryptOAuthStateSecret(signed.codeVerifier),signed.expiresAt],
+    );
+    url.searchParams.set("state",signed.state);
+    url.searchParams.set("code","synthetic-authorization-code");
+   }
+   const result=await fetchLocal(url,{method,headers:{authorization:"Bearer "+token,"content-type":"application/json","x-novalure-role":"owner","x-novalure-user-id":actor,"x-novalure-workspace-id":w},...(["GET","HEAD"].includes(method)?{}:{body:"{}"})});
+   if(mailboxCallback){
+    assert.equal(result.status,303);
+    assert.equal(result.redirected,false);
+    assert.equal(result.headers.get("location"),new URL("/?mailbox=authorization_required#communication",baseUrl).href);
+    const state=await db.admin.query("select consumed_at from crm_mailbox_oauth_states where state_hash=$1",[stateHash]);
+    assert.deepEqual(state.rows,[{consumed_at:null}],"A forged session cannot consume even a valid local OAuth state");
+    mailboxCallbacks++;
+   }else{
+    assert.ok([401,403].includes(result.status),method+" "+pathname+" status="+result.status);
+   }
+   checked++;
   }
  }
+ assert.equal(mailboxCallbacks,1,"The OAuth callback must receive its distinct denial assertion");
  assert.ok(checked>=40,"Full historical CRM method inventory must be covered");
  console.log("Legacy CRM HTTP boundary checked methods:",checked);
 });

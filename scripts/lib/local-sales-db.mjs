@@ -53,13 +53,14 @@ async function freePort() {
   });
 }
 /** Entirely local, disposable synthetic cluster. No environment connection string is consumed. */
-export async function startLocalSalesDb() {
+export async function startLocalSalesDb({ separateBootstrap = false } = {}) {
   await mkdir(qaRoot, { recursive: true });
   const directory = await mkdtemp(path.join(qaRoot, "sales-pg-"));
   if (!directory.startsWith(qaRoot + path.sep)) throw new Error("Unsafe QA directory");
   const bin = await binaries();
   const port = await freePort();
-  await run(bin.initdb, ["-D", directory, "--username=qa_admin", "--auth-local=trust", "--auth-host=trust", "--encoding=UTF8", "--locale=C"], workRoot);
+  const bootstrapUser = separateBootstrap ? "sales_fixture_bootstrap" : "qa_admin";
+  await run(bin.initdb, ["-D", directory, "--username=" + bootstrapUser, "--auth-local=trust", "--auth-host=trust", "--encoding=UTF8", "--locale=C"], workRoot);
   const logfile = path.join(directory, "postgres.log");
   const options = `-h 127.0.0.1 -p ${port}`;
   const role = `sales_qa_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -69,6 +70,11 @@ export async function startLocalSalesDb() {
   const stopCluster = () => run(bin.pg_ctl, ["-D", directory, "-m", "fast", "-t", "15", "-w", "stop"], workRoot);
   try {
     await run(bin.pg_ctl, ["-D", directory, "-l", logfile, "-o", options, "-t", "30", "-w", "start"], workRoot);
+    if (separateBootstrap) {
+      const bootstrap = new LocalSalesPool({ host: "127.0.0.1", port, user: bootstrapUser, database: "postgres", max: 1 });
+      try { await bootstrap.query("create role qa_admin login superuser"); }
+      finally { await bootstrap.end(); }
+    }
     admin = new LocalSalesPool({ host: "127.0.0.1", port, user: "qa_admin", database: "postgres", max: 5, connectionTimeoutMillis: 5_000, query_timeout: 15_000 });
     await admin.query(`create role ${role} login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls`);
     await admin.query("create role novalure_app nologin inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
@@ -104,11 +110,11 @@ export async function startLocalSalesDb() {
  * This partial bootstrap is not a production upgrade plan or a full historical
  * or pgvector/RAG validation; dedicated predecessor fixtures cover those cutovers.
  */
-export async function applySalesSchema(db, {
-  includeD11Contract = true,
-  includeSales = true,
-  maxMigrationNumber = Number.POSITIVE_INFINITY,
-} = {}) {
+/** @param {{includeD11Contract?: boolean, includeSales?: boolean, maxMigrationNumber?: number, afterMigration?: (name: string) => (void | Promise<void>)}} [options] */
+export async function applySalesSchema(db, options = {}) {
+  const { includeD11Contract = true, includeSales = true,
+    maxMigrationNumber = Number.POSITIVE_INFINITY, afterMigration } = options;
+  if (afterMigration !== undefined && typeof afterMigration !== "function") throw new Error("Local migration callback must be a function");
   const names = (await readdir("migrations")).filter(name => /^\d+.*\.sql$/.test(name)).sort();
   const applied = [];
   for (const name of names) {
@@ -135,7 +141,25 @@ export async function applySalesSchema(db, {
       // 111 requires the deliberately omitted 096 gateway and 100 Studio
       // tables. Dedicated Design-C/booking and production-upgrade fixtures
       // apply those predecessors and then the unchanged 111 SQL explicitly.
-      name === "111_booking_public_channels.sql"
+      name === "111_booking_public_channels.sql" ||
+      // Shared behavior is a manual actual114 cutover. Its unchanged SQL and
+      // private runtime are covered by explicit shared tests and the actual
+      // PG17 public-schema rehearsal; this historical sales fixture omits
+      // required 091-100 predecessors and must not claim that upgrade.
+      name === "115_shared_behavior_foundation.sql" ||
+      name === "116_shared_behavior_package2.sql" ||
+      name === "117_shared_behavior_package3.sql" ||
+      name === "118_shared_behavior_personal_runtime.sql" ||
+      name === "119_shared_behavior_revocable_operation.sql" ||
+      name === "120_shared_behavior_package4.sql" ||
+      // Customer Webchat requires the omitted 096 public chat tables. Its
+      // dedicated two-tenant acceptance applies the actual 121 SQL after
+      // the real gateway predecessors; generic sales tests do not imply it.
+      name === "121_webchat_customer_product.sql" ||
+      // 191 composes that same omitted Webchat predecessor with released 167.
+      // The dedicated compatibility fixture applies both real predecessors;
+      // generic sales/workspace fixtures must not claim this isolated upgrade.
+      name === "191_webchat_partner_access_compatibility.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
@@ -166,6 +190,9 @@ export async function applySalesSchema(db, {
     } finally {
       client.release();
     }
+    // Dedicated integration fixtures can apply their real manual predecessors
+    // at the original boundary; the generic default remains unchanged.
+    if (afterMigration) await afterMigration(name);
   }
   // The product regression suites exercise the final D11 schema. Production
   // still applies this separately: keeping Contract outside migrations/*.sql
@@ -197,6 +224,6 @@ export async function applySalesSchema(db, {
   }
   await db.admin.query(`grant usage on schema public to ${db.role}`);
   await db.admin.query(`grant select on workspaces, workspace_users, project_pipeline_permissions to ${db.role}`);
-  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { migration: "111_booking_public_channels.sql", reason: "Requires the deliberately omitted 096 gateway and 100 Studio predecessors; unchanged SQL is applied by the dedicated booking and production-upgrade fixtures" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
+  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { migration: "111_booking_public_channels.sql", reason: "Requires the deliberately omitted 096 gateway and 100 Studio predecessors; unchanged SQL is applied by the dedicated booking and production-upgrade fixtures" }, { migration: "121_webchat_customer_product.sql", reason: "Requires omitted public chat predecessors; applied by the dedicated two-customer fixture" }, { migration: "191_webchat_partner_access_compatibility.sql", reason: "Requires both isolated Webchat121 and released partner167; applied by the dedicated compatibility fixture" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
   return applied;
 }

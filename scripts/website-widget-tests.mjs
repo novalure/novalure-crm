@@ -46,6 +46,12 @@ function browser({ language = "en", siteKey = key, src = "https://crm.example.in
 const started = { body: { sessionId: "11111111-1111-4111-8111-111111111111", sessionToken: "opaque_session_token_12345678901234567890", status: "active", mode: "training", widget: { assistantName: "<img onerror=alert(1)>" } } };
 const answered = { body: { contractVersion: "website-answer-v1", answerStatus: "grounded", answer: "<script>alert(1)</script> Approved answer", citations: [{ title: "<img src=x onerror=alert(1)>", sourceId: "source", versionId: "version" }] } };
 const submit = async state => { state.find("textarea").value = "What does the website cost?"; await state.find("form").listeners.submit({ preventDefault() {} }); };
+test("optional operational reason preserves website-answer-v1 rendering and never invents citations", async () => {
+  const state = browser({ responses: [started, { body: { contractVersion: "website-answer-v1", answerStatus: "temporarily_unavailable", operationalReason: "budget_limit", answer: "The answer allowance is currently exhausted. Please contact the team directly.", citations: [] } }] });
+  state.byClass("launcher").listeners.click(); await submit(state);
+  assert.match(state.byClass("log").textContent, /answer allowance is currently exhausted/);
+  assert.equal(state.requests.length, 2); assert.equal(state.nodes.filter(node => node.attributes.class === "citations").length, 0);
+});
 const embedPresentation = {
   "data-assistant-name": "SYNTHETIC Hanna",
   "data-brand-name": "SYNTHETIC company",
@@ -80,7 +86,14 @@ test("base64url key, lazy session, exact API origin and closure-only credentials
     assert.equal(request.headers["x-novalure-site-key"], key);
     assert.doesNotMatch(request.url, /opaque_session_token/);
   }
-  assert.deepEqual(Object.keys(JSON.parse(state.requests[1].body)).sort(), ["message", "sessionId"]);
+  const answerRequests = state.requests.slice(1).map(request => JSON.parse(request.body));
+  for (const answer of answerRequests) {
+    assert.deepEqual(Object.keys(answer).sort(), ["message", "requestId", "sessionId"]);
+    assert.match(answer.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+    assert.equal(answer.sessionId, started.body.sessionId);
+    assert.equal(answer.message, "What does the website cost?");
+  }
+  assert.notEqual(answerRequests[0].requestId, answerRequests[1].requestId, "separate submitted turns receive distinct request identities");
   assert.equal(state.requests[1].headers["x-novalure-session-token"], started.body.sessionToken);
   assert.ok(state.nodes.every(node => !JSON.stringify(node.attributes).includes(started.body.sessionToken)));
   assert.equal(state.context.session, undefined);
@@ -285,7 +298,9 @@ test("explicit website presentation remains stable after the session without cha
   assert.equal(state.byClass("mode").textContent, "Modo de prueba");
   assert.equal(state.find("a").href, "https://customer.example.invalid/v2/datenschutz/#ki-chat");
   assert.deepEqual(JSON.parse(state.requests[0].body), { language: "en" });
-  assert.deepEqual(JSON.parse(state.requests[1].body), { sessionId: started.body.sessionId, message: "What does the website cost?" });
+  const answerRequest = JSON.parse(state.requests[1].body);
+  assert.match(answerRequest.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+  assert.deepEqual(answerRequest, { sessionId: started.body.sessionId, message: "What does the website cost?", requestId: answerRequest.requestId });
   for (const request of state.requests) {
     assert.ok(request.url.startsWith("https://crm.example.invalid/api/public/integrations/chat/"));
     for (const value of Object.values(embedPresentation)) assert.ok(!request.body.includes(value));

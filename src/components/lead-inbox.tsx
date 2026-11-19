@@ -15,6 +15,7 @@ import {
   type LeadType,
   type PropertyType,
   type Project,
+  type Task,
   type WorkspaceUser,
 } from "@/lib/crm-types";
 import {
@@ -39,8 +40,13 @@ import {
 import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 import { StudioEnquiryDetails } from "@/components/studio-enquiry-details";
+import { LeadNextTask } from "@/components/lead-next-task";
+import { useCrmTeam } from "@/lib/use-crm-team";
+import { LeadQualificationWorkspace } from "@/components/lead-qualification-workspace";
+import { ActivityTimeline } from "@/components/activity-timeline";
 
 type LeadInboxProps = {
+  detailsOnly?: boolean;
   activeProjectId: string | null;
   brokerMandates?: BrokerMandate[];
   buyerSearchProfiles?: BuyerSearchProfile[];
@@ -56,6 +62,10 @@ type LeadInboxProps = {
   showPropertySalesWorkflow?: boolean;
   users: WorkspaceUser[];
   workspaceId: string;
+  tasks?: Task[];
+  onTasksChanged?: () => Promise<void> | void;
+  onOpenProperty?: (propertyId:string)=>void|Promise<unknown>;
+  timeZone?: string;
 };
 
 type LeadView = "queue" | "hot" | "due" | "unassigned" | "handover" | "archived" | "all";
@@ -200,6 +210,7 @@ function getInitialDraft(projects: Project[], activeProjectId: string | null) {
 }
 
 export function LeadInbox({
+  detailsOnly = false,
   activeProjectId,
   brokerMandates = [],
   buyerSearchProfiles = [],
@@ -214,12 +225,13 @@ export function LeadInbox({
   showPropertySalesWorkflow = true,
   users = [],
   workspaceId,
+  tasks,
+  onTasksChanged,
+  onOpenProperty,
+  timeZone = "Europe/Vienna",
 }: LeadInboxProps) {
   const copy = getDashboardCopy(language).leadInbox;
   const text = getLeadInboxCommandCopy(language);
-  const relatedUnavailableText = language === "de"
-    ? "Gesprächsverlauf und Einwilligungen sind derzeit nicht verfügbar."
-    : "Conversation history and consent data are currently unavailable.";
   const unavailableLabel = language === "de" ? "Nicht verfügbar" : "Unavailable";
   const locale = getLocale(language);
   const [sessionLeads, setSessionLeads] = useState<LocalLead[]>([]);
@@ -240,9 +252,8 @@ export function LeadInbox({
     assignedToUserId: leads[0]?.assignedToUserId ?? "",
     nextAction: leads[0]?.nextAction ?? "",
   });
-  const [noteDraft, setNoteDraft] = useState("");
   const [activities, setActivities] = useState<LeadActivity[]>([]);
-  const [createdTaskLeadIds, setCreatedTaskLeadIds] = useState<string[]>([]);
+  const [taskComposerLeadId, setTaskComposerLeadId] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [leadSaving, setLeadSaving] = useState(false);
   const [formSuccess, setFormSuccess] = useState("");
@@ -253,7 +264,7 @@ export function LeadInbox({
   const projectFieldRef = useRef<HTMLSelectElement | null>(null);
   const intentFieldRef = useRef<HTMLTextAreaElement | null>(null);
   const nextActionFieldRef = useRef<HTMLTextAreaElement | null>(null);
-  const assignableUsers = users.filter((user) => user.status === "active");
+  const draftTeam = useCrmTeam(workspaceId, leadDraft.projectId || activeProjectId);
   const draftProjects = activeProjectId
     ? projects.filter((project) => project.id === activeProjectId)
     : projects;
@@ -267,6 +278,8 @@ export function LeadInbox({
   );
 
   const selectedLead = effectiveLeads.find((lead) => lead.id === selectedLeadId) ?? effectiveLeads[0];
+  const selectedTeam = useCrmTeam(workspaceId, selectedLead?.projectId || activeProjectId);
+  const assignableUsers = selectedTeam.users;
   const activeFieldDraft = selectedLead && fieldDraft.leadId === selectedLead.id
     ? fieldDraft
     : {
@@ -596,45 +609,7 @@ export function LeadInbox({
     }
   };
 
-  const createTask = async () => {
-    if (!selectedLead) {
-      return;
-    }
-
-    const contact = contacts.find((item) => item.id === selectedLead.contactId);
-    const response = await csrfFetch("/api/crm/recommendation-runtime", {
-      body: JSON.stringify({
-        actionType: selectedLead.hotStatus || selectedLead.score >= 80 ? "hot_lead_follow_up" : "lead_follow_up",
-        channel: contact?.email ? "E-Mail" : contact?.phone ? "WhatsApp" : "Telefon",
-        contactId: selectedLead.contactId,
-        email: contact?.email ?? null,
-        leadId: selectedLead.id,
-        operation: "follow_up_action",
-        outcome: "planned",
-        phone: contact?.phone ?? null,
-        projectId: selectedLead.projectId,
-        purpose: "salesFollowUp",
-        taskTitle: selectedLead.nextAction || selectedLead.intent,
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    });
-
-    if (!response.ok) {
-      showNotice(text.saveError, "error");
-      setActionFeedback({ message: text.saveError, tone: "error" });
-      return;
-    }
-
-    setCreatedTaskLeadIds((current) =>
-      current.includes(selectedLead.id) ? current : [...current, selectedLead.id],
-    );
-    addActivity(selectedLead.id, text.taskCreated, selectedLead.nextAction, "success");
-    const payload = (await response.json().catch(() => ({}))) as { data?: { allowed?: boolean } };
-    const message = payload.data?.allowed === false ? text.consentBlocked : text.taskCreated;
-    showNotice(message, payload.data?.allowed === false ? "error" : "success");
-    setActionFeedback({ message, tone: payload.data?.allowed === false ? "error" : "success" });
-  };
+  const createTask = () => { if (selectedLead) setTaskComposerLeadId(selectedLead.id); };
 
   const prepareBulkFollowUp = async () => {
     const candidates = filteredLeads
@@ -674,8 +649,6 @@ export function LeadInbox({
       };
       if (!response.ok) throw new Error(text.saveError);
 
-      const leadIds = candidates.map((item) => item.lead.id);
-      setCreatedTaskLeadIds((current) => Array.from(new Set([...current, ...leadIds])));
       candidates.slice(0, 5).forEach((item) => {
         addActivity(item.lead.id, text.bulkFollowUp, item.lead.nextAction, "success");
       });
@@ -690,37 +663,6 @@ export function LeadInbox({
       showNotice(text.saveError, "error");
     } finally {
       setBulkSaving(false);
-    }
-  };
-
-  const addNote = async () => {
-    if (!selectedLead || !noteDraft.trim()) {
-      return;
-    }
-
-    const detail = noteDraft.trim();
-    try {
-      const response = await csrfFetch("/api/crm/notes", {
-        body: JSON.stringify({
-          note: {
-            contactId: selectedLead.contactId || undefined,
-            detail,
-            leadId: selectedLead.id,
-            projectId: selectedLead.projectId,
-            title: text.noteSaved,
-          },
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-
-      if (!response.ok) throw new Error(text.saveError);
-
-      addActivity(selectedLead.id, text.noteSaved, detail, "info");
-      setNoteDraft("");
-      showNotice(text.noteSaved);
-    } catch {
-      showNotice(text.saveError, "error");
     }
   };
 
@@ -741,7 +683,6 @@ export function LeadInbox({
 
     leadSavingRef.current = true;
     setLeadSaving(true);
-    const contact = contacts.find((item) => item.id === leadDraft.contactId);
     const now = new Date();
     const nextLead: LocalLead = {
       id: `lead_local_${now.getTime()}`,
@@ -789,7 +730,7 @@ export function LeadInbox({
               yearBuilt: toOptionalNumber(leadDraft.yearBuilt) ?? 0,
             }
           : undefined,
-      assignedToUserId: assignableUsers[0]?.id,
+      assignedToUserId: draftTeam.users.find(user => user.id === draftTeam.currentUserId)?.id,
       isLocal: true,
     };
 
@@ -814,26 +755,7 @@ export function LeadInbox({
       setFormSuccess(text.newLeadSaved);
       await refreshPersistedLeads(savedLead.id);
       if (createTaskAfterSave) {
-        await csrfFetch("/api/crm/recommendation-runtime", {
-          body: JSON.stringify({
-            actionType: savedLead.hotStatus || savedLead.score >= 80 ? "hot_lead_follow_up" : "lead_follow_up",
-            channel: contact?.email ? "E-Mail" : contact?.phone ? "WhatsApp" : "Telefon",
-            contactId: savedLead.contactId || null,
-            email: contact?.email ?? null,
-            leadId: savedLead.id,
-            operation: "follow_up_action",
-            outcome: "planned",
-            phone: contact?.phone ?? null,
-            projectId: savedLead.projectId,
-            purpose: "salesFollowUp",
-            taskTitle: savedLead.nextAction || savedLead.intent,
-          }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }).catch(() => undefined);
-        setCreatedTaskLeadIds((current) =>
-          current.includes(savedLead.id) ? current : [...current, savedLead.id],
-        );
+        setTaskComposerLeadId(savedLead.id);
       }
     } catch {
       setFormError(text.saveError);
@@ -847,8 +769,8 @@ export function LeadInbox({
 
   return (
     <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
-      {showPropertySalesWorkflow ? <PropertySalesWorkflow key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={activeProjectId} onChanged={refreshAfterPropertySales} /> : null}
-      <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 md:p-5">
+      {showPropertySalesWorkflow && !detailsOnly ? <PropertySalesWorkflow key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={activeProjectId} onChanged={refreshAfterPropertySales} /> : null}
+      {!detailsOnly ? <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 md:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
@@ -882,10 +804,10 @@ export function LeadInbox({
             {notice}
           </div>
         ) : null}
-      </article>
+      </article> : null}
 
-      <section className="grid min-w-0 max-w-full gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-        <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
+      <section className={`grid min-w-0 max-w-full gap-4 ${detailsOnly ? "" : "2xl:grid-cols-[minmax(0,1fr)_420px]"}`}>
+        {!detailsOnly ? <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap gap-2">
               {views.map((view) => (
@@ -1386,9 +1308,10 @@ export function LeadInbox({
               </div>
             )}
           </div>
-        </article>
+        </article> : null}
 
         <aside className="rounded-lg border border-stone-200 bg-white p-4">
+          {detailsOnly && notice ? <p className={`mb-4 rounded-md border p-3 text-sm ${noticeClassName}`} role={noticeTone === "error" ? "alert" : "status"}>{notice}</p> : null}
           {selected ? (
             <div className="grid gap-4">
               <div className="flex items-start justify-between gap-3">
@@ -1417,6 +1340,11 @@ export function LeadInbox({
               </div>
 
               {selected.lead.hasStudioEnquiry && <StudioEnquiryDetails key={selected.lead.id} leadId={selected.lead.id}/>}
+              <LeadNextTask key={`${workspaceId}:${selected.lead.id}`} lead={selected.lead} tasks={tasks} users={selectedTeam.users} currentUserId={selectedTeam.currentUserId} teamLoading={selectedTeam.loading} teamFailed={selectedTeam.failed} retryTeam={selectedTeam.retry} language={language} timeZone={timeZone} compose={taskComposerLeadId === selected.lead.id} onComposeClosed={() => setTaskComposerLeadId(null)} onTasksChanged={onTasksChanged} onTaskSaved={task => addActivity(selected.lead.id, task.status === "done" ? (language === "de" ? "Aufgabe erledigt" : "Task completed") : text.taskCreated, task.title, "success")} />
+              <LeadQualificationWorkspace workspaceId={workspaceId} leadId={selected.lead.id} projectId={selected.lead.projectId} contactId={selected.lead.contactId}
+                onOpenProperty={onOpenProperty}
+                canWrite={selectedTeam.users.some(user => user.id === selectedTeam.currentUserId && ["owner","admin","agent"].includes(user.role))}
+                onChanged={async () => { await onLeadsChanged?.(); }} />
 
               <div className="grid gap-2 text-sm sm:grid-cols-2 2xl:grid-cols-1">
                 <div className="rounded-md bg-stone-50 p-3">
@@ -1514,12 +1442,14 @@ export function LeadInbox({
                       value={activeFieldDraft.assignedToUserId}
                     >
                       <option value="">{text.unassigned}</option>
-                      {users.map((user) => (
+                      {activeFieldDraft.assignedToUserId && !assignableUsers.some(user => user.id === activeFieldDraft.assignedToUserId) ? <option value={activeFieldDraft.assignedToUserId} disabled>{selectedTeam.loading ? (language === "de" ? "Teamauswahl wird geladen…" : "Loading team options…") : (language === "de" ? "Zuständigkeit nicht verfügbar" : "Owner unavailable")}</option> : null}
+                      {assignableUsers.map((user) => (
                         <option disabled={user.status !== "active"} key={user.id} value={user.id}>
                           {user.name}{user.status !== "active" ? ` (${user.status})` : ""}
                         </option>
                       ))}
                     </select>
+                    {selectedTeam.failed ? <button type="button" className="text-left text-xs underline" onClick={selectedTeam.retry}>{language === "de" ? "Teamauswahl erneut laden" : "Reload team options"}</button> : null}
                   </label>
                   {qualifyingAssigneeMissing ? (
                     <p className="text-sm font-semibold text-red-700" role="alert">
@@ -1577,7 +1507,7 @@ export function LeadInbox({
                   }}
                   type="button"
                 >
-                  {createdTaskLeadIds.includes(selected.lead.id) ? text.taskCreated : text.createTask}
+                  {text.createTask}
                 </button>
                 <button
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
@@ -1604,23 +1534,7 @@ export function LeadInbox({
                 ) : null}
               </div>
 
-              <div className="rounded-lg border border-stone-200 p-3">
-                <p className="text-sm font-semibold">{text.addNote}</p>
-                <textarea
-                  className="mt-2 min-h-20 w-full rounded-md border border-stone-300 px-3 py-2 text-sm"
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  placeholder={text.notePlaceholder}
-                  value={noteDraft}
-                />
-                <button
-                  className="mt-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:bg-stone-300"
-                  disabled={!noteDraft.trim()}
-                  onClick={addNote}
-                  type="button"
-                >
-                  {text.addNote}
-                </button>
-              </div>
+              <ActivityTimeline workspaceId={workspaceId} leadId={selected.lead.id} contactId={selected.lead.contactId || undefined} projectId={selected.lead.projectId || undefined} language={language} timeZone={timeZone} />
 
               <div className="rounded-lg bg-slate-950 p-4 text-white">
                 <p className="text-sm font-semibold">{text.handoverChecklist}</p>
@@ -1641,9 +1555,8 @@ export function LeadInbox({
                 </div>
               </div>
 
-              <div>
-                <p className="text-sm font-semibold">{copy.timeline}</p>
-                {!relatedDataAvailable ? <p className="mt-2 text-sm text-stone-600" role="status">{relatedUnavailableText}</p> : null}
+              {selected.activities.length > 0 || selected.conversations.length > 0 ? <details>
+                <summary className="cursor-pointer text-sm font-semibold">{language === "de" ? "Weitere Aktionen in dieser Ansicht" : "More actions in this view"}</summary>
                 <div className="mt-2 space-y-2">
                   {selected.activities.map((activity) => (
                     <div
@@ -1689,7 +1602,7 @@ export function LeadInbox({
                     </div>
                   ) : null}
                 </div>
-              </div>
+              </details> : null}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-sm text-stone-500">

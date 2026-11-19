@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-04T22:27:34.800Z",
+  "base": "9b7f60a5452e5b4c5894bdc4c94fcdee5e2c98d8",
+  "initialUnit": {
+    "tests": 263,
+    "passed": 254,
+    "failed": 9,
+    "skipped": 0,
+    "retained": true
+  },
+  "runtimeCorrections": [
+    "Localize generated lead intent and next action at the daily queue display boundary; saved/personal text unchanged.",
+    "Expose the existing web-expose maintenance host run ID and duration for traceability."
+  ],
+  "testUpdates": [
+    "Current Next16.4.5 pinned with lockfile equivalence",
+    "Existing11cron schedules and actual delegated guards, no schedule changes",
+    "Newsletter delegated route retains fresh technical/product send rights and consent",
+    "Conditional details layout retains responsive bounds",
+    "Consent rendering delegated to ContactCommandCenter",
+    "Current weighted pipeline value never presented as assumed commission",
+    "Effective Next headers evaluated on protected and embeddable routes; booking privacy headers preserved"
+  ],
+  "validation": {
+    "targeted": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "fullUnit": {
+      "passed": 263,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typecheck": {
+      "exitCode": 0
+    },
+    "changedLint": {
+      "exitCode": 0
+    },
+    "diffCheck": {
+      "exitCode": 0
+    }
+  },
+  "evidence": [
+    {
+      "file": "C:/Projects/crm-live-acceptance-20261104/unit-repair/unit-regression.log",
+      "sha256": "116a6bc02fcde39c772d74a576a570333f76d6ef731e33629f2e58a4ec192de4"
+    },
+    {
+      "file": "C:/Projects/crm-live-acceptance-20261104/unit-repair/unit-targeted-repair.log",
+      "sha256": "79a170a8fba06f8a751d7a96452721aaa6ef6127d832f90a37d716a37882e19c"
+    },
+    {
+      "file": "C:/Projects/crm-live-acceptance-20261104/unit-repair/unit-targeted-repair-final.log",
+      "sha256": "d2c4b70be788152ae0ceda2c9f2da39e8d9fdbdba468802b12f73fc98195edad"
+    },
+    {
+      "file": "C:/Projects/crm-live-acceptance-20261104/unit-repair/unit-regression-repaired.log",
+      "sha256": "d56f32ba91f81e14b3b0c55da484e650b65808c35d9bf08f3e1774e503b478ce"
+    },
+    {
+      "file": "C:/Projects/crm-live-acceptance-20261104/unit-repair/unit-repair-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "independentReview": "PENDING_EXACT_COMMIT",
+  "nativeCi": "NOT_RUN",
+  "trustedApp": "NOT_ATTESTED",
+  "production": "UNCHANGED"
+}

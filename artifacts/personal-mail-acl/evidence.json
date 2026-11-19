@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-11-04T23:15:00.812Z",
+  "classification": "LOCAL_SYNTHETIC_ACL_DELTA_ONLY_INDEPENDENT_REVIEW_PENDING",
+  "baseRevision": "7b0aae8038cadcd6af738d6e45cc22d47d607d6d",
+  "branch": "codex/personal-mail-acl-20261105",
+  "sourceHashKind": "SHA256 actual Windows worktree bytes plus canonical Git blob IDs",
+  "sourceFiles": [
+    {
+      "path": "src/lib/db/crm-mailbox-message-access.ts",
+      "sha256": "648455ccfc3b87de2f0cb2dc02700a4d1d3c706b1a6f266dda6402e1fccb19a4",
+      "gitBlobId": "af99ca1ffa6884458eb0dcaed67de4ed09544718"
+    },
+    {
+      "path": "src/lib/db/crm-mailbox-reply-repository.ts",
+      "sha256": "b181e24ec72d587c41d09931c244060b7b5b6830e1986576f4ff23f1378761d8",
+      "gitBlobId": "890e82547207281c39aaa5bf29da10757a7147ea"
+    },
+    {
+      "path": "scripts/personal-mail-reply-tests.ts",
+      "sha256": "28bcc322b661864d70506812db3413960e1a89e7019db022eca0e7f8aba5dd8b",
+      "gitBlobId": "c57fd3a0e8178122c1bc00d9328f18ab204fbcda"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "artifacts/personal-mail-acl/before-fix.tap.gz",
+      "sha256": "ad20168174076279ffcd2051f61bcc3fc053a44bf9e9457e83344af5c82ef5f8"
+    },
+    {
+      "path": "artifacts/personal-mail-acl/after-fix.tap",
+      "sha256": "aaca942cad12dbf2818a1418d28fd81f6e47ec070d09f2e9bd3ae6c933ef5522"
+    },
+    {
+      "path": "artifacts/personal-mail-acl/typecheck.log.gz",
+      "sha256": "d7bf9db2ede137db22ee96374785a48fa0a656f0236a8d178c0edc65ddf48540"
+    },
+    {
+      "path": "artifacts/personal-mail-acl/lint.log.gz",
+      "sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "path": "artifacts/personal-mail-acl/compressed-evidence.json",
+      "sha256": "9a1a400555a7f4c2239a5f3239fda692f99b0ccd7f58957ba1ab3efcaddd6a8b"
+    }
+  ],
+  "beforeFix": {
+    "runtime": "7b0aae8038cadcd6af738d6e45cc22d47d607d6d",
+    "tests": 23,
+    "pass": 20,
+    "fail": 3,
+    "actualFailingCases": 2,
+    "bothMetadataAndPrivateBytesReturned": true,
+    "subjects": [
+      "manual association without send job",
+      "private filed association without send job"
+    ],
+    "unchangedSessionAfterProjectRevocation": true
+  },
+  "afterFix": {
+    "tests": 23,
+    "pass": 23,
+    "fail": 0,
+    "skip": 0,
+    "exitCode": 0,
+    "command": "node --conditions=react-server --import tsx --test --test-reporter=tap scripts/personal-mail-reply-tests.ts",
+    "typecheckExitCode": 0,
+    "affectedLintExitCode": 0,
+    "unassociatedOwnerAccessPreserved": true,
+    "ownByteErasurePreserved": true,
+    "providerReadsAfterAssociationRevocation": 0
+  },
+  "unchanged": [
+    "dependencies",
+    "lockfile",
+    "migration192",
+    "providerports",
+    "routes",
+    "UI"
+  ],
+  "notRerun": [
+    "full imports suite",
+    "browser suite",
+    "application build",
+    "full unit regression",
+    "CI"
+  ],
+  "open": [
+    "exact revision independent review",
+    "common integration and required checks",
+    "real app/provider acceptance",
+    "native CI/Linux",
+    "original schema upgrade/restore"
+  ],
+  "liveActions": 0,
+  "productionClaims": false
+}

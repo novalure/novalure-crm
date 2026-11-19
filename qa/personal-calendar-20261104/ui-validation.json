@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_UI_TESTS_PASS_NOT_LIVE",
+  "checkedAtUtc": "2026-11-04T23:03:38.3942832+00:00",
+  "baseCommit": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+  "headAtCapture": "7b4d9ca7eb79d19e5529c2a7aa22ed77ebec1e40",
+  "sourceState": "Collaborative worktree UI freeze; Root owns the coherent final commit",
+  "sourceHashes": [
+    {
+      "path": "src/components/personal-calendar-workspace.tsx",
+      "sha256WorktreeBytes": "663f61913f6dbb63499f7ed0cbebc15deb49fd138a8f9cc34a71a1093944c708",
+      "sha256LfNormalizedText": "663f61913f6dbb63499f7ed0cbebc15deb49fd138a8f9cc34a71a1093944c708"
+    },
+    {
+      "path": "src/lib/personal-calendar-client-store.ts",
+      "sha256WorktreeBytes": "cd863a913b27c32b939de6b1c9190966f553676a69802bfd05edd70e29884e20",
+      "sha256LfNormalizedText": "cd863a913b27c32b939de6b1c9190966f553676a69802bfd05edd70e29884e20"
+    },
+    {
+      "path": "src/components/calendar-command-center.tsx",
+      "sha256WorktreeBytes": "19f9b919f1f9c8adb308450ac046f6e4022ad0843e322a4cd385659d757a2db3",
+      "sha256LfNormalizedText": "683f3844f3d7dd37dc8b2b2cb09909a3237db206572c79827982cfbc5eb412af"
+    },
+    {
+      "path": "src/components/crm-workspace.tsx",
+      "sha256WorktreeBytes": "d867f3161dc51f5b05b26f98dc2302de6f29cc3ad7896c9905880722228f55e0",
+      "sha256LfNormalizedText": "96ddd6f2788d4fa420c76181c3e247a23b9e20842113e490c57545246130d9b8"
+    },
+    {
+      "path": "scripts/personal-calendar-ui-tests.mjs",
+      "sha256WorktreeBytes": "92633ddd9ae0b98b76b66dacb9b5fb6656329c3d08c27f74f3523b1824044915",
+      "sha256LfNormalizedText": "92633ddd9ae0b98b76b66dacb9b5fb6656329c3d08c27f74f3523b1824044915"
+    },
+    {
+      "path": "scripts/calendar-oauth-source-tests.mjs",
+      "sha256WorktreeBytes": "22a35d2beecd4e86cd4d766f454acebaef203b55e409aa3fabe6a15121b34b8a",
+      "sha256LfNormalizedText": "3068f4744cd7717b06d50101179c7c6a65d1b414bc10fd0d63940650fa6caefb"
+    }
+  ],
+  "checks": [
+    {
+      "realComponents": true,
+      "passed": 23,
+      "result": "ui-browser-results.json",
+      "syntheticHttp": true,
+      "browserErrors": 0,
+      "console": "ui-browser.log",
+      "command": "node --import tsx scripts/personal-calendar-ui-tests.mjs",
+      "failed": 0,
+      "databaseIntegration": false
+    },
+    {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "console": "ui-compatibility.log",
+      "command": "node --import tsx --test scripts/calendar-oauth-source-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs"
+    },
+    {
+      "exitCode": 0,
+      "scope": "Shared working tree at UI freeze; coordinator reruns final common checks",
+      "command": "npm run typecheck"
+    },
+    {
+      "exitCode": 0,
+      "command": "focused ESLint on six owned source/test files --max-warnings=0"
+    },
+    {
+      "exitCode": 0,
+      "command": "git diff --check on owned source/tests"
+    }
+  ],
+  "initialCompatibilityFailure": {
+    "passed": 9,
+    "failed": 3,
+    "reason": "One real unknown-state regression and two intentionally retired legacy sync assertions; final test still executes all nine remaining home guards",
+    "preservedAsHistorical": true,
+    "reportedBy": "Root"
+  },
+  "peerCorrections": [
+    "All-attendee removal retains previous/new recipient union confirmation",
+    "Text-only edit preserves seconds/milliseconds and DST occurrence",
+    "Project binding immutable while editing",
+    "All form fields compared with clean baseline for unload protection",
+    "Scoped completion invalidation refreshes a remounted active instance",
+    "No silent retarget after stale project filter"
+  ],
+  "limits": [
+    "Local UI/store qualification only; synthetic HTTP is not real Browser-to-API-to-PG-to-provider acceptance",
+    "No general external calendar import or recurrence management",
+    "No browser storage of customer inputs",
+    "No provider/OAuth/live/database/customer actions by UI test",
+    "No own commit, deploy, migration, invitations or additional costs"
+  ],
+  "realEffects": {
+    "liveCalls": 0,
+    "ownCommits": 0,
+    "productionWrites": 0,
+    "providerCalls": 0,
+    "paidCalls": 0
+  },
+  "outcomeProtocolFollowup": {
+    "contract": "Release a new 4xx intent only for exact notStarted:true and no prior uncertainty; first403/409withoutproof retains the immutable body/key",
+    "initialExitCode": 1,
+    "initialCompletedPasses": 18,
+    "initialFailure": "Stale pre-stage version409 fixture omitted new notStarted marker; fixture updated, production safety rule retained",
+    "initialEvidence": [
+      "ui-outcome-protocol-initial.json",
+      "ui-outcome-protocol-initial.log"
+    ],
+    "finalCases": 23,
+    "newCase": "first permission denial without proof of non-start retains the exact command across remount"
+  }
+}

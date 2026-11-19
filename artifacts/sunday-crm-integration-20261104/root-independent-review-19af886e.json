@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "root-independent-of-integration-agent",
+  "reviewedAt": "2026-11-04T21:40:38.247Z",
+  "base": "80de72a4fb92befa73128aaa7d801adc35c7fd1d",
+  "head": "19af886e81362b6acd3cbd463e428b2c678f2236",
+  "reviewScope": "Exact integrated source delta; dependency order and single composed workspace conflict; existing server authority and RLS preserved",
+  "sourceHashes": {
+    "migrations/190_property_inventory_knownness.sql": "d9d8d521f3867f8c7eecb8c6b57836b29fa68bd8d2eb9b2fd5e5d48498781d78",
+    "src/components/crm-workspace.tsx": "0edf19c0b815e4acfc9888faec062470eb9520d92545c688d45742552513d682",
+    "src/components/property-command-center.tsx": "3b07efc7afa40b99ff1e2428d37e27ee7f42c44605bdfb37fe463a18a53167a4",
+    "src/lib/db/property-department-repositories.ts": "67724ce58f5041450a323a980b95fe8769dce840a78274135f984feeb6ad185e",
+    "src/lib/db/property-expose-repositories.ts": "786afb1ee70941a8f356bb61c7b0a0d58c4726eba0b0b789694f7541370738ca",
+    "src/lib/db/web-expose-repository.ts": "a1db051b91ed4a18b5da485be053b32c9c5b79c075f6fdd913427b099bdc5dd5",
+    "src/lib/property-core-editing.ts": "eb930fff83ee39bcdb1b53f1089fb4e61069eb2723e801f49bdf95bc087434aa",
+    "src/lib/property-core-numbers.ts": "ef74d1e3adbb62d3e492971bd6bd961bb7acbce0f6613c90058f600e79943af5",
+    "src/lib/property-direct-numeric.ts": "ee3c1e0b79e1a22d3350b35393b14100158c0ad6efc6c9ac9055bc1f6e4621dd",
+    "src/lib/property-draft-store.ts": "ab619d699d484f6de7cb58cc5f69f8ab380741285cc1f3194d185d90a0da782e",
+    "src/lib/property-expose-public-content.ts": "4bb332878ce60ef4263fd1f16020cce61d9f9a79fb058853571995cd52dec686",
+    "src/lib/property-expose-service.ts": "d5a744ca8e758e5fe5d8c21fb0690be1d319c05e768a226e5a1cbbd97b2b1340",
+    "src/lib/use-property-draft.ts": "914d101fe035f1d2ef2d08e08d36a76d8d2f002f85f01ddb60952cc9e27d6123",
+    "src/lib/web-expose-pdf.ts": "e7c955383420668bb2dea77baa4e3c1a54ebfba54cd8f7b28b19ea8011327115"
+  },
+  "findings": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "assessed": [
+    "Existing caller project checks precede snapshot reads; 189/191 previous exact owner dependency fix unchanged",
+    "Read-only scope resolution before current-switch gate; all state/history effects follow accepted ticket; layout cleanup disposes old identity guard",
+    "RAM-only per-identity draft store; immutable idempotent request tuple survives section remount; unknown retries preserve exact key/body/scope",
+    "Native number input normalization retains integer cents and rejects unsupported precision/exponents/unsafe range",
+    "Server-generated independent public/rent knownness; no client price authority inferred",
+    "190 retains capability lookup, visibility intersection, tenant/project linkage and authorized linked-unit confirmation",
+    "PDF zero-price guard consumes server-projected developer/confirmation booleans; matching negative and positive donor controls qualified",
+    "Address policy uses only stored full address/street; no guessed address anonymity or retroactive old snapshot repair claimed"
+  ],
+  "limitations": [
+    "Static bounded source review, not genuine App5228093 attestation, full security audit or production acceptance",
+    "Current integration tests are owned and recorded separately by integration agent; not rerun by this reviewer",
+    "All external/native CI and actual production/schema/identity gates remain open",
+    "Historical sources, failures and partial fixture limits are retained"
+  ]
+}

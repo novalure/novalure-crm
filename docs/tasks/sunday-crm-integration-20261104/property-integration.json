@@ -1,0 +1,483 @@
+{
+  "coherentSuccessor": {
+    "sourceRevision": "19af886e81362b6acd3cbd463e428b2c678f2236",
+    "currentReceipt": "artifacts/sunday-crm-integration-20261104/coherent-final/completion.json",
+    "scopeOfFollowingFields": "HISTORICAL_PROPERTY_SOURCE_5416515_AND_ORIGINAL_SRC05_FINDING_RETAINED"
+  },
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-04T21:03:13.1937679Z",
+  "status": "LOCAL_SOURCE_INTEGRATED_SCOPED_CHECKS_PASS_SRC05_NEW_NAVIGATION_BUG_OPEN",
+  "workspace": "C:/Projects/novalure-crm-sunday-integration-20261104",
+  "branch": "codex/sunday-crm-integration-20261104",
+  "originalBase": "fa234f226c41def89f038ee7b1c52e838b90cb4f",
+  "previousIntegration": "0abea1facc4ff3e6a948f39935a52027340d37ba",
+  "sourceHead": "5416515a38cb30bc5f8e3389de5cb124fe0e470e",
+  "sourceTree": "26f1f0e5599aca193bb6426fc782a1d68f16c42f",
+  "sequence": [
+    {
+      "kind": "BACKEND_FIRST",
+      "commits": [
+        "e6fe1e76f44bea5da7a359362570fa455314c317",
+        "0a63bb46afe84619464077f7e97a543df4958e71",
+        "4c0d45f7385c61159789849424b4f309fd3fc7c8",
+        "8d94b6b21d07b74ef8e3960f66824c73f6a447f5"
+      ],
+      "merge": "e7cf5713f6205ad5eba8b269dd2d08ded73638ee"
+    },
+    {
+      "kind": "CLIENT_AFTER_BACKEND_RECEIPT",
+      "commits": [
+        "6b9b38c5f54279b757f057c4b2f31393b5d243d1"
+      ],
+      "merge": "b26da35368c7225c4c84b4fca2aba56878722d14"
+    },
+    {
+      "kind": "LATEST_PUBLIC_ASSISTANT_REGULAR_MERGE",
+      "commits": [
+        "bb8bbaa916e5194ae7bdd7e6535f93283906a75c"
+      ],
+      "merge": "44b504c1ed03a2f994103be54d09ec7e686cd3c2"
+    },
+    {
+      "kind": "ONLY_ACTUAL_UI_SUCCESSOR_CHERRY_PICK_WITH_ORIGIN",
+      "commits": [
+        "2a7ac7f2943fad98b8de510cb33914fcb0edf682"
+      ],
+      "integratedCommit": "5416515a38cb30bc5f8e3389de5cb124fe0e470e",
+      "excludedDuplicateHelper": "3a28f87997e16a02561c992d18b9f0a00c353684",
+      "originalHelperAncestor": "4c0d45f7385c61159789849424b4f309fd3fc7c8"
+    }
+  ],
+  "exactDonorFiles": [
+    {
+      "path": "qa/property-integrity-2026-11-04/targeted-tests.txt",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "635eba6ca4ba78c8a127911058ef9e7729ace5e8",
+      "integratedBlob": "635eba6ca4ba78c8a127911058ef9e7729ace5e8",
+      "exact": true
+    },
+    {
+      "path": "qa/property-integrity-2026-11-04/validation.md",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "0cbd496acdbea7a19eff32c652874e563f533ee2",
+      "integratedBlob": "0cbd496acdbea7a19eff32c652874e563f533ee2",
+      "exact": true
+    },
+    {
+      "path": "scripts/property-core-number-state-tests.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "89cd0379e2a3434843cd11e9d3853ad7eeeb48a8",
+      "integratedBlob": "89cd0379e2a3434843cd11e9d3853ad7eeeb48a8",
+      "exact": true
+    },
+    {
+      "path": "scripts/property-create-draft-tests.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "fcc6542455df993198808501cd0b6366f302e82a",
+      "integratedBlob": "fcc6542455df993198808501cd0b6366f302e82a",
+      "exact": true
+    },
+    {
+      "path": "scripts/property-create-route-integrity-tests.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "504d5a62d99daeca87cd15916164c500ef120836",
+      "integratedBlob": "504d5a62d99daeca87cd15916164c500ef120836",
+      "exact": true
+    },
+    {
+      "path": "scripts/property-create-validation-tests.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "dfd7aed2baae77e70a516da1ca17819cc602a1df",
+      "integratedBlob": "dfd7aed2baae77e70a516da1ca17819cc602a1df",
+      "exact": true
+    },
+    {
+      "path": "src/app/api/crm/properties/route.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "2c02217adecc11c80084011a7f01a47f65553a33",
+      "integratedBlob": "2c02217adecc11c80084011a7f01a47f65553a33",
+      "exact": true
+    },
+    {
+      "path": "src/components/property-core-editor.tsx",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "687a2066372070157a167ff82feb8d699f83e215",
+      "integratedBlob": "687a2066372070157a167ff82feb8d699f83e215",
+      "exact": true
+    },
+    {
+      "path": "src/lib/db/property-department-repositories.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "0069e0b5518a37a8246da446daa640c944a90ca3",
+      "integratedBlob": "0069e0b5518a37a8246da446daa640c944a90ca3",
+      "exact": true
+    },
+    {
+      "path": "src/lib/property-core-editing.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "e61e118d30eaa551de074f7796542a38622b9c56",
+      "integratedBlob": "e61e118d30eaa551de074f7796542a38622b9c56",
+      "exact": true
+    },
+    {
+      "path": "src/lib/property-core-numbers.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "df8919adf81a39a94fd47a11fdb9d8df8690eb47",
+      "integratedBlob": "df8919adf81a39a94fd47a11fdb9d8df8690eb47",
+      "exact": true
+    },
+    {
+      "path": "src/lib/property-create-draft.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "89d50dab6ed41c70f092cd23da534210501771c2",
+      "integratedBlob": "89d50dab6ed41c70f092cd23da534210501771c2",
+      "exact": true
+    },
+    {
+      "path": "src/lib/property-create-validation.ts",
+      "donor": "8d94b6b21d07b74ef8e3960f66824c73f6a447f5",
+      "donorBlob": "bd63239803871cebecd3c7b9a207d0a42e7c8351",
+      "integratedBlob": "bd63239803871cebecd3c7b9a207d0a42e7c8351",
+      "exact": true
+    },
+    {
+      "path": "scripts/crm-ai-assistant-tests.ts",
+      "donor": "bb8bbaa916e5194ae7bdd7e6535f93283906a75c",
+      "donorBlob": "501e09808a913a4c4fe32f9df54cd59b17c16200",
+      "integratedBlob": "501e09808a913a4c4fe32f9df54cd59b17c16200",
+      "exact": true
+    },
+    {
+      "path": "src/lib/crm-ai-assistant/service.ts",
+      "donor": "bb8bbaa916e5194ae7bdd7e6535f93283906a75c",
+      "donorBlob": "05ba7ed33e44b6d1e4a7cc7f907503715fde310e",
+      "integratedBlob": "05ba7ed33e44b6d1e4a7cc7f907503715fde310e",
+      "exact": true
+    },
+    {
+      "path": "qa/property-direct-create-2026-11-04/browser-results.json",
+      "donor": "2a7ac7f2943fad98b8de510cb33914fcb0edf682",
+      "donorBlob": "649cbcd27b9f4a06cc617f4e9935dec3fe58cb15",
+      "integratedBlob": "649cbcd27b9f4a06cc617f4e9935dec3fe58cb15",
+      "exact": true
+    },
+    {
+      "path": "qa/property-direct-create-2026-11-04/validation.md",
+      "donor": "2a7ac7f2943fad98b8de510cb33914fcb0edf682",
+      "donorBlob": "3ce289461f7ed82cf27b30eee068fcaab93ee7ef",
+      "integratedBlob": "3ce289461f7ed82cf27b30eee068fcaab93ee7ef",
+      "exact": true
+    },
+    {
+      "path": "scripts/property-direct-create-ui-tests.mjs",
+      "donor": "2a7ac7f2943fad98b8de510cb33914fcb0edf682",
+      "donorBlob": "8ef3e499c6e8b8ef5963593d707c8fcba285ce86",
+      "integratedBlob": "8ef3e499c6e8b8ef5963593d707c8fcba285ce86",
+      "exact": true
+    },
+    {
+      "path": "src/components/property-command-center.tsx",
+      "donor": "2a7ac7f2943fad98b8de510cb33914fcb0edf682",
+      "donorBlob": "b574ae8d8ebc317bdaa4e2218d3884bd54661083",
+      "integratedBlob": "b574ae8d8ebc317bdaa4e2218d3884bd54661083",
+      "exact": true
+    },
+    {
+      "path": "qa/property-direct-create-2026-11-04/baseline-results.json",
+      "donor": "6b9b38c5f54279b757f057c4b2f31393b5d243d1",
+      "donorBlob": "565d35ddb1b15897ac9e65261bd1e535e7cd5510",
+      "integratedBlob": "565d35ddb1b15897ac9e65261bd1e535e7cd5510",
+      "exact": true
+    }
+  ],
+  "validation": {
+    "backend": {
+      "executedOnIntegratedSource": true,
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "exitCode": 0,
+      "mode": "ISOLATED_LOOPBACK_POSTGRES_COOKIE_CSRF_SYNTHETIC_TENANTS",
+      "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/property-create-route-integrity-tests.ts scripts/property-core-number-state-tests.ts scripts/property-create-validation-tests.ts scripts/property-create-draft-tests.ts scripts/property-completeness-tests.ts scripts/property-country-db-tests.ts",
+      "sourceRevision": "b26da35368c7225c4c84b4fca2aba56878722d14",
+      "retentionScope": "Property backend, tests and actual own Sales fixture unchanged through final source; no backend rerun after unrelated assistant and narrow UI deltas."
+    },
+    "browser": {
+      "executedOnIntegratedSource": true,
+      "tests": 8,
+      "passed": 8,
+      "browserErrors": 0,
+      "exitCode": 0,
+      "realComponent": true,
+      "syntheticHttp": true,
+      "databaseIntegration": false,
+      "command": "node --import tsx scripts/property-direct-create-ui-tests.mjs",
+      "sourceRevision": "b26da35368c7225c4c84b4fca2aba56878722d14",
+      "historicalScope": "First8 actual cases retained; final9 executed separately below."
+    },
+    "typecheckExitCode": 0,
+    "affectedLintExitCode": 0,
+    "build": {
+      "exitCode": 0,
+      "typeScriptCompleted": true,
+      "staticPages": 188,
+      "command": "npm run build",
+      "sourceRevision": "b26da35368c7225c4c84b4fca2aba56878722d14"
+    },
+    "whitespaceExitCode": 0,
+    "fullRegressionExecuted": false,
+    "independentExactReviewExecuted": false,
+    "trustedAppAttested": false,
+    "nativeCiExecuted": false,
+    "providerCalls": 0,
+    "assistantSuccessor": {
+      "sourceRevision": "44b504c1ed03a2f994103be54d09ec7e686cd3c2",
+      "tests": 25,
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "exitCode": 0,
+      "fakeProvider": true,
+      "realLoopbackSql": true,
+      "lintExitCode": 0,
+      "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-ai-assistant-tests.ts scripts/crm-ai-assistant-guard-tests.ts scripts/sunday-webchat-partner-compatibility-tests.mjs"
+    },
+    "latestFullBuild": {
+      "sourceRevision": "44b504c1ed03a2f994103be54d09ec7e686cd3c2",
+      "exitCode": 0,
+      "typeScriptCompleted": true,
+      "staticPages": 188
+    },
+    "finalBrowser": {
+      "sourceRevision": "5416515a38cb30bc5f8e3389de5cb124fe0e470e",
+      "passed": 9,
+      "browserErrors": 0,
+      "exitCode": 0,
+      "syntheticHttp": true,
+      "databaseIntegration": false,
+      "includesKnownZeroVsUnknownAndUnconfirmedAggregatedPrice": true
+    },
+    "finalTypecheck": {
+      "sourceRevision": "5416515a38cb30bc5f8e3389de5cb124fe0e470e",
+      "exitCode": 0
+    },
+    "finalLint": {
+      "sourceRevision": "5416515a38cb30bc5f8e3389de5cb124fe0e470e",
+      "exitCode": 0
+    },
+    "finalWholeNextBuildExecuted": false,
+    "finalBuildQualification": "44b full Next build retained only for unchanged components; final exact donor UI delta independently browser-bundled and full-typechecked, not claimed as a new complete Next build.",
+    "consoleArtifactTransport": "Original stdout retained byte-for-byte in Git18f563c and Base64 JSON transports. No test/build output was normalized or rerun."
+  },
+  "sourceQualification": {
+    "backendDonorFilesUnchanged": true,
+    "ownSalesFixtureDiffersFromBackendDonor": true,
+    "inheritedDonor32NotBlindlyReused": true,
+    "targetedBackendReexecutedWithOwnFixture": true,
+    "browserReexecutedAfterBackendEditorComposition": true,
+    "childEnvironment": "PLATFORM_ALLOWLIST_ONLY_NO_PROVIDER_OR_DATABASE_CREDENTIALS_INHERITED",
+    "reactChecklist": "LOCAL_SOURCE_SELF_CHECK_ONLY_NOT_INDEPENDENT_REVIEW",
+    "uiFinalDonorHead": "2a7ac7f2943fad98b8de510cb33914fcb0edf682",
+    "allFinalOwnedFilesExact": true,
+    "onlyDeltaSinceLastFullBuild": [
+      "qa/property-direct-create-2026-11-04/browser-results.json",
+      "qa/property-direct-create-2026-11-04/validation.md",
+      "scripts/property-direct-create-ui-tests.mjs",
+      "src/components/property-command-center.tsx"
+    ],
+    "initialPropertyValidationHead": "b26da35368c7225c4c84b4fca2aba56878722d14",
+    "finalClient2aDonorFilesUnchanged": true
+  },
+  "preservation": {
+    "workspaceFixesUnchanged": true,
+    "compatibility191Unchanged": true,
+    "migrationFilesChanged": [],
+    "packageFilesChanged": [],
+    "reservedNotIncorporated": [
+      "189_property_media_project_access.sql",
+      "190_property_unknown_values.sql"
+    ],
+    "noProductionPublishedClaim": true,
+    "assistant188SchemaAndBillingUnchanged": true,
+    "currentPublicAssistantSourceExact": true
+  },
+  "localClusterReadback": [
+    {
+      "directory": "sales-pg-q0EEBx",
+      "postmasterPidAbsent": true,
+      "shutdownInTail": true,
+      "logSha256": "257b55e79b04bac2030472185b15283d42e206defe492ca6f56e827b7d10891e"
+    },
+    {
+      "directory": "sales-pg-SoN4pD",
+      "postmasterPidAbsent": true,
+      "shutdownInTail": true,
+      "logSha256": "ccd9ee81de72a5608a3435335d3efc867798c31449447ec92272e77b8ab28cfb"
+    },
+    {
+      "directory": "sales-pg-pbrr0T",
+      "postmasterPidAbsent": true,
+      "shutdownInTail": true,
+      "logSha256": "9933b35b74f3774a6675274e29c1f24ec20a5b6f31a80f58c0ce6203799f0882"
+    },
+    {
+      "directory": "sales-pg-81jW7u",
+      "postmasterPidAbsent": true,
+      "shutdownInTail": true,
+      "logSha256": "12a42c307aaa16f5fce3f0ee42a9dac7aba89ff67cdc7693e9c8321b7030016c"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-backend-integrated.txt",
+      "sha256": "c041ef20346c31a1706d0d87e5260041f29fb43406081ffff7beca7276710bdc",
+      "bytes": 3743
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-browser-integrated.json",
+      "sha256": "b4d7bdbc511a9cd737de53f6ef2e1214ffad865fa2e4e5b7d5abb4225a9a459f",
+      "bytes": 1138
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-browser-integrated.txt",
+      "sha256": "6bdf83f88484d0837bae183bed717a788f83cdc24e3ed0b97eb6266c246342a2",
+      "bytes": 612
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-typecheck.raw.json",
+      "sha256": "ddd4ac15c676c4fea2ba815e750a4f8446c9cc63e57b1f4fbd88dc4fcbb7ff94",
+      "bytes": 599,
+      "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-typecheck.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-build.raw.json",
+      "sha256": "7908127390d9907acb8af5ee4773c82f9be0c9f3e5958c1740dd3b1211b25653",
+      "bytes": 12409,
+      "decodedOriginalSha256": "156bee32bfb134e51908e7a63dfb1157e24633d337b7cc21132f013d136b3ee5",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-build.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-targeted.txt",
+      "sha256": "97f03259721c35915ec4916710b3443f01eab557aa12f8bf8daa271c82cdccdb",
+      "bytes": 2931
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.raw.json",
+      "sha256": "26e33189019b483434fcf5b64d41e698fb3f9aaec5047a5cf65ceeedc143c02d",
+      "bytes": 12410,
+      "decodedOriginalSha256": "f4b3d111813fe6e05c8b0c8d87b4c9aa9ee7317abbd71ddbac3fc5cd15d708b8",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-browser.txt",
+      "sha256": "ca713466f537327a23c2a7e963a302726c8f2e4fac3b3a7dc67f9d6f689de369",
+      "bytes": 725
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-browser.json",
+      "sha256": "7602eff38cd5c6078f635d20e701f88b48c98d9ac650bfac90f43983cd73772a",
+      "bytes": 1298
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.raw.json",
+      "sha256": "d84a6e3b86554e1626411dea93d9b2e157c9e34b3c94be35270a4ae1de6d72a7",
+      "bytes": 610,
+      "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+      "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.txt",
+      "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+    },
+    {
+      "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "remaining": [
+    "NEW_SRC05: Await the exact QA RAM-DraftStore successor; preserve frozen intent through navigation/unmount/remount and late responses. Current9 browser cases do not close this finding.",
+    "Await final isolated QA media189 and public-output190 source/schema handoffs; do not infer public knownness or matching acceptance from backend storage semantics.",
+    "Reconcile any later production revision/schema before one coordinated release candidate; current local candidate is unpublished.",
+    "Historical scope8/9 failure remains retained; no new complete regression or blanket gate pass is claimed.",
+    "Exact independent candidate review, applicable native CI/genuine App, real target acceptance, and commercial/financial authorities remain open."
+  ],
+  "prohibitedActionsPerformed": [],
+  "initialValidationReceipt": "docs/tasks/sunday-crm-integration-20261104/property-integration-b26.json",
+  "latestRootProvidedProduction": {
+    "sha": "bb8bbaa916e5194ae7bdd7e6535f93283906a75c",
+    "deployment": "dpl_FWru64SJYvcZJU5otFsmTEJEuWu6",
+    "buildTimestamp": "2026-11-04T20:40:04.307Z",
+    "observedBy": "ROOT_PUBLIC_VERSION_READBACK",
+    "source": "Evelyn/artifacts/sunday-integration/crm-public-version-followup.json",
+    "regularMergeAncestor": true,
+    "noOwnProviderReadPerformed": true
+  },
+  "knownOpenFunctionalFindings": [
+    {
+      "id": "SRC05_PENDING_REF_LOST_ON_COMPONENT_UNMOUNT",
+      "origin": "NEW_QA_PEER_REVIEW_FOLLOWUP",
+      "status": "OPEN",
+      "cause": "Pending request body, UUIDs and scope currently live in PropertyCommandCenter component refs and are lost on navigation/unmount.",
+      "impact": "Uncertain direct property creation cannot safely recover the original request after remount; backend receipt alone does not restore the lost client identifier.",
+      "existing9BrowserCasesCoverThis": false,
+      "separateFromHistoricalScope8Of9Failure": true,
+      "requiredSuccessor": "Existing CRM-session RAM DraftStore binding with frozen body/UUID/scope and unmount/remount/late-response tests; no browser storage or automatic retry.",
+      "successorCommitIncluded": false
+    }
+  ],
+  "localClusterReadbackScope": "Four actual initial Property32 fixture clusters, checked stopped after that run; not a new final whole-runtime campaign.",
+  "historicalInitialReceiptResolution": {
+    "originalReceipt": "docs/tasks/sunday-crm-integration-20261104/property-integration-b26.json",
+    "rawTextRevision": "18f563cbc301ef30d634d306b1191caac3854488",
+    "losslessCurrentTransports": [
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/property-build.raw.json",
+        "sha256": "7908127390d9907acb8af5ee4773c82f9be0c9f3e5958c1740dd3b1211b25653",
+        "bytes": 12409,
+        "decodedOriginalSha256": "156bee32bfb134e51908e7a63dfb1157e24633d337b7cc21132f013d136b3ee5",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-build.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      },
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.raw.json",
+        "sha256": "d84a6e3b86554e1626411dea93d9b2e157c9e34b3c94be35270a4ae1de6d72a7",
+        "bytes": 610,
+        "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-known-zero-typecheck.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      },
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/property-typecheck.raw.json",
+        "sha256": "ddd4ac15c676c4fea2ba815e750a4f8446c9cc63e57b1f4fbd88dc4fcbb7ff94",
+        "bytes": 599,
+        "decodedOriginalSha256": "c7745d1cea890ec357c0ec009abf1b95e271a2129a4872b90245d5b351146c3e",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/property-typecheck.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      },
+      {
+        "path": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.raw.json",
+        "sha256": "26e33189019b483434fcf5b64d41e698fb3f9aaec5047a5cf65ceeedc143c02d",
+        "bytes": 12410,
+        "decodedOriginalSha256": "f4b3d111813fe6e05c8b0c8d87b4c9aa9ee7317abbd71ddbac3fc5cd15d708b8",
+        "decodedOriginalPath": "artifacts/sunday-crm-integration-20261104/assistant-bb8-build.txt",
+        "rawOriginalGitRevision": "18f563cbc301ef30d634d306b1191caac3854488"
+      }
+    ],
+    "frozenHistoricalReceiptNotRewritten": true
+  }
+}

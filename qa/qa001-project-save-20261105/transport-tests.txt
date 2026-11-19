@@ -1,0 +1,34 @@
+{
+  "command": "node --import tsx --test scripts/sales-client-recovery-tests.ts",
+  "node": "v24.18.0",
+  "startedAtUtc": "2026-11-05T00:07:43.551Z",
+  "endedAtUtc": "2026-11-05T00:07:44.093Z",
+  "exitCode": 0,
+  "signal": null,
+  "sourceLfSha256Before": {
+    "src/lib/security/crm-safe-client.ts": "eedc706602952265147b2bf9520511bb073fd3ec6bc5049f4c282dc109163f2f",
+    "src/lib/security/crm-sales-client.ts": "22bc79692db73902f2d9e359c6554e6d6cfdc21e6d68d2cd5756ee4f7edee920",
+    "scripts/sales-client-recovery-tests.ts": "6f6f55545b2383364a54c891eab1660a266f008fbbc42ea4f9171e667fe074df"
+  },
+  "sourceLfSha256After": {
+    "src/lib/security/crm-safe-client.ts": "eedc706602952265147b2bf9520511bb073fd3ec6bc5049f4c282dc109163f2f",
+    "src/lib/security/crm-sales-client.ts": "22bc79692db73902f2d9e359c6554e6d6cfdc21e6d68d2cd5756ee4f7edee920",
+    "scripts/sales-client-recovery-tests.ts": "6f6f55545b2383364a54c891eab1660a266f008fbbc42ea4f9171e667fe074df"
+  },
+  "scope": "Six pure transport cases with injected simulated responses; no fetch, browser, database, provider or live invocation"
+}
+
+✔ G06 client reconciles a lost success using the original metadata without another write (30.9704ms)
+✔ G06 missing receipt stays unknown and blocks changed requests; retry is lookup only (3.9488ms)
+✔ G06 explicit validation rejection permits corrected intent and does not reconcile (4.1188ms)
+✔ G06 offer retry uses original envelope even when UI creates fresh metadata (3.1931ms)
+✔ project validator keeps an invalid 200 unknown until the original receipt becomes valid without another create (6.3105ms)
+✔ project validator rejects an invalid committed receipt and keeps changed intents blocked while lookup remains possible (2.6795ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 467.9993

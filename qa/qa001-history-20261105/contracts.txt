@@ -1,0 +1,37 @@
+✔ three admin entries have distinct stable hashes and dedicated panels (1.5503ms)
+✔ admin navigation restores browser history and gates restricted roles (0.444ms)
+✔ active navigation and central language updates control the browser title, language and breadcrumb (1098.5117ms)
+✔ audit log is read-only, workspace-bound, filtered and paginated (0.4629ms)
+✔ system and governance panels distinguish code evidence from operational gates (0.1827ms)
+✔ CRM scope uses URL, then user/workspace preference, then deliberate All (3.0575ms)
+✔ CRM scope parser rejects partial, duplicate and unsafe URL candidates (0.2607ms)
+✔ foreign, deleted and wrong-workspace project scopes remain visibly invalid (0.213ms)
+✔ preference keys isolate user and workspace and stale preferences fail closed (0.2003ms)
+✔ scope serialization preserves module hash and unrelated query state (0.4328ms)
+✔ reload restores a listed URL workspace before resolving its project (0.4054ms)
+✔ reload preserves explicit All instead of applying a stored project (0.2165ms)
+✔ reload never restores absent duplicate malformed or unlisted workspace URLs (0.2203ms)
+✔ shell persists history and all five audited drafts have no first-project fallback (31.6641ms)
+✔ Studio selects its authorized project rather than the first available project (1.0145ms)
+✔ Studio project selection denies missing access and foreign workspace matches (0.3029ms)
+✔ Studio preferences are isolated by user with encoded key components (0.2512ms)
+✔ other workspaces keep their legacy preference key without reusing Studio preferences (0.133ms)
+✔ business enquiries include only real Studio submissions, including unmarked records (0.7902ms)
+✔ the separate test view retains only accepted synthetic Studio enquiries (0.1247ms)
+✔ all workspace entries remain reachable once with no new permissions or lost labels (7.0818ms)
+✔ every actual navigation preset partitions within eight primary areas (1.251ms)
+✔ restricted views gain no entries and contacts plus enquiries stay in primary areas (0.2989ms)
+✔ future authorized modules fall back to reachable management without exposing others (0.1756ms)
+✔ area selection preserves the current original entry or chooses an authorized entry in preset order (0.1613ms)
+✔ primary labels stay stable in DE, EN and ES even when only one module is authorized (0.139ms)
+✔ sidebar marks the active area and keeps management out of primary navigation (10.2006ms)
+✔ content navigation preserves every authorized subpage label and original navigation ID (1.8127ms)
+✔ clicking the active area or tab preserves dynamic page context while other entries navigate by original ID (1.9648ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1576.0587

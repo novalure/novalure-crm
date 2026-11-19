@@ -1,0 +1,30 @@
+{
+  "command": "node --conditions=react-server --import tsx --test scripts/project-wizard-persistence-tests.ts",
+  "startedAtUtc": "2026-11-05T00:33:50.090Z",
+  "endedAtUtc": "2026-11-05T00:33:56.097Z",
+  "exitCode": 0,
+  "node": "v24.18.0",
+  "localOnly": true,
+  "realPostgres": true,
+  "live": false
+}
+
+▶ project wizard: atomic local PostgreSQL persistence, references and actor-private notes
+  ✔ options use current compatible catalogs and only eligible active responsible users (58.0241ms)
+  ✔ preflight rejects stale actor, foreign or ineligible owner, source and incompatible pipeline before any project INSERT (31.9061ms)
+  ✔ one command saves actual pipeline/stages, safe immutable receipt and exact actor-only notes across reload (123.2466ms)
+  ✔ raw runtime RLS hides private text even from another manager and rejects forged authors and tenants (22.4636ms)
+  ✔ reference names disappear after source access or recipient eligibility is revoked (16.2245ms)
+  ✔ private-note failure rolls back project, pipelines, settings, audit and command receipt (67.2142ms)
+  ✔ explicit PATCH pipeline must belong to this exact project; legacy type and null choices remain supported (39.4849ms)
+  ✔ all five stable types and all four real compatible pipeline catalogs persist their actual stages (169.1056ms)
+  ✔ responsible membership share lock fences a concurrent suspension until the create transaction ends (186.9542ms)
+✔ project wizard: atomic local PostgreSQL persistence, references and actor-private notes (5098.5729ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5953.9967

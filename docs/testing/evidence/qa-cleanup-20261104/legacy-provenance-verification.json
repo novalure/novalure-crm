@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-11-04T23:14:59.2883585Z",
+  "base": "84d53cc7b2252f3d38e0fdf82439986c151b44a9",
+  "branch": "codex/qa-cleanup-20261104",
+  "status": "LOCAL_PROVENANCE_EVIDENCE_ONLY_CLASSIFICATION_AND_EIGHT_GROUP_CLEANUP_OPEN",
+  "executionSourceBinding": "OWN_SOURCE_BYTES_HASHED_AFTER_TARGETED_RUN_BEFORE_COMMIT",
+  "sourceHashes": {
+    "migrations/195_qa_legacy_provenance_snapshot.sql": "5cd4fe285c3f11cedb4b33a0e140d88cb767c47f02d14c7cbad9bc3c49f2dfe9",
+    "src/lib/qa-legacy-provenance.ts": "e7eeaf458718db02f01e98213f6ae40ffb78a5ff916068b589703c944281c4f3",
+    "src/app/api/admin/qa-legacy-provenance/route.ts": "86a9fcda946a27005b463956417e4b9f9fcbca058d23280dcfc5c5a9edd21e9f",
+    "scripts/qa-legacy-provenance-tests.ts": "18f7ed34ff624688aab84c368f38138351a5e19e12718cbe890d0fd392852a87",
+    "scripts/lib/qa-legacy-replay-worker.ts": "30ff92c24b9250d39b0468b910cbb24c964a57419d30addace9994a86af9f8e3",
+    "docs/tasks/qa-cleanup-20261104/legacy-provenance.md": "9e2076c69c30dd14b203256b1888d6714c2d9c2cdf4a3b2a242135a8ca809031",
+    "docs/tasks/qa-cleanup-20261104/handoff.md": "af77f29756cf24677cae7419e8072b6085d38393221fc166e5805bcaa46fffdf",
+    "package.json": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d",
+    "package-lock.json": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea"
+  },
+  "targetedTests": {
+    "limits": "Historical sales bootstrap through110 with unchanged documented exclusions; not full native restored schema/CI/App.",
+    "tapSha256": "43e456a45394bcacd56fb9b26879193ec5c90188aeb4265a6e676ab48c71a78b",
+    "caseLabelsAreAssertionsNotAdditionalTestCounts": true,
+    "exitCode": 0,
+    "cases": [
+      "EXACT_DOUBLE_DB_PROVENANCE_AND_SOURCE_AUDIT_BINDING",
+      "SAME_PERSISTED_IDENTITY_CURRENT_TARGET_OWNER_OWN_DRAFT",
+      "EIGHT_GROUPS_AND_ALL_CLASSIFICATION_FLAGS_CLOSED",
+      "BUSINESS_ACCOUNT_AND_CALENDAR_STATE_UNCHANGED",
+      "NEW_PROCESS_DURABLE_RECEIPT_REPLAY",
+      "FOREIGN_SOURCE_AUDIT_DRAFT_ORIGIN_AND_TARGET_SESSION_DENIED",
+      "CURRENT_DB_MFA_ROLE_SESSION_IDENTITY_REVOCATION",
+      "EXACT_IDS_COUNTS_HASH_CONFIRMATION_EXPIRY_AND_STALE_SUCCESSFUL_REPLAY",
+      "TABLE_COLUMN_POLICY_METADATA_CHANGES_INVALIDATE_PLAN",
+      "ORIGIN_CONTEXT_RESTORE_SUCCESS_AND_EXCEPTION",
+      "REAL_COOKIE_CSRF_ROUTE_NO_QA_FLAG_OR_BATCH"
+    ],
+    "fixture": "DISPOSABLE_LITERAL_LOOPBACK_PG_NONOWNER_RUNTIME_ACTUAL_114_173_195_TWO_SYNTHETIC_TARGET_TENANTS",
+    "cancelled": 0,
+    "skipped": 0,
+    "tap": "docs/testing/evidence/qa-cleanup-20261104/legacy-provenance-tests.tap",
+    "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 --test-reporter=tap scripts/qa-legacy-provenance-tests.ts",
+    "tests": 10,
+    "pass": 10,
+    "fail": 0
+  },
+  "typecheck": {
+    "exitCode": 0,
+    "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false"
+  },
+  "lint": {
+    "exitCode": 0,
+    "maxWarnings": 0,
+    "files": [
+      "src/lib/qa-legacy-provenance.ts",
+      "src/app/api/admin/qa-legacy-provenance/route.ts",
+      "scripts/qa-legacy-provenance-tests.ts",
+      "scripts/lib/qa-legacy-replay-worker.ts"
+    ]
+  },
+  "preservedFailures": {
+    "firstTypecheck": "Literal-type widening in plan content; explicit Omit<QaLegacyPlan,digest> annotation corrected",
+    "intermediateSourceReview": "Medium: replay originally skipped expiry/current-state callback checks; moved before generic receipt lookup; independently reread, not exact-SHA approval",
+    "initialTests": {
+      "pass": 7,
+      "tests": 9,
+      "reason": "Synthetic revoke fixture omitted required revoked_reason; protection preserved",
+      "fail": 2,
+      "losslessTransport": "docs/testing/evidence/qa-cleanup-20261104/legacy-provenance-initial-failure.transport.json"
+    }
+  },
+  "migration195": {
+    "security": "INVOKER",
+    "roleMembershipChanges": 0,
+    "qaFlagSetter": false,
+    "classificationAllowed": false,
+    "rlsBypass": false,
+    "batchMutation": false,
+    "function": "public.crm_qa_legacy_provenance_snapshot(uuid,uuid,uuid,uuid)",
+    "newTableGrants": 0,
+    "newRoles": 0,
+    "wholeWorkspaceInventory": false
+  },
+  "historicalMigration194Sha256Unchanged": "7db093a4beb5efa1cdaf95ce0b138eaf6bf65802c7e5769d89debcbfdac1c108",
+  "realEffects": {
+    "productionMigrations": 0,
+    "accountAndRightsChanges": 0,
+    "businessMutations": 0,
+    "calendarChanges": 0,
+    "qaClassifications": 0,
+    "deployments": 0,
+    "legacy068Registrations": 0,
+    "pushes": 0,
+    "productionConnections": 0,
+    "providerCalls": 0,
+    "modelCalls": 0
+  },
+  "open": [
+    "EXACT_SHA_INDEPENDENT_SOURCE_REVIEW",
+    "SHARED_FINAL_SCHEMA_AND_RUNNER_INTEGRATION",
+    "NATIVE_CI_APP",
+    "SEPARATE_FIRST_TIME_QA_PROVISIONING",
+    "TENANT_COMPLETE_CURRENT_VISIBILITY_AND_FOREIGN_DEPENDENCY_ADMISSION",
+    "EXPLICIT_068_CLASSIFICATION_AND_REGISTRATION",
+    "SUPPORTED_EIGHT_GROUP_LIFECYCLE",
+    "SETTINGS_BASELINE_RESTORATION_CAS",
+    "LIVE_ACCEPTANCE"
+  ]
+}

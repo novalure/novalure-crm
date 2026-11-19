@@ -1,0 +1,16 @@
+{
+  "localOnly": true,
+  "actualCrmWorkspace": true,
+  "unrelatedChildrenStubbed": true,
+  "syntheticHttp": true,
+  "databaseIntegration": false,
+  "baselineReproduction": false,
+  "baselineRevision": null,
+  "results": [
+    {
+      "name": "late confirmed property A save cannot refresh A into the real parent after B is active",
+      "status": "PASS"
+    }
+  ],
+  "browserErrors": []
+}

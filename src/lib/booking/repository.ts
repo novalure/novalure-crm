@@ -43,6 +43,11 @@ export async function readTravelBookings(tx:TenantTransaction,session:AppSession
     and ($3::uuid is null or id<>$3::uuid) order by id`,[session.workspaceId,session.userId,excludeId]);
 }
 export async function internalBusy(tx:TenantTransaction,session:AppSession,excludeId:string|null=null) {
+  const personal=await tx.queryOne<{installed:boolean}>(`select to_regclass('public.crm_personal_calendar_binding_locks') is not null as installed`);
+  if(personal?.installed){
+    const unresolved=await tx.queryOne<{blocked:boolean}>(`select exists(select 1 from crm_personal_calendar_binding_locks where workspace_id=$1 and actor_id=$2 and state in ('processing','uncertain')) as blocked`,[session.workspaceId,session.userId]);
+    if(unresolved?.blocked)throw new BookingError("PERSONAL_CALENDAR_RECONCILIATION_REQUIRED",409);
+  }
   return tx.query<{startsAt:string;endsAt:string}>(`select to_char(blocked_starts_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "startsAt",to_char(blocked_ends_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "endsAt" from booking_reservations where workspace_id=$1::uuid and organizer_id=$2::uuid and state in ('held','processing','confirmed','uncertain','conflict') and (state<>'conflict' or provider_event_id is not null) and ($3::uuid is null or id<>$3::uuid)`,[session.workspaceId,session.userId,excludeId]);
 }
 export async function bookingAudit(tx:TenantTransaction,session:AppSession,action:string,id:string,details:Record<string,unknown>={}) {

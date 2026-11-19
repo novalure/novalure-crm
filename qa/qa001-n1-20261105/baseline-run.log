@@ -1,0 +1,5 @@
+FAIL stale A selection cannot cancel current B-to-C switch or overwrite pending scope/URL: An old A callback must have no current navigation authority
+PASS genuine current B project selection still cancels pending C and preserves explicit All
+FAIL old B selection cannot overwrite an already accepted C scope or URL: Expected values to be strictly deep-equal:
+FAIL callback from retired login identity cannot overwrite current same-workspace All URL: Expected values to be strictly deep-equal:
+{"cases":4,"passed":1,"failed":3}

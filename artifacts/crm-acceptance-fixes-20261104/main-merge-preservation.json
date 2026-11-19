@@ -1,0 +1,55 @@
+{
+  "recordedAt": "2026-11-04T22:12:03.265Z",
+  "candidateParent": "f367164a7b0ec485767823a3eeb122038f0461a7",
+  "mainParent": "1af2f8f9bba9db57c15bfadfee25f6bee5693b9d",
+  "purpose": "Preserve native main operational and security changes in the coherent release candidate",
+  "resolutions": [
+    {
+      "paths": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "decision": "Keep candidate newer exact dependencies/scripts. Main Undici 6.29.1 and scoped Zod 4.6.7 overrides already present; no dependency update."
+    },
+    {
+      "paths": [
+        "docs/crm-full-backup-runner.md",
+        "scripts/crm-full-backup-http-tests.mjs",
+        "scripts/crm-full-backup-provider-tests.mjs",
+        "scripts/crm-full-backup-tests.mjs",
+        "scripts/crm-full-backup.mjs",
+        "scripts/lib/crm-full-backup-http.mjs",
+        "scripts/lib/crm-full-backup-providers.mjs",
+        "scripts/lib/crm-full-backup.mjs",
+        "scripts/prepare-crm-backup-workload.mjs"
+      ],
+      "decision": "Preserve candidate extension of main backup contracts: failure alarm bridge, unique run IDs and allowlisted provider diagnostics; all original main boundaries retained."
+    },
+    {
+      "paths": [
+        ".gitleaksignore"
+      ],
+      "decision": "Preserve union of exact existing historical fingerprints, retain main explanatory comments. No new finding exemption."
+    }
+  ],
+  "mainChangesPreserved": [
+    "existing native backup CI step",
+    "redacted-only secret-scan finding output",
+    "operational evidence/history",
+    "existing Vercel branch configuration"
+  ],
+  "checks": [
+    {
+      "command": "node --test scripts/crm-full-backup-tests.mjs scripts/crm-full-backup-provider-tests.mjs scripts/crm-full-backup-http-tests.mjs scripts/crm-backup-failure-warning-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs",
+      "exitCode": 0,
+      "pass": 93,
+      "fail": 0,
+      "skip": 0
+    }
+  ],
+  "scopeFixIndependentReview": "C:/Projects/crm-live-acceptance-20261104/reviews/task-scope-f367164a-independent.json",
+  "mergeIndependentReview": "PENDING",
+  "nativeCI": "PENDING",
+  "appAttestation": "PENDING",
+  "productionChanged": false
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
-import { requirePermissionAndProductCapability } from "@/lib/auth/session";
+import { requirePermissionAndProductCapability, resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import {
   consumeOAuthState,
   exchangeOAuthCode,
@@ -11,6 +11,8 @@ import {
 } from "@/lib/integrations/calendar-connections";
 import { bookingMicrosoftAuthority, consumeBookingOAuthState, saveBookingOAuthConnection } from "@/lib/booking/connections";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
+import { calendarOAuthResultRedirect } from "@/lib/integrations/calendar-oauth-redirect";
+export const maxDuration = 60;
 
 type RouteContext = {
   params: Promise<{ provider: string }>;
@@ -26,9 +28,17 @@ export async function GET(request: Request, context: RouteContext) {
   const provider = getProvider(providerParam);
   const url = new URL(request.url);
   let bookingMode = false;
-  try { bookingMode = Boolean(provider && parseOAuthState(url.searchParams.get("state"),provider)?.returnTo === "/booking"); }
+  let personalWorkspace:string|null=null;
+  try {
+    const parsed=provider?parseOAuthState(url.searchParams.get("state"),provider):null;
+    bookingMode=Boolean(parsed&&["/booking","/calendar-personal"].includes(parsed.returnTo));
+    if(parsed?.returnTo==="/calendar-personal")personalWorkspace=parsed.workspaceId;
+  }
   catch { /* Invalid state cannot select the booking callback. */ }
-  const auth = await requirePermissionAndProductCapability(request, bookingMode ? "crm:write" : "calendar:sync", "calendar:manage");
+  const scopedUrl=new URL(request.url);if(personalWorkspace)scopedUrl.searchParams.set("workspaceId",personalWorkspace);
+  const auth = personalWorkspace
+    ? await resolveWorkspaceScopedSession(new Request(scopedUrl,{headers:request.headers}),{permission:"crm:write",capability:"calendar:manage"})
+    : await requirePermissionAndProductCapability(request, bookingMode ? "crm:write" : "calendar:sync", "calendar:manage");
   if (!auth.ok) return auth.response;
   const trustedOrigin = getTrustedAppOrigin();
   const fallbackRedirect = new URL("/#calendar", trustedOrigin);
@@ -59,12 +69,12 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.redirect(fallbackRedirect);
   }
 
-  const returnTo = resolveSafeLocalRedirect(state.returnTo, {
+  const returnTo = resolveSafeLocalRedirect(state.returnTo==="/calendar-personal"?`/?workspaceId=${encodeURIComponent(state.workspaceId)}#calendar`:state.returnTo, {
     blockedPathPrefixes: ["/api", "/login"],
     fallback: "/#calendar",
     trustedOrigin,
   });
-  const redirectUrl = new URL(returnTo, trustedOrigin);
+  const redirectUrl = calendarOAuthResultRedirect(returnTo, trustedOrigin,{});
 
   const providerError = url.searchParams.get("error");
   if (providerError) {

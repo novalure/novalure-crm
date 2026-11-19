@@ -61,6 +61,10 @@ jobs:
       - name: Unit and component smoke tests
         run: npm run test:unit
 
+      - name: Media HTTP validation and controlled failure responses
+        # Real route handlers with synthetic session and storage module ports.
+        run: npm run test:media-routes
+
       - name: Design C data provenance and customer self-service regression
         run: npm run test:design-c-integration
 
@@ -112,6 +116,9 @@ jobs:
       - name: Final sales contract, approval, route and recovery regression
         run: npm run test:sales:final
 
+      - name: Registered autonomous CRM delegation
+        run: npm run test:crm-autonomous-access
+
       - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
         run: npm run test:g08
 
@@ -138,8 +145,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-18
 
+      - name: AI billing quota, settlement and administrator access
+        # Disposable loopback PostgreSQL and synthetic provider responses only.
+        run: npm run test:ai-billing
+
+      - name: CRM assistant authorization, metering and uncertain outcomes
+        run: npm run test:crm-assistant
+
+      - name: Prepare pinned official OpenImmo reference schema
+        # Public reference bytes stay in the ignored cache, outside test artifacts.
+        run: node scripts/prepare-openimmo-reference.mjs
+
+      - name: CRM domain workflows and public property publication
+        # The fixed runner serializes its 47 existing local domain suites.
+        run: npm run test:livelisted
+
       - name: Neon 061 compatibility and role isolation regression
         run: npm run test:neon:061
+
+      - name: Fresh CRM QA source plans and restricted-role bootstrap contracts
+        # Disposable loopback PostgreSQL and synthetic provider metadata only.
+        run: npm run test:crm-candidate-fresh
 
       - name: Sales schema upgrade, rollback and native restore
         run: npm run test:sales:migrations
@@ -259,6 +285,7 @@ jobs:
     name: Manual trusted-candidate QA regression and tenant diagnostics
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ${{ inputs.qa_profile == 'isolated-candidate' && 'novalure-qa-candidate' || 'novalure-qa' }}
     concurrency:
       group: novalure-shared-qa

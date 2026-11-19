@@ -1,0 +1,17 @@
+{
+  "syntheticHttp": true,
+  "databaseIntegration": false,
+  "baseline": true,
+  "baselineRevision": "11c4384c0c5a360e448f441c822edc1057d9fe17",
+  "results": [
+    {
+      "name": "baseline reproduces rejected valid decimals before submission",
+      "status": "PASS"
+    },
+    {
+      "name": "baseline reproduces missing selected workspace in direct request",
+      "status": "PASS"
+    }
+  ],
+  "browserErrors": []
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTrustedAuthClientIp } from "@/lib/auth/auth-security";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import {
   inviteSettingsWorkspaceUser,
   listWorkspaceAccessSettings,
@@ -30,6 +30,15 @@ async function requireSettingsAccess(request: Request) {
   return resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "settings:manage" });
 }
 
+async function workspaceUserMutationResponse(session: AppSession, result: { accessChanged: boolean; data: { id: string } }) {
+  const sessionRevoked = result.accessChanged && result.data.id === session.userId;
+  const payload = sessionRevoked ? null : await listWorkspaceAccessSettings(session).catch(() => null);
+  return NextResponse.json(payload ?? {
+    persisted: true, sessionRevoked, refreshRequired: true,
+    canManage: false, customerProductRoles: [], source: "fallback", users: [], workspaceRoles: [],
+  });
+}
+
 export async function GET(request: Request) {
   const auth = await requireSettingsAccess(request);
   if (!auth.ok) return auth.response;
@@ -57,7 +66,7 @@ export async function PATCH(request: Request) {
 
   if (!result.ok) return NextResponse.json({ error: result.reason }, { status: getFailureStatus(result) });
 
-  return NextResponse.json(await listWorkspaceAccessSettings(auth.session));
+  return workspaceUserMutationResponse(auth.session, result);
 }
 
 export async function POST(request: Request) {
@@ -110,6 +119,9 @@ export async function POST(request: Request) {
 
   if (!result.ok) return NextResponse.json({ error: result.reason }, { status: getFailureStatus(result) });
 
+  if (operation === "revoke_invitation" && "accessChanged" in result) {
+    return workspaceUserMutationResponse(auth.session, result);
+  }
   const payload = await listWorkspaceAccessSettings(auth.session);
   return NextResponse.json({
     ...payload,

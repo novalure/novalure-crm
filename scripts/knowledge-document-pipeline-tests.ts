@@ -10,6 +10,7 @@ import { getProductRoleCapabilities } from "../src/lib/product-model";
 import { withTenantTransaction, type TenantTransactionOptions } from "../src/lib/db/tenant-client";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { applyMediaProjectRuntimeFunctions } from "./lib/media-project-runtime-fixture.mjs";
 
 const code = (expected: string) => (error: unknown) => (error as { code?: string }).code === expected;
 const textFile = (content = "SYNTHETIC blueberry delivery is Monday.", name = "delivery.txt") => new File([content], name, { type: "text/plain" });
@@ -21,6 +22,7 @@ test("private document pipeline: bytes, immutable results, replay, approval, rep
   const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
     await applySalesSchema(db, { maxMigrationNumber: 108 });
+    await applyMediaProjectRuntimeFunctions(db);
     for (const key of keys) delete process.env[key];
     Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, CRM_LOCAL_TEST_DATABASE: "1", NODE_ENV: "test", NOVALURE_MEDIA_ROOT: mediaRoot });
     const workspaceId = randomUUID(), ownerId = randomUUID(), staffId = randomUUID(), viewerId = randomUUID(), projectId = randomUUID();

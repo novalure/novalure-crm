@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-11-04T23:06:19.454Z",
+  "classification": "LOCAL_SYNTHETIC_ONLY_REVIEW_AND_INTEGRATION_PENDING",
+  "baseRevision": "9b7f60a5452e5b4c5894bdc4c94fcdee5e2c98d8",
+  "branch": "codex/personal-mail-20261104",
+  "sourceFiles": [
+    {
+      "path": "migrations/192_personal_mail_reply_and_attachments.sql",
+      "sha256": "c4c446ce73d27b7c983fd9ef26ece2383ad4eceae65e30cc9d487260d9ac500b",
+      "gitBlobId": "1f679d732b4b0bd94ff18a56b0630c6450c03e38"
+    },
+    {
+      "path": "next.config.ts",
+      "sha256": "a81fec7ff6cc36e4a30ff5e3d8112aa952c4a8c98aa6f642875a71bb927e7ed6",
+      "gitBlobId": "30f4ecf61a531ece62ad482abd54495bc6b75f01"
+    },
+    {
+      "path": "scripts/lib/personal-mail-restart-probe.ts",
+      "sha256": "7e7e038e41dab09523167776cd928b7ab43ac1e364b8efc6543ea5b58171868c",
+      "gitBlobId": "3f07aa35c97a2b8ab6cbf1742a3ac36993c5510f"
+    },
+    {
+      "path": "scripts/personal-mail-reply-browser-tests.mjs",
+      "sha256": "297940ad0f214448cb8f9bf049b53b20350574983f8753128f1840be1945035f",
+      "gitBlobId": "877c056f4c9db8b8e903af630ccb3581a3f92450"
+    },
+    {
+      "path": "scripts/personal-mail-reply-tests.ts",
+      "sha256": "c9e58a973490578fcdefb725099324ae27569dbe7cc22f12bae484fe7b63761a",
+      "gitBlobId": "588ecd8f916c325d783dc59c32813d8c3152c631"
+    },
+    {
+      "path": "src/app/api/crm/mailbox/attachments/route.ts",
+      "sha256": "39ff4912cae92aa178145244684cc4fa50c8fd60024ecd479eb7eebb38422efb",
+      "gitBlobId": "b33798e98d3e637d3c3ef020141282e757de0dea"
+    },
+    {
+      "path": "src/app/api/crm/mailbox/import-exact/route.ts",
+      "sha256": "f47383dba400a0a95ad10682cd1141ea868f0da10c43b168468bcd0605cd25ba",
+      "gitBlobId": "db38574491a57d06b71de56827845f880c151f0e"
+    },
+    {
+      "path": "src/app/api/crm/mailbox/oauth/[provider]/start/route.ts",
+      "sha256": "f68b760862f09482fde4ba9089f245c11ceedb80feb534de7d8ddeaf012c2f53",
+      "gitBlobId": "def207c49926fadadd7f2a56e6b9b77f5caf41fc"
+    },
+    {
+      "path": "src/app/api/crm/mailbox/replies/route.ts",
+      "sha256": "406974bf40afa7b159bc3e9d05954118a27993dd42cf4681e71635febbf9e7e6",
+      "gitBlobId": "e2f4edfbbe4498ed894a86afc3a1b5c9db9658b4"
+    },
+    {
+      "path": "src/components/connected-communication-workspace.tsx",
+      "sha256": "a63d8cd447896149d4a5af5d07261bbd0671ac11aaecb59d9aff27e7af6bf8ce",
+      "gitBlobId": "952b8a5a52ad582a44663607d3ef854fd4e9b65e"
+    },
+    {
+      "path": "src/components/personal-mail-reply-panel.tsx",
+      "sha256": "10b051b48155a7f22c41a47e5300ff0bb25f3a7c5f7ec9f81f8e890d62de590d",
+      "gitBlobId": "23ec060f287fd42c78e055e8394bb1e50ed61325"
+    },
+    {
+      "path": "src/lib/crm-mailbox-attachment-worker.cjs",
+      "sha256": "8974581170282f53668b3b64938d84bd075b43b358e2e524da90c1c0e9a00051",
+      "gitBlobId": "fe0103b7be96670c273c3ed3e8ca034348d95a32"
+    },
+    {
+      "path": "src/lib/crm-mailbox-attachment.ts",
+      "sha256": "480edff0450cc24ea1dd24560725eda5fcc494e556122809c1e4df64d58024b9",
+      "gitBlobId": "806053ae376588f643fc4ac23f7de5646dec33a6"
+    },
+    {
+      "path": "src/lib/crm-mailbox-pdf-preflight.cjs",
+      "sha256": "2dffb04a5d9ac0e46cb60b1a9fa6532a5d9e56817c66cd3fdc69e76307e4b75a",
+      "gitBlobId": "725be3c358c53bca94484da1d28b92c2cc1cdf1c"
+    },
+    {
+      "path": "src/lib/crm-mailbox-qa-import-scope.ts",
+      "sha256": "faca4cde5a727b6681ac165d29f40b2c465729ab2c0e9492b1a8bb77b7a2f02c",
+      "gitBlobId": "d11ca151451251898b7dd6fd4c78700be29512a8"
+    },
+    {
+      "path": "src/lib/crm-mailbox-reply.ts",
+      "sha256": "87cda64c6ef8af9ee043a95b382afc6a2d87446a9ed635aa3bb6326dc6af89ac",
+      "gitBlobId": "3ea838e3b09f3811e7bcf0a6c6ff31ef4427efac"
+    },
+    {
+      "path": "src/lib/crm-mailbox-request.ts",
+      "sha256": "4f9d04e8059efc6c227d5a9577abf6b94cc05605f3765a62db2471e712a36354",
+      "gitBlobId": "99965986efc0452781e48dc0275d9df9a22104b7"
+    },
+    {
+      "path": "src/lib/db/crm-mailbox-exact-import.ts",
+      "sha256": "95e02ea3f3b1ad4d7e02aded89700dc9a8aac88ed95f57264a1c471f1cb149df",
+      "gitBlobId": "4877884fa4d8fc8ca777d4e7d25890af1bbc61fb"
+    },
+    {
+      "path": "src/lib/db/crm-mailbox-reply-repository.ts",
+      "sha256": "1749e090347acc009941466c1e097807d2435bb14c050f7c11190d5c904f1f7f",
+      "gitBlobId": "545c9096861e34aab163f04daf400854fe09a092"
+    },
+    {
+      "path": "src/lib/db/crm-mailbox-repository.ts",
+      "sha256": "456bf49601fa938557bcc3e0578a1133cd946fa13ead9eb27755902f5a9869ed",
+      "gitBlobId": "64dc8e4879ca6979902c63984b291595d8e05b2c"
+    },
+    {
+      "path": "src/lib/integrations/mailbox-provider.ts",
+      "sha256": "6ee925ee1ed642ba2c1985918b6b6266d6139506db39e9c5f62ce62568661955",
+      "gitBlobId": "9d5dcfbf220b85fd3b67001a7b5ae966f11a94ca"
+    },
+    {
+      "path": "src/lib/integrations/mailbox-reply-provider.ts",
+      "sha256": "81a3136f26a891c000353ff7d27989f664db8d68cc5c324fb0fabb50c3c8c80b",
+      "gitBlobId": "ffe3529d9a0457f123af17f260ea44130f72a9d1"
+    },
+    {
+      "path": "src/lib/integrations/mailbox-sync-provider.ts",
+      "sha256": "d40d0f37a35d1cd565176ad7cd07a0ba0e59eb973a66bf5c3f7c0fbae45bcfb4",
+      "gitBlobId": "3fd950429fc4c820b4f346e1df3e55ebb3e5dfd6"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "artifacts/personal-mail/targeted-tests.tap",
+      "sha256": "21fda50d6cc5d48695457604f22a943bf839bce8191077e6af0ec1c795fbdd01"
+    },
+    {
+      "path": "artifacts/personal-mail/targeted-tests-initial-restart-probe-failure.tap.gz",
+      "sha256": "75a7a55c21ffbd21acd1dd226ddae9659b049be81a7e355fdad68690861a2b29"
+    },
+    {
+      "path": "artifacts/personal-mail/browser.log.gz",
+      "sha256": "87c10efc0832fe33ab573c7ec794aab4342d74f5361a252596b59f3f6bd9445b"
+    },
+    {
+      "path": "artifacts/personal-mail/typecheck.log.gz",
+      "sha256": "d7bf9db2ede137db22ee96374785a48fa0a656f0236a8d178c0edc65ddf48540"
+    },
+    {
+      "path": "artifacts/personal-mail/lint.log.gz",
+      "sha256": "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
+    },
+    {
+      "path": "artifacts/personal-mail/build.log.gz",
+      "sha256": "962667e2f37d5b9eba0216acd1b7408e0af1e599c3e2f6f01355e649bd90a71e"
+    },
+    {
+      "path": "artifacts/personal-mail/packaging-check.json",
+      "sha256": "b9f71c916fdb98c475cfe02515f77fcb04173e167bc0ff26565b687e99d0fa06"
+    },
+    {
+      "path": "artifacts/personal-mail/compressed-evidence.json",
+      "sha256": "2764e9c47c8aa16c71fd58d1399ffbb74e4337d69c20c545c66a0f8e02d8b4fe"
+    }
+  ],
+  "unchangedDependencies": [
+    {
+      "path": "package.json",
+      "sha256": "be0935006389a43f56fcdacef76563a71bf56b42db187cf88961c221b928bc0d",
+      "gitBlobId": "374cf44d4adb128fbf5d267807ae18652d6bb64d",
+      "baseGitBlobId": "374cf44d4adb128fbf5d267807ae18652d6bb64d",
+      "unchangedFromBase": true
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "4d47f76c2b3c9232af364fb0082fce285302d1a3d938ee40437d8728a4cebdea",
+      "gitBlobId": "8712e6908996b2192ad7cdb03c813695791997cd",
+      "baseGitBlobId": "8712e6908996b2192ad7cdb03c813695791997cd",
+      "unchangedFromBase": true
+    }
+  ],
+  "results": {
+    "targetedNode": {
+      "tests": 43,
+      "pass": 43,
+      "fail": 0,
+      "skip": 0,
+      "exitCode": 0,
+      "command": "node --conditions=react-server --import tsx --test --test-reporter=tap --test-concurrency=1 scripts/personal-mail-reply-tests.ts scripts/crm-mailbox-tests.ts scripts/mailbox-auto-sync-tests.ts"
+    },
+    "browser": {
+      "checks": 5,
+      "pass": true,
+      "providerCalls": 0,
+      "classification": "LOCAL_UI_WITH_STUBBED_HTTP_NOT_AUTH_OR_PROVIDER_ACCEPTANCE"
+    },
+    "typecheck": {
+      "exitCode": 0
+    },
+    "affectedLint": {
+      "exitCode": 0
+    },
+    "build": {
+      "exitCode": 0,
+      "staticGeneration": "191/191",
+      "databaseEnvCleared": true,
+      "telemetryDisabled": true
+    },
+    "packaging": {
+      "classification": "STATIC_NEXT_FILE_TRACING_NOT_DEPLOYMENT",
+      "required": [
+        {
+          "path": "src/lib/crm-mailbox-attachment-worker.cjs",
+          "included": true
+        },
+        {
+          "path": "src/lib/crm-mailbox-pdf-preflight.cjs",
+          "included": true
+        },
+        {
+          "path": "node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+          "included": true
+        },
+        {
+          "path": "node_modules/pdf-lib/cjs/index.js",
+          "included": true
+        },
+        {
+          "path": "node_modules/sharp/dist/index.cjs",
+          "included": true
+        }
+      ],
+      "allPresent": true
+    }
+  },
+  "loopbackSchema": {
+    "bootstrapThrough": 106,
+    "additional": [
+      "154_automation_graph.sql",
+      "161_crm_notification_preferences.sql",
+      "170_crm_personal_mailbox.sql",
+      "177_crm_notification_email.sql",
+      "178_personal_mailbox_triage.sql",
+      "182_personal_mailbox_sync.sql",
+      "192_personal_mail_reply_and_attachments.sql"
+    ],
+    "productionUpgradeRehearsal": false
+  },
+  "network": {
+    "liveAccountActions": 0,
+    "realProviderCalls": 0,
+    "realMessagesSent": 0,
+    "modelCalls": 0,
+    "documentationReadsOnly": true
+  },
+  "history": [
+    {
+      "status": "FAIL_RETAINED",
+      "artifact": "targeted-tests-initial-restart-probe-failure.tap.gz",
+      "reason": "Added restart probe used top-level await under CJS; fixed async entrypoint; final fresh-process probe passed."
+    }
+  ],
+  "openGates": [
+    "exact_revision_independent_review",
+    "common_integration_and_affected_regression",
+    "original_production_schema_upgrade_restore",
+    "native_ci_linux_packaging",
+    "real_app_session_csrf_and_two_tenant_acceptance",
+    "real_outlook_and_google_oauth_send_attachment_delivery_acceptance"
+  ],
+  "claims": {
+    "productionReady": false,
+    "liveProviderAccepted": false,
+    "deliveryVerified": false,
+    "fullApplicationAcceptance": false
+  },
+  "sourceHashKind": "SHA256 of actual Windows worktree bytes; canonical Git blob IDs additionally bind committed source.",
+  "exactQaImport": {
+    "enabledWithoutHostRegistry": false,
+    "hostRegistryConfiguredHere": false,
+    "requestFieldsAreAuthority": false,
+    "source": "server-only bound resource pin plus actual personal OAuth/session/current membership",
+    "testContentHashesRequired": true,
+    "bccReplyToAndUnregisteredOriginalReferencesRejected": true,
+    "undisclosedRemovedBccProven": false,
+    "finalConnectionLockAndReplayRecheck": true,
+    "singleConnectionPoolAndLateDisconnectTests": true
+  }
+}

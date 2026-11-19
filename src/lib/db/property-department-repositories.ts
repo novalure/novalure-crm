@@ -1,4 +1,8 @@
-import { withCrmRead, CrmCommandError } from "@/lib/crm-command";
+import { bindPropertyDetails, readPropertyDetails, propertyDetailsLegacyFields, propertyDetailCostBindings, propertyDetailsInput } from "@/lib/property-details";
+import { fullPropertyInputKeys,propertyFullSnapshot,samePropertySnapshot } from "@/lib/property-full-editing";
+import { validatePropertyCreationInput } from "@/lib/property-create-validation";
+import { websitePriceVisibilityReadValues } from "@/lib/property-website-price-visibility";
+import { withCrmRead, CrmCommandError, assertProjectGrant, crmPayloadDigest, executeCrmCommand, type CrmCommandInput, type TenantTransaction } from "@/lib/crm-command";
 import type { AppSession } from "@/lib/auth/session";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
 import type {
@@ -6,7 +10,7 @@ import type {
   PropertyInquiryRouteResult,
   PropertyPreflightResult,
 } from "@/lib/property-department";
-import { executeQuery, queryOne } from "@/lib/db/client";
+import { executeQuery, queryOne, queryRows } from "@/lib/db/client";
 import { queryPropertyMediaMutation } from "@/lib/db/property-media-mutation";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
@@ -14,6 +18,9 @@ import { parsePropertyLinkInput, parsePropertyRelationshipInput } from "@/lib/pr
 import { resolvePropertyAreaSqm } from "@/lib/property-area-input";
 import { isEmptyMoneyInput, parsePropertyEuroCents, parsePropertyIntegerCents } from "@/lib/property-money";
 import { normalizePurchaseAncillaryCalculation } from "@/lib/property-purchase-costs";
+import { austriaPropertyRegions, normalizePropertyEnergyCertificate, normalizePropertyGeography, normalizePropertyRegion, propertyGeographyFromInput, readPropertyGeography } from "@/lib/property-country";
+import type { PropertyChannelPriceEdits, PropertyChannelPriceState } from "@/lib/property-channel-price-draft";
+import { hasProductCapability } from "@/lib/product-model";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -84,18 +91,6 @@ type IdRow = { id: string };
 type ListingProjectRow = { projectId: string | null };
 type CountRow = { count: number | string };
 
-const allowedRegions = new Set([
-  "Wien",
-  "Steiermark",
-  "Tirol",
-  "Salzburg",
-  "Oberoesterreich",
-  "Niederoesterreich",
-  "Kaernten",
-  "Burgenland",
-  "Vorarlberg",
-]);
-
 const sellerListingReturningSql = `
   id,
   workspace_id as "workspaceId",
@@ -165,23 +160,32 @@ async function createSellerListingRecordInTransaction(input: {
     return { persisted: false, reason: "Database persistence is not configured" };
   }
 
+  const creationError = validatePropertyCreationInput(input.property);
+  if (creationError) return { persisted: false, reason: creationError };
+
+  try { input={...input,property:{...input.property,...propertyDetailsInput(input.property)}}; }
+  catch { return {persisted:false,reason:"Invalid typed property details"}; }
   const fields = asPlainObject(input.property.fieldValues);
+  const country = propertyGeographyFromInput(input.property);
+  if (!country.ok) return { persisted: false, reason: country.reason };
+  const geography = country.geography;
+  const hasEnergyCertificate = Object.hasOwn(input.property, "energyCertificate");
+  const energyCertificate = hasEnergyCertificate ? normalizePropertyEnergyCertificate(input.property.energyCertificate) : null;
+  if (hasEnergyCertificate && (!energyCertificate || energyCertificate.countryCode !== geography.countryCode || energyCertificate.sourceDocumentId)) {
+    return { persisted: false, reason: "Invalid property energy certificate; attach source documents after creating the property" };
+  }
   const title = cleanString(input.property.title);
   const city = cleanString(input.property.city) || cleanString(fields["location.ort"]);
   const postalCode = cleanString(input.property.postalCode) || cleanString(fields["location.plz"]);
   const street = cleanString(input.property.street) || cleanString(fields["location.strasse"]);
   const houseNumber = cleanString(fields["location.hausnummer"]);
   const address = cleanString(input.property.address) || [street, houseNumber, postalCode, city].filter(Boolean).join(" ");
-  const federalState = cleanString(input.property.region) || cleanString(fields["location.bundesland"]);
-  const region = normalizeRegion(federalState);
+  const federalState = geography.region;
+  const region = geography.region;
   const objectType = cleanString(input.property.objectType) || cleanString(fields["classification.objektart"]) || "Wohnung";
-  const areaSqm = toNumber(
-    input.property.areaSqm ??
-      fields["areas.wohnflaeche"] ??
-      fields["areas.nutzflaeche"] ??
-      fields["areas.gesamtflaeche"],
-    0,
-  );
+  const area = resolvePropertyAreaSqm(input.property);
+  if (!area.ok) return { persisted: false, reason: area.reason };
+  const areaSqm = area.value ?? 0;
   const priceCents = toPriceCents(input.property.price ?? fields["costs.kaufpreis"]);
   const projectId = nullableUuid(input.property.projectId);
   const sellerLeadId = nullableUuid(input.property.sellerLeadId);
@@ -212,6 +216,9 @@ async function createSellerListingRecordInTransaction(input: {
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
   const publicPriceCents = toNullablePriceCents(input.property.publicPrice ?? input.property.price ?? fields["costs.kaufpreis"]);
   const rentPriceCents = toNullablePriceCents(input.property.rentPrice ?? fields["costs.mietpreis_brutto"]);
+  const coreNumericState = { version: 1, areaSqm: area.value === null ? "unknown" : "known",
+    price: toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]) === null ? "unknown" : "known",
+    publicPrice: publicPriceCents === null ? "unknown" : "known", rentPrice: rentPriceCents === null ? "unknown" : "known" };
   const rentNetCents = toNullablePriceCents(input.property.rentNet);
   const monthlyCostsGrossCents = toNullablePriceCents(input.property.monthlyCostsGross);
   const purchaseAncillaryCostsCents = toNullablePriceCents(input.property.purchaseAncillaryCosts);
@@ -219,6 +226,9 @@ async function createSellerListingRecordInTransaction(input: {
   const portalMappingStatus = cleanString(input.property.portalMappingStatus) || "needs_review";
   const canonicalPayload = {
     source: "property_department",
+    coreNumericState,
+    geography,
+    ...(energyCertificate ? { energyCertificate } : {}),
     submittedByUserId: input.session.userId,
     base: {
       address,
@@ -237,6 +247,7 @@ async function createSellerListingRecordInTransaction(input: {
     },
     channelPriceVisibility,
     fieldValues: fields,
+    propertyDetails:input.property.propertyDetails,
   };
 
   if (!title || !address) {
@@ -462,7 +473,9 @@ async function updateSellerListingRecordInTransaction(input: {
 
   const monetaryError = validatePropertyMoney(input.property);
   if (monetaryError) return { persisted: false, reason: monetaryError };
-  const area = resolvePropertyAreaSqm(input.property);
+  const completeNumbers = Object.hasOwn(input.property, "expectedFullSnapshot");
+  const area = completeNumbers && Object.hasOwn(input.property, "areaSqm") && (input.property.areaSqm === null || input.property.areaSqm === "")
+    ? { ok: true as const, value: null } : resolvePropertyAreaSqm(input.property);
   if (!area.ok) return { persisted: false, reason: area.reason };
   const links = parsePropertyLinkInput(input.property);
   if (!links.ok) return { persisted: false, reason: links.reason };
@@ -486,9 +499,35 @@ async function updateSellerListingRecordInTransaction(input: {
     return { persisted: false, reason: "Invalid property relationship comparison snapshot" };
   }
   const hasAncillaryCalculation = Object.hasOwn(input.property, "purchaseAncillaryCalculation");
+  const hasGeography = Object.hasOwn(input.property, "geography");
+  const geography = hasGeography ? normalizePropertyGeography(input.property.geography) : null;
+  const hasExpectedGeography = Object.hasOwn(input.property, "expectedGeography");
+  const expectedGeography = input.property.expectedGeography === null ? null : normalizePropertyGeography(input.property.expectedGeography);
+  if (hasGeography && (!geography || !hasExpectedGeography || (input.property.expectedGeography !== null && !expectedGeography))) {
+    return { persisted: false, reason: "Invalid property geography or comparison snapshot" };
+  }
+  if (geography && Object.hasOwn(input.property, "region") && normalizePropertyRegion(input.property.region) !== geography.region) return { persisted: false, reason: "Invalid property region: geography and region must agree" };
+  const hasEnergyCertificate = Object.hasOwn(input.property, "energyCertificate");
+  const energyCertificate = hasEnergyCertificate ? normalizePropertyEnergyCertificate(input.property.energyCertificate) : null;
+  const expectedEnergyCertificate = input.property.expectedEnergyCertificate;
+  if (hasEnergyCertificate && (!energyCertificate || !Object.hasOwn(input.property, "expectedEnergyCertificate") ||
+      (expectedEnergyCertificate !== null && (!expectedEnergyCertificate || typeof expectedEnergyCertificate !== "object" || Array.isArray(expectedEnergyCertificate) || JSON.stringify(expectedEnergyCertificate).length > 12000)) ||
+      (geography && energyCertificate.countryCode !== geography.countryCode))) {
+    return { persisted: false, reason: "Invalid property energy certificate or comparison snapshot" };
+  }
+  const hasExpectedUsageType = Object.hasOwn(input.property, "expectedUsageType");
+  if (hasExpectedUsageType && (typeof input.property.expectedUsageType !== "string" || input.property.expectedUsageType.length > 100)) {
+    return { persisted: false, reason: "Invalid property use comparison snapshot" };
+  }
+  if (Object.hasOwn(input.property, "usageType") && !["", "residential", "commercial", "mixed", "investment"].includes(String(input.property.usageType))) {
+    return { persisted: false, reason: "Invalid property use" };
+  }
   const ancillaryCalculation = hasAncillaryCalculation ? normalizePurchaseAncillaryCalculation(input.property.purchaseAncillaryCalculation) : null;
   if (hasAncillaryCalculation && input.property.purchaseAncillaryCalculation !== null && !ancillaryCalculation) {
     return { persisted: false, reason: "Invalid purchase ancillary calculation" };
+  }
+  if (ancillaryCalculation && geography && geography.countryCode !== "AT") {
+    return { persisted: false, reason: "Invalid purchase ancillary jurisdiction for property country" };
   }
   const hasExpectedAncillaryCosts = Object.hasOwn(input.property, "expectedAncillaryCosts");
   const expectedAncillaryCosts = asPlainObject(input.property.expectedAncillaryCosts);
@@ -512,10 +551,38 @@ async function updateSellerListingRecordInTransaction(input: {
   const street = cleanString(input.property.street) || cleanString(fields["location.strasse"]);
   const houseNumber = cleanString(fields["location.hausnummer"]);
   const address = cleanString(input.property.address) || [street, houseNumber, postalCode, city].filter(Boolean).join(" ");
-  const federalState = cleanString(input.property.region) || cleanString(fields["location.bundesland"]);
+  const federalState = normalizePropertyRegion(geography?.region ?? (cleanString(input.property.region) || cleanString(fields["location.bundesland"])));
+  if (federalState.length > 200 || /[\u0000-\u001f<>]/.test(federalState)) return { persisted: false, reason: "Invalid property region" };
+  // Legacy callers may update only the old region field. Keep the current
+  // explicit country's other axes, but invalidate an AT inference whose sole
+  // evidence no longer exists. Never guess a new country from a foreign name.
+  const regionInvalidatesInference = `(not($49::jsonb ? 'geography') and nullif($12,'') is not null and canonical_payload->'geography'->>'source'='legacy_at_region' and $12<>all(array[${austriaPropertyRegions.map((region) => `'${region}'`).join(",")}]))`;
   const areaSqm = area.value;
   const priceCents = toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]);
+  const publicPriceCents = toNullablePriceCents(input.property.publicPrice);
+  const coreNumericStatePatch = {
+    version: 1,
+    ...(area.value !== null || completeNumbers && Object.hasOwn(input.property, "areaSqm") ? { areaSqm: area.value === null ? "unknown" : "known" } : {}),
+    ...(priceCents !== null || completeNumbers && Object.hasOwn(input.property, "price") ? { price: priceCents === null ? "unknown" : "known" } : {}),
+    ...(publicPriceCents !== null || completeNumbers && Object.hasOwn(input.property, "publicPrice") ? { publicPrice: publicPriceCents === null ? "unknown" : "known" } : {}),
+    ...(toNullablePriceCents(input.property.rentPrice) !== null || completeNumbers && Object.hasOwn(input.property, "rentPrice") ? { rentPrice: toNullablePriceCents(input.property.rentPrice) === null ? "unknown" : "known" } : {}),
+  };
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
+  const updatesGlobalVisibility = Object.hasOwn(input.property, "priceVisibility");
+  const updatesChannelVisibility = Object.hasOwn(input.property, "channelPriceVisibility");
+  const requestedVisibility = updatesGlobalVisibility ? normalizePriceVisibility(input.property.priceVisibility) : null;
+  const comparesPublicPrice = publicPriceCents !== null && !hasExpectedCore && !completeNumbers;
+  if (updatesGlobalVisibility || updatesChannelVisibility || comparesPublicPrice) {
+    const current = await withCrmRead(input.session, (tx, fresh) => loadPropertyPricePolicyRow(tx, fresh, propertyId, true));
+    const changesPolicy = (requestedVisibility !== null && requestedVisibility !== current.priceVisibility) ||
+      (updatesChannelVisibility && !samePropertySnapshot(channelPriceVisibility, current.channelPriceVisibility)) ||
+      (comparesPublicPrice && String(publicPriceCents) !== current.publicPriceCents);
+    // Full editing already checked its locked snapshot (including global policy
+    // and public price), and its field allowlist excludes channel-map writes.
+    if (changesPolicy && !completeNumbers && input.property.expectedPolicyRevision !== propertyPricePolicyRevision(input.session, propertyId, current)) {
+      return { persisted: false, reason: "Conflict: price policy changed or a fresh comparison is missing. Reload before saving." };
+    }
+  }
   const row = await queryOne<SellerListingRow>(
     `
       update seller_listings
@@ -529,17 +596,17 @@ async function updateSellerListingRecordInTransaction(input: {
         contact_user_id = case when $51::jsonb ? 'contactUserId' then $9::uuid else contact_user_id end,
         title = coalesce(nullif($10, ''), title),
         address = coalesce(nullif($11, ''), address),
-        region = coalesce(nullif($12, ''), region),
+        region = case when $49::jsonb ? 'geography' then $12 else coalesce(nullif($12, ''), region) end,
         object_type = coalesce(nullif($13, ''), object_type),
-        area_sqm = coalesce($14::numeric, area_sqm),
+        area_sqm = case when $49::jsonb->'coreNumericState'->>'areaSqm'='unknown' then 0 else coalesce($14::numeric, area_sqm) end,
         rooms = coalesce($15::numeric, rooms),
         year_built = coalesce($16::integer, year_built),
         market_value_cents = coalesce($17::bigint, market_value_cents),
-        target_price_cents = coalesce($18::bigint, target_price_cents),
+        target_price_cents = case when $49::jsonb->'coreNumericState'->>'price'='unknown' then 0 else coalesce($18::bigint, target_price_cents) end,
         expected_gross_yield = coalesce($19::numeric, expected_gross_yield),
         postal_code = coalesce(nullif($20, ''), postal_code),
         city = coalesce(nullif($21, ''), city),
-        federal_state = coalesce(nullif($22, ''), federal_state),
+        federal_state = case when $49::jsonb ? 'geography' then $22 else coalesce(nullif($22, ''), federal_state) end,
         street = coalesce(nullif($23, ''), street),
         object_number = coalesce(nullif($24, ''), object_number),
         internal_reference = coalesce(nullif($25, ''), internal_reference),
@@ -549,7 +616,7 @@ async function updateSellerListingRecordInTransaction(input: {
         contact_phone = coalesce(nullif($29, ''), contact_phone),
         contact_email = coalesce(nullif($30, ''), contact_email),
         marketing_type = coalesce(nullif($31, ''), marketing_type),
-        usage_type = coalesce(nullif($32, ''), usage_type),
+        usage_type = case when $58::boolean then nullif($32, '') else coalesce(nullif($32, ''), usage_type) end,
         sub_object_type = coalesce(nullif($33, ''), sub_object_type),
         sub_object_type_custom = coalesce(nullif($34, ''), sub_object_type_custom),
         available_from = coalesce($35::date, available_from),
@@ -571,7 +638,18 @@ async function updateSellerListingRecordInTransaction(input: {
             ((coalesce(canonical_payload, '{}'::jsonb) || ($49::jsonb - 'fieldValues')
               || case when $49::jsonb ? 'fieldValues' then jsonb_build_object(
                 'fieldValues', coalesce(canonical_payload -> 'fieldValues', '{}'::jsonb) || ($49::jsonb -> 'fieldValues')
-              ) else '{}'::jsonb end) - 'purchaseAncillaryCalculation')
+              ) else '{}'::jsonb end
+              || case when $49::jsonb ? 'coreNumericState' then jsonb_build_object('coreNumericState',
+                (jsonb_build_object('version',1,
+                  'areaSqm',case when area_sqm>0 then 'known' else 'unknown' end,
+                  'price',case when target_price_cents>0 then 'known' else 'unknown' end,
+                  'publicPrice',case when public_price_cents>0 then 'known' else 'unknown' end,
+                  'rentPrice',case when rent_price_cents>0 then 'known' else 'unknown' end)
+                  || case when jsonb_typeof(canonical_payload->'coreNumericState')='object' then canonical_payload->'coreNumericState' else '{}'::jsonb end
+                  || ($49::jsonb->'coreNumericState'))) else '{}'::jsonb end
+              || case when ${regionInvalidatesInference} then '{"geography":null}'::jsonb
+                when not($49::jsonb ? 'geography') and nullif($12,'') is not null and jsonb_typeof(canonical_payload->'geography')='object'
+                then jsonb_build_object('geography',(canonical_payload->'geography')||jsonb_build_object('region',$12::text)) else '{}'::jsonb end) - 'purchaseAncillaryCalculation')
               || case when ancillary_selected.calculation is not null then
                 jsonb_build_object('purchaseAncillaryCalculation', ancillary_selected.calculation)
                 when not ($52::jsonb ? 'calculation') and ancillary_previous.calculation is null
@@ -580,10 +658,14 @@ async function updateSellerListingRecordInTransaction(input: {
                 else '{}'::jsonb end
           from lateral (select ${existingAncillarySql} as calculation) ancillary_previous
           cross join lateral (select case
+            when ${regionInvalidatesInference} then null::jsonb
+            when coalesce($49::jsonb -> 'geography' ->> 'countryCode', canonical_payload -> 'geography' ->> 'countryCode', 'AT') <> 'AT' then null::jsonb
             when coalesce(nullif($31, ''), marketing_type, 'sale') not in ('sale', 'sale_or_rent') then null::jsonb
             when $52::jsonb ? 'calculation' then nullif($52::jsonb -> 'calculation', 'null'::jsonb)
             else ancillary_previous.calculation end as calculation) ancillary_selected
           cross join lateral (select case
+            when (${regionInvalidatesInference} or coalesce($49::jsonb -> 'geography' ->> 'countryCode', canonical_payload -> 'geography' ->> 'countryCode', 'AT') <> 'AT')
+              and ancillary_previous.calculation is not null and $52::jsonb ->> 'amountProvided' <> 'true' then null::bigint
             when coalesce(nullif($31, ''), marketing_type, 'sale') not in ('sale', 'sale_or_rent')
               and (ancillary_previous.calculation is not null or jsonb_typeof($52::jsonb -> 'calculation') = 'object')
               then null::bigint
@@ -596,6 +678,14 @@ async function updateSellerListingRecordInTransaction(input: {
         updated_at = now()
       where id = $1::uuid
         and workspace_id = $2
+        and (not $54::boolean or coalesce(canonical_payload -> 'geography', 'null'::jsonb) = $55::jsonb)
+        and (not $56::boolean or coalesce(canonical_payload -> 'energyCertificate', 'null'::jsonb) = $57::jsonb)
+        and (not $58::boolean or coalesce(usage_type, '') = $59::text)
+        and (not $56::boolean or $49::jsonb -> 'energyCertificate' ->> 'countryCode' = coalesce($49::jsonb -> 'geography' ->> 'countryCode', canonical_payload -> 'geography' ->> 'countryCode'))
+        and (nullif($49::jsonb -> 'energyCertificate' ->> 'sourceDocumentId', '') is null or exists (
+          select 1 from property_documents energy_document where energy_document.id = ($49::jsonb -> 'energyCertificate' ->> 'sourceDocumentId')::uuid
+            and energy_document.workspace_id = $2::uuid and energy_document.property_id = $1::uuid
+        ))
         and ($53::jsonb is null or jsonb_build_object(
           'amountCents', purchase_ancillary_costs_cents, 'calculation', ${existingAncillarySql}
         ) = $53::jsonb)
@@ -720,7 +810,7 @@ async function updateSellerListingRecordInTransaction(input: {
       relationships.values.contactUserId,
       title,
       address,
-      federalState ? normalizeRegion(federalState) : "",
+      federalState ? normalizePropertyRegion(federalState) : "",
       cleanString(input.property.objectType) || cleanString(fields["classification.objektart"]),
       areaSqm,
       optionalNumber(input.property.rooms ?? fields["rooms.zimmer"]),
@@ -746,9 +836,9 @@ async function updateSellerListingRecordInTransaction(input: {
       dateOnly(input.property.availableFrom ?? fields["construction.beziehbar_ab"]),
       cleanString(input.property.availableFromText),
       cleanString(input.property.availabilityNote),
-      Object.hasOwn(input.property, "priceVisibility") ? normalizePriceVisibility(input.property.priceVisibility) : null,
-      Object.hasOwn(input.property, "channelPriceVisibility") ? JSON.stringify(channelPriceVisibility) : null,
-      toNullablePriceCents(input.property.publicPrice),
+      requestedVisibility,
+      updatesChannelVisibility ? JSON.stringify(channelPriceVisibility) : null,
+      publicPriceCents,
       toNullablePriceCents(input.property.rentPrice ?? fields["costs.mietpreis_brutto"]),
       toNullablePriceCents(input.property.rentNet),
       toNullablePriceCents(input.property.monthlyCostsGross),
@@ -759,7 +849,11 @@ async function updateSellerListingRecordInTransaction(input: {
       cleanString(input.property.portalMappingStatus),
       cleanString(input.property.internalNotes) || cleanString(fields["notes.interne_notizen"]),
       JSON.stringify({
+        ...(Object.keys(coreNumericStatePatch).length > 1 ? { coreNumericState: coreNumericStatePatch } : {}),
+        ...(geography ? { geography } : {}),
+        ...(energyCertificate ? { energyCertificate } : {}),
         ...(Object.hasOwn(input.property, "fieldValues") ? { fieldValues: fields } : {}),
+        ...(Object.hasOwn(input.property, "propertyDetails") ? { propertyDetails:input.property.propertyDetails } : {}),
         updatedByUserId: input.session.userId,
         updatedFrom: "property_department",
       }),
@@ -767,10 +861,16 @@ async function updateSellerListingRecordInTransaction(input: {
       JSON.stringify({ ...relationships.supplied, ...(hasExpectedRelationships ? { _expectedRelationships: expectedRelationships } : {}) }),
       JSON.stringify(ancillaryInput),
       hasExpectedAncillaryCosts ? JSON.stringify({ amountCents: expectedAncillaryCosts.amountCents, calculation: expectedAncillaryCalculation }) : null,
+      hasGeography,
+      JSON.stringify(expectedGeography),
+      hasEnergyCertificate,
+      JSON.stringify(expectedEnergyCertificate ?? null),
+      hasExpectedUsageType,
+      hasExpectedUsageType ? input.property.expectedUsageType : null,
     ],
   );
 
-  if (!row) return { persisted: false, reason: hasExpectedCore || hasExpectedRelationships || hasExpectedAncillaryCosts
+  if (!row) return { persisted: false, reason: hasExpectedCore || hasExpectedRelationships || hasExpectedAncillaryCosts || hasGeography || hasEnergyCertificate || hasExpectedUsageType
     ? "Conflict: property was changed, moved or is no longer available; reload before editing again"
     : "Property not found or project/unit is outside this workspace, or relationship target is invalid" };
 
@@ -797,10 +897,25 @@ async function updateSellerListingRecordInTransaction(input: {
   return { data: listing, persisted: true };
 }
 
+async function lockPropertyFragments(session: AppSession, propertyId: string, requestedProject: unknown,
+  table: "property_text_blocks" | "property_cost_items", expected: unknown): Promise<RepositoryWriteResult<{projectId: string | null}>> {
+  const property = await queryOne<{projectId:string|null; allowed:boolean}>(`select project_id as "projectId",crm_project_access(workspace_id,project_id,true) as allowed from seller_listings where workspace_id=$1 and id=$2::uuid for update`, [session.workspaceId, propertyId]);
+  if (!property || !property.allowed) return {persisted:false,reason:"Forbidden property fragment scope"};
+  if (requestedProject && requestedProject !== property.projectId) return {persisted:false,reason:"Invalid property project"};
+  if (expected !== undefined) {
+    if (!Array.isArray(expected) || expected.length > 300 || expected.some(x=>!x || !isUuid(x.id) || typeof x.updatedAt !== "string" || !Number.isFinite(Date.parse(x.updatedAt)))) return {persisted:false,reason:"Invalid fragment comparison snapshot"};
+    const current = await queryOne<{items:{id:string;updatedAt:string}[]}>(`select coalesce(jsonb_agg(jsonb_build_object('id',id,'updatedAt',updated_at) order by id),'[]') as items from ${table} where workspace_id=$1 and property_id=$2::uuid and unit_id is null`,[session.workspaceId,propertyId]);
+    const normalize=(items:{id:string;updatedAt:string}[])=>JSON.stringify(items.map(x=>[x.id,new Date(x.updatedAt).toISOString()]).sort((a,b)=>a[0].localeCompare(b[0])));
+    if (normalize(expected)!==normalize(current?.items??[])) return {persisted:false,reason:"Conflict: property fragments changed; reload before saving"};
+  }
+  return {persisted:true,data:{projectId:property.projectId}};
+}
+
 async function savePropertyTextBlocksInTransaction(input: {
   projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
+  expectedSnapshot?: unknown;
   textBlocks: unknown;
 }): Promise<RepositoryWriteResult<{ count: number }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -810,9 +925,12 @@ async function savePropertyTextBlocksInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const locked = await lockPropertyFragments(input.session, propertyId, input.projectId, "property_text_blocks", input.expectedSnapshot);
+  if (!locked.persisted) return locked;
+  const projectId = locked.data.projectId;
   const textBlocks = asObjectArray(input.textBlocks);
-  await executeQuery("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid", [
+  if (!Array.isArray(input.textBlocks) || input.textBlocks.length !== textBlocks.length || textBlocks.some(block=>!(cleanString(block.textKey)||cleanString(block.key)) || typeof block.content!=="string" || (block.unitId!=null))) return {persisted:false,reason:"Invalid text block entries"};
+  await executeQuery("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid and unit_id is null", [
     input.session.workspaceId,
     propertyId,
   ]);
@@ -872,6 +990,7 @@ async function savePropertyTextBlocksInTransaction(input: {
     title: "Objekttexte gespeichert",
   });
 
+  await executeQuery("update seller_listings set updated_at=clock_timestamp() where workspace_id=$1 and id=$2::uuid", [input.session.workspaceId, propertyId]);
   return { data: { count }, persisted: true };
 }
 
@@ -880,6 +999,7 @@ async function savePropertyCostItemsInTransaction(input: {
   projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
+  expectedSnapshot?: unknown;
 }): Promise<RepositoryWriteResult<{ count: number }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "Database persistence is not configured" };
@@ -888,9 +1008,14 @@ async function savePropertyCostItemsInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const locked = await lockPropertyFragments(input.session, propertyId, input.projectId, "property_cost_items", input.expectedSnapshot);
+  if (!locked.persisted) return locked;
+  const projectId = locked.data.projectId;
   const costItems = asObjectArray(input.costItems);
-  await executeQuery("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid", [
+  if (!Array.isArray(input.costItems) || input.costItems.length !== costItems.length || costItems.some(item=>!(cleanString(item.costKey)||cleanString(item.key)) || !cleanString(item.label) || item.unitId!=null)) return {persisted:false,reason:"Invalid cost item entries"};
+  const invalidMoney = validateCostItemMoney(costItems);
+  if (invalidMoney) return { persisted: false, reason: invalidMoney };
+  await executeQuery("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid and unit_id is null", [
     input.session.workspaceId,
     propertyId,
   ]);
@@ -981,6 +1106,11 @@ async function savePropertyCostItemsInTransaction(input: {
     title: "Kostenmatrix gespeichert",
   });
 
+  const savedSource=await queryOne<{canonical:Record<string,unknown>}>("select canonical_payload as canonical from seller_listings where workspace_id=$1 and id=$2::uuid",[input.session.workspaceId,propertyId]);
+  const priorDetails=readPropertyDetails({canonicalPayload:savedSource?.canonical});
+  for(const id of Object.values(propertyDetailCostBindings)) priorDetails.values[id]=null;
+  const details=bindPropertyDetails(priorDetails,{costItems});
+  await executeQuery("update seller_listings set canonical_payload=coalesce(canonical_payload,'{}')||jsonb_build_object('propertyDetails',$3::jsonb,'fieldValues',$4::jsonb),updated_at=clock_timestamp() where workspace_id=$1 and id=$2::uuid", [input.session.workspaceId, propertyId,JSON.stringify(details),JSON.stringify(propertyDetailsLegacyFields(details))]);
   return { data: { count }, persisted: true };
 }
 
@@ -1280,8 +1410,95 @@ async function updatePropertyMediaOrderInTransaction(input: {
   return { data: { count: Number(row.count) }, persisted: true };
 }
 
+type PropertyPricePolicyRow = {
+  projectId: string | null;
+  priceVisibility: PropertyPriceVisibility;
+  channelPriceVisibility: unknown;
+  publicPriceCents: string | null;
+};
+
+async function loadPropertyPricePolicyRow(tx: TenantTransaction, session: AppSession, propertyId: string, lock: boolean): Promise<PropertyPricePolicyRow> {
+  const row = await tx.queryOne<PropertyPricePolicyRow>(`
+    select project_id as "projectId", price_visibility as "priceVisibility",
+      channel_price_visibility as "channelPriceVisibility", public_price_cents::text as "publicPriceCents"
+    from seller_listings where workspace_id=$1::uuid and id=$2::uuid ${lock ? "for update" : ""}
+  `, [session.workspaceId, propertyId]);
+  if (!row) throw new CrmCommandError("PROPERTY_NOT_FOUND", "Property not found", 404);
+  if (row.projectId) await assertProjectGrant(tx, session, row.projectId, true);
+  return row;
+}
+
+function propertyPricePolicyRevision(session: AppSession, propertyId: string, row: PropertyPricePolicyRow): string {
+  return crmPayloadDigest({ workspaceId: session.workspaceId, propertyId, ...row });
+}
+
+function propertyChannelPriceState(session: AppSession, propertyId: string, row: PropertyPricePolicyRow): PropertyChannelPriceState {
+  return {
+    propertyId, workspaceId: session.workspaceId, projectId: row.projectId, priceVisibility: row.priceVisibility,
+    revision: propertyPricePolicyRevision(session, propertyId, row),
+    channelPriceVisibility: { ...normalizePriceVisibilityMap(asPlainObject(row.channelPriceVisibility)), ...websitePriceVisibilityReadValues(row.channelPriceVisibility) },
+  };
+}
+
+function propertyChannelWriteCapability(session: AppSession): CrmCommandInput["capability"] {
+  const capabilities = ["workspace:operate", "pipeline:write", "settings:manage", "workspace:admin"] as const;
+  const capability = capabilities.find(value => hasProductCapability(session.productRole, value));
+  if (!session.permissions.includes("crm:write") || (!capability && session.role !== "owner" && session.role !== "admin")) {
+    throw new CrmCommandError("FORBIDDEN", "Property operating rights are required", 403);
+  }
+  return capability ?? "workspace:read";
+}
+
+export async function readPropertyChannelPriceState(session: AppSession, propertyId: string): Promise<PropertyChannelPriceState> {
+  return withCrmRead(session, async (tx, fresh) => {
+    propertyChannelWriteCapability(fresh);
+    return propertyChannelPriceState(fresh, propertyId, await loadPropertyPricePolicyRow(tx, fresh, propertyId, false));
+  });
+}
+
+export async function patchPropertyChannelPriceVisibility(input: {
+  session: AppSession;
+  propertyId: string;
+  expectedProjectId: string | null;
+  expectedPolicyRevision: string;
+  changes: PropertyChannelPriceEdits;
+  metadata: Pick<CrmCommandInput, "idempotencyKey" | "correlationId">;
+}) {
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const capability = propertyChannelWriteCapability(fresh);
+    // Check the actual locked scope before looking up any historical receipt.
+    const row = await loadPropertyPricePolicyRow(tx, fresh, input.propertyId, true);
+    if (row.projectId !== input.expectedProjectId) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Property project changed. Reload the price rules before saving.", 409);
+    return executeCrmCommand(fresh, {
+      ...input.metadata, operation: "property.channel_price_visibility.patch", capability,
+      projectId: row.projectId ?? undefined, resourceId: input.propertyId,
+      payload: { expectedPolicyRevision: input.expectedPolicyRevision, changes: input.changes },
+    }, async commandTx => {
+      if (propertyPricePolicyRevision(fresh, input.propertyId, row) !== input.expectedPolicyRevision) {
+        throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Price rules changed. Reload before saving.", 409);
+      }
+      const stored = row.channelPriceVisibility;
+      if (stored !== null && (typeof stored !== "object" || Array.isArray(stored))) {
+        throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Saved channel rules require review before saving.", 409);
+      }
+      const channels = { ...asPlainObject(stored), ...input.changes };
+      if (Object.hasOwn(input.changes, "Eigene Website")) delete channels.Website;
+      if (!samePropertySnapshot(channels, stored)) {
+        const saved = await commandTx.queryOne<IdRow>(`
+          update seller_listings set channel_price_visibility=$4::jsonb, updated_at=now()
+          where workspace_id=$1::uuid and id=$2::uuid and project_id is not distinct from $3::uuid returning id
+        `, [fresh.workspaceId, input.propertyId, row.projectId, JSON.stringify(channels)]);
+        if (!saved) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Price rules could not be confirmed.", 409);
+      }
+      await persistChannelPriceOverrides({ channelPriceVisibility: input.changes, projectId: row.projectId, propertyId: input.propertyId, session: fresh });
+      return propertyChannelPriceState(fresh, input.propertyId, { ...row, channelPriceVisibility: channels });
+    });
+  });
+}
+
 async function updatePropertyPriceVisibilityInTransaction(input: {
   channelPriceVisibility?: unknown;
+  expectedPolicyRevision?: unknown;
   priceVisibility?: unknown;
   projectId?: unknown;
   propertyId: unknown;
@@ -1295,9 +1512,23 @@ async function updatePropertyPriceVisibilityInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const current = await withCrmRead(input.session, (tx, fresh) => loadPropertyPricePolicyRow(tx, fresh, propertyId, true));
+  if (typeof input.projectId === "string" && input.projectId && nullableUuid(input.projectId) !== current.projectId) {
+    return { persisted: false, reason: "Conflict: property project changed. Reload before saving." };
+  }
+  const projectId = current.projectId;
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.channelPriceVisibility));
   const priceVisibility = normalizePriceVisibility(input.priceVisibility);
+  const publicPriceCents = toNullablePriceCents(input.publicPrice);
+  const changes = priceVisibility !== current.priceVisibility || !samePropertySnapshot(channelPriceVisibility, current.channelPriceVisibility) ||
+    (publicPriceCents !== null && String(publicPriceCents) !== current.publicPriceCents);
+  if (!changes) {
+    await persistChannelPriceOverrides({ channelPriceVisibility, projectId, propertyId, session: input.session });
+    return { persisted: true, data: { id: propertyId } };
+  }
+  if (input.expectedPolicyRevision !== propertyPricePolicyRevision(input.session, propertyId, current)) {
+    return { persisted: false, reason: "Conflict: price policy changed or a fresh comparison is missing. Reload before saving." };
+  }
   const row = await queryOne<IdRow>(
     `
       update seller_listings
@@ -1315,7 +1546,7 @@ async function updatePropertyPriceVisibilityInTransaction(input: {
       input.session.workspaceId,
       priceVisibility,
       JSON.stringify(channelPriceVisibility),
-      toNullablePriceCents(input.publicPrice),
+      publicPriceCents,
     ],
   );
 
@@ -1582,26 +1813,33 @@ async function savePropertyFragments(input: {
 }
 
 async function persistChannelPriceOverrides(input: {
-  channelPriceVisibility: Record<string, PropertyPriceVisibility>;
+  channelPriceVisibility: Readonly<Record<string, PropertyPriceVisibility>>;
   projectId?: string | null;
   propertyId: string;
   session: AppSession;
 }) {
+  const projectId = nullableUuid(input.projectId);
   for (const [channel, priceVisibility] of Object.entries(input.channelPriceVisibility)) {
-    const existing = await queryOne<IdRow>(
+    const rows = await queryRows<{ id: string; name: string; visibility: string | null }>(
       `
-        select id
+        select id, channel_name as name, price_visibility_override as visibility
         from property_channels
-        where workspace_id = $1
+        where workspace_id = $1::uuid
           and property_id = $2::uuid
           and channel_type = $3
-        limit 1
+          and project_id is not distinct from $4::uuid
+          and unit_id is null
+          and metadata->>'kind' is distinct from 'openimmo_offline_profile'
+        limit 2 for update
       `,
-      [input.session.workspaceId, input.propertyId, channel],
+      [input.session.workspaceId, input.propertyId, channel, projectId],
     );
+    if (rows.length > 1) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Duplicate property channel rules require review before saving.", 409);
+    const existing = rows[0];
 
     if (existing) {
-      await queryOne<IdRow>(
+      if (existing.name && existing.visibility === priceVisibility) continue;
+      const saved = await queryOne<IdRow>(
         `
           update property_channels
           set
@@ -1609,15 +1847,18 @@ async function persistChannelPriceOverrides(input: {
             channel_name = coalesce(nullif(channel_name, ''), $3),
             updated_at = now()
           where id = $1::uuid
-            and workspace_id = $2
+            and workspace_id = $2::uuid
+            and property_id = $5::uuid
+            and project_id is not distinct from $6::uuid
           returning id
         `,
-        [existing.id, input.session.workspaceId, channel, priceVisibility],
+        [existing.id, input.session.workspaceId, channel, priceVisibility, input.propertyId, projectId],
       );
+      if (!saved) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Property channel rules could not be confirmed.", 409);
       continue;
     }
 
-    await queryOne<IdRow>(
+    const saved = await queryOne<IdRow>(
       `
         insert into property_channels (
           workspace_id,
@@ -1634,13 +1875,14 @@ async function persistChannelPriceOverrides(input: {
       `,
       [
         input.session.workspaceId,
-        nullableUuid(input.projectId),
+        projectId,
         input.propertyId,
         channel,
         priceVisibility,
         JSON.stringify({ source: "property_department_price_visibility" }),
       ],
     );
+    if (!saved) throw new CrmCommandError("PRICE_POLICY_CONFLICT", "Property channel rules could not be confirmed.", 409);
   }
 }
 
@@ -1835,6 +2077,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
 
 function toSellerListing(row: SellerListingRow): SellerListing {
   return {
+    countryCode: readPropertyGeography({ canonicalPayload: row.canonicalPayload, region: row.region })?.countryCode,
     address: row.address,
     areaSqm: Number(row.areaSqm ?? 0),
     canonicalPayload: row.canonicalPayload ?? undefined,
@@ -1846,7 +2089,7 @@ function toSellerListing(row: SellerListingRow): SellerListing {
     availableFrom: toOptionalIso(row.availableFrom),
     availableFromText: row.availableFromText ?? undefined,
     availabilityNote: row.availabilityNote ?? undefined,
-    channelPriceVisibility: normalizePriceVisibilityMap(row.channelPriceVisibility ?? {}),
+    channelPriceVisibility: { ...normalizePriceVisibilityMap(row.channelPriceVisibility ?? {}), ...websitePriceVisibilityReadValues(row.channelPriceVisibility) },
     contactEmail: row.contactEmail ?? undefined,
     contactName: row.contactName ?? undefined,
     contactPhone: row.contactPhone ?? undefined,
@@ -2031,14 +2274,6 @@ function buildCostsSummary(property: Record<string, unknown>) {
   };
 }
 
-function normalizeRegion(value: string): SellerListing["region"] {
-  const normalized = value.replace("ö", "oe").replace("Ö", "Oe").replace("ä", "ae").replace("Ä", "Ae");
-  if (allowedRegions.has(normalized)) {
-    return value as SellerListing["region"];
-  }
-  return "Wien";
-}
-
 function nullableUuid(value: unknown) {
   const candidate = cleanString(value);
   return isUuid(candidate) ? candidate : null;
@@ -2088,12 +2323,67 @@ function toOptionalIso(value: string | Date | null) {
   return value ? toIso(value) : undefined;
 }
 
+export async function loadFullPropertyRecord(session:AppSession,propertyId:string){
+ return withCrmRead(session,async(tx,fresh)=>{
+  if(!isUuid(propertyId))throw new CrmCommandError("INVALID_INPUT","Invalid property identifier");
+  const row=await queryOne<SellerListingRow&{legacyRow:Record<string,unknown>}>(`select ${sellerListingReturningSql},to_jsonb(seller_listings) as "legacyRow" from seller_listings where id=$1::uuid and workspace_id=$2::uuid`,[propertyId,fresh.workspaceId]);
+  if(!row)throw new CrmCommandError("NOT_FOUND","Property not found",404);
+  if(row.projectId)await assertProjectGrant(tx,fresh,row.projectId);
+  const listing=toSellerListing(row),details=readPropertyDetails(listing,row.legacyRow);return {listing,details,snapshot:propertyFullSnapshot(listing,details)};
+ });
+}
+
+export async function updateFullPropertyRecord(input:{session:AppSession;propertyId:unknown;property:Record<string,unknown>}):Promise<RepositoryWriteResult<SellerListing>>{
+ return withCrmRead(input.session,async(tx,fresh)=>{
+  if(!fresh.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission required",403);
+  const id=normalizeEntityId(input.propertyId);if(!id)return{persisted:false,reason:"Invalid property identifier"};
+  if(Object.keys(input.property).some(key=>!(fullPropertyInputKeys as readonly string[]).includes(key))||!Object.hasOwn(input.property,"expectedFullSnapshot")||!Object.hasOwn(input.property,"propertyDetails"))return{persisted:false,reason:"Invalid complete property comparison snapshot"};
+  const row=await queryOne<SellerListingRow&{legacyRow:Record<string,unknown>}>(`select ${sellerListingReturningSql},to_jsonb(seller_listings) as "legacyRow" from seller_listings where id=$1::uuid and workspace_id=$2::uuid for update`,[id,fresh.workspaceId]);
+  if(!row)return{persisted:false,reason:"Property not found"};
+  if(row.projectId)await assertProjectGrant(tx,fresh,row.projectId,true);
+  const before=toSellerListing(row);
+  if(!samePropertySnapshot(propertyFullSnapshot(before,readPropertyDetails(before,row.legacyRow)),input.property.expectedFullSnapshot))return{persisted:false,reason:"Conflict: property content changed; reload before editing again"};
+  let property:Record<string,unknown>;
+  try{property={...input.property,...propertyDetailsInput(input.property)};}catch{return{persisted:false,reason:"Invalid typed property details"};}
+  const textKeys=["objectNumber","internalReference","postalCode","city","street","contactName","contactEmail","contactPhone","subObjectType","availableFromText","availabilityNote","internalNotes"];
+  if(textKeys.some(key=>typeof property[key]!=="string"||String(property[key]).length>(key==="internalNotes"?10000:1000)||/[\u0000-\u0008\u000b\u000c\u000e-\u001f<>]/.test(String(property[key])))||!["sale","rent","sale_or_rent"].includes(String(property.marketingType)))return{persisted:false,reason:"Invalid complete property input"};
+  if(property.contactEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(property.contactEmail)))return{persisted:false,reason:"Invalid property contact email"};
+  if(property.availableFrom&&!dateOnly(property.availableFrom))return{persisted:false,reason:"Invalid property availability date"};
+  for(const key of ["rentNet","rentPrice","monthlyCostsGross"])if(property[key]!==null&&parsePropertyEuroCents(property[key])===null)return{persisted:false,reason:"Invalid complete property money"};
+  for (const key of ["rooms", "yearBuilt"] as const) {
+    const value = property[key];
+    if (!Object.hasOwn(property, key) || value === null) continue;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < (key === "yearBuilt" ? 1 : 0) ||
+      (key === "yearBuilt" ? !Number.isInteger(value) || value > 9999 : value > 999.9 || !/^\d+(?:\.\d)?$/.test(String(value)))) return { persisted: false, reason: `Invalid complete property ${key}` };
+  }
+  const saved=await updateSellerListingRecordInTransaction({session:fresh,propertyId:id,property});
+  if(!saved.persisted)return saved;
+  // Full editing permits intentional clearing of optional fields. The legacy
+  // partial editor retains its previous coalesce semantics for old callers.
+  const optionalNumbers = {
+    ...(Object.hasOwn(property, "rooms") ? { rooms: property.rooms } : {}),
+    ...(Object.hasOwn(property, "yearBuilt") ? { yearBuilt: property.yearBuilt } : {}),
+    ...(Object.hasOwn(property, "publicPrice") ? { publicPriceCents: parsePropertyEuroCents(property.publicPrice) } : {}),
+  };
+  await tx.execute(`update seller_listings set object_number=$3,internal_reference=$4,postal_code=$5,city=$6,street=$7,contact_name=$8,contact_email=$9,contact_phone=$10,sub_object_type=$11,available_from=$12::date,available_from_text=$13,availability_note=$14,internal_notes=$15,marketing_type=$16,rent_net_cents=$17::bigint,rent_price_cents=$18::bigint,monthly_costs_gross_cents=$19::bigint,
+    rooms=case when $20::jsonb ? 'rooms' then ($20::jsonb->>'rooms')::numeric else rooms end,
+    year_built=case when $20::jsonb ? 'yearBuilt' then ($20::jsonb->>'yearBuilt')::integer else year_built end,
+    public_price_cents=case when $20::jsonb ? 'publicPriceCents' then ($20::jsonb->>'publicPriceCents')::bigint else public_price_cents end,
+    updated_at=now() where id=$1::uuid and workspace_id=$2::uuid`,[id,fresh.workspaceId,...textKeys.slice(0,9).map(key=>property[key]),property.availableFrom?dateOnly(property.availableFrom):null,property.availableFromText,property.availabilityNote,property.internalNotes,property.marketingType,...["rentNet","rentPrice","monthlyCostsGross"].map(key=>property[key]===null?null:parsePropertyEuroCents(property[key])), JSON.stringify(optionalNumbers)]);
+  const updated=toSellerListing((await queryOne<SellerListingRow>(`select ${sellerListingReturningSql} from seller_listings where id=$1::uuid and workspace_id=$2::uuid`,[id,fresh.workspaceId]))!);
+  await writeAuditLog({action:"property.full_updated",after:updated,before,entityId:id,entityType:"seller_listing",projectId:row.projectId??undefined,session:fresh});
+  return{persisted:true,data:updated};
+ });
+}
+
 export async function createSellerListingRecord(input:Parameters<typeof createSellerListingRecordInTransaction>[0]):ReturnType<typeof createSellerListingRecordInTransaction>{
  if(!canPersist())return createSellerListingRecordInTransaction(input);
  return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return createSellerListingRecordInTransaction({...input,session})});
 }
 
 export async function updateSellerListingRecord(input:Parameters<typeof updateSellerListingRecordInTransaction>[0]):ReturnType<typeof updateSellerListingRecordInTransaction>{
+ if(Object.hasOwn(input.property,"expectedFullSnapshot"))return updateFullPropertyRecord(input);
+ if(Object.hasOwn(input.property,"propertyDetails")||Object.hasOwn(input.property,"fieldValues"))return{persisted:false,reason:"Invalid complete property comparison snapshot"};
  if(!canPersist())return updateSellerListingRecordInTransaction(input);
  return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return updateSellerListingRecordInTransaction({...input,session})});
 }

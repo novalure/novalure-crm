@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "shared-behavior-migration-contract-v1",
+  "rolloutMode": "MANUAL_EXACT_REVISION_ONLY",
+  "sourcePr115Revision": "c64d26dfc8f7257cd831ff25c97f940ec2bd1e02",
+  "predecessor": {
+    "version": "114_customer_workspace_provisioning",
+    "normalizedSqlSha256": "6c42ba6c8541c8b03c2d0600dfad495527b0106259267bb6316d2285e4319994"
+  },
+  "steps": [
+    {
+      "version": "115_shared_behavior_foundation",
+      "number": 115,
+      "path": "migrations/115_shared_behavior_foundation.sql",
+      "stagedPath": "migrations/staged/shared_behavior_foundation.sql",
+      "requiredPredecessor": "114_customer_workspace_provisioning",
+      "rawSourceSha256": "3e00721474c52707bafde0675879aa0a347046b813fc7de73c9a1a8f70a00cf9",
+      "normalizedSqlSha256": "3e00721474c52707bafde0675879aa0a347046b813fc7de73c9a1a8f70a00cf9"
+    },
+    {
+      "version": "116_shared_behavior_package2",
+      "number": 116,
+      "path": "migrations/116_shared_behavior_package2.sql",
+      "stagedPath": "migrations/staged/shared_behavior_package2.sql",
+      "requiredPredecessor": "115_shared_behavior_foundation",
+      "rawSourceSha256": "0f73b7b79cee3585a61cb134714b1d2094d9d178c54576fba6381f387e023bd9",
+      "normalizedSqlSha256": "0f73b7b79cee3585a61cb134714b1d2094d9d178c54576fba6381f387e023bd9"
+    },
+    {
+      "version": "117_shared_behavior_package3",
+      "number": 117,
+      "path": "migrations/117_shared_behavior_package3.sql",
+      "stagedPath": "migrations/staged/shared_behavior_package3.sql",
+      "requiredPredecessor": "116_shared_behavior_package2",
+      "rawSourceSha256": "24f7baf8acee246cf3ef7e4a951e0d087a10247f448b499ae96558f5b8fa162d",
+      "normalizedSqlSha256": "24f7baf8acee246cf3ef7e4a951e0d087a10247f448b499ae96558f5b8fa162d"
+    },
+    {
+      "version": "118_shared_behavior_personal_runtime",
+      "number": 118,
+      "path": "migrations/118_shared_behavior_personal_runtime.sql",
+      "stagedPath": "migrations/staged/shared_behavior_personal_runtime.sql",
+      "requiredPredecessor": "117_shared_behavior_package3",
+      "rawSourceSha256": "30fdebf0b386a751342867afc1db931c8970e6d26df8cd1d55214590d1974484",
+      "normalizedSqlSha256": "30fdebf0b386a751342867afc1db931c8970e6d26df8cd1d55214590d1974484"
+    }
+  ],
+  "actualSchemaQa": {
+    "project": "weathered-term-98273025",
+    "branch": "br-lucky-heart-alrm9dlw",
+    "database": "package3_schema114_20261027",
+    "sourceProject": "misty-cloud-70835427",
+    "sourceBranch": "br-snowy-fog-aldx77v8",
+    "archiveSha256": "d375879d19ccb08237dada45bc6b1a84770c13ab00a4599eaac2c7dc8e8d8656",
+    "scope": "actual operator-owned public schema, all object ACLs and owner defaults; two provider future DefaultACL items separately conserved"
+  },
+  "productionApplied": false,
+  "workloadBindingsSeeded": false,
+  "publisherLoginActivated": false,
+  "schedulesChanged": false
+}

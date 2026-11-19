@@ -1,0 +1,7 @@
+
+C:\Projects\novalure-crm-history-scope-fix-20261105\src\components\crm-workspace.tsx
+  3169:6  warning  React Hook useCallback has an unnecessary dependency: 'activeWorkspace.id'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+
+✖ 1 problem (0 errors, 1 warning)
+
+ESLint found too many warnings (maximum: 0).

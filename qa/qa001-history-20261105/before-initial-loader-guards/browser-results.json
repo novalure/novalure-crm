@@ -1,0 +1,1501 @@
+{
+  "capturedAt": "2026-11-04T23:25:27.802Z",
+  "localOnly": true,
+  "syntheticHttp": true,
+  "actualCrmWorkspace": true,
+  "actualBrowserHistoryTraversal": true,
+  "realWorkspaceNavigationComponents": true,
+  "testObserverReadOnlyStateAndExistingHandlers": true,
+  "unrelatedChildPanelsStubbed": true,
+  "nextPrimitivesStubbed": true,
+  "databaseIntegration": false,
+  "authorizationIntegration": false,
+  "liveTest": false,
+  "fixtureContext": {
+    "sessionProductRole": "platform_admin",
+    "operatingModel": "novalure_internal",
+    "allWorkspacesSynthetic": true,
+    "serverAuthorizationStubbed": true
+  },
+  "baseline": false,
+  "baselineRevision": "94838b983df9cfe61d8367d5f2e1ca316bfb8184",
+  "harnessSha256": "ed371c9897dda50ea061cce30c5acbe58d974d1d7eb31c00c4fb533db496728a",
+  "testedHead": "94838b983df9cfe61d8367d5f2e1ca316bfb8184",
+  "sourceHashNormalization": "CRLF to LF",
+  "sourceHashes": {
+    "src/components/crm-workspace.tsx": "3157eeed3ad210cc028fb19da50896b9c76f7c9b172573a38c3e39d6a44f6d49",
+    "src/lib/crm-core-request-guard.ts": "1567e96d815f77545f33832a32aa1c02361af11970647fc5e6479a6a864aaf97"
+  },
+  "totals": {
+    "cases": 107,
+    "passed": 107,
+    "failed": 0
+  },
+  "results": [
+    {
+      "name": "direct B/project deep link and actual reload retain workspace, project and properties",
+      "status": "PASS",
+      "durationMs": 932,
+      "requests": [
+        {
+          "scenario": "direct B/project deep link and actual reload retain workspace, project and properties",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "direct B/project deep link and actual reload retain workspace, project and properties",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "A to B to real Back to real Forward restores dataset and project without new history entries",
+      "status": "PASS",
+      "durationMs": 697,
+      "requests": [
+        {
+          "scenario": "A to B to real Back to real Forward restores dataset and project without new history entries",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "A to B to real Back to real Forward restores dataset and project without new history entries",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "A to B to real Back to real Forward restores dataset and project without new history entries",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "explicit All Projects survives project history Back Forward and reload",
+      "status": "PASS",
+      "durationMs": 616,
+      "requests": []
+    },
+    {
+      "name": "section history preserves explicit nested buyer-leads and properties",
+      "status": "PASS",
+      "durationMs": 522,
+      "requests": [
+        {
+          "scenario": "section history preserves explicit nested buyer-leads and properties",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "delayed B switch is cancelled when user selects already active A",
+      "status": "PASS",
+      "durationMs": 547,
+      "requests": [
+        {
+          "scenario": "delayed B switch is cancelled when user selects already active A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": "SYNTHETIC stale B after return to A",
+          "status": 200
+        },
+        {
+          "scenario": "delayed B switch is cancelled when user selects already active A",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "local project selection cancels pending B and late B cannot replace explicit All in A",
+      "status": "PASS",
+      "durationMs": 502,
+      "requests": [
+        {
+          "scenario": "local project selection cancels pending B and late B cannot replace explicit All in A",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": "SYNTHETIC stale B after local project selection",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "Back A request delayed then Forward B cannot commit late A or grow history",
+      "status": "PASS",
+      "durationMs": 647,
+      "requests": [
+        {
+          "scenario": "Back A request delayed then Forward B cannot commit late A or grow history",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "Back A request delayed then Forward B cannot commit late A or grow history",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": "SYNTHETIC stale history A",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "unknown workspace direct link blocks business scope without adopting foreign data",
+      "status": "PASS",
+      "durationMs": 266,
+      "requests": []
+    },
+    {
+      "name": "known target revoked by core 403 remains blocked and URL is not rewritten to a false success",
+      "status": "PASS",
+      "durationMs": 581,
+      "requests": [
+        {
+          "scenario": "known target revoked by core 403 remains blocked and URL is not rewritten to a false success",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 403
+        }
+      ]
+    },
+    {
+      "name": "pending B response cannot commit after real Forward to absent workspace",
+      "status": "PASS",
+      "durationMs": 668,
+      "requests": [
+        {
+          "scenario": "pending B response cannot commit after real Forward to absent workspace",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": "SYNTHETIC stale B after absent target",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "wrong activeWorkspaceId in core 200 cannot be adopted as requested B",
+      "status": "PASS",
+      "durationMs": 317,
+      "requests": [
+        {
+          "scenario": "wrong activeWorkspaceId in core 200 cannot be adopted as requested B",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "foreign project ID is invalid and never falls back to first project",
+      "status": "PASS",
+      "durationMs": 286,
+      "requests": []
+    },
+    {
+      "name": "authorized B core 200 with revoked project filtered out blocks the requested project without fallback",
+      "status": "PASS",
+      "durationMs": 413,
+      "requests": [
+        {
+          "scenario": "authorized B core 200 with revoked project filtered out blocks the requested project without fallback",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "legacy camelCase #objectsMandates restores its allowed section",
+      "status": "PASS",
+      "durationMs": 268,
+      "requests": []
+    },
+    {
+      "name": "#billing never renders old-workspace panel while target pending or revoked",
+      "status": "PASS",
+      "durationMs": 569,
+      "requests": [
+        {
+          "scenario": "#billing never renders old-workspace panel while target pending or revoked",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 403
+        }
+      ]
+    },
+    {
+      "name": "#billing never renders panel for unknown-workspace direct URL",
+      "status": "PASS",
+      "durationMs": 288,
+      "requests": []
+    },
+    {
+      "name": "#ai-billing-admin never renders old-workspace panel while target pending or revoked",
+      "status": "PASS",
+      "durationMs": 587,
+      "requests": [
+        {
+          "scenario": "#ai-billing-admin never renders old-workspace panel while target pending or revoked",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 403
+        }
+      ]
+    },
+    {
+      "name": "#ai-billing-admin never renders panel for unknown-workspace direct URL",
+      "status": "PASS",
+      "durationMs": 307,
+      "requests": []
+    },
+    {
+      "name": "#ai-assistant never renders old-workspace panel while target pending or revoked",
+      "status": "PASS",
+      "durationMs": 543,
+      "requests": [
+        {
+          "scenario": "#ai-assistant never renders old-workspace panel while target pending or revoked",
+          "workspaceId": "44444444-4444-4444-8444-444444444444",
+          "marker": null,
+          "status": 403
+        }
+      ]
+    },
+    {
+      "name": "#ai-assistant never renders panel for unknown-workspace direct URL",
+      "status": "PASS",
+      "durationMs": 315,
+      "requests": []
+    },
+    {
+      "name": "canonical hash #marketing restores allowed section marketing",
+      "status": "PASS",
+      "durationMs": 273,
+      "requests": [],
+      "hash": "marketing",
+      "expectedSection": "marketing",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #analysis restores allowed section analysis",
+      "status": "PASS",
+      "durationMs": 300,
+      "requests": [
+        {
+          "scenario": "canonical hash #analysis restores allowed section analysis",
+          "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "analysis",
+      "expectedSection": "analysis",
+      "profile": "novalureStudio",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #analytics restores allowed section analytics",
+      "status": "PASS",
+      "durationMs": 268,
+      "requests": [],
+      "hash": "analytics",
+      "expectedSection": "analytics",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #settings restores allowed section settings",
+      "status": "PASS",
+      "durationMs": 317,
+      "requests": [],
+      "hash": "settings",
+      "expectedSection": "settings",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #bots restores allowed section bots",
+      "status": "PASS",
+      "durationMs": 282,
+      "requests": [],
+      "hash": "bots",
+      "expectedSection": "bots",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #meetings restores allowed section calendar",
+      "status": "PASS",
+      "durationMs": 219,
+      "requests": [],
+      "hash": "meetings",
+      "expectedSection": "calendar",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #managed-service restores allowed section managedService",
+      "status": "PASS",
+      "durationMs": 281,
+      "requests": [
+        {
+          "scenario": "canonical hash #managed-service restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "canonical hash #managed-service restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "managed-service",
+      "expectedSection": "managedService",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #leadInbox restores allowed section leadInbox",
+      "status": "PASS",
+      "durationMs": 265,
+      "requests": [],
+      "hash": "leadInbox",
+      "expectedSection": "leadInbox",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #objects-mandates restores allowed section objectsMandates",
+      "status": "PASS",
+      "durationMs": 234,
+      "requests": [],
+      "hash": "objects-mandates",
+      "expectedSection": "objectsMandates",
+      "profile": "realEstateBroker",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #contacts restores allowed section contacts",
+      "status": "PASS",
+      "durationMs": 251,
+      "requests": [],
+      "hash": "contacts",
+      "expectedSection": "contacts",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #communication restores allowed section communication",
+      "status": "PASS",
+      "durationMs": 249,
+      "requests": [],
+      "hash": "communication",
+      "expectedSection": "communication",
+      "profile": "realEstateBroker",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #customer-access restores allowed section customerAccess",
+      "status": "PASS",
+      "durationMs": 250,
+      "requests": [],
+      "hash": "customer-access",
+      "expectedSection": "customerAccess",
+      "profile": "management",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #customer-success restores allowed section customerSuccess",
+      "status": "PASS",
+      "durationMs": 249,
+      "requests": [],
+      "hash": "customer-success",
+      "expectedSection": "customerSuccess",
+      "profile": "novalureServiceOps",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #dashboard restores allowed section dashboard",
+      "status": "PASS",
+      "durationMs": 250,
+      "requests": [],
+      "hash": "dashboard",
+      "expectedSection": "dashboard",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #daily-queue restores allowed section dailyQueue",
+      "status": "PASS",
+      "durationMs": 249,
+      "requests": [],
+      "hash": "daily-queue",
+      "expectedSection": "dailyQueue",
+      "profile": "sales",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #data-hygiene restores allowed section dataHygiene",
+      "status": "PASS",
+      "durationMs": 236,
+      "requests": [],
+      "hash": "data-hygiene",
+      "expectedSection": "dataHygiene",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #onboarding restores allowed section onboarding",
+      "status": "PASS",
+      "durationMs": 265,
+      "requests": [],
+      "hash": "onboarding",
+      "expectedSection": "onboarding",
+      "profile": "realEstateBroker",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #pipelines restores allowed section pipelines",
+      "status": "PASS",
+      "durationMs": 328,
+      "requests": [],
+      "hash": "pipelines",
+      "expectedSection": "pipelines",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #forms restores allowed section forms",
+      "status": "PASS",
+      "durationMs": 307,
+      "requests": [],
+      "hash": "forms",
+      "expectedSection": "forms",
+      "profile": "marketing",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #tasks restores allowed section tasks",
+      "status": "PASS",
+      "durationMs": 385,
+      "requests": [],
+      "hash": "tasks",
+      "expectedSection": "tasks",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #funnels restores allowed section funnels",
+      "status": "PASS",
+      "durationMs": 298,
+      "requests": [],
+      "hash": "funnels",
+      "expectedSection": "funnels",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #knowledge restores allowed section knowledge",
+      "status": "PASS",
+      "durationMs": 364,
+      "requests": [],
+      "hash": "knowledge",
+      "expectedSection": "knowledge",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #newsletter restores allowed section newsletter",
+      "status": "PASS",
+      "durationMs": 308,
+      "requests": [],
+      "hash": "newsletter",
+      "expectedSection": "newsletter",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #sequences restores allowed section sequences",
+      "status": "PASS",
+      "durationMs": 335,
+      "requests": [],
+      "hash": "sequences",
+      "expectedSection": "sequences",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #properties restores allowed section properties",
+      "status": "PASS",
+      "durationMs": 344,
+      "requests": [],
+      "hash": "properties",
+      "expectedSection": "properties",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #projects restores allowed section projects",
+      "status": "PASS",
+      "durationMs": 263,
+      "requests": [],
+      "hash": "projects",
+      "expectedSection": "projects",
+      "profile": "novalureInternal",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #reservations restores allowed section reservations",
+      "status": "PASS",
+      "durationMs": 251,
+      "requests": [],
+      "hash": "reservations",
+      "expectedSection": "reservations",
+      "profile": "realEstateBroker",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "canonical hash #units restores allowed section units",
+      "status": "PASS",
+      "durationMs": 302,
+      "requests": [
+        {
+          "scenario": "canonical hash #units restores allowed section units",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "units",
+      "expectedSection": "units",
+      "profile": "realEstateBroker",
+      "group": "canonical-sections"
+    },
+    {
+      "name": "explicit nested hash #marketing restores marketing",
+      "status": "PASS",
+      "durationMs": 274,
+      "requests": [],
+      "hash": "marketing",
+      "expectedEntry": "marketing",
+      "profile": "novalureInternal",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #audit-log restores auditLog",
+      "status": "PASS",
+      "durationMs": 380,
+      "requests": [],
+      "hash": "audit-log",
+      "expectedEntry": "auditLog",
+      "profile": "managedService",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #billing restores billing",
+      "status": "PASS",
+      "durationMs": 277,
+      "requests": [],
+      "hash": "billing",
+      "expectedEntry": "billing",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #ai-billing-admin restores aiBillingAdmin",
+      "status": "PASS",
+      "durationMs": 284,
+      "requests": [],
+      "hash": "ai-billing-admin",
+      "expectedEntry": "aiBillingAdmin",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #ai-assistant restores aiAssistant",
+      "status": "PASS",
+      "durationMs": 284,
+      "requests": [],
+      "hash": "ai-assistant",
+      "expectedEntry": "aiAssistant",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #buyer-leads restores buyerLeads",
+      "status": "PASS",
+      "durationMs": 301,
+      "requests": [],
+      "hash": "buyer-leads",
+      "expectedEntry": "buyerLeads",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #buyer-profiles restores buyerProfiles",
+      "status": "PASS",
+      "durationMs": 264,
+      "requests": [],
+      "hash": "buyer-profiles",
+      "expectedEntry": "buyerProfiles",
+      "profile": "propertyDeveloper",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #daily-queue restores dailyQueue",
+      "status": "PASS",
+      "durationMs": 233,
+      "requests": [],
+      "hash": "daily-queue",
+      "expectedEntry": "dailyQueue",
+      "profile": "sales",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #leads restores developerLeads",
+      "status": "PASS",
+      "durationMs": 266,
+      "requests": [],
+      "hash": "leads",
+      "expectedEntry": "developerLeads",
+      "profile": "propertyDeveloper",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #governance-compliance restores governanceCompliance",
+      "status": "PASS",
+      "durationMs": 241,
+      "requests": [],
+      "hash": "governance-compliance",
+      "expectedEntry": "governanceCompliance",
+      "profile": "novalureAdmin",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #objects-mandates restores objectsMandates",
+      "status": "PASS",
+      "durationMs": 275,
+      "requests": [],
+      "hash": "objects-mandates",
+      "expectedEntry": "objectsMandates",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #properties restores properties",
+      "status": "PASS",
+      "durationMs": 250,
+      "requests": [],
+      "hash": "properties",
+      "expectedEntry": "properties",
+      "profile": "novalureInternal",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #analytics restores projectAnalytics",
+      "status": "PASS",
+      "durationMs": 251,
+      "requests": [],
+      "hash": "analytics",
+      "expectedEntry": "projectAnalytics",
+      "profile": "propertyDeveloper",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #projects restores projectOverview",
+      "status": "PASS",
+      "durationMs": 266,
+      "requests": [],
+      "hash": "projects",
+      "expectedEntry": "projectOverview",
+      "profile": "propertyDeveloper",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #projects restores projects",
+      "status": "PASS",
+      "durationMs": 233,
+      "requests": [],
+      "hash": "projects",
+      "expectedEntry": "projects",
+      "profile": "novalureInternal",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #reservations restores reservations",
+      "status": "PASS",
+      "durationMs": 252,
+      "requests": [],
+      "hash": "reservations",
+      "expectedEntry": "reservations",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #seller-leads restores sellerLeads",
+      "status": "PASS",
+      "durationMs": 306,
+      "requests": [],
+      "hash": "seller-leads",
+      "expectedEntry": "sellerLeads",
+      "profile": "realEstateBroker",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #settings restores settings",
+      "status": "PASS",
+      "durationMs": 360,
+      "requests": [],
+      "hash": "settings",
+      "expectedEntry": "settings",
+      "profile": "novalureInternal",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #system-releases restores systemReleases",
+      "status": "PASS",
+      "durationMs": 344,
+      "requests": [],
+      "hash": "system-releases",
+      "expectedEntry": "systemReleases",
+      "profile": "novalureAdmin",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #website-enquiries restores studioWebsiteEnquiries",
+      "status": "PASS",
+      "durationMs": 326,
+      "requests": [
+        {
+          "scenario": "explicit nested hash #website-enquiries restores studioWebsiteEnquiries",
+          "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "website-enquiries",
+      "expectedEntry": "studioWebsiteEnquiries",
+      "profile": "novalureStudio",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #studio-knowledge-ai restores studioKnowledgeAi",
+      "status": "PASS",
+      "durationMs": 337,
+      "requests": [
+        {
+          "scenario": "explicit nested hash #studio-knowledge-ai restores studioKnowledgeAi",
+          "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "studio-knowledge-ai",
+      "expectedEntry": "studioKnowledgeAi",
+      "profile": "novalureStudio",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "explicit nested hash #workspaces restores workspaces",
+      "status": "PASS",
+      "durationMs": 383,
+      "requests": [
+        {
+          "scenario": "explicit nested hash #workspaces restores workspaces",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "explicit nested hash #workspaces restores workspaces",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "workspaces",
+      "expectedEntry": "workspaces",
+      "profile": "novalureInternal",
+      "group": "explicit-nested-hashes"
+    },
+    {
+      "name": "legacy alias #analyse restores allowed section analysis",
+      "status": "PASS",
+      "durationMs": 362,
+      "requests": [
+        {
+          "scenario": "legacy alias #analyse restores allowed section analysis",
+          "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "analyse",
+      "expectedSection": "analysis",
+      "profile": "novalureStudio",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #analyse-bot restores allowed section analysis",
+      "status": "PASS",
+      "durationMs": 324,
+      "requests": [
+        {
+          "scenario": "legacy alias #analyse-bot restores allowed section analysis",
+          "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "analyse-bot",
+      "expectedSection": "analysis",
+      "profile": "novalureStudio",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #calendar restores allowed section calendar",
+      "status": "PASS",
+      "durationMs": 318,
+      "requests": [],
+      "hash": "calendar",
+      "expectedSection": "calendar",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #customer restores allowed section customerAccess",
+      "status": "PASS",
+      "durationMs": 310,
+      "requests": [],
+      "hash": "customer",
+      "expectedSection": "customerAccess",
+      "profile": "management",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #customeraccess restores allowed section customerAccess",
+      "status": "PASS",
+      "durationMs": 282,
+      "requests": [],
+      "hash": "customeraccess",
+      "expectedSection": "customerAccess",
+      "profile": "management",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #datahygiene restores allowed section dataHygiene",
+      "status": "PASS",
+      "durationMs": 266,
+      "requests": [],
+      "hash": "datahygiene",
+      "expectedSection": "dataHygiene",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #datenhygiene restores allowed section dataHygiene",
+      "status": "PASS",
+      "durationMs": 234,
+      "requests": [],
+      "hash": "datenhygiene",
+      "expectedSection": "dataHygiene",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #daten-hygiene restores allowed section dataHygiene",
+      "status": "PASS",
+      "durationMs": 252,
+      "requests": [],
+      "hash": "daten-hygiene",
+      "expectedSection": "dataHygiene",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #dailyqueue restores allowed section dailyQueue",
+      "status": "PASS",
+      "durationMs": 264,
+      "requests": [],
+      "hash": "dailyqueue",
+      "expectedSection": "dailyQueue",
+      "profile": "sales",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #einstellungen restores allowed section settings",
+      "status": "PASS",
+      "durationMs": 249,
+      "requests": [],
+      "hash": "einstellungen",
+      "expectedSection": "settings",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #form restores allowed section forms",
+      "status": "PASS",
+      "durationMs": 251,
+      "requests": [],
+      "hash": "form",
+      "expectedSection": "forms",
+      "profile": "marketing",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #formulare restores allowed section forms",
+      "status": "PASS",
+      "durationMs": 266,
+      "requests": [],
+      "hash": "formulare",
+      "expectedSection": "forms",
+      "profile": "marketing",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #formular restores allowed section forms",
+      "status": "PASS",
+      "durationMs": 252,
+      "requests": [],
+      "hash": "formular",
+      "expectedSection": "forms",
+      "profile": "marketing",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #kalender restores allowed section calendar",
+      "status": "PASS",
+      "durationMs": 249,
+      "requests": [],
+      "hash": "kalender",
+      "expectedSection": "calendar",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #customers restores allowed section managedService",
+      "status": "PASS",
+      "durationMs": 299,
+      "requests": [
+        {
+          "scenario": "legacy alias #customers restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "legacy alias #customers restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "customers",
+      "expectedSection": "managedService",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #hygiene restores allowed section dataHygiene",
+      "status": "PASS",
+      "durationMs": 271,
+      "requests": [],
+      "hash": "hygiene",
+      "expectedSection": "dataHygiene",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #kunden restores allowed section managedService",
+      "status": "PASS",
+      "durationMs": 266,
+      "requests": [
+        {
+          "scenario": "legacy alias #kunden restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "legacy alias #kunden restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "kunden",
+      "expectedSection": "managedService",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #leadinbox restores allowed section leadInbox",
+      "status": "PASS",
+      "durationMs": 271,
+      "requests": [],
+      "hash": "leadinbox",
+      "expectedSection": "leadInbox",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #lead-inbox restores allowed section leadInbox",
+      "status": "PASS",
+      "durationMs": 310,
+      "requests": [],
+      "hash": "lead-inbox",
+      "expectedSection": "leadInbox",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #jarvis restores allowed section analysis",
+      "status": "PASS",
+      "durationMs": 301,
+      "requests": [
+        {
+          "scenario": "legacy alias #jarvis restores allowed section analysis",
+          "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "jarvis",
+      "expectedSection": "analysis",
+      "profile": "novalureStudio",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #meeting restores allowed section calendar",
+      "status": "PASS",
+      "durationMs": 247,
+      "requests": [],
+      "hash": "meeting",
+      "expectedSection": "calendar",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #mandates restores allowed section objectsMandates",
+      "status": "PASS",
+      "durationMs": 267,
+      "requests": [],
+      "hash": "mandates",
+      "expectedSection": "objectsMandates",
+      "profile": "realEstateBroker",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #mandate restores allowed section objectsMandates",
+      "status": "PASS",
+      "durationMs": 285,
+      "requests": [],
+      "hash": "mandate",
+      "expectedSection": "objectsMandates",
+      "profile": "realEstateBroker",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #immobilien restores allowed section properties",
+      "status": "PASS",
+      "durationMs": 305,
+      "requests": [],
+      "hash": "immobilien",
+      "expectedSection": "properties",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #property restores allowed section properties",
+      "status": "PASS",
+      "durationMs": 259,
+      "requests": [],
+      "hash": "property",
+      "expectedSection": "properties",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #real-estate restores allowed section properties",
+      "status": "PASS",
+      "durationMs": 267,
+      "requests": [],
+      "hash": "real-estate",
+      "expectedSection": "properties",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #realestate restores allowed section properties",
+      "status": "PASS",
+      "durationMs": 249,
+      "requests": [],
+      "hash": "realestate",
+      "expectedSection": "properties",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #objects restores allowed section objectsMandates",
+      "status": "PASS",
+      "durationMs": 283,
+      "requests": [],
+      "hash": "objects",
+      "expectedSection": "objectsMandates",
+      "profile": "realEstateBroker",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #managedservice restores allowed section managedService",
+      "status": "PASS",
+      "durationMs": 282,
+      "requests": [
+        {
+          "scenario": "legacy alias #managedservice restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        },
+        {
+          "scenario": "legacy alias #managedservice restores allowed section managedService",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "managedservice",
+      "expectedSection": "managedService",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #customersuccess restores allowed section customerSuccess",
+      "status": "PASS",
+      "durationMs": 285,
+      "requests": [],
+      "hash": "customersuccess",
+      "expectedSection": "customerSuccess",
+      "profile": "novalureServiceOps",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #overview restores allowed section dashboard",
+      "status": "PASS",
+      "durationMs": 299,
+      "requests": [],
+      "hash": "overview",
+      "expectedSection": "dashboard",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #projekte restores allowed section projects",
+      "status": "PASS",
+      "durationMs": 267,
+      "requests": [],
+      "hash": "projekte",
+      "expectedSection": "projects",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #reservierungen restores allowed section reservations",
+      "status": "PASS",
+      "durationMs": 294,
+      "requests": [],
+      "hash": "reservierungen",
+      "expectedSection": "reservations",
+      "profile": "realEstateBroker",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #einheiten restores allowed section units",
+      "status": "PASS",
+      "durationMs": 327,
+      "requests": [
+        {
+          "scenario": "legacy alias #einheiten restores allowed section units",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "einheiten",
+      "expectedSection": "units",
+      "profile": "realEstateBroker",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #inventory restores allowed section units",
+      "status": "PASS",
+      "durationMs": 313,
+      "requests": [
+        {
+          "scenario": "legacy alias #inventory restores allowed section units",
+          "workspaceId": "11111111-1111-4111-8111-111111111111",
+          "marker": null,
+          "status": 200
+        }
+      ],
+      "hash": "inventory",
+      "expectedSection": "units",
+      "profile": "realEstateBroker",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #sequence restores allowed section sequences",
+      "status": "PASS",
+      "durationMs": 284,
+      "requests": [],
+      "hash": "sequence",
+      "expectedSection": "sequences",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    },
+    {
+      "name": "legacy alias #sequenzen restores allowed section sequences",
+      "status": "PASS",
+      "durationMs": 282,
+      "requests": [],
+      "hash": "sequenzen",
+      "expectedSection": "sequences",
+      "profile": "novalureInternal",
+      "group": "legacy-aliases"
+    }
+  ],
+  "browserErrors": [],
+  "blockedNetwork": [],
+  "requests": [
+    {
+      "scenario": "direct B/project deep link and actual reload retain workspace, project and properties",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "direct B/project deep link and actual reload retain workspace, project and properties",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "A to B to real Back to real Forward restores dataset and project without new history entries",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "A to B to real Back to real Forward restores dataset and project without new history entries",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "A to B to real Back to real Forward restores dataset and project without new history entries",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "section history preserves explicit nested buyer-leads and properties",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "delayed B switch is cancelled when user selects already active A",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": "SYNTHETIC stale B after return to A",
+      "status": 200
+    },
+    {
+      "scenario": "delayed B switch is cancelled when user selects already active A",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "local project selection cancels pending B and late B cannot replace explicit All in A",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": "SYNTHETIC stale B after local project selection",
+      "status": 200
+    },
+    {
+      "scenario": "Back A request delayed then Forward B cannot commit late A or grow history",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "Back A request delayed then Forward B cannot commit late A or grow history",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": "SYNTHETIC stale history A",
+      "status": 200
+    },
+    {
+      "scenario": "known target revoked by core 403 remains blocked and URL is not rewritten to a false success",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 403
+    },
+    {
+      "scenario": "pending B response cannot commit after real Forward to absent workspace",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": "SYNTHETIC stale B after absent target",
+      "status": 200
+    },
+    {
+      "scenario": "wrong activeWorkspaceId in core 200 cannot be adopted as requested B",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "authorized B core 200 with revoked project filtered out blocks the requested project without fallback",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "#billing never renders old-workspace panel while target pending or revoked",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 403
+    },
+    {
+      "scenario": "#ai-billing-admin never renders old-workspace panel while target pending or revoked",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 403
+    },
+    {
+      "scenario": "#ai-assistant never renders old-workspace panel while target pending or revoked",
+      "workspaceId": "44444444-4444-4444-8444-444444444444",
+      "marker": null,
+      "status": 403
+    },
+    {
+      "scenario": "canonical hash #analysis restores allowed section analysis",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "canonical hash #managed-service restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "canonical hash #managed-service restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "canonical hash #units restores allowed section units",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "explicit nested hash #website-enquiries restores studioWebsiteEnquiries",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "explicit nested hash #studio-knowledge-ai restores studioKnowledgeAi",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "explicit nested hash #workspaces restores workspaces",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "explicit nested hash #workspaces restores workspaces",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #analyse restores allowed section analysis",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #analyse-bot restores allowed section analysis",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #customers restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #customers restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #kunden restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #kunden restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #jarvis restores allowed section analysis",
+      "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #managedservice restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #managedservice restores allowed section managedService",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #einheiten restores allowed section units",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    },
+    {
+      "scenario": "legacy alias #inventory restores allowed section units",
+      "workspaceId": "11111111-1111-4111-8111-111111111111",
+      "marker": null,
+      "status": 200
+    }
+  ]
+}

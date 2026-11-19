@@ -39,9 +39,16 @@ scripts/studio-enquiry-tests.ts:generic-api-key:178
 # The current test generates its fixture key randomly; retain every scanner rule
 # and allow only this exact historical finding, which cannot authenticate anywhere.
 d9734433397d9a831ceb735091e5117995fa884c:scripts/booking-channel-adapter-tests.ts:generic-api-key:69
-
 # Independently reviewed historical false positive: public website routing ID.
 # publicSiteKey is embedded in data-site-key and selects an integration only;
 # Studio runtime access still requires a signed JWT and separate capability.
 # Keep every rule and both history/tree scans; no current-tree exemption.
 485850509fbbeb327d1228761774456c9d049003:src/lib/shared-behavior/studio-auth.ts:generic-api-key:13
+# Public central-identity UUID, freshly verified as the existing selected operator.
+# This UUID is an authorization selector, never a credential; current metadata
+# uses an unambiguous name. Only this historical exact finding is excluded.
+bd8d3920d74798d7458094e6ebfbd6e544306e00:config/operator-recovery-recipient.json:generic-api-key:6
+# Independently reviewed historical false positive: documented SHA-256 of the
+# unchanged personal mailbox access-policy source, not a credential. Current
+# evidence uses {path, sha256}; retain all rules and history/current-tree scans.
+4e0c8fb3885fc322768fbb39b7fddb1f2e822c76:artifacts/personal-mail-acl-replay/evidence.json:generic-api-key:12

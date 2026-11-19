@@ -1,0 +1,73 @@
+{
+  "syntheticHttp": true,
+  "databaseIntegration": false,
+  "baseline": false,
+  "baselineRevision": null,
+  "results": [
+    {
+      "name": "decimal area, fractional rooms and cents reach the selected workspace and project",
+      "status": "PASS"
+    },
+    {
+      "name": "negative values and fractions of a cent do not submit",
+      "status": "PASS"
+    },
+    {
+      "name": "uncertain response freezes inputs and replays the exact request and identifiers",
+      "status": "PASS"
+    },
+    {
+      "name": "malformed success, wrong workspace and server failure retain the original attempt",
+      "status": "PASS"
+    },
+    {
+      "name": "terminal validation allows correction and uses a fresh intent",
+      "status": "PASS"
+    },
+    {
+      "name": "a double submit during a delayed response sends one command",
+      "status": "PASS"
+    },
+    {
+      "name": "refresh failure after confirmed persistence cannot replay the completed command",
+      "status": "PASS"
+    },
+    {
+      "name": "an unconfirmed create cannot be retargeted to another workspace",
+      "status": "PASS"
+    },
+    {
+      "name": "unsaved inputs survive actual section unmount without an automatic request",
+      "status": "PASS"
+    },
+    {
+      "name": "delayed create across unmount and remount keeps one command and freezes the remounted form",
+      "status": "PASS"
+    },
+    {
+      "name": "a lost response across section unmount requires explicit exact replay",
+      "status": "PASS"
+    },
+    {
+      "name": "success while the section is unmounted clears only its submitted draft",
+      "status": "PASS"
+    },
+    {
+      "name": "late workspace A success preserves newer workspace B inputs and its own pending command",
+      "status": "PASS"
+    },
+    {
+      "name": "late previous-user completion cannot clear current-user inputs",
+      "status": "PASS"
+    },
+    {
+      "name": "project and signed-in identity changes isolate inputs and cannot replay a previous identity",
+      "status": "PASS"
+    },
+    {
+      "name": "overview distinguishes explicit scalar area zero from unknown without certifying an unconfirmed unit price",
+      "status": "PASS"
+    }
+  ],
+  "browserErrors": []
+}
