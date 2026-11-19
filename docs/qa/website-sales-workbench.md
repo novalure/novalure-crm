@@ -1,6 +1,6 @@
 # Website Sales workbench
 
-The internal CRM now exposes Website Sales at `/?projectId=<authorized-project>#website-sales`.
+The internal CRM now exposes Website Sales at `/?workspaceId=<authorized-workspace>&projectId=<authorized-project>#website-sales`.
 It follows the November masterplan's Ireland-first website-sales slice and uses
 the existing CRM records and offer service. It changes no Teams or A1 runtime.
 
