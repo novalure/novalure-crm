@@ -67,9 +67,13 @@ test("real CORS upload requires this page's prepare grant, exact provider API an
   const blocked = [], failures = [], providerEvents = [], received = [], sockets = new Set();
   let origin;
   const provider = https.createServer({ key: await readFile(key), cert: await readFile(cert) }, (request, response) => {
-    received.push({ method: request.method, appToken: request.headers["x-vercel-trusted-oidc-idp-token"], toolbar: request.headers["x-vercel-skip-toolbar"], store: request.headers["x-vercel-blob-store-id"] });
+    received.push({ method: request.method, url: request.url, requestedMethod: request.headers["access-control-request-method"],
+      authorizationPresent: request.headers.authorization !== undefined, appToken: request.headers["x-vercel-trusted-oidc-idp-token"],
+      toolbar: request.headers["x-vercel-skip-toolbar"], store: request.headers["x-vercel-blob-store-id"] });
     response.setHeader("access-control-allow-origin", origin);
     response.setHeader("access-control-allow-methods", "PUT");
+    // Exercise the wrong-store check without relying on the browser preflight cache.
+    response.setHeader("access-control-max-age", "0");
     response.setHeader("access-control-allow-headers", "authorization,content-type,x-vercel-blob-store-id,x-vercel-trusted-oidc-idp-token,x-vercel-skip-toolbar");
     if (request.method === "OPTIONS") { response.writeHead(204); response.end(); return; }
     let body = ""; request.on("data", chunk => { body += chunk; });
@@ -127,13 +131,23 @@ test("real CORS upload requires this page's prepare grant, exact provider API an
     await page.evaluate(async () => { await (await fetch("/api/knowledge-center/documents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "prepare" }) })).json(); });
     assert.equal(await send(authorized), 200);
     assert(received.some(row => row.method === "OPTIONS")); assert(received.some(row => row.method === "PUT" && row.store === "SYNTHETIC"));
-    assert(received.every(row => row.appToken === undefined && row.toolbar === undefined));
     const accepted = received.length;
     for (const options of [{ method: "GET" }, { apiPath: "/api/blob/other" }, { query: new URLSearchParams({ pathname: authorized, extra: "denied" }).toString() },
-      { query: new URLSearchParams([["pathname", authorized], ["pathname", authorized]]).toString() }, { store: "FOREIGN" }]) assert.equal(await send(authorized, options), "BLOCKED");
+      { query: new URLSearchParams([["pathname", authorized], ["pathname", authorized]]).toString() }]) assert.equal(await send(authorized, options), "BLOCKED");
     assert.equal(await send(unregistered), "BLOCKED");
     assert.equal(received.length, accepted);
+
+    // A preflight declares header names. The guard learns the store value on the PUT.
+    const beforeWrongStoreBlocks = blocked.length;
+    assert.equal(await send(authorized, { store: "FOREIGN" }), "BLOCKED");
+    assert.deepEqual(received.slice(accepted), [{
+      method: "OPTIONS", url: "/api/blob/?" + new URLSearchParams({ pathname: authorized }), requestedMethod: "PUT",
+      authorizationPresent: false, appToken: undefined, toolbar: undefined, store: undefined,
+    }]);
+    assert.deepEqual(blocked.slice(beforeWrongStoreBlocks), [{ method: "PUT", origin: "https://vercel.com" }]);
+
     assert.equal(await send(authorized, { body: "SYNTHETIC redirect" }), "BLOCKED");
+    assert(received.every(row => row.appToken === undefined && row.toolbar === undefined));
     assert.equal(unexpectedRedirects, 0);
     assert(providerEvents.every(row => row.pageLocalPrepareGrant === true && row.endpoint === "/api/blob/" && row.sourceStoreId === "store_SYNTHETIC"));
     assert(blocked.some(row => row.reason === "page-local upload grant unavailable"));
