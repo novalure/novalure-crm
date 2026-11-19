@@ -94,25 +94,54 @@ async function privateOutput(filename, { newDirectory = false } = {}) {
   return output;
 }
 
+export function createCrmCandidatePgConfig({ descriptor, database, runtimePassword, migrationPassword, ca }) {
+  const runtime = runtimePassword !== undefined;
+  check(ca.length > 0, 'CRM_QA_VERIFIED_TLS_ROOTS_REQUIRED');
+  check(['postgres', 'neondb', 'crm_candidate_provider_baseline'].includes(database) && (!runtime || database === 'neondb'),
+    'CRM_QA_CONNECT_DATABASE_SCOPE');
+  return { host: runtime ? descriptor.pooledHost : descriptor.directHost, port: 5432,
+    database, user: runtime ? 'novalure_app' : 'neondb_owner', password: runtime ? runtimePassword : migrationPassword,
+    enableChannelBinding: true, sslnegotiation: 'postgres',
+    ssl: { rejectUnauthorized: true, ca, servername: runtime ? descriptor.pooledHost : descriptor.directHost }, connectionTimeoutMillis: 15_000,
+    query_timeout: 960_000,
+    // PgBouncer rejects these startup GUCs. The direct migration connection
+    // retains them; pooled verification applies the same limits transaction-locally.
+    ...(!runtime ? { options: '-c statement_timeout=840000 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=60000' } : {}),
+    application_name: 'crm-candidate-original-qa-bootstrap', client_encoding: 'UTF8' };
+}
+
 function connector(descriptor, url) {
   const ca = [...getCACertificates('default'), ...getCACertificates('system')].join('\n');
-  check(ca.length > 0, 'CRM_QA_VERIFIED_TLS_ROOTS_REQUIRED');
   return async (database, runtimePassword) => {
-    const runtime = runtimePassword !== undefined;
-    check(['postgres', 'neondb', 'crm_candidate_provider_baseline'].includes(database) && (!runtime || database === 'neondb'),
-      'CRM_QA_CONNECT_DATABASE_SCOPE');
-    const client = new pg.Client({ host: runtime ? descriptor.pooledHost : descriptor.directHost, port: 5432,
-      database, user: runtime ? 'novalure_app' : 'neondb_owner', password: runtime ? runtimePassword : decodeURIComponent(url.password),
-      enableChannelBinding: true, sslnegotiation: 'postgres',
-      ssl: { rejectUnauthorized: true, ca, servername: runtime ? descriptor.pooledHost : descriptor.directHost }, connectionTimeoutMillis: 15_000,
-      query_timeout: 960_000, options: '-c statement_timeout=840000 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=60000',
-      application_name: 'crm-candidate-original-qa-bootstrap', client_encoding: 'UTF8' });
+    const client = new pg.Client(createCrmCandidatePgConfig({ descriptor, database, runtimePassword,
+      migrationPassword: decodeURIComponent(url.password), ca }));
+    if (runtimePassword !== undefined) check(!['options', 'statement_timeout', 'lock_timeout', 'idle_in_transaction_session_timeout']
+      .some(key => Object.hasOwn(client.getStartupConf(), key)), 'CRM_QA_POOLED_STARTUP_PARAMETERS_FORBIDDEN');
     client.on('error', () => {}); // Query/end outcomes, never raw provider errors, determine the journal status.
     try { await client.connect(); return client; } catch (error) { await client.end(); throw error; }
   };
 }
 
-async function verifyRuntime(runtime, owner, descriptor) {
+export async function verifyRuntime(runtime, owner, descriptor) {
+  try {
+    await runtime.query('begin read only');
+    await runtime.query('set local statement_timeout=840000');
+    await runtime.query('set local lock_timeout=5000');
+    await runtime.query('set local idle_in_transaction_session_timeout=60000');
+    const settings = (await runtime.query(`select current_setting('transaction_read_only')='on' as read_only,
+      current_setting('statement_timeout')::interval=interval '840000 milliseconds' as statement_timeout_ok,
+      current_setting('lock_timeout')::interval=interval '5000 milliseconds' as lock_timeout_ok,
+      current_setting('idle_in_transaction_session_timeout')::interval=interval '60000 milliseconds' as idle_timeout_ok`)).rows[0];
+    check(settings?.read_only === true && settings.statement_timeout_ok === true &&
+      settings.lock_timeout_ok === true && settings.idle_timeout_ok === true, 'CRM_QA_RUNTIME_TRANSACTION_LIMITS');
+    return await verifyRuntimeReadback(runtime, owner, descriptor);
+  } finally {
+    try { await runtime.query('rollback'); }
+    catch { throw new Error('CRM_QA_RUNTIME_ROLLBACK_UNCONFIRMED'); }
+  }
+}
+
+async function verifyRuntimeReadback(runtime, owner, descriptor) {
   const runtimeIdentity = await assertConnectedDatabaseTarget({ client: runtime, connectionMode: 'pooled', minimumServerVersionNum: 170000,
     purpose: 'CRM candidate restricted runtime', target: 'test', env: crmCandidateMetadataEnvironment(descriptor) });
   const ownerIdentity = await assertConnectedDatabaseTarget({ client: owner, connectionMode: 'direct', minimumServerVersionNum: 170000,

@@ -5,12 +5,15 @@ import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import pg from 'pg';
+import { serialize } from 'pg-protocol';
 import { createCrmCandidateManifest, crmCandidateOriginalSources, crmCandidateTarget, digest, sha256,
   validateCrmCandidateDescriptor, validateCrmCandidatePlan } from './lib/crm-candidate-fresh-manifest.mjs';
-import { loadCrmCandidateCommittedManifest, validateCrmCandidatePrivateInput } from './crm-candidate-fresh-bootstrap.mjs';
+import { createCrmCandidatePgConfig, loadCrmCandidateCommittedManifest, validateCrmCandidatePrivateInput, verifyRuntime } from './crm-candidate-fresh-bootstrap.mjs';
 import { planCrmCandidateOfficialStep, crmCandidateMetadataEnvironment } from './lib/crm-candidate-official-migrations.mjs';
 import { assertCrmCandidateProviderRoles, assertCrmCandidateSessions, completeCrmCandidateFreshSchema, crmCandidateQueries } from './lib/crm-candidate-fresh-bootstrap.mjs';
 import { catalogQueries } from './lib/studio-stage3-qa-fingerprint.mjs';
+import { startLocalSalesDb } from './lib/local-sales-db.mjs';
 
 const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const now = Date.now();
@@ -28,6 +31,136 @@ const files = crmCandidateOriginalSources.forward.map(row => ({ path: row.path, 
 const staged = crmCandidateOriginalSources.staged087.map(row => ({ path: row.path, content: readFileSync(row.path, 'utf8') }));
 const manifest = createCrmCandidateManifest(files, staged, headCommit);
 const descriptorDigest = digest(descriptor);
+
+test('actual pg startup serialization excludes pooled timeout GUCs while preserving direct owner options and TLS', () => {
+  const base = { descriptor, database: 'neondb', migrationPassword: 'PUBLIC_SYNTHETIC_PASSWORD', ca: 'PUBLIC_SYNTHETIC_CA' };
+  const runtime = createCrmCandidatePgConfig({ ...base, runtimePassword: 'a'.repeat(80) });
+  const owner = createCrmCandidatePgConfig(base);
+  const startup = config => {
+    // Real installed pg8 startup construction and the exact pg-protocol writer;
+    // no connection, socket, authentication, provider response or SQL is mocked.
+    const bytes = serialize.startup(new pg.Client(config).getStartupConf());
+    assert.equal(bytes.readInt32BE(0), bytes.length);
+    assert.equal(bytes.readInt32BE(4), 196608);
+    const strings = bytes.subarray(8).toString('utf8').split('\0');
+    assert.deepEqual(strings.splice(-2), ['', '']);
+    assert.equal(strings.length % 2, 0);
+    return Object.fromEntries(Array.from({ length: strings.length / 2 }, (_, index) => [strings[index * 2], strings[index * 2 + 1]]));
+  };
+  const runtimePacket = startup(runtime), ownerPacket = startup(owner);
+  for (const key of ['options', 'statement_timeout', 'lock_timeout', 'idle_in_transaction_session_timeout']) {
+    assert.equal(Object.hasOwn(runtime, key), false);
+    assert.equal(Object.hasOwn(runtimePacket, key), false);
+  }
+  assert.deepEqual(runtimePacket, { user: 'novalure_app', database: 'neondb',
+    application_name: 'crm-candidate-original-qa-bootstrap', client_encoding: 'UTF8' });
+  assert.equal(ownerPacket.options, '-c statement_timeout=840000 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=60000');
+  assert.equal(ownerPacket.user, 'neondb_owner');
+  for (const [config, host] of [[runtime, descriptor.pooledHost], [owner, descriptor.directHost]]) {
+    assert.equal(config.host, host); assert.equal(config.ssl.servername, host);
+    assert.equal(config.ssl.rejectUnauthorized, true); assert.equal(config.ssl.ca, base.ca);
+    assert.equal(config.enableChannelBinding, true); assert.equal(config.sslnegotiation, 'postgres');
+    assert.equal(config.query_timeout, 960_000); assert.equal(config.connectionTimeoutMillis, 15_000);
+  }
+  assert.throws(() => createCrmCandidatePgConfig({ ...base, database: 'postgres', runtimePassword: 'a'.repeat(80) }), /CONNECT_DATABASE_SCOPE/);
+  assert.throws(() => createCrmCandidatePgConfig({ ...base, database: 'foreign' }), /CONNECT_DATABASE_SCOPE/);
+});
+
+function runtimeVerificationFixture({ failAt, settings = {}, posture = true, physical = 1, visible = 0,
+  retired = true, runtimeProject = descriptor.projectId, rollbackFailure = false } = {}) {
+  const calls = []; let active = false;
+  const identity = roleName => ({ projectId: descriptor.projectId, branchId: descriptor.branchId,
+    databaseName: 'neondb', roleName, serverVersionNum: '180007' });
+  const client = role => ({ async query(query) {
+    const text = typeof query === 'string' ? query : query.text;
+    let step;
+    if (text === 'begin read only' || text === 'rollback' || text.startsWith('set local ')) step = text;
+    else if (text.includes("current_setting('transaction_read_only')")) step = 'settings';
+    else if (text.includes("current_setting('neon.project_id'")) step = role + '_identity';
+    else if (text.includes('from pg_roles r join pg_authid')) step = 'retired';
+    else if (text.includes('not r.rolsuper')) step = 'posture';
+    else if (text.includes('count(*)::int from forms')) step = role === 'runtime' ? 'visible' : 'physical';
+    else assert.fail('Unexpected runtime-verification statement');
+    calls.push({ role, step });
+    if (step === failAt) throw new Error('SYNTHETIC_VERIFICATION_STEP_FAILED');
+    if (step === 'begin read only') { assert.equal(active, false); active = true; return { rows: [] }; }
+    if (step === 'rollback') { active = false; if (rollbackFailure) throw new Error('SYNTHETIC_ROLLBACK_FAILED'); return { rows: [] }; }
+    assert.equal(active, true, 'Every verification read belongs to the same open runtime transaction');
+    if (step.startsWith('set local ')) { assert.equal(role, 'runtime'); return { rows: [] }; }
+    if (step === 'settings') return { rows: [{ read_only: true, statement_timeout_ok: true, lock_timeout_ok: true, idle_timeout_ok: true, ...settings }] };
+    if (step === 'runtime_identity') return { rows: [{ ...identity('novalure_app'), projectId: runtimeProject }] };
+    if (step === 'owner_identity') return { rows: [identity('neondb_owner')] };
+    if (step === 'posture') return { rows: [{ safe: posture }] };
+    if (step === 'physical') return { rows: [{ forms: physical, integrations: physical }] };
+    if (step === 'visible') return { rows: [{ forms: visible, integrations: visible }] };
+    if (step === 'retired') return { rows: [{ safe: retired }] };
+  } });
+  return { runtime: client('runtime'), owner: client('owner'), calls, active: () => active };
+}
+
+test('runtime identity, all existing posture/default-deny/retired checks share one bounded read-only transaction', async () => {
+  const f = runtimeVerificationFixture();
+  const result = await verifyRuntime(f.runtime, f.owner, descriptor);
+  assert.equal(result.safeRoleSeparation, true); assert.equal(result.noContextDefaultDeny, true);
+  assert.equal(result.retiredLookupNoLoginPasswordNull, true);
+  assert.equal(result.runtimeIdentity.roleName, 'novalure_app'); assert.equal(result.ownerIdentity.roleName, 'neondb_owner');
+  assert.deepEqual(f.calls.map(row => row.step), ['begin read only', 'set local statement_timeout=840000',
+    'set local lock_timeout=5000', 'set local idle_in_transaction_session_timeout=60000', 'settings',
+    'runtime_identity', 'owner_identity', 'posture', 'physical', 'visible', 'retired', 'rollback']);
+  assert.equal(f.calls[0].role, 'runtime'); assert.equal(f.calls.at(-1).role, 'runtime');
+  assert.equal(f.active(), false);
+});
+
+test('every failed runtime verification phase attempts rollback; no failed rollback can return a verified result', async () => {
+  for (const failAt of ['begin read only', 'set local statement_timeout=840000', 'set local lock_timeout=5000',
+    'set local idle_in_transaction_session_timeout=60000', 'settings', 'runtime_identity', 'owner_identity',
+    'posture', 'physical', 'visible', 'retired']) {
+    const f = runtimeVerificationFixture({ failAt });
+    await assert.rejects(verifyRuntime(f.runtime, f.owner, descriptor), /SYNTHETIC_VERIFICATION_STEP_FAILED/);
+    assert.deepEqual(f.calls.at(-1), { role: 'runtime', step: 'rollback' });
+    assert.equal(f.active(), false);
+  }
+  const f = runtimeVerificationFixture({ rollbackFailure: true });
+  await assert.rejects(verifyRuntime(f.runtime, f.owner, descriptor), /CRM_QA_RUNTIME_ROLLBACK_UNCONFIRMED/);
+});
+
+test('read-only/timeout readback and each pre-existing runtime authority guard still reject drift', async () => {
+  for (const field of ['read_only', 'statement_timeout_ok', 'lock_timeout_ok', 'idle_timeout_ok']) {
+    for (const value of [false, undefined, 'true']) {
+      const f = runtimeVerificationFixture({ settings: { [field]: value } });
+      await assert.rejects(verifyRuntime(f.runtime, f.owner, descriptor), /CRM_QA_RUNTIME_TRANSACTION_LIMITS/);
+      assert.equal(f.calls.some(row => row.step === 'runtime_identity'), false);
+      assert.equal(f.calls.at(-1).step, 'rollback');
+    }
+  }
+  for (const [change, code] of [[{ runtimeProject: 'foreign' }, /fingerprint/], [{ posture: false }, /FULL_RUNTIME_POSTURE/],
+    [{ physical: 0 }, /GATEWAY_ORIGINAL_SEEDS_MISSING/], [{ visible: 1 }, /RUNTIME_DEFAULT_DENY/], [{ retired: false }, /LOOKUP_NOT_RETIRED/]]) {
+    const f = runtimeVerificationFixture(change);
+    await assert.rejects(verifyRuntime(f.runtime, f.owner, descriptor), code);
+    assert.equal(f.calls.at(-1).step, 'rollback'); assert.equal(f.active(), false);
+  }
+});
+
+test('real loopback PostgreSQL applies and rolls back the exact runtime GUCs when native Neon identity is absent', async () => {
+  const db = await startLocalSalesDb();
+  const client = await db.pool.connect();
+  const snapshot = () => client.query(`select current_setting('transaction_read_only') read_only,
+    current_setting('statement_timeout') statement_timeout,current_setting('lock_timeout') lock_timeout,
+    current_setting('idle_in_transaction_session_timeout') idle_timeout`);
+  try {
+    const before = (await snapshot()).rows;
+    let actualLimits;
+    const observed = { async query(query) {
+      const result = await client.query(query);
+      if (typeof query === 'string' && query.includes("current_setting('transaction_read_only')='on'")) actualLimits = result.rows[0];
+      return result;
+    } };
+    await assert.rejects(verifyRuntime(observed, { query: () => assert.fail('Missing Neon identity must deny before owner reads') }, descriptor), /fingerprint/);
+    assert.deepEqual(actualLimits, { read_only: true, statement_timeout_ok: true, lock_timeout_ok: true, idle_timeout_ok: true });
+    assert.deepEqual((await snapshot()).rows, before, 'ROLLBACK restores every original timeout and read-only setting');
+  } finally { client.release(); await db.stop(); }
+});
+
 // The five-name shape was observed read-only on native PG18.7. These test rows
 // remain fixtures, not a new native preflight or SQL-installation claim.
 const providerRoles = [
