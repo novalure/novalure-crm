@@ -17,6 +17,9 @@ import { executeWebsiteSalesStudioCommand, parseWebsiteSalesStudioCommand, readW
   reconcileWebsiteSalesStudioCommand, websiteSalesStudioCommandInput } from "./db/website-sales-studio-repositories";
 import { websiteSalesStudioContract, type WebsiteSalesStudioCommand } from "./website-sales-studio-types";
 import { WebsiteStudioError } from "./website-sales-studio";
+import { executeWebsiteSalesLifecycleCommand, parseWebsiteSalesLifecycleCommand, readWebsiteSalesLifecycle,
+  reconcileWebsiteSalesLifecycleCommand, websiteSalesLifecycleCommandInput } from "./db/website-sales-lifecycle-repositories";
+import { websiteSalesLifecycleContract, type WebsiteSalesLifecycleCommand } from "./website-sales-lifecycle-types";
 
 export const websiteSalesMachineContract = "website-sales-machine-v1";
 export const websiteSalesMachinePath = "/api/integrations/evelyn/website-sales";
@@ -24,13 +27,14 @@ export const websiteSalesMachineDelegationDomain = `${websiteSalesMachineContrac
 export const websiteSalesMachineScopes = ["crm.website-sales.read", "crm.website-sales.register-location", "crm.website-sales.observe",
   "crm.website-sales.qualify", "crm.website-sales.prepare-draft", "crm.website-sales.stop", "crm.website-sales.reconcile",
   "crm.website-sales.studio.read", "crm.website-sales.studio.create-diagnosis", "crm.website-sales.studio.create-concept",
-  "crm.website-sales.studio.accept-concept", "crm.website-sales.studio.build-demo"] as const;
+  "crm.website-sales.studio.accept-concept", "crm.website-sales.studio.build-demo", "crm.website-sales.lifecycle.read",
+  "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.lifecycle.ingest-reply", "crm.website-sales.lifecycle.create-handoff"] as const;
 export type WebsiteSalesMachineScope = typeof websiteSalesMachineScopes[number];
 export type WebsiteSalesDelegationPayload = { issuedAt: number; expiresAt: number; nonce: string; requestHash: string };
 export type WebsiteSalesMachineRead = { projectId: string; companyId: string; locationId: string; correlationId: string };
-export type WebsiteSalesMachineRequest = { contractVersion: typeof websiteSalesMachineContract; target?: "workflow" | "studio" } & (
-  { operation: "execute"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand } |
-  { operation: "reconcile"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand } |
+export type WebsiteSalesMachineRequest = { contractVersion: typeof websiteSalesMachineContract; target?: "workflow" | "studio" | "lifecycle" } & (
+  { operation: "execute"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand | WebsiteSalesLifecycleCommand } |
+  { operation: "reconcile"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand | WebsiteSalesLifecycleCommand } |
   { operation: "read"; request: WebsiteSalesMachineRead });
 export type WebsiteSalesMachineOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions };
 type Grant = { id: string; workload_id: string; workspace_id: string; actor_user_id: string; project_id: string;
@@ -49,18 +53,22 @@ function parseRequest(value: unknown): WebsiteSalesMachineRequest {
   const body = object(value);
   assertCrmFields(body, ["contractVersion", "target", "operation", "request"]);
   if (body.contractVersion !== websiteSalesMachineContract || !["execute", "read", "reconcile"].includes(String(body.operation))) denied("INVALID_REQUEST", 400);
-  if (body.target !== undefined && !["workflow", "studio"].includes(String(body.target))) denied("INVALID_REQUEST", 400);
+  if (body.target !== undefined && !["workflow", "studio", "lifecycle"].includes(String(body.target))) denied("INVALID_REQUEST", 400);
   const request = object(body.request);
   if (body.operation === "read") {
     assertCrmFields(request, ["projectId", "companyId", "locationId", "correlationId"]);
     for (const name of ["projectId", "companyId", "locationId", "correlationId"]) assertCrmUuid(request[name], name);
   } else {
-    if (request.contractVersion !== (body.target === "studio" ? websiteSalesStudioContract : websiteSalesIrelandContract)
+    if (request.contractVersion !== (body.target === "studio" ? websiteSalesStudioContract : body.target === "lifecycle" ? websiteSalesLifecycleContract : websiteSalesIrelandContract)
       || !uuidV4.test(String(request.idempotencyKey))) denied("INVALID_REQUEST", 400);
     assertCrmUuid(request.correlationId, "correlationId");
     if (body.target === "studio") {
       if (["submit_qa", "create_preview", "revoke_preview"].includes(String(request.operation))) denied("STUDIO_STAFF_REQUIRED");
       parseWebsiteSalesStudioCommand(request);
+    }
+    if (body.target === "lifecycle") {
+      if (["authorize_reply_classification", "record_customer_acceptance"].includes(String(request.operation))) denied("HUMAN_ATTESTATION_REQUIRED");
+      parseWebsiteSalesLifecycleCommand(request);
     }
     // The canonical repository validates the exact operation-specific command before transaction entry.
   }
@@ -95,12 +103,16 @@ function grantDigest(grant: Grant) { return crmPayloadDigest({ id: grant.id, wor
   locationId: grant.location_id, departmentId: grant.department_id, agentId: grant.agent_id, taskId: grant.task_id,
   scopes: grant.scopes, publicKey: grant.delegation_public_key }); }
 function action(body: WebsiteSalesMachineRequest): WebsiteSalesMachineScope {
-  if (body.operation === "read") return body.target === "studio" ? "crm.website-sales.studio.read" : "crm.website-sales.read";
+  if (body.operation === "read") return body.target === "studio" ? "crm.website-sales.studio.read" : body.target === "lifecycle" ? "crm.website-sales.lifecycle.read" : "crm.website-sales.read";
   if (body.operation === "reconcile") return "crm.website-sales.reconcile";
   if (body.target === "studio") {
     const studio = { create_diagnosis: "crm.website-sales.studio.create-diagnosis", create_concept: "crm.website-sales.studio.create-concept",
       accept_concept: "crm.website-sales.studio.accept-concept", build_demo: "crm.website-sales.studio.build-demo" } as const;
     return studio[body.request.operation as keyof typeof studio] ?? denied("STUDIO_STAFF_REQUIRED");
+  }
+  if (body.target === "lifecycle") {
+    const lifecycle = { refresh_evidence: "crm.website-sales.lifecycle.refresh-evidence", ingest_reply: "crm.website-sales.lifecycle.ingest-reply", create_handoff: "crm.website-sales.lifecycle.create-handoff" } as const;
+    return lifecycle[body.request.operation as keyof typeof lifecycle] ?? denied("HUMAN_ATTESTATION_REQUIRED");
   }
   const mapping: Record<WebsiteSalesIrelandCommand["operation"], WebsiteSalesMachineScope> = {
     register_location: "crm.website-sales.register-location", observe: "crm.website-sales.observe",
@@ -155,6 +167,7 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
     return await withWebsiteSalesMachineAuthority(authority, async () => {
       const command = body.operation === "read" ? null : body.target === "studio"
         ? websiteSalesStudioCommandInput(session, body.request as WebsiteSalesStudioCommand)
+        : body.target === "lifecycle" ? websiteSalesLifecycleCommandInput(session, body.request as WebsiteSalesLifecycleCommand)
         : websiteSalesIrelandCommandInput(session, body.request as WebsiteSalesIrelandCommand);
       const access = async (tx: TenantTransaction, fresh: AppSession) => {
         const revalidate = async () => {
@@ -171,6 +184,7 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
         if (body.operation === "execute") {
           result = body.target === "studio"
             ? { ...await executeWebsiteSalesStudioCommand(fresh, body.request as WebsiteSalesStudioCommand, options) }
+            : body.target === "lifecycle" ? { ...await executeWebsiteSalesLifecycleCommand(fresh, body.request as WebsiteSalesLifecycleCommand, options), contractVersion: websiteSalesLifecycleContract, persisted: true }
             : { ...await runWebsiteSalesIrelandCommand(fresh, body.request as WebsiteSalesIrelandCommand, options), contractVersion: websiteSalesIrelandContract, persisted: true };
         } else if (body.operation === "reconcile") {
           if (body.target === "studio") {
@@ -179,10 +193,12 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
               ...(receipt.status === "COMMITTED" ? { currentData: await readWebsiteSalesStudio(fresh, {
                 projectId: original.projectId, companyId: original.companyId, locationId: original.locationId!,
               }, options) } : {}) };
-          } else result = { ...await reconcileWebsiteSalesIrelandCommand(fresh, body.request as WebsiteSalesIrelandCommand, options), contractVersion: websiteSalesMachineContract };
+          } else if (body.target === "lifecycle") result = { ...await reconcileWebsiteSalesLifecycleCommand(fresh, body.request as WebsiteSalesLifecycleCommand, options), contractVersion: websiteSalesMachineContract };
+          else result = { ...await reconcileWebsiteSalesIrelandCommand(fresh, body.request as WebsiteSalesIrelandCommand, options), contractVersion: websiteSalesMachineContract };
         } else {
           const scope = { projectId: body.request.projectId, companyId: body.request.companyId, locationId: body.request.locationId };
           result = body.target === "studio" ? { contractVersion: websiteSalesStudioContract, data: await readWebsiteSalesStudio(fresh, scope, options) }
+            : body.target === "lifecycle" ? { contractVersion: websiteSalesLifecycleContract, data: await readWebsiteSalesLifecycle(fresh, scope, options) }
             : { contractVersion: websiteSalesIrelandContract, data: await getWebsiteSalesIrelandWorkflow(fresh, scope, options) };
         }
         // Any authority/TTL change after a lock wait rolls the entire business transaction back.

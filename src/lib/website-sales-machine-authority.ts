@@ -7,7 +7,7 @@ type Scope = { projectId: string; companyId: string; locationId?: string };
 export type WebsiteSalesMachineAuthority = Readonly<{
   workspaceId: string; actorId: string; identityId: string; grantId: string; workloadId: string;
   departmentId: "SALES"; agentId: string; taskId: string; scope: Scope;
-  operation: string; mode: "execute" | "read" | "reconcile"; target: "workflow" | "studio";
+  operation: string; mode: "execute" | "read" | "reconcile"; target: "workflow" | "studio" | "lifecycle";
 }>;
 const authority = new AsyncLocalStorage<WebsiteSalesMachineAuthority>();
 
@@ -17,7 +17,7 @@ export function withWebsiteSalesMachineAuthority<T>(value: WebsiteSalesMachineAu
   return authority.run(Object.freeze({ ...value, scope: Object.freeze({ ...value.scope }) }), callback);
 }
 
-export function websiteSalesActorAuthority(session: AppSession, scope: Scope, operation: string, target: "workflow" | "studio" = "workflow") {
+export function websiteSalesActorAuthority(session: AppSession, scope: Scope, operation: string, target: "workflow" | "studio" | "lifecycle" = "workflow") {
   if (!session.authenticated || session.source === "demo") throw new CrmCommandError("SESSION_REQUIRED", "Authenticated CRM actor required", 401);
   if (!session.serviceIdentity) return null;
   const bound = authority.getStore();
@@ -30,4 +30,15 @@ export function websiteSalesActorAuthority(session: AppSession, scope: Scope, op
   }
   return { workloadId: bound.workloadId, grantId: bound.grantId, departmentId: bound.departmentId,
     agentId: bound.agentId, taskId: bound.taskId };
+}
+
+/** The one allowed compound sub-operation: ingesting a canonical reply terminates its old workflow sequence. */
+export function withWebsiteSalesLifecycleStop<T>(session: AppSession, run: () => Promise<T>) {
+  if (!session.serviceIdentity) return run();
+  const current = authority.getStore();
+  if (!current || current.target !== "lifecycle" || current.operation !== "ingest_reply" || current.mode !== "execute") {
+    throw new CrmCommandError("SALES_MACHINE_AUTHORITY_REQUIRED", "A verified reply-ingestion context is required", 403);
+  }
+  websiteSalesActorAuthority(session, current.scope, "ingest_reply", "lifecycle");
+  return authority.run(Object.freeze({ ...current, target: "workflow", operation: "stop" }), run);
 }

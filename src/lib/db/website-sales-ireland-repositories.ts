@@ -9,6 +9,7 @@ import { executeOfferCommand } from "@/lib/db/offer-repositories";
 import { parseOfferContent, OfferValidationError } from "@/lib/offer-workflow";
 import { decideWebsiteInvestment, qualifyWebsiteProspect, type WebsiteProspectQualification } from "@/lib/website-prospect";
 import { websiteSalesActorAuthority } from "@/lib/website-sales-machine-authority";
+import { websiteSalesOfferInvalidated, withWebsiteSalesOfferRevision } from "./website-sales-offer-evidence";
 
 export const websiteSalesIrelandContract = "website-sales-ireland-v1";
 export const websiteSalesIrelandPath = "/api/crm/website-sales";
@@ -28,7 +29,7 @@ export type WebsiteSalesIrelandCommand = {
 type Scope = { projectId: string; companyId: string; locationId: string };
 type LocationRow = {
   id: string; workspaceId: string; projectId: string; companyId: string; locationKey: string;
-  countryCode: "IE"; address: string; sourceUrl: string; version: number;
+  countryCode: "IE"; address: string; sourceUrl: string; sourceReference: string; version: number;
 };
 type WorkflowRow = {
   id: string; workspaceId: string; projectId: string; companyId: string; locationId: string;
@@ -40,7 +41,7 @@ type WorkflowRow = {
   prospect: unknown; investmentPlan: unknown; evidenceDigest: string; observedAt: string | Date;
 };
 const locationSelect = `select id,workspace_id as "workspaceId",project_id as "projectId",company_id as "companyId",
-  location_key as "locationKey",country_code as "countryCode",address,source_url as "sourceUrl",version from crm_company_locations`;
+  location_key as "locationKey",country_code as "countryCode",address,source_url as "sourceUrl",source_reference as "sourceReference",version from crm_company_locations`;
 const workflowSelect = `select w.id,w.workspace_id as "workspaceId",w.project_id as "projectId",w.company_id as "companyId",
   w.location_id as "locationId",w.location_version as "locationVersion",w.observation_id as "observationId",w.version,w.status,
   w.contact_id as "contactId",w.lead_id as "leadId",w.deal_id as "dealId",w.next_task_id as "nextTaskId",w.offer_draft_id as "offerDraftId",
@@ -167,6 +168,14 @@ async function view(tx: TenantTransaction, session: AppSession, scope: Scope, re
     nextTaskId: row.nextTaskId, offerDraftId: row.offerDraftId, stopReason: row.stopReason,
     lastCommandId: row.lastCommandId, lastCorrelationId: row.lastCorrelationId, canContact: false as const,
   }, canContact: false as const };
+}
+/** Internal shared scope loader. The public session/machine adapters perform their own exact authority check. */
+export async function websiteSalesIrelandState(tx: TenantTransaction, session: AppSession, scope: Scope, lock = false) {
+  const canonicalCompany = await company(tx, session, scope), registered = await location(tx, session, scope, lock);
+  const row = await workflow(tx, session, scope, lock);
+  return { company: canonicalCompany, location: registered, row,
+    contactStop: row ? await contactStop(tx, session, row) : null,
+    current: await view(tx, session, scope, registered) };
 }
 export async function getWebsiteSalesIrelandWorkflow(session: AppSession, scope: Scope, options: TenantTransactionOptions = {}) {
   websiteSalesActorAuthority(session, scope, "read");
@@ -329,7 +338,18 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
             if (effective.status !== "READY" || effective.evidenceDigest !== row.evidenceDigest) fail("CURRENT_EVIDENCE_REQUIRED");
             const currentStop = await contactStop(commandTx, fresh, row);
             if (currentStop) fail(currentStop);
-            const offer = await executeOfferCommand(fresh, { operation: "create", projectId: scope.projectId, dealId: row.dealId!,
+            let offer;
+            if (row.offerDraftId) {
+              const previous = await commandTx.queryOne<{ version: number; revision: number; status: string; approvalId: string | null }>(`select version,revision,status,approval_id as "approvalId" from crm_offers
+                where workspace_id=$1 and project_id=$2 and id=$3 and deal_id=$4 for update`, [fresh.workspaceId, scope.projectId, row.offerDraftId, row.dealId]);
+              if (!previous || previous.status !== "DRAFT" || previous.approvalId
+                || !await websiteSalesOfferInvalidated(commandTx, fresh.workspaceId, row.offerDraftId, Number(previous.revision))) fail("OFFER_REVIEW_REQUIRED");
+              offer = await withWebsiteSalesOfferRevision({ workspaceId: fresh.workspaceId, projectId: scope.projectId, offerId: row.offerDraftId,
+                workflowId: row.id, observationId: row.observationId, evidenceDigest: current.evidenceDigest }, () => executeOfferCommand(fresh, {
+                operation: "revise", projectId: scope.projectId, offerId: row.offerDraftId!, expectedVersion: Number(previous.version),
+                idempotencyKey: offerKey(input.idempotencyKey), correlationId: input.correlationId, payload: { content },
+              }, options));
+            } else offer = await executeOfferCommand(fresh, { operation: "create", projectId: scope.projectId, dealId: row.dealId!,
               expectedVersion: Number(deal.version), idempotencyKey: offerKey(input.idempotencyKey), correlationId: input.correlationId, payload: { content, leadId: row.leadId } }, options);
             await updateWorkflow(commandTx, context, row, "status='OFFER_DRAFT',offer_draft_id=$6", [offer.data.id]);
           }
