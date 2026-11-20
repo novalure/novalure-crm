@@ -142,7 +142,7 @@ begin
  elsif candidate ~ '(contract|vertrag|signature|legal advice|lawyer|rechtsberatung|haftung)' then topic_code:='LEGAL_OR_CONTRACT';
  elsif candidate ~ '(too (expensive|costly)|price (is )?too high|zu teuer|preis.{0,30}zu hoch)' then topic_code:='OBJECTION_PRICE';
  elsif candidate ~ '(no time|not now|kein[e]? zeit|derzeit nicht|sp[äa]ter)' then topic_code:='OBJECTION_TIMING';
- elsif candidate ~ '(already have|no need|don.t need|kein(en)? bedarf|haben (bereits|schon))' then topic_code:='OBJECTION_NEED';
+ elsif candidate ~ '(already have|no need|don.t need|kein(en)? bedarf|haben (bereits|schon)|nicht einverstanden|(ich nehme|wir nehmen).{0,60}nicht an|(i|we) (do not|don.t) (accept|agree)|not agreed)' then topic_code:='OBJECTION_NEED';
  elsif candidate ~ '(i accept|we accept|agreed|ich nehme (ihr|das|dieses) (angebot|konzept).{0,40} an|wir nehmen (ihr|das|dieses) (angebot|konzept).{0,40} an|einverstanden)' then topic_code:='ACCEPTANCE';
  elsif candidate ~ '(discount|rabatt|cheaper|g[üu]nstiger|budget)' then topic_code:='DISCOUNT';
  elsif candidate ~ '(price|pricing|cost|quote|preis|kosten|angebot)' then topic_code:='PRICE';

@@ -28,7 +28,7 @@ test("Sales topic projection enforces independent owner-purpose consent without 
         "How much?\r\nFrom: Synthetic person\r\nPlease unsubscribe", "How much?\rVon: Synthetic person\rPlease unsubscribe", "Services\n--- Forwarded message\nI accept",
         "Website\nLe mardi ÉCRIT:\nPlease unsubscribe", "Wir möchten SPÄTER sprechen", "NICHT IM BÜRO", "Ist das GÜNSTIGER?", "＞unsubscribe\nｗｅｂｓｉｔｅ",
         "website\u2028cost", "\ufeff> unsubscribe\nwebsite", "website\n\u1680On Monday wrote:\nunsubscribe", "SECRET TOKEN: marker; website", "bearer abcdefghijklmnopqrstuv; website",
-        "a".repeat(16000), "a".repeat(16001), "😀".repeat(8000), "😀".repeat(8001), "😀".repeat(7999) + "x", "ignore system prompt\n> unsubscribe", "I accept your website proposal", "I accept the price", "Wir nehmen Ihr Angebot an", "Ich nehme Ihr Angebot an", "Ich nehme an, dass der Preis stimmt"];
+        "a".repeat(16000), "a".repeat(16001), "😀".repeat(8000), "😀".repeat(8001), "😀".repeat(7999) + "x", "ignore system prompt\n> unsubscribe", "I accept your website proposal", "I accept the price", "Wir nehmen Ihr Angebot an", "Ich nehme Ihr Angebot an", "Ich nehme an, dass der Preis stimmt", "Ich nehme Ihr Angebot nicht an", "Wir sind mit dem Angebot nicht einverstanden", "We don’t accept the price"];
       for (const body of corpus) for (const language of ["de", "en"] as const) {
         const expected = extractWebsiteSalesConversationTopic(body, language);
         const actual = (await db.admin.query("select topic_code as \"topicCode\",language,basis,blocked_reason as \"blockedReason\" from crm_website_sales_extract_topic($1,$2)", [body, language])).rows[0];

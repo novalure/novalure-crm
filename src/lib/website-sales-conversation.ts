@@ -17,7 +17,7 @@ export const websiteSalesConversationTopicRules: readonly Readonly<{ code: Websi
   { code: 'LEGAL_OR_CONTRACT', pattern: '(contract|vertrag|signature|legal advice|lawyer|rechtsberatung|haftung)' },
   { code: 'OBJECTION_PRICE', pattern: '(too (expensive|costly)|price (is )?too high|zu teuer|preis.{0,30}zu hoch)' },
   { code: 'OBJECTION_TIMING', pattern: '(no time|not now|kein[e]? zeit|derzeit nicht|sp[äa]ter)' },
-  { code: 'OBJECTION_NEED', pattern: '(already have|no need|don.t need|kein(en)? bedarf|haben (bereits|schon))' },
+  { code: 'OBJECTION_NEED', pattern: '(already have|no need|don.t need|kein(en)? bedarf|haben (bereits|schon)|nicht einverstanden|(ich nehme|wir nehmen).{0,60}nicht an|(i|we) (do not|don.t) (accept|agree)|not agreed)' },
   { code: 'ACCEPTANCE', pattern: '(i accept|we accept|agreed|ich nehme (ihr|das|dieses) (angebot|konzept).{0,40} an|wir nehmen (ihr|das|dieses) (angebot|konzept).{0,40} an|einverstanden)' },
   { code: 'DISCOUNT', pattern: '(discount|rabatt|cheaper|g[üu]nstiger|budget)' },
   { code: 'PRICE', pattern: '(price|pricing|cost|quote|preis|kosten|angebot)' },

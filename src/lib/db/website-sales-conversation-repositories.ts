@@ -9,6 +9,7 @@ import { websiteSalesConversationContract, type SalesConversationCommand, type S
 import { websiteSalesIrelandState, runWebsiteSalesIrelandCommand, websiteSalesIrelandContract } from "./website-sales-ireland-repositories";
 import { readCurrentSalesPriceFact, readCurrentSalesQuoteBinding } from "./website-sales-operations-repositories";
 import { readSalesConversationSources as sources, type SalesConversationCanonicalSource as Source } from "./website-sales-conversation-source";
+import { websiteSalesConversationReadiness } from "../website-sales-conversation-readiness";
 
 const uuid = z.uuid(), language = z.enum(["de", "en"]), sha = z.hash("sha256");
 const payloads = {
@@ -46,7 +47,7 @@ function currentWorkflow(state: State) { if (!state.row || !state.current.workfl
 function hardStop(state: State) {
   if (state.contactStop === "OPT_OUT" || state.contactStop === "UNKNOWN_DELIVERY") return state.contactStop;
   if (state.row?.status === "STOPPED" && state.row.stopReason !== "REPLY_RECEIVED") return state.row.stopReason ?? "WORKFLOW_STOPPED";
-  if (!state.current.workflow || state.row?.locationVersion !== state.location.version || state.current.workflow.qualificationStatus !== "READY") return "STALE_EVIDENCE";
+  if (!state.row || !state.current.workflow || !websiteSalesConversationReadiness(state.row.prospect, state.row.locationVersion, state.location.version, new Date().toISOString()).eligible) return "STALE_EVIDENCE";
   return null;
 }
 function assertReady(state: State) { const reason = hardStop(state); if (reason) fail(reason); if (!state.row?.contactId || !state.row.leadId) fail("QUALIFIED_CONTACT_REQUIRED"); }
@@ -168,6 +169,23 @@ export async function executeWebsiteSalesConversationCommand(session: AppSession
         if (p.reason === "OPT_OUT") await stopCanonical(tx, fresh, input, row, `operator-recorded-dialogue-stop:${next.id}`, options);
         next.status = "STOPPED"; next.stopReason = reason ?? String(p.reason);
       } else {
+        // Removing contact authority takes precedence over missing evidence and any earlier dialogue stop.
+        // This branch is fed only by the current owner-authorized SQL extractor, never a caller topic flag.
+        if (p.canonicalMessageId) {
+          const stopSource = (await sources(tx, fresh, row, String(p.canonicalMessageId), String(p.language)))[0];
+          if (stopSource?.authorized && stopSource.topicCode === "OPT_OUT") {
+            const existing = await tx.queryOne<StoredTurn>(`select id,turn_index as index,kind,topic_turn_id as "topicTurnId",topic_code as "topicCode",language,source_kind as "sourceKind",message_id as "messageId",source_hash as "sourceHash",created_at::text as "createdAt",draft
+              from crm_website_sales_conversation_turns where workspace_id=$1 and workflow_id=$2 and message_id=$3 and source_hash=$4 and kind='TOPIC_RECORDED'`, [fresh.workspaceId, row.id, stopSource.messageId, stopSource.sourceHash]);
+            const last = await tx.queryOne<{ index: number }>("select coalesce(max(turn_index),0)::int as index from crm_website_sales_conversation_turns where workspace_id=$1 and workflow_id=$2", [fresh.workspaceId, row.id]);
+            const topic: StoredTurn = existing ?? { id: randomUUID(), index: (last?.index ?? 0) + 1, kind: "TOPIC_RECORDED", topicTurnId: null, topicCode: "OPT_OUT", language: stopSource.language,
+              sourceKind: "CANONICAL_TOPIC_EXTRACTION", messageId: stopSource.messageId, sourceHash: stopSource.sourceHash, createdAt: now, draft: null };
+            await stopCanonical(tx, fresh, input, row, `crm-topic:${stopSource.messageId}:${stopSource.sourceHash}`, options);
+            next.status = "STOPPED"; next.stopReason = "OPT_OUT";
+            await persistConversation(tx, fresh, row, previous, next, context.commandId);
+            if (!existing) await insertTurn(tx, fresh, row, next, topic, context.commandId, stopSource.sourceUserId);
+            return { canContact: false, workflow: currentWorkflow(await websiteSalesIrelandState(tx, fresh, input)), conversation: summary(next, loaded.digest), topicTurnId: topic.id, messageId: stopSource.messageId };
+          }
+        }
         assertReady(state); if (previous?.status === "STOPPED") fail("CONVERSATION_STOPPED");
         const turns = await storedTurns(tx, fresh, row), additions: { turn: StoredTurn; sourceUserId: string | null }[] = [];
         let topic: StoredTurn, sourceUserId: string | null = null;
@@ -199,7 +217,8 @@ export async function executeWebsiteSalesConversationCommand(session: AppSession
           if (prior && !additions.length) return { workflow: currentWorkflow(state), conversation: summary(previous!, loaded.digest), topicTurnId: topic.id, draftTurnId: prior.id, ...(topic.messageId ? { messageId: topic.messageId } : {}), canContact: false };
           const draft = prepareWebsiteSalesConversationDraft({ identity: { workspaceId: fresh.workspaceId, projectId: row.projectId, companyId: row.companyId, locationId: row.locationId }, workflowVersion: row.version,
             evidenceDigest: row.evidenceDigest, conversationVersion: next.version, expectedFactsDigest: loaded.digest,
-            topic: { id: topic.id, code: topic.topicCode, messageId: topic.messageId, sourceHash: topic.sourceHash, sourceKind: topic.sourceKind, language: topic.language },
+            topic: { id: topic.id, code: websiteSalesConversationReadiness(row.prospect, row.locationVersion, state.location.version, now).clarificationOnly ? "UNKNOWN" : topic.topicCode,
+              messageId: topic.messageId, sourceHash: topic.sourceHash, sourceKind: topic.sourceKind, language: topic.language },
             facts: loaded.active, hardStop: false, quoteBinding: loaded.quoteBinding,
             previousAnswers: turns.filter(turn => turn.draft?.status === "DRAFT_READY").map(turn => ({ topicTurnId: turn.topicTurnId!, messageId: turn.messageId, sourceHash: turn.sourceHash, factsDigest: turn.draft!.factsDigest, draftDigest: turn.draft!.draftDigest })) }, now);
           const drafted: StoredTurn = { ...topic, id: randomUUID(), index: (turns[0]?.index ?? 0) + additions.length + 1, kind: draft.status === "WAITING_FOR_FACTS" ? "CLARIFICATION_REQUIRED" : "ANSWER_DRAFTED", topicTurnId: topic.id, draft };
