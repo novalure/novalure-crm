@@ -113,6 +113,9 @@ jobs:
       - name: Sales transactions against isolated local PostgreSQL
         run: npm run test:sales
 
+      - name: Website Sales machine, Studio and lifecycle regression
+        run: npm run test:website-sales-complete
+
       - name: Final sales contract, approval, route and recovery regression
         run: npm run test:sales:final
 

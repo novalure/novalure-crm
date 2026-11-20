@@ -25,7 +25,7 @@ export type WebsiteSalesStoredSummary = {
 export type WebsiteSalesWorkbenchLocation = {
   id: string; workspaceId: string; projectId: string; companyId: string;
   locationKey: string; countryCode: "IE"; address: string; sourceUrl: string; version: number;
-  sourceReference: string; registrationBasis: "SESSION_ATTESTED"; registeredAt: string;
+  sourceReference: string; registrationBasis: "SESSION_ATTESTED" | "REGISTERED_DELEGATION"; registeredAt: string;
 };
 export type WebsiteSalesWorkbenchLocationItem = WebsiteSalesWorkbenchLocation & { workflow: WebsiteSalesStoredSummary | null };
 export type WebsiteSalesWorkbenchWorkflow = {

@@ -109,3 +109,14 @@ test("Studio persists real immutable artifacts and independently signed, revocab
   });
  }finally{if(originalKeys===undefined)delete process.env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS;else process.env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS=originalKeys;await db.stop();}
 });
+
+
+test("an errored body maps INVALID_JSON without a secondary unhandled cancellation rejection",async()=>{
+ const {websiteStudioBody}=await import("../src/lib/website-sales-studio-http");
+ const failures:unknown[]=[];const listener=(reason:unknown)=>{failures.push(reason);};process.on("unhandledRejection",listener);
+ try{const body=new ReadableStream<Uint8Array>({start(controller){controller.error(new Error("synthetic disconnected body"));}});
+  const request=new Request("https://crm.example/api/crm/website-sales/studio",{method:"POST",body,duplex:"half"} as RequestInit);
+  await assert.rejects(websiteStudioBody(request),(error:unknown)=>error instanceof Error&&"code" in error&&error.code==="INVALID_JSON");
+  await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(failures,[]);
+ }finally{process.off("unhandledRejection",listener);}
+});

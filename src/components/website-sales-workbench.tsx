@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Surface } from "@/components/ui/surface";
@@ -9,6 +10,11 @@ import { getWebsiteSalesCopy } from "@/lib/website-sales-copy";
 import { commandWebsiteSalesWorkbench, readWebsiteSalesWorkbench, subscribeWebsiteSalesPending, websiteSalesMarkCurrentRead, websiteSalesPending,
   WebsiteSalesBrowserError, type WebsiteSalesBrowserCommand } from "@/lib/website-sales-workbench-client";
 import type { WebsiteProspectInput } from "@/lib/website-prospect";
+import { studioPending, subscribeStudioPending } from "@/lib/website-sales-studio-client";
+import { lifecyclePending, subscribeLifecyclePending, writeLifecycle } from "@/lib/website-sales-lifecycle-client";
+
+const WebsiteSalesStudio = dynamic(() => import("@/components/website-sales-studio").then(module => module.WebsiteSalesStudio));
+const WebsiteSalesLifecyclePanel = dynamic(() => import("@/components/website-sales-lifecycle-panel").then(module => module.WebsiteSalesLifecyclePanel));
 import type { WebsiteSalesWorkbenchCompany, WebsiteSalesWorkbenchContact, WebsiteSalesWorkbenchDetailResponse,
   WebsiteSalesWorkbenchLocationItem, WebsiteSalesWorkbenchPage, WebsiteSalesWorkbenchProject } from "@/lib/website-sales-workbench-types";
 
@@ -211,9 +217,11 @@ export function WebsiteSalesWorkbench(props: WorkbenchProps) { return <Workbench
 function Workbench({ workspaceId, actorId, language, initialProjectId }: WorkbenchProps) {
   const copy = getWebsiteSalesCopy(language), id = useId().replace(/:/g, "");
   const [pending, setPending] = useState(() => websiteSalesPending(workspaceId, actorId));
-  const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? initialProjectId ?? "");
-  const [companyId, setCompanyId] = useState(() => pending?.command.companyId ?? "");
-  const [locationId, setLocationId] = useState(() => pending?.command.locationId ?? "");
+  const foreignOriginal = studioPending(workspaceId, actorId)?.command ?? lifecyclePending(workspaceId, actorId)?.command;
+  const [, refreshPending] = useState(0), [showResearch, setShowResearch] = useState(false);
+  const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? foreignOriginal?.projectId ?? initialProjectId ?? "");
+  const [companyId, setCompanyId] = useState(() => pending?.command.companyId ?? foreignOriginal?.companyId ?? "");
+  const [locationId, setLocationId] = useState(() => pending?.command.locationId ?? foreignOriginal?.locationId ?? "");
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState<"saved" | "denied" | null>(null);
   const generation = useRef(0), mounted = useRef(true), dirty = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -222,6 +230,8 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
     function beforeUnload(event: BeforeUnloadEvent) { if (dirty.current || websiteSalesPending(workspaceId, actorId)) { event.preventDefault(); event.returnValue = ""; } }
     window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [workspaceId, actorId]);
+  useEffect(() => { const update = () => refreshPending(n => n + 1); const a = subscribeStudioPending(update), b = subscribeLifecyclePending(update); return () => { a(); b(); }; }, []);
+  const studioRecovery = studioPending(workspaceId, actorId), lifecycleRecovery = lifecyclePending(workspaceId, actorId);
   const scope = { projectId, companyId, locationId };
   const projects = useList<WebsiteSalesWorkbenchProject>(workspaceId, "projects", {});
   const companies = useList<WebsiteSalesWorkbenchCompany>(workspaceId, "companies", { projectId }, Boolean(projectId));
@@ -230,10 +240,21 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
   const current = useDetail(workspaceId, scope), detail = current.detail, workflow = detail?.workflow;
   const project = projects.items.find(row => row.id === projectId);
   const canWrite = Boolean(detail?.canWrite ?? (project?.canWrite && companies.canWrite));
-  const locked = busy || Boolean(pending);
+  const locked = busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery);
   const disableWrite = locked || !canWrite || current.loading || current.failed;
   const failed = projects.failed || companies.failed || contacts.failed || locations.failed || current.failed;
   function refresh() { projects.refresh(); companies.refresh(); contacts.refresh(); locations.refresh(); current.refresh(); }
+  async function refreshEvidence(command: WebsiteSalesBrowserCommand): Promise<boolean> {
+    if (locked || !workflow || !command.payload.prospect || !command.locationVersion) return false;
+    setBusy(true); setNotice(null);
+    try {
+      await writeLifecycle(workspaceId, actorId, { contractVersion: "website-sales-lifecycle-v1", operation: "refresh_evidence", ...scope,
+        expectedVersion: workflow.version, idempotencyKey: crypto.randomUUID(), correlationId: crypto.randomUUID(),
+        payload: { prospect: command.payload.prospect, locationVersion: command.locationVersion } });
+      dirty.current = false; setShowResearch(false); setNotice("saved"); refresh(); return true;
+    } catch { setNotice("denied"); return false; }
+    finally { setBusy(false); }
+  }
   async function execute(command: WebsiteSalesBrowserCommand): Promise<boolean> {
     if (locked) return false;
     const token = ++generation.current; setBusy(true); setNotice(null);
@@ -274,15 +295,16 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
     {language !== "de" && language !== "en" ? <Notice>{copy.languageFallback}</Notice> : null}
     {pending?.state === "UNKNOWN" ? <Notice tone="warning" announce="polite"><p>{pending.recoveryError ? copy.recoveryInvalid : copy.unknown}</p>{!pending.recoveryError ? <><p className="mt-2 text-sm">{pending.currentRead ? copy.checkedUnknown : copy.unknownScope}</p><div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" disabled={busy} onClick={() => void readOriginal()}>{copy.checkOriginal}</Button><Button disabled={busy || !pending.currentRead} onClick={() => void reconcile()}>{copy.reconcile}</Button></div></> : null}</Notice> : null}
     {pending?.state === "IN_FLIGHT" ? <p role="status" className="text-sm text-stone-700">{copy.saving}</p> : null}
+    {!pending && (studioRecovery || lifecycleRecovery) ? <Notice tone="warning" announce="polite">{copy.unknown}</Notice> : null}
     {notice ? <Notice tone={notice === "saved" ? "success" : "danger"} announce={notice === "saved" ? "polite" : "assertive"}>{notice === "saved" ? copy.saved : copy.denied}</Notice> : null}
     {failed ? <Notice tone="danger" announce="polite"><p>{copy.loadError}</p><Button className="mt-3" variant="secondary" disabled={busy} onClick={refresh}>{copy.refresh}</Button></Notice> : null}
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(250px,320px)_minmax(0,1fr)]">
       <aside className="min-w-0 space-y-4" aria-label={copy.project}>
-        <Surface className="space-y-4"><Field htmlFor={`${id}-project`} label={copy.project}><Select id={`${id}-project`} value={projectId} disabled={locked || projects.loading || Boolean(initialProjectId) && !pending} className={controlClass} onChange={event => { generation.current++; setProjectId(event.target.value); setCompanyId(""); setLocationId(""); setNotice(null); }}><option value="">{copy.choose}</option>{projects.items.map(row => <option value={row.id} key={row.id}>{row.name}</option>)}</Select></Field>
+        <Surface className="space-y-4"><Field htmlFor={`${id}-project`} label={copy.project}><Select id={`${id}-project`} value={projectId} disabled={locked || projects.loading || Boolean(initialProjectId) && !pending} className={controlClass} onChange={event => { generation.current++; setProjectId(event.target.value); setShowResearch(false); setCompanyId(""); setLocationId(""); setNotice(null); }}><option value="">{copy.choose}</option>{projects.items.map(row => <option value={row.id} key={row.id}>{row.name}</option>)}</Select></Field>
           {projects.loading ? <p role="status" className="text-sm text-stone-600">{copy.loading}</p> : !projects.failed && !projects.items.length ? <p className="text-sm text-stone-600">{copy.projectEmpty}</p> : null}
           {projects.page.hasMore ? <Button variant="ghost" disabled={locked} onClick={projects.more}>{copy.more}</Button> : null}
-          {projectId ? <><Field htmlFor={`${id}-company`} label={copy.company}><Select id={`${id}-company`} value={companyId} disabled={locked || companies.loading} className={controlClass} onChange={event => { generation.current++; setCompanyId(event.target.value); setLocationId(""); setNotice(null); }}><option value="">{copy.choose}</option>{companies.items.map(row => <option value={row.id} key={row.id}>{row.name}{row.city ? ` (${row.city})` : ""}</option>)}</Select></Field>{companies.page.hasMore ? <Button variant="ghost" disabled={locked} onClick={companies.more}>{copy.more}</Button> : null}{!companies.loading && !companies.failed && !companies.items.length ? <p className="text-sm text-stone-600">{copy.companyEmpty}</p> : null}</> : null}
-          {companyId ? <><Field htmlFor={`${id}-location`} label={copy.location}><Select id={`${id}-location`} value={locationId} disabled={locked || locations.loading} className={controlClass} onChange={event => { generation.current++; setLocationId(event.target.value); setNotice(null); }}><option value="">{copy.choose}</option>{locations.items.map(row => <option value={row.id} key={row.id}>{row.address}</option>)}</Select></Field>{locations.page.hasMore ? <Button variant="ghost" disabled={locked} onClick={locations.more}>{copy.more}</Button> : null}{!locations.loading && !locations.failed && !locations.items.length ? <p className="text-sm text-stone-600">{copy.locationEmpty}</p> : null}</> : null}
+          {projectId ? <><Field htmlFor={`${id}-company`} label={copy.company}><Select id={`${id}-company`} value={companyId} disabled={locked || companies.loading} className={controlClass} onChange={event => { generation.current++; setCompanyId(event.target.value); setShowResearch(false); setLocationId(""); setNotice(null); }}><option value="">{copy.choose}</option>{companies.items.map(row => <option value={row.id} key={row.id}>{row.name}{row.city ? ` (${row.city})` : ""}</option>)}</Select></Field>{companies.page.hasMore ? <Button variant="ghost" disabled={locked} onClick={companies.more}>{copy.more}</Button> : null}{!companies.loading && !companies.failed && !companies.items.length ? <p className="text-sm text-stone-600">{copy.companyEmpty}</p> : null}</> : null}
+          {companyId ? <><Field htmlFor={`${id}-location`} label={copy.location}><Select id={`${id}-location`} value={locationId} disabled={locked || locations.loading} className={controlClass} onChange={event => { generation.current++; setLocationId(event.target.value); setShowResearch(false); setNotice(null); }}><option value="">{copy.choose}</option>{locations.items.map(row => <option value={row.id} key={row.id}>{row.address}</option>)}</Select></Field>{locations.page.hasMore ? <Button variant="ghost" disabled={locked} onClick={locations.more}>{copy.more}</Button> : null}{!locations.loading && !locations.failed && !locations.items.length ? <p className="text-sm text-stone-600">{copy.locationEmpty}</p> : null}</> : null}
           <Button variant="secondary" className="min-h-11" disabled={busy} onClick={refresh}>{copy.refresh}</Button>
         </Surface>
         {projectId && companyId ? <LocationForm key={`${workspaceId}:${projectId}:${companyId}`} copy={copy} scope={scope} disabled={locked || !project?.canWrite || !companies.canWrite} execute={execute} /> : null}
@@ -293,7 +315,7 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
           {!canWrite ? <Notice>{copy.readOnly}</Notice> : null}
           {workflow?.blockedReason ? <Notice tone="warning"><strong>{copy.blocked}: </strong>{copy.blockedReasons[workflow.blockedReason as keyof typeof copy.blockedReasons] ?? copy.loadError}</Notice> : null}
           {workflow?.status === "STOPPED" ? <p className="text-sm text-stone-700">{copy.stopped}</p> : null}
-          {!workflow || workflow.status === "OBSERVED" ? <ResearchForm key={`${scope.locationId}:${workflow?.version ?? 0}`} copy={copy} scope={scope} detail={detail} disabled={disableWrite} execute={execute} /> : null}
+          {!workflow || workflow.status === "OBSERVED" || showResearch && (workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT") ? <ResearchForm key={`${scope.locationId}:${workflow?.version ?? 0}`} copy={copy} scope={scope} detail={detail} disabled={disableWrite} execute={showResearch && workflow?.status !== "OBSERVED" ? refreshEvidence : execute} /> : null}
           {workflow?.status === "OBSERVED" ? <><hr className="border-stone-200" />{project?.pipelineConfigured === false ? <Notice tone="warning">{copy.pipelineMissing}</Notice> : null}<QualificationForm key={`qualify:${workflow.id}:${workflow.version}`} copy={copy} scope={scope} detail={detail} contacts={contacts.items} disabled={disableWrite || Boolean(workflow.blockedReason) || workflow.qualificationStatus !== "READY" || !project?.pipelineConfigured || contacts.loading || contacts.failed} execute={execute} />{contacts.page.hasMore ? <Button variant="ghost" disabled={locked} onClick={contacts.more}>{copy.more}</Button> : null}</> : null}
           {workflow?.status === "QUALIFIED" ? <OfferForm key={`offer:${workflow.id}:${workflow.version}`} copy={copy} scope={scope} detail={detail} disabled={disableWrite || Boolean(workflow.blockedReason)} execute={execute} /> : null}
           {workflow?.leadId ? <div className="border-t border-stone-200 pt-4"><h4 className="text-sm font-semibold">{copy.links}</h4><nav className="mt-2 flex flex-wrap gap-3 text-sm" aria-label={copy.links}>{[[copy.lead, "lead-inbox"], [copy.opportunity, "pipelines"], [copy.task, "tasks"], ...(workflow.offerDraftId ? [[copy.offer, "pipelines"]] : [])].map(([label, hash]) => <a key={label} href={`/?workspaceId=${encodeURIComponent(workspaceId)}&projectId=${encodeURIComponent(projectId)}#${hash}`} className="inline-flex min-h-11 items-center text-blue-800 underline underline-offset-4">{label}</a>)}</nav></div> : null}
@@ -301,5 +323,9 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
         </>}
       </Surface>
     </div>
+    {workflow && locationId ? <>
+      <WebsiteSalesStudio key={`studio:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || Boolean(pending) || Boolean(lifecycleRecovery)} />
+      <WebsiteSalesLifecyclePanel key={`lifecycle:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || Boolean(pending) || Boolean(studioRecovery)} onRefreshEvidence={workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT" ? () => { setShowResearch(true); } : undefined} />
+    </> : null}
   </section>;
 }

@@ -59,6 +59,8 @@ const visualQaContentHeaders = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // The canonical Node ESM domain module retains its .js import in both repositories.
+  turbopack: { resolveAlias: { "./website-prospect.js": "./src/lib/website-prospect.ts" } },
   deploymentId: deploymentIdentity,
   env: {
     NOVALURE_APPLICATION_VERSION: applicationVersion,

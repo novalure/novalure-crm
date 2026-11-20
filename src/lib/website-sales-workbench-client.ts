@@ -1,4 +1,5 @@
 "use client";
+import { assertSalesWriteBarrier } from "./website-sales-write-barrier";
 
 import { csrfFetch } from "@/lib/security/csrf-client";
 
@@ -186,6 +187,7 @@ export async function readWebsiteSalesWorkbench(workspaceId: string, query: Reco
   return value;
 }
 export async function commandWebsiteSalesWorkbench(workspaceId: string, actorId: string, command: WebsiteSalesBrowserCommand, reconcile = false): Promise<Record<string, unknown>> {
+  if (!reconcile) assertSalesWriteBarrier("workflow", workspaceId, actorId);
   const key = recoveryKey(workspaceId, actorId), existing = loadPending(workspaceId, actorId);
   if (existing?.recoveryError) throw new WebsiteSalesBrowserError("UNKNOWN", "RECOVERY_RECORD_INVALID");
   if (existing && (!reconcile || existing.state !== "UNKNOWN" || !existing.currentRead)) throw new WebsiteSalesBrowserError("UNKNOWN", "ORIGINAL_ACTION_REQUIRED");
