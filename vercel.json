@@ -2,6 +2,7 @@
   "buildCommand": "npm run build -- --webpack",
   "git": {
     "deploymentEnabled": {
+      "codex/crm-baseline-repair-20261120": false,
       "codex/shared-learning-package4-20261102": false,
       "codex/continuous-operation-20261029-crm": false,
       "codex/shared-behavior-studio-adapter-20261027": false,
