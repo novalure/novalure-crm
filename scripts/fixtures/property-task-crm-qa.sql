@@ -24,6 +24,44 @@ create table property_task_qa.receipts (
   primary key(workspace_id, operation_id)
 );
 
+-- Test-only role: NOLOGIN, no CRM-role membership, no table ownership or
+-- BYPASSRLS. Policy predicates on CRM tables stay exactly as installed; only
+-- their role lists are extended inside this disposable database. This is not
+-- a production role/grant or a proposed migration.
+alter table property_task_qa.authority enable row level security;
+alter table property_task_qa.authority force row level security;
+alter table property_task_qa.receipts enable row level security;
+alter table property_task_qa.receipts force row level security;
+create policy qa_authority_select on property_task_qa.authority for select to property_task_qa_owner using (login=session_user);
+create policy qa_authority_lock on property_task_qa.authority for update to property_task_qa_owner using (login=session_user) with check (login=session_user);
+create policy qa_receipt_select on property_task_qa.receipts for select to property_task_qa_owner using (principal=session_user);
+create policy qa_receipt_insert on property_task_qa.receipts for insert to property_task_qa_owner with check (principal=session_user);
+alter policy crm_sales_read on public.projects to novalure_tenant_app, property_task_qa_owner;
+alter policy crm_sales_write on public.projects to novalure_tenant_app, property_task_qa_owner;
+alter policy crm_sales_read on public.property_units to novalure_tenant_app, property_task_qa_owner;
+alter policy crm_sales_write on public.property_units to novalure_tenant_app, property_task_qa_owner;
+alter policy crm_sales_read on public.tasks to novalure_tenant_app, property_task_qa_owner;
+alter policy crm_sales_write on public.tasks to novalure_tenant_app, property_task_qa_owner;
+alter policy audit_logs_tenant_select_policy on public.audit_logs to novalure_tenant_app, property_task_qa_owner;
+alter policy audit_logs_tenant_insert_policy on public.audit_logs to novalure_tenant_app, property_task_qa_owner;
+grant usage on schema property_task_qa to property_task_qa_owner;
+grant select on property_task_qa.authority to property_task_qa_owner;
+-- PostgreSQL requires UPDATE privilege to acquire row locks, even for SHARE.
+grant update(generation) on property_task_qa.authority to property_task_qa_owner;
+grant select,insert on property_task_qa.receipts to property_task_qa_owner;
+grant select(id,operating_model) on public.workspaces to property_task_qa_owner;
+grant select(id,workspace_id,status,role,product_role) on public.workspace_users to property_task_qa_owner;
+grant select(workspace_id,project_id,user_id,can_read,can_edit_deals) on public.project_pipeline_permissions to property_task_qa_owner;
+-- setup_defaults is read by the existing CRM onboarding guard on task INSERT.
+grant select(id,workspace_id,setup_defaults,data_classification,data_purpose) on public.projects to property_task_qa_owner;
+grant select(id,workspace_id,project_id,version,data_classification,data_purpose) on public.property_units to property_task_qa_owner;
+grant select(id,workspace_id,project_id,owner_user_id,status,version,data_classification,data_purpose) on public.tasks to property_task_qa_owner;
+grant select(id,workspace_id,actor_user_id) on public.audit_logs to property_task_qa_owner;
+grant update(id) on public.projects,public.property_units,public.tasks to property_task_qa_owner;
+grant insert(workspace_id,project_id,owner_user_id,title,status,data_classification,data_purpose) on public.tasks to property_task_qa_owner;
+grant insert(workspace_id,actor_user_id,action,entity_type,entity_id) on public.audit_logs to property_task_qa_owner;
+grant execute on function public.crm_lock_active_member(uuid,uuid),public.crm_lock_project_access(uuid,uuid,boolean) to property_task_qa_owner;
+
 -- Same transaction holds CRM membership, project grant, project and unit rows,
 -- plus the QA case/identity/source/stop row, through task+audit+receipt insertion.
 -- All QA revocations update that row. This says nothing about external writers.
@@ -67,5 +105,6 @@ begin
   insert into property_task_qa.receipts values(w,op,session_user,req,task_id,audit_id);
   return task_id;
 end $$;
+alter function property_task_qa.create_task(uuid,uuid,uuid,uuid,uuid,bigint,bigint,bigint,uuid) owner to property_task_qa_owner;
 revoke all on all tables in schema property_task_qa from public;
 revoke all on function property_task_qa.create_task(uuid,uuid,uuid,uuid,uuid,bigint,bigint,bigint,uuid) from public;

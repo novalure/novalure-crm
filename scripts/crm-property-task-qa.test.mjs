@@ -6,7 +6,9 @@ import { LocalSalesPool, startLocalSalesDb, applySalesSchema } from './lib/local
 
 // A disposable loopback PostgreSQL cluster; never consumes environment URLs.
 let cluster, db, writer, outsider;
+let policiesBefore;
 const w=randomUUID(), p=randomUUID(), u=randomUUID(), a=randomUUID(), c=randomUUID();
+const fw=randomUUID(), fp=randomUUID(), fu=randomUUID(), fa=randomUUID(), fc=randomUUID();
 const login=`task_qa_${randomUUID().replaceAll('-','').slice(0,12)}`;
 const stranger=`task_qa_${randomUUID().replaceAll('-','').slice(0,12)}`;
 const sql='select property_task_qa.create_task($1,$2,$3,$4,$5,$6,$7,$8,$9) as id';
@@ -23,6 +25,8 @@ before(async () => {
   await applySalesSchema(db,{maxMigrationNumber:188});
   await admin.query('create role novalure_property_reader nologin');
   await admin.query(await readFile('migrations/staged/property_observation_grants_candidate.sql','utf8'));
+  policiesBefore=(await admin.query("select schemaname,tablename,policyname,cmd,qual,with_check from pg_policies where schemaname='public' order by tablename,policyname")).rows;
+  await admin.query('create role property_task_qa_owner nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls');
   await admin.query(await readFile('scripts/fixtures/property-task-crm-qa.sql','utf8'));
   for (const role of [login,stranger]) {
     await admin.query(`create role ${role} login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls`);
@@ -37,6 +41,12 @@ before(async () => {
   await admin.query('insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)',[w,p,a]);
   await admin.query("insert into property_units(id,workspace_id,project_id,unit_number,status,data_classification,data_purpose) values($1,$2,$3,'QA','available','CUSTOMER_TENANT','crm_sales')",[u,w,p]);
   await admin.query('insert into property_task_qa.authority values($1,$2,$3,$4,$5,$6,1,1,true,false,true)',[w,p,u,a,login,c]);
+  await admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'FOREIGN SYNTHETIC','managed_by_novalure','{}')",[fw]);
+  await admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'FOREIGN','foreign@example.invalid','agent','project_sales_member','active')",[fa,fw]);
+  await admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'FOREIGN','SYNTHETIC')",[fp,fw]);
+  await admin.query('insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)',[fw,fp,fa]);
+  await admin.query("insert into property_units(id,workspace_id,project_id,unit_number,status,data_classification,data_purpose) values($1,$2,$3,'FOREIGN','available','CUSTOMER_TENANT','crm_sales')",[fu,fw,fp]);
+  await admin.query('insert into property_task_qa.authority values($1,$2,$3,$4,$5,$6,1,1,true,false,true)',[fw,fp,fu,fa,stranger,fc]);
 });
 after(async () => {
   if(writer) await writer.end();
@@ -56,9 +66,60 @@ test('task, CRM audit and receipt commit together; exact replay is idempotent',a
 
 test('writer has no direct data privileges; principal and scope cannot be forged',async()=>{
   await assert.rejects(writer.query('select * from property_task_qa.authority'),/permission denied/i);
+  await assert.rejects(writer.query('select * from property_task_qa.receipts'),/permission denied/i);
   await assert.rejects(writer.query("insert into public.tasks(workspace_id,title) values($1,'x')",[w]),/permission denied/i);
+  await assert.rejects(writer.query('update public.tasks set title=$1 where workspace_id=$2',['x',w]),/permission denied/i);
+  await assert.rejects(writer.query("insert into public.audit_logs(workspace_id,action,entity_type) values($1,'x','x')",[w]),/permission denied/i);
+  await assert.rejects(writer.query('set role property_task_qa_owner'),/permission denied/i);
+  const forged=await writer.connect();
+  try {
+    await forged.query('begin');
+    await forged.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)",[fw,fa]);
+    await assert.rejects(forged.query('select id from public.tasks where workspace_id=$1',[fw]),/permission denied/i);
+  } finally { await forged.query('rollback'); forged.release(); }
   await assert.rejects(invoke(outsider),/AUTHORITY_CHANGED/);
   await assert.rejects(invoke(writer,[randomUUID(),p,u,a,c,1,1,1,randomUUID()]),/DENIED/);
+  await assert.rejects(invoke(writer,[fw,fp,fu,fa,fc,1,1,1,randomUUID()]),/AUTHORITY_CHANGED/);
+  const otherActor=randomUUID();
+  await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'OTHER','other@example.invalid','agent','project_sales_member','active')",[otherActor,w]);
+  await db.admin.query('insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)',[w,p,otherActor]);
+  await assert.rejects(invoke(writer,[w,p,u,otherActor,c,1,1,1,randomUUID()]),/AUTHORITY_CHANGED/);
+});
+
+test('owner and runtime roles are restricted; CRM RLS predicates are unchanged',async()=>{
+  const roles=await db.admin.query("select rolname,rolsuper,rolbypassrls,rolcanlogin,rolcreaterole,rolcreatedb from pg_roles where rolname=any($1::text[]) order by rolname",[[login,stranger,'property_task_qa_owner']]);
+  assert.equal(roles.rows.length,3);
+  for(const role of roles.rows) {
+    assert.equal(role.rolsuper,false); assert.equal(role.rolbypassrls,false);
+    assert.equal(role.rolcreaterole,false); assert.equal(role.rolcreatedb,false);
+    assert.equal(role.rolcanlogin,role.rolname!=='property_task_qa_owner');
+  }
+  const checks=await db.admin.query("select c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) as owner from pg_class c join pg_namespace n on n.oid=c.relnamespace where (n.nspname='public' and c.relname=any($1::text[])) or (n.nspname='property_task_qa' and c.relname=any($2::text[]))",[['projects','property_units','tasks','audit_logs'],['authority','receipts']]);
+  assert.equal(checks.rows.length,6);
+  for(const row of checks.rows) { assert.equal(row.relrowsecurity,true); assert.equal(row.relforcerowsecurity,true); assert.notEqual(row.owner,'property_task_qa_owner'); }
+  const fn=await db.admin.query("select pg_get_userbyid(proowner) as owner,prosecdef from pg_proc where oid='property_task_qa.create_task(uuid,uuid,uuid,uuid,uuid,bigint,bigint,bigint,uuid)'::regprocedure");
+  assert.deepEqual(fn.rows[0],{owner:'property_task_qa_owner',prosecdef:true});
+  const nested=await db.admin.query("select proname,pg_get_userbyid(proowner) as owner,prosecdef from pg_proc where oid=any($1::regprocedure[]) order by proname",[['public.crm_lock_active_member(uuid,uuid)','public.crm_lock_project_access(uuid,uuid,boolean)']]);
+  assert.deepEqual(nested.rows.map(row=>[row.owner,row.prosecdef]),[['qa_admin',true],['qa_admin',true]]);
+  const membership=await db.admin.query("select pg_has_role('property_task_qa_owner','novalure_tenant_app','member') as member,pg_has_role($1,'property_task_qa_owner','member') as runtime_owner",[login]);
+  assert.deepEqual(membership.rows[0],{member:false,runtime_owner:false});
+  const privileges=await db.admin.query("select has_table_privilege('property_task_qa_owner','public.tasks','select') as all_select,has_table_privilege('property_task_qa_owner','public.tasks','update') as all_update,has_table_privilege('property_task_qa_owner','public.tasks','delete') as may_delete,has_column_privilege('property_task_qa_owner','public.tasks','id','update') as lock_column,has_column_privilege('property_task_qa_owner','public.tasks','title','update') as change_title");
+  assert.deepEqual(privileges.rows[0],{all_select:false,all_update:false,may_delete:false,lock_column:true,change_title:false});
+  const after=(await db.admin.query("select schemaname,tablename,policyname,cmd,qual,with_check from pg_policies where schemaname='public' order by tablename,policyname")).rows;
+  assert.deepEqual(after,policiesBefore);
+});
+
+test('existing CRM RLS denies a foreign tenant even to the definer role',async()=>{
+  const own=(await invoke(writer)).rows[0].id;
+  const foreign=(await invoke(outsider,[fw,fp,fu,fa,fc,1,1,1,randomUUID()])).rows[0].id;
+  const client=await db.admin.connect();
+  try {
+    await client.query('begin'); await client.query('set local role property_task_qa_owner');
+    await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)",[w,a]);
+    const seen=await client.query('select id from public.tasks where id=any($1::uuid[]) order by id',[[own,foreign]]);
+    assert.deepEqual(seen.rows,[{id:own}]);
+    await assert.rejects(client.query("insert into public.tasks(workspace_id,project_id,owner_user_id,title,data_classification,data_purpose) values($1,$2,$3,'FOREIGN','CUSTOMER_TENANT','crm_sales')",[fw,fp,fa]),/row-level security/i);
+  } finally { await client.query('rollback'); client.release(); }
 });
 
 test('fixture refuses installation in the cluster default database',async()=>{

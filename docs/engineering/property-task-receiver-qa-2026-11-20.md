@@ -27,9 +27,29 @@ started while the task owns the relevant row lock waits for its transaction.
 These are ordering tests for the local database only. They do not establish
 the moment an external service acknowledges a revocation.
 
-The function owner is the temporary cluster's synthetic superuser; therefore
-the experiment **does not prove a production definer's privileges or forced
-RLS behavior**. The test receipt and audit action are not the CRM command
+The outer receiver function runs as a dedicated **NOLOGIN, non-superuser,
+non-BYPASSRLS** definer, which is not the table owner or a member of the
+general CRM role. Runtime logins have only schema usage and function EXECUTE,
+no direct table rights, and cannot assume the definer role. The real CRM
+tables and the two QA tables have FORCE RLS enabled. The test extends the
+role lists of the existing CRM policies to the QA definer in this disposable
+database only, without changing their expressions or commands; a catalog
+comparison and a foreign-tenant read/write test check those properties.
+Extending a policy to a new principal is nevertheless a local authorization
+change, not evidence that such a grant is safe in production.
+
+The definer has column-level CRM privileges for the queried fields, task and
+audit insertion, plus UPDATE on the `id` column of projects, units and tasks
+and `generation` on the QA authority row because PostgreSQL row locks require
+UPDATE privilege. It does not have table-wide UPDATE/DELETE or task-title
+UPDATE. The existing CRM onboarding trigger also requires read access to the
+project's `setup_defaults` column. All of these grants are to a NOLOGIN role,
+but their suitability under a real owner, real privileges and real identity
+issuance is not established. Existing nested `crm_lock_active_member` and
+`crm_lock_project_access` functions were installed by the partial bootstrap
+under its local superuser; their actual production owner/RLS configuration is
+not validated by this experiment. Thus this is **not a full production
+least-privilege or forced-RLS proof**. The test receipt and audit action are not the CRM command
 receipt/domain event contract. The task contains a fixed synthetic title and
 does not implement a complete task lifecycle, assignee policy, or recovery
 API. Exact replay is permitted only while the checked authority and task
