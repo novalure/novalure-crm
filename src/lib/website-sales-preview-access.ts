@@ -1,0 +1,6 @@
+import { createHash } from "node:crypto";
+
+// Fixed bootstrap contains no server-rendered inputs. Its hash authorizes only
+// this script at both Next's header boundary and the Route Handler boundary.
+export const websiteSalesPreviewAccessScript = `(()=>{const p=new URLSearchParams(location.hash.slice(1));history.replaceState(null,'',location.pathname);const grantId=p.get('grant'),token=p.get('token');if(!/^[0-9a-f-]{36}$/.test(grantId||'')||!/^[0-9a-f]{64}$/.test(token||'')){document.getElementById('status').textContent='This invitation is unavailable.';return;}fetch('/api/public/website-sales-studio/exchange',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({grantId,token})}).then(async r=>{if(!r.ok)throw Error();const data=await r.json();if(data.path!=='/sales-preview/'+grantId+'/render')throw Error();location.replace(data.path);}).catch(()=>{document.getElementById('status').textContent='This invitation has expired, was revoked or has already been used.';});})();`;
+export const websiteSalesPreviewAccessCsp = `default-src 'none'; script-src 'sha256-${createHash("sha256").update(websiteSalesPreviewAccessScript, "utf8").digest("base64")}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;

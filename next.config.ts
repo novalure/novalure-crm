@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { websiteSalesPreviewAccessCsp } from "./src/lib/website-sales-preview-access";
 
 const buildGitSha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "unknown";
 const buildGitBranch = process.env.VERCEL_GIT_COMMIT_REF ?? process.env.GITHUB_REF_NAME ?? "unknown";
@@ -132,6 +133,13 @@ const nextConfig: NextConfig = {
         source: "/:path*",
       },
       ...["/api/crm/website-sales/studio/qa-render/:path*", "/sales-preview/:grantId/render", "/sales-preview/:grantId/assets/:path*"].map(source => ({ source, headers: [...websiteStudioHeaders] })),
+      { source: "/sales-preview/access", headers: [
+        { key: "Content-Security-Policy", value: websiteSalesPreviewAccessCsp },
+        { key: "Cache-Control", value: "private, no-store" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+        { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        { key: "X-Frame-Options", value: "DENY" },
+      ] },
       {
         headers: [...protectedPageHeaders],
         source: "/",
