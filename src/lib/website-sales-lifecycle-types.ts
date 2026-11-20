@@ -7,7 +7,7 @@ export type WebsiteSalesReplyClassification = "INTERESTED" | "QUESTION" | "OUT_O
 export type WebsiteSalesLifecycleOperation = "refresh_evidence" | "authorize_reply_classification" | "ingest_reply" | "record_customer_acceptance" | "create_handoff";
 export type WebsiteSalesLifecycleCommand = WebsiteSalesLifecycleScope & {
   contractVersion: typeof websiteSalesLifecycleContract; operation: WebsiteSalesLifecycleOperation;
-  expectedVersion: number; idempotencyKey: string; correlationId: string; payload: Record<string, unknown>;
+  expectedVersion: number; idempotencyKey: string; correlationId: string; allocationProof?:{allocationId:string;version:number;leaseToken:string};payload: Record<string, unknown>;
 };
 export type WebsiteSalesRefreshPayload = { prospect: WebsiteProspectInput; locationVersion: number; investmentPlan?: WebsiteInvestmentInput };
 export type WebsiteSalesCustomerAcceptancePayload = {

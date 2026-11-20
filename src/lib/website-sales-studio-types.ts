@@ -8,7 +8,7 @@ export type StudioOperation = "create_diagnosis" | "create_concept" | "accept_co
 export type WebsiteSalesStudioCommand = StudioScope & {
   contractVersion: typeof websiteSalesStudioContract; operation: StudioOperation;
   workflowId: string; expectedWorkflowVersion: number; expectedEvidenceDigest: string;
-  idempotencyKey: string; correlationId: string; payload: Record<string, unknown>;
+  idempotencyKey: string; correlationId: string;allocationProof?:{allocationId:string;version:number;leaseToken:string}; payload: Record<string, unknown>;
 };
 export type WebsiteStudioInvestment = Omit<WebsiteInvestmentInput, "requestedStage" | "completedStage" | "completedStageEvidence">;
 export type WebsiteStudioQaPayload = {

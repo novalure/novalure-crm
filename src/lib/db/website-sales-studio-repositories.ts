@@ -1,3 +1,4 @@
+import {withSalesAllocationFence,salesAllocationProofSchema} from "../website-sales-allocation";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppSession } from "../auth/session";
@@ -17,7 +18,7 @@ const payloadSchemas={
  accept_concept:z.strictObject({artifactId:uuid}),build_demo:z.strictObject({...revision,conceptDigest:sha,investmentPlan:investment}),
  submit_qa:z.strictObject({artifactId:uuid,certificate:z.unknown()}),create_preview:z.strictObject({artifactId:uuid,contactId:uuid,expiresAt:z.iso.datetime({offset:true})}),revoke_preview:z.strictObject({grantId:uuid,expectedVersion:z.number().int().positive()}),
 };
-const commandSchema=z.strictObject({contractVersion:z.literal(websiteSalesStudioContract),operation:z.enum(["create_diagnosis","create_concept","accept_concept","build_demo","submit_qa","create_preview","revoke_preview"]),projectId:uuid,companyId:uuid,locationId:uuid,workflowId:uuid,expectedWorkflowVersion:z.number().int().positive(),expectedEvidenceDigest:sha,idempotencyKey:z.uuidv4(),correlationId:uuid,payload:z.record(z.string(),z.unknown())});
+const commandSchema=z.strictObject({contractVersion:z.literal(websiteSalesStudioContract),operation:z.enum(["create_diagnosis","create_concept","accept_concept","build_demo","submit_qa","create_preview","revoke_preview"]),projectId:uuid,companyId:uuid,locationId:uuid,workflowId:uuid,expectedWorkflowVersion:z.number().int().positive(),expectedEvidenceDigest:sha,idempotencyKey:z.uuidv4(),correlationId:uuid,allocationProof:salesAllocationProofSchema.optional(),payload:z.record(z.string(),z.unknown())});
 function fail(code:string,status=409):never{throw new CrmCommandError(code,code,status);}
 export function parseWebsiteSalesStudioCommand(raw:unknown):WebsiteSalesStudioCommand {
  if(Buffer.byteLength(JSON.stringify(raw)??"","utf8")>120000)fail("STUDIO_COMMAND_TOO_LARGE",413);
@@ -83,7 +84,7 @@ export function websiteSalesStudioCommandInput(session:AppSession,raw:WebsiteSal
  return {operation:`website_sales.studio.${input.operation}`,projectId:input.projectId,resourceId:input.locationId,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,capability:"pipeline:write" as const,payload:{...input,machineAuthority:authority}};
 }
 export async function reconcileWebsiteSalesStudioCommand(session:AppSession,raw:WebsiteSalesStudioCommand,options:TenantTransactionOptions={}){const input=parseWebsiteSalesStudioCommand(raw);return reconcileCrmCommand(session,websiteSalesStudioCommandInput(session,input),options);}
-export async function executeWebsiteSalesStudioCommand(session:AppSession,raw:WebsiteSalesStudioCommand,options:TenantTransactionOptions={}){
+async function executeWebsiteSalesStudioCommandImpl(session:AppSession,raw:WebsiteSalesStudioCommand,options:TenantTransactionOptions={}){
  const input=parseWebsiteSalesStudioCommand(raw),command=websiteSalesStudioCommandInput(session,input);let issuedSecret:string|null=null;
  const result=await executeCrmCommand(session,command,async(tx,context)=>{
   const row=await current(tx,context.session,input,true);
@@ -152,4 +153,9 @@ export async function websiteStudioPublicPreview(grantId:string,secret:string,ex
  const cookie=exchange?randomBytes(32).toString("hex"):null;
  const rows=await queryAuthenticationRows<{artifact:WebsiteStudioArtifact;prospect:WebsiteProspectInput;certificate:WebsiteStudioQaCertificate;builder_id:string;workflow_id:string;expires_at:string|Date}>("select * from crm_website_studio_preview_access($1::uuid,$2,$3,$4)",[grantId,secretHash(secret),exchange,cookie?secretHash(cookie):null],options),row=rows[0];if(!row)return null;
  try {const artifact=verifyWebsiteStudioArtifact(row.artifact,row.prospect,new Date().toISOString());if(artifact.kind!=="DEMO")return null;verifyWebsiteStudioQaCertificate(row.certificate,artifact,row.workflow_id,row.builder_id);return {artifact,cookie,expiresAt:new Date(row.expires_at).toISOString()};}catch{return null;}
+}
+
+export async function executeWebsiteSalesStudioCommand(session:AppSession,raw:WebsiteSalesStudioCommand,options:TenantTransactionOptions={}){
+ 
+ return withCrmRead(session,(tx,fresh)=>withSalesAllocationFence(tx,fresh,{projectId:raw.projectId,companyId:raw.companyId,locationId:raw.locationId!},"studio",raw as unknown as Record<string,unknown>,()=>executeWebsiteSalesStudioCommandImpl(fresh,raw,options)),options);
 }

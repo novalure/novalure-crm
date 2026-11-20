@@ -1,3 +1,4 @@
+import {withSalesAllocationFence,salesAllocationProofSchema} from "../website-sales-allocation";
 import { createHash, randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import {
@@ -24,6 +25,7 @@ export type WebsiteSalesIrelandCommand = {
   expectedVersion?: number;
   idempotencyKey: string;
   correlationId: string;
+  allocationProof?:{allocationId:string;version:number;leaseToken:string};
   payload: Record<string, unknown>;
 };
 type Scope = { projectId: string; companyId: string; locationId: string };
@@ -70,7 +72,7 @@ function qualification(raw: unknown): WebsiteProspectQualification {
 }
 function validateCommand(raw: WebsiteSalesIrelandCommand): WebsiteSalesIrelandCommand {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) fail("INVALID_REQUEST", 400);
-  assertCrmFields(raw as unknown as Record<string, unknown>, ["contractVersion", "operation", "projectId", "companyId", "locationId", "locationVersion", "expectedVersion", "idempotencyKey", "correlationId", "payload"]);
+  assertCrmFields(raw as unknown as Record<string, unknown>, ["contractVersion", "operation", "projectId", "companyId", "locationId", "locationVersion", "expectedVersion", "idempotencyKey", "correlationId", "payload", "allocationProof"]);
   if (raw.contractVersion !== websiteSalesIrelandContract || !["register_location", "observe", "qualify", "prepare_offer", "stop"].includes(raw.operation)) fail("INVALID_REQUEST", 400);
   assertCrmUuid(raw.projectId, "projectId"); assertCrmUuid(raw.companyId, "companyId");
   if (!raw.payload || typeof raw.payload !== "object" || Array.isArray(raw.payload)) fail("INVALID_PAYLOAD", 400);
@@ -90,6 +92,7 @@ function validateCommand(raw: WebsiteSalesIrelandCommand): WebsiteSalesIrelandCo
         : raw.operation === "prepare_offer" ? ["content", "expectedEvidenceDigest"] : ["reason", "sourceReference"]);
     }
   }
+  if(raw.allocationProof!==undefined)salesAllocationProofSchema.parse(raw.allocationProof);
   return raw;
 }
 async function company(tx: TenantTransaction, session: AppSession, scope: Pick<Scope, "projectId" | "companyId">) {
@@ -223,7 +226,7 @@ export async function reconcileWebsiteSalesIrelandCommand(session: AppSession, r
 }
 
 /** Existing sessions or the dedicated verified Sales contract; one canonical CRM transaction. */
-export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: WebsiteSalesIrelandCommand, options: TenantTransactionOptions = {}) {
+async function runWebsiteSalesIrelandCommandImpl(session: AppSession, raw: WebsiteSalesIrelandCommand, options: TenantTransactionOptions = {}) {
   const input = validateCommand(raw);
   const command = websiteSalesIrelandCommandInput(session, input);
   return withCrmCommandPreflight(session, command, async (tx, fresh) => {
@@ -362,4 +365,9 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
     // before returning a result; an old receipt never resurrects historical workflow readiness.
     return { ...result, data: await view(tx, fresh, scope, registered) };
   }, options);
+}
+
+export async function runWebsiteSalesIrelandCommand(session:AppSession,raw:WebsiteSalesIrelandCommand,options:TenantTransactionOptions={}){
+ if(raw.operation==="register_location")return runWebsiteSalesIrelandCommandImpl(session,raw,options);
+ return withCrmRead(session,(tx,fresh)=>withSalesAllocationFence(tx,fresh,{projectId:raw.projectId,companyId:raw.companyId,locationId:raw.locationId!},"workflow",raw as unknown as Record<string,unknown>,()=>runWebsiteSalesIrelandCommandImpl(fresh,raw,options)),options);
 }
