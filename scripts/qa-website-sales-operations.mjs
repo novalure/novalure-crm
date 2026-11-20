@@ -180,7 +180,8 @@ try {
     await refreshOperations(); await panel.getByLabel("Verknüpfte CRM-Nachricht", { exact: true }).selectOption(messageId);
     const permission = main.getByTestId("website-conversation-permission"); await permission.getByRole("checkbox").check(); await permission.getByRole("button", { name: "Themeneinordnung erlauben", exact: true }).click();
     await expect.poll(async () => (await dialogRead()).sources.find(value => value.messageId === messageId)?.authorized).toBe(true); await panel.getByRole("button", { name: "Kundenfrage bearbeiten", exact: true }).click();
-    await expect.poll(async () => (await dialogRead()).workflow.stopReason).toBe("OPT_OUT");
+    await expect.poll(async () => (await dialogRead()).conversation?.stopReason).toBe("OPT_OUT");
+    assert.equal((await dialogRead()).workflow.blockedReason, "OPT_OUT");
     const consent = (await admin.query("select consent_label from contacts where id=$1", [state.project.contactId])).rows[0]; assert.equal(consent.consent_label, "Abgemeldet");
     await main.getByTestId("website-sales-operations").getByRole("tab", { name: "Ergebnisse", exact: true }).click();
     const financial = main.getByTestId("website-operations-financial-form"); await financial.locator('[name="reference"]').fill("SYNTHETIC real-form-cost-document");
