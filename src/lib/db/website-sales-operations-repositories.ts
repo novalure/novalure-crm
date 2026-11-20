@@ -4,7 +4,7 @@ import {randomUUID,createHash} from "node:crypto";
 import {z} from "zod";
 import type {AppSession} from "../auth/session";
 import {assertProjectGrant,crmPayloadDigest,CrmCommandError,executeCrmCommand,reconcileCrmCommand,withCrmRead,type TenantTransaction,type TenantTransactionOptions} from "../crm-command";
-import {websiteSalesActorAuthority,websiteSalesResourceAuthority} from "../website-sales-machine-authority";
+import {websiteSalesActorAuthority,websiteSalesResourceAuthority,websiteSalesResourceReadScopes} from "../website-sales-machine-authority";
 import {websiteSalesOperationsContract,type SalesOperationsCommand,type SalesOperationsScope,type SalesOperationsRead,type SalesOperationsEffect} from "../website-sales-operations-types";
 import {portfolioPolicySchema,pricingPolicySchema,improvementRuleSchema,outcomeSourceSchema,websiteSalesOperationsDigest,websiteSalesPolicyDigest,
  type OperationsOrigin,type OperationsBinding,type PortfolioInput,type PricingInput,type OutcomeCohort} from "../website-sales-operations-contracts";
@@ -373,6 +373,29 @@ async function promoteImprovement(tx:TenantTransaction,session:AppSession,c:Sale
  return{improvementId:row.id,policyId:next.id,version:bucket.version+(next.kind==="PORTFOLIO"?1:0),canContact:false as const};
 }
 
+async function opportunities(tx:TenantTransaction,session:AppSession,projectId:string):Promise<Pick<SalesOperationsRead,"opportunities"|"opportunitiesHasMore">>{
+ const resources=websiteSalesResourceReadScopes(session,projectId);
+ const rows=await tx.query<SalesOperationsScope>(`select w.project_id as "projectId",w.company_id as "companyId",w.location_id as "locationId"
+  from crm_website_sales_workflows w join projects p on p.workspace_id=w.workspace_id and p.id=w.project_id
+  join organizations o on o.workspace_id=w.workspace_id and o.project_id=w.project_id and o.id=w.company_id
+  join crm_company_locations l on l.workspace_id=w.workspace_id and l.project_id=w.project_id and l.company_id=w.company_id and l.id=w.location_id
+  where w.workspace_id=$1 and w.project_id=$2 and p.division='WEB_DESIGN' and p.data_classification='NOVALURE_INTERNAL' and p.data_purpose='crm_sales'
+   and o.data_classification='NOVALURE_INTERNAL' and o.data_purpose='crm_sales'
+   ${resources?`and exists(select 1 from jsonb_to_recordset($3::jsonb) as permitted("companyId" uuid,"locationId" uuid) where permitted."companyId"=w.company_id and permitted."locationId"=w.location_id)`:""}
+  order by o.name,l.address,w.id limit 201`,[session.workspaceId,projectId,...(resources?[JSON.stringify(resources.map(r=>({companyId:r.companyId,locationId:r.locationId})))]:[])]);
+ const access=await tx.queryOne<{allowed:boolean}>("select crm_project_access($1,$2,true) as allowed",[session.workspaceId,projectId]);
+ const canWrite=!!access?.allowed&&session.permissions.includes("crm:write")&&session.productPermissions.includes("pipeline:write"),items:SalesOperationsRead["opportunities"]=[];
+ for(const candidate of rows){
+  await guard(tx,session,candidate);
+  if(items.length===200)continue;
+  const state=await websiteSalesIrelandState(tx,session,candidate),workflow=state.current.workflow;
+  if(!workflow)continue;
+  items.push({...identity(session,candidate),opportunityId:workflow.id,workflowId:workflow.id,companyName:state.company.name,locationLabel:state.location.address,
+   workflowVersion:workflow.version,evidenceDigest:workflow.evidenceDigest,status:workflow.status,statusKind:"stored",qualificationStatus:workflow.qualificationStatus,
+   blockedReason:workflow.blockedReason,validUntil:workflow.validUntil,canWrite,canContact:false});
+ }
+ return{opportunities:items,opportunitiesHasMore:rows.length>200};
+}
 async function read(tx:TenantTransaction,session:AppSession,scope:SalesOperationsScope,resourceOnly=false):Promise<SalesOperationsRead>{
  await guard(tx,session,scope);const s=await websiteSalesIrelandState(tx,session,scope),bucket=await portfolio(tx,session,scope.projectId),used=bucket?await capacity(tx,session,bucket):{budget:0,minutes:0};
  const rows=await tx.query<AllocationRow>(`select ${allocationCols} from crm_website_sales_ops_allocations a join crm_website_sales_ops_portfolios p on p.workspace_id=a.workspace_id and p.id=a.portfolio_id where a.workspace_id=$1 and a.project_id=$2${resourceOnly?" and a.company_id=$3 and a.location_id=$4":""} order by case when a.status in('RESERVED','CLAIMED') then 0 else 1 end,a.created_at,a.id limit 25`,[session.workspaceId,scope.projectId,...(resourceOnly?[scope.companyId,scope.locationId]:[])]);
@@ -389,7 +412,8 @@ async function read(tx:TenantTransaction,session:AppSession,scope:SalesOperation
  const conversion={denominator,closedWonCount,closedLostCount,winRateBps:denominator?Number(BigInt(closedWonCount)*BigInt(10000)/BigInt(denominator)):null,source:"CANONICAL_CRM_STATE" as const,sourceDigest:crmPayloadDigest(conversions),profitPrediction:null};
  const inputs=resourceOnly?null:await cohort(tx,session,scope.projectId,1),summary=inputs?summarizeWebsiteSalesOutcomes(inputs,now()):null;
  const allowed=await tx.queryOne<{allowed:boolean}>("select crm_project_access($1,$2,true) as allowed",[session.workspaceId,scope.projectId]);
- return{contractVersion:websiteSalesOperationsContract,source:"database",workspaceId:session.workspaceId,...scopeOf(scope),
+ const listed=resourceOnly?{opportunities:[],opportunitiesHasMore:false}:await opportunities(tx,session,scope.projectId);
+ return{contractVersion:websiteSalesOperationsContract,source:"database",workspaceId:session.workspaceId,...scopeOf(scope),...listed,
   projection:resourceOnly?"RESOURCE":"PORTFOLIO",portfolio:bucket&&!resourceOnly?{...bucket,budgetMinor:n(bucket.budgetMinor),capacityMinutes:n(bucket.capacityMinutes),allocatedBudgetMinor:used.budget,allocatedCapacityMinutes:used.minutes}:null,
   allocations:rows.map(row=>{const a={...row} as Partial<AllocationRow>;delete a.leaseToken;delete a.current;delete a.sealedDigest;return{...a,amountMinor:n(row.amountMinor),capacityMinutes:n(row.capacityMinutes),expectedAllocationVersion:row.status==="CLAIMED"?row.version-1:row.version} as SalesOperationsRead["allocations"][number];}),policies,quotes:quotes as unknown as SalesOperationsRead["quotes"],financialEvidence,outcomes,improvements,conversation,cohort:summary?{...summary,conversion}:null,workflow:s.current.workflow,
   canApprovePolicies:!session.serviceIdentity&&!!(await tx.queryOne<{ok:boolean}>("select crm_sales_ops_owner($1) as ok",[session.workspaceId]))?.ok,canWrite:!!allowed?.allowed&&session.permissions.includes("crm:write")&&session.productPermissions.includes("pipeline:write"),canContact:false};

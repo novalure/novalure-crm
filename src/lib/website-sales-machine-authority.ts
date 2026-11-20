@@ -42,6 +42,17 @@ export function websiteSalesResourceAuthority(session:AppSession,scope:Scope){
   throw new CrmCommandError("SALES_RESOURCE_DENIED","A current exact resource grant is required",403);
 }
 
+/** Metadata-only listing filter from the verified server context, never from request JSON. */
+export function websiteSalesResourceReadScopes(session:AppSession,projectId:string):readonly Readonly<{projectId:string;companyId:string;locationId:string}>[]|null{
+ if(!session.serviceIdentity)return null;
+ const bound=authority.getStore();
+ if(!bound||bound.target!=="autonomy"||bound.scope.projectId!==projectId||!bound.scope.locationId)
+  throw new CrmCommandError("SALES_RESOURCE_DENIED","A verified exact resource context is required",403);
+ websiteSalesResourceAuthority(session,bound.scope);
+ const scopes=[{projectId,companyId:bound.scope.companyId,locationId:bound.scope.locationId},...(bound.resources??[]).map(r=>({projectId,companyId:r.companyId,locationId:r.locationId}))];
+ return Object.freeze([...new Map(scopes.map(s=>[`${s.companyId}:${s.locationId}`,Object.freeze({...s})])).values()]);
+}
+
 /** The one allowed compound sub-operation: ingesting a canonical reply terminates its old workflow sequence. */
 export function withWebsiteSalesLifecycleStop<T>(session: AppSession, run: () => Promise<T>) {
   if (!session.serviceIdentity) return run();

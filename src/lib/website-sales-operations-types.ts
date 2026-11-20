@@ -28,9 +28,16 @@ export type SalesOutcome = SalesOperationsScope & { id: string; workflowId: stri
   event: Record<string, unknown>; createdAt: string };
 export type SalesImprovement = { id: string; version: number; status: "REVIEW_REQUIRED" | "APPROVED" | "REJECTED" | "PROMOTED";
   candidateDigest: string; candidate: Record<string, unknown>; decisionId: string | null; createdAt: string };
+export type SalesOperationsOpportunity = SalesOperationsScope & {workspaceId:string;opportunityId:string;workflowId:string;
+ companyName:string;locationLabel:string;workflowVersion:number;evidenceDigest:string;
+ status:"OBSERVED"|"QUALIFIED"|"OFFER_DRAFT"|"STOPPED";statusKind:"stored";
+ qualificationStatus:"READY"|"NEEDS_CLARIFICATION"|"NURTURE";blockedReason:string|null;validUntil:string;
+ /** Current role/project access only; never an investment, contact or offer approval. */
+ canWrite:boolean;canContact:false};
 export type SalesOperationsRead = SalesOperationsScope & { contractVersion: typeof websiteSalesOperationsContract; source: "database";
   workspaceId: string;projection:"RESOURCE"|"PORTFOLIO"; portfolio: SalesPortfolio | null; allocations: SalesAllocation[]; policies: SalesPolicy[];
   quotes: SalesPriceQuote[]; financialEvidence: SalesFinancialEvidence[]; outcomes: SalesOutcome[]; improvements: SalesImprovement[];
+  opportunities:SalesOperationsOpportunity[];opportunitiesHasMore:boolean;
   conversation:{version:number;language:"de"|"en"};cohort: Record<string, unknown> | null; workflow: Record<string, unknown> | null; canApprovePolicies:boolean;canWrite: boolean; canContact: false };
 export type SalesOperationsEffect = SalesOperationsScope & {workspaceId:string; allocationIds?:string[];serverReservationSkips?:{opportunityId:string;reason:string}[]; portfolioId?: string; allocationId?: string; policyId?: string; ruleId?: string; quoteId?: string;
   allocationProof?:{allocationId:string;version:number;leaseToken:string};expiresAt?:string;stageOperationId?:string;
