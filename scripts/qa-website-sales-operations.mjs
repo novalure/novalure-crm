@@ -120,7 +120,8 @@ try {
       const response = await original(input, init); if (lose && response.ok) { once = false; await response.body?.cancel(); throw new TypeError("SYNTHETIC post-commit price response loss"); } return response;
     }; });
     await form.getByRole("button", { name: "Preisvorschlag erstellen", exact: true }).click();
-    await expect(main.getByTestId("website-sales-operations").getByText(/Ergebnis unbestätigt/)).toBeVisible();
+    await expect(main.getByTestId("website-sales-operations").getByText(/Ergebnis unbestätigt/).first()).toBeVisible();
+    await expect(main.getByTestId("website-sales-operations").getByText("Die Änderung wurde nicht gespeichert. Prüfen Sie die Angaben und laden Sie den aktuellen Stand.", { exact: true })).toHaveCount(0);
     await main.reload({ waitUntil: "domcontentloaded" }); const panel = main.getByTestId("website-sales-operations"); await expect(panel).toBeVisible();
     await expect(main.locator("[data-website-sales-workbench]").getByLabel("Unternehmen", { exact: true })).toBeDisabled();
     await expect(panel.locator('form button[type="submit"]:enabled')).toHaveCount(0);
@@ -159,6 +160,20 @@ try {
     await main.getByTestId("website-operations-conversation").getByRole("button", { name: "Kundenfrage bearbeiten", exact: true }).click();
     await expect(main.getByTestId("website-conversation-draft")).toContainText(revised);
   });
+  await step("a canonical price objection prepares an automatic counteroffer using the approved step without caller discount input", async () => {
+    const messageId = await incoming(state, "This price is too expensive."), panel = main.getByTestId("website-operations-conversation");
+    await refreshOperations(); await panel.getByLabel("Verknüpfte CRM-Nachricht", { exact: true }).selectOption(messageId);
+    const permission = main.getByTestId("website-conversation-permission"); await permission.getByRole("checkbox").check(); await permission.getByRole("button", { name: "Themeneinordnung erlauben", exact: true }).click();
+    await expect.poll(async () => (await dialogRead()).sources.find(value => value.messageId === messageId)?.topicCode).toBe("OBJECTION_PRICE");
+    await main.getByTestId("website-sales-operations").getByRole("tab", { name: "Preise", exact: true }).click();
+    const form = main.getByTestId("website-operations-quote-form"); await form.locator('[name="rule"]').selectOption(pricingRuleId); await form.locator('[name="mode"]').selectOption("AUTO_COUNTEROFFER");
+    await expect(form.locator('[name="discount"]')).toHaveCount(0); await form.locator('[name="dialog"]').selectOption(messageId);
+    await form.getByRole("button", { name: "Preisvorschlag erstellen", exact: true }).click();
+    await expect.poll(async () => (await opsRead()).quotes.length).toBe(2); const quote = (await opsRead()).quotes[0]; assert.equal(quote.quote.requestedDiscountBps, 500); assert.equal(quote.quote.netMinor, 95000);
+    const apply = main.getByTestId("website-operations-apply-form"); await apply.locator('[name="quote"]').selectOption(quote.id); await apply.getByRole("checkbox").check();
+    await apply.getByRole("button", { name: "In Angebotsentwurf übernehmen", exact: true }).click(); await expect.poll(async () => (await opsRead()).quotes[0].status).toBe("APPLIED");
+    state.workflow = (await opsRead()).workflow; await main.getByTestId("website-sales-operations").getByRole("tab", { name: "Gespräche", exact: true }).click();
+  });
   await step("canonical opt-out stops contact while financial documents remain recordable", async () => {
     const messageId = await incoming(state, "Please unsubscribe me."), panel = main.getByTestId("website-operations-conversation");
     await refreshOperations(); await panel.getByLabel("Verknüpfte CRM-Nachricht", { exact: true }).selectOption(messageId);
@@ -174,9 +189,9 @@ try {
     const document = (await opsRead()).financialEvidence.find(value => value.source.recordId === "SYNTHETIC real-form-cost-document");
     const include = main.getByTestId("website-operations-outcome-form"); await include.locator('[name="source"]').selectOption(document.id); await include.getByRole("button", { name: "In Ergebnisse übernehmen", exact: true }).click();
     await expect.poll(async () => (await opsRead()).outcomes.length).toBe(1);
-    await includeDocument("PAYMENT", 100000); await includeDocument("FULFILLED"); await includeDocument("PAYMENTS_COMPLETE"); await includeDocument("COSTS_COMPLETE");
+    await includeDocument("PAYMENT", 95000); await includeDocument("FULFILLED"); await includeDocument("PAYMENTS_COMPLETE"); await includeDocument("COSTS_COMPLETE");
     await refreshOperations(); const report = (await opsRead()).cohort; assert.equal(report.denominator, 2); assert.equal(report.completedProfitSamples, 1);
-    assert.equal(report.results.find(value => value.realizedProfitMinor !== null).realizedProfitMinor, -20000); assert.equal(report.conversion.closedWonCount, 0);
+    assert.equal(report.results.find(value => value.realizedProfitMinor !== null).realizedProfitMinor, -25000); assert.equal(report.conversion.closedWonCount, 0);
   });
   await step("actual results produce a review-only improvement and only the reviewed proposal can be promoted", async () => {
     const view = await opsRead(), rule = view.policies.find(value => value.kind === "IMPROVEMENT" && value.active), form = main.getByTestId("website-operations-improvement-form");
