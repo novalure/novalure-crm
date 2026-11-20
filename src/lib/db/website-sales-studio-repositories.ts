@@ -156,6 +156,6 @@ export async function websiteStudioPublicPreview(grantId:string,secret:string,ex
 }
 
 export async function executeWebsiteSalesStudioCommand(session:AppSession,raw:WebsiteSalesStudioCommand,options:TenantTransactionOptions={}){
- 
+
  return withCrmRead(session,(tx,fresh)=>withSalesAllocationFence(tx,fresh,{projectId:raw.projectId,companyId:raw.companyId,locationId:raw.locationId!},"studio",raw as unknown as Record<string,unknown>,()=>executeWebsiteSalesStudioCommandImpl(fresh,raw,options)),options);
 }

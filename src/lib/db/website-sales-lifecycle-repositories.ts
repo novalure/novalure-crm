@@ -260,6 +260,6 @@ export async function reconcileWebsiteSalesLifecycleCommand(session: AppSession,
 }
 
 export async function executeWebsiteSalesLifecycleCommand(session:AppSession,raw:WebsiteSalesLifecycleCommand,options:TenantTransactionOptions={}){
- 
+
  return withCrmRead(session,(tx,fresh)=>withSalesAllocationFence(tx,fresh,{projectId:raw.projectId,companyId:raw.companyId,locationId:raw.locationId!},"lifecycle",raw as unknown as Record<string,unknown>,()=>executeWebsiteSalesLifecycleCommandImpl(fresh,raw,options)),options);
 }
