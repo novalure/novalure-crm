@@ -75,7 +75,7 @@ create trigger website_studio_grant_guard before update on crm_website_studio_pr
 -- Narrow public capability lookup. No generic business SELECT privilege is granted.
 -- A returned artifact remains untrusted until host signature+deterministic renderer verification.
 create function crm_website_studio_preview_access(p_grant uuid,p_hash text,p_exchange boolean,p_cookie_hash text default null)
-returns table(artifact jsonb,prospect jsonb,certificate jsonb,builder_id uuid,expires_at timestamptz)
+returns table(artifact jsonb,prospect jsonb,certificate jsonb,builder_id uuid,workflow_id uuid,expires_at timestamptz)
 language plpgsql security definer set search_path=pg_catalog,public,pg_temp set row_security=off as $$
 declare g public.crm_website_studio_preview_grants%rowtype;
 begin
@@ -84,7 +84,7 @@ begin
  if not found or g.revoked_at is not null or g.expires_at<=clock_timestamp()
   or (p_exchange and (g.invitation_hash<>p_hash or g.exchanged_at is not null))
   or (not p_exchange and (g.cookie_hash is null or g.cookie_hash<>p_hash)) then return; end if;
- return query select a.artifact,o.prospect,q.certificate,a.created_by,g.expires_at
+ return query select a.artifact,o.prospect,q.certificate,a.created_by,w.id,g.expires_at
  from public.crm_website_studio_artifacts a
  join public.crm_website_sales_workflows w on w.workspace_id=g.workspace_id and w.id=g.workflow_id and w.project_id=g.project_id and w.company_id=g.company_id and w.location_id=g.location_id
  join public.crm_company_locations l on l.workspace_id=w.workspace_id and l.id=w.location_id and l.version=w.location_version

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import type { AppSession } from "../src/lib/auth/session";
@@ -83,6 +83,13 @@ test("Studio persists real immutable artifacts and independently signed, revocab
    await assert.rejects(withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_qa(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_actor_id,certificate,checked_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,'{}'::jsonb,now(),now()+interval '1 hour')",[randomUUID(),ids.workspace,sameTenantProject,ids.company,locationId,workflow.id,demoId,ids.qa]),options),{code:"23503"});
    const savedQa=(await db.admin.query("select id from crm_website_studio_qa where artifact_id=$1",[demoId])).rows[0].id;
    await assert.rejects(withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_preview_grants(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_id,contact_id,invitation_hash,expires_at,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '5 minutes',$10)",[ids.workspace,ids.project,ids.company,locationId,workflow.id,diagnosisId,savedQa,ids.contact,"0".repeat(64),ids.actor]),options),{code:"23503"});
+  });
+  await t.test("public verifier binds certificate workflow to the actual authorized database workflow",async()=>{
+   const original=(await db.admin.query("select certificate from crm_website_studio_qa where artifact_id=$1 limit 1",[demoId])).rows[0].certificate;
+   const payload={...original.payload,certificateId:randomUUID(),workflowId:randomUUID()},certificate={payload,signature:sign(null,Buffer.from(canonicalWebsiteStudioQaPayload(payload)),keys.privateKey).toString("base64url")};
+   await withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_qa(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_actor_id,certificate,checked_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)",[payload.certificateId,ids.workspace,ids.project,ids.company,locationId,workflow.id,demoId,ids.qa,JSON.stringify(certificate),payload.checkedAt,payload.expiresAt]),options);
+   const grant=randomUUID(),token=randomBytes(32).toString("hex");await withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_preview_grants(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_id,contact_id,invitation_hash,expires_at,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+interval '5 minutes',$11)",[grant,ids.workspace,ids.project,ids.company,locationId,workflow.id,demoId,payload.certificateId,ids.contact,createHash("sha256").update(token).digest("hex"),ids.actor]),options);
+   assert.equal(await preview(grant,token,true,options),null,"A valid signature for a different workflow cannot authorize this stored grant");
   });
   await t.test("revocation and committed contact opt-out close HTML and assets immediately",async()=>{
    await db.admin.query("update contacts set consent_label='Abgemeldet' where id=$1",[ids.contact]);assert.equal(await preview(grantId,cookie,false,options),null);
