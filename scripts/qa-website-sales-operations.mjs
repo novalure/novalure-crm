@@ -116,7 +116,7 @@ try {
     const form = main.getByTestId("website-operations-quote-form"); await form.locator('[name="rule"]').selectOption(pricingRuleId);
     await main.evaluate(() => { const original = window.fetch.bind(window); let once = true; window.fetch = async (input, init) => {
       const request = new Request(input instanceof Request ? input.clone() : new URL(String(input), location.href), init);
-      const lose = once && request.method === "POST" && new URL(request.url()).pathname === "/api/crm/website-sales/autonomy" && (await request.clone().json()).operation === "propose_price";
+      const lose = once && request.method === "POST" && new URL(request.url).pathname === "/api/crm/website-sales/autonomy" && (await request.clone().json()).operation === "propose_price";
       const response = await original(input, init); if (lose && response.ok) { once = false; await response.body?.cancel(); throw new TypeError("SYNTHETIC post-commit price response loss"); } return response;
     }; });
     await form.getByRole("button", { name: "Preisvorschlag erstellen", exact: true }).click();
