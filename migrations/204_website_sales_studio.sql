@@ -9,7 +9,7 @@ create table crm_website_studio_artifacts (
  artifact_digest text not null check(artifact_digest ~ '^[0-9a-f]{64}$'), evidence_digest text not null check(evidence_digest ~ '^[0-9a-f]{64}$'),
  artifact jsonb not null check(jsonb_typeof(artifact)='object' and octet_length(artifact::text)<=250000),
  created_by uuid not null, created_at timestamptz not null default now(), valid_until timestamptz not null,
- unique(workspace_id,id), unique(workspace_id,workflow_id,kind,version), unique(workspace_id,workflow_id,artifact_digest),
+ unique(workspace_id,id), unique(workspace_id,project_id,company_id,location_id,workflow_id,id), unique(workspace_id,workflow_id,kind,version), unique(workspace_id,workflow_id,artifact_digest),
  foreign key(workspace_id,project_id,company_id,location_id,workflow_id) references crm_website_sales_workflows(workspace_id,project_id,company_id,location_id,id),
  foreign key(workspace_id,created_by) references workspace_users(workspace_id,id),
  check(artifact->>'kind'=kind and (artifact->>'version')::integer=version and artifact->>'artifactDigest'=artifact_digest and artifact->>'evidenceDigest'=evidence_digest),
@@ -17,15 +17,16 @@ create table crm_website_studio_artifacts (
 );
 create table crm_website_studio_acceptances (
  id uuid primary key default gen_random_uuid(), workspace_id uuid not null, project_id uuid not null,
+ company_id uuid not null, location_id uuid not null, workflow_id uuid not null,
  artifact_id uuid not null, accepted_by uuid not null, accepted_at timestamptz not null default now(),
- unique(workspace_id,artifact_id), foreign key(workspace_id,artifact_id) references crm_website_studio_artifacts(workspace_id,id),
+ unique(workspace_id,artifact_id), foreign key(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id) references crm_website_studio_artifacts(workspace_id,project_id,company_id,location_id,workflow_id,id),
  foreign key(workspace_id,accepted_by) references workspace_users(workspace_id,id)
 );
 create table crm_website_studio_qa (
- id uuid primary key, workspace_id uuid not null, project_id uuid not null, artifact_id uuid not null,
+ id uuid primary key, workspace_id uuid not null, project_id uuid not null, company_id uuid not null, location_id uuid not null, workflow_id uuid not null, artifact_id uuid not null,
  qa_actor_id uuid not null, certificate jsonb not null check(jsonb_typeof(certificate)='object' and octet_length(certificate::text)<16000),
  checked_at timestamptz not null, expires_at timestamptz not null, created_at timestamptz not null default now(),
- unique(workspace_id,id), foreign key(workspace_id,artifact_id) references crm_website_studio_artifacts(workspace_id,id),
+ unique(workspace_id,id), unique(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,id), foreign key(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id) references crm_website_studio_artifacts(workspace_id,project_id,company_id,location_id,workflow_id,id),
  foreign key(workspace_id,qa_actor_id) references workspace_users(workspace_id,id), check(expires_at>checked_at)
 );
 create table crm_website_studio_preview_grants (
@@ -36,8 +37,8 @@ create table crm_website_studio_preview_grants (
  expires_at timestamptz not null, created_by uuid not null, created_at timestamptz not null default now(),
  revoked_at timestamptz, revoked_by uuid, version integer not null default 1 check(version>0),
  unique(workspace_id,id), foreign key(workspace_id,project_id,company_id,location_id,workflow_id) references crm_website_sales_workflows(workspace_id,project_id,company_id,location_id,id),
- foreign key(workspace_id,artifact_id) references crm_website_studio_artifacts(workspace_id,id),
- foreign key(workspace_id,qa_id) references crm_website_studio_qa(workspace_id,id),
+ foreign key(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id) references crm_website_studio_artifacts(workspace_id,project_id,company_id,location_id,workflow_id,id),
+ foreign key(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_id) references crm_website_studio_qa(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,id),
  foreign key(workspace_id,contact_id) references contacts(workspace_id,id),
  foreign key(workspace_id,created_by) references workspace_users(workspace_id,id),
  foreign key(workspace_id,revoked_by) references workspace_users(workspace_id,id),

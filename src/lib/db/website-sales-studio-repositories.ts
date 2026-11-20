@@ -100,14 +100,14 @@ export async function executeWebsiteSalesStudioCommand(session:AppSession,raw:We
    if(input.operation==="accept_concept"){
     if(artifact.kind!=="CONCEPT")fail("STUDIO_CONCEPT_REQUIRED");
     const parent=await latest(tx,context.workspaceId,row.id,"DIAGNOSIS");if(parent?.digest!==artifact.parentArtifactDigest)fail("STUDIO_PARENT_CHANGED");
-    const id=randomUUID();await tx.execute("insert into crm_website_studio_acceptances(id,workspace_id,project_id,artifact_id,accepted_by) values($1,$2,$3,$4,$5)",[id,context.workspaceId,input.projectId,record.id,context.actorId]);return {artifactId:record.id,acceptanceId:id,canContact:false};
+    const id=randomUUID();await tx.execute("insert into crm_website_studio_acceptances(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,accepted_by) values($1,$2,$3,$4,$5,$6,$7,$8)",[id,context.workspaceId,input.projectId,input.companyId,input.locationId,row.id,record.id,context.actorId]);return {artifactId:record.id,acceptanceId:id,canContact:false};
    }
    if(artifact.kind!=="DEMO")fail("STUDIO_DEMO_REQUIRED");
    await assertCurrentDemoParent(tx,context.workspaceId,row.id,artifact);
    if(input.operation==="submit_qa"){
     const cert=verifyWebsiteStudioQaCertificate(p.certificate,artifact,row.id,record.createdBy);
     const qaActor=await tx.queryOne("select id from workspace_users where workspace_id=$1 and id=$2 and status='active'",[context.workspaceId,cert.payload.qaActorId]);if(!qaActor)fail("QA_ACTOR_UNAVAILABLE",403);
-    await tx.execute("insert into crm_website_studio_qa(id,workspace_id,project_id,artifact_id,qa_actor_id,certificate,checked_at,expires_at) values($1,$2,$3,$4,$5,$6::jsonb,$7,$8)",[cert.payload.certificateId,context.workspaceId,input.projectId,record.id,cert.payload.qaActorId,JSON.stringify(cert),cert.payload.checkedAt,cert.payload.expiresAt]);return {artifactId:record.id,certificateId:cert.payload.certificateId,canContact:false};
+    await tx.execute("insert into crm_website_studio_qa(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_actor_id,certificate,checked_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)",[cert.payload.certificateId,context.workspaceId,input.projectId,input.companyId,input.locationId,row.id,record.id,cert.payload.qaActorId,JSON.stringify(cert),cert.payload.checkedAt,cert.payload.expiresAt]);return {artifactId:record.id,certificateId:cert.payload.certificateId,canContact:false};
    }
    if(!row.contactId||p.contactId!==row.contactId||!["QUALIFIED","OFFER_DRAFT"].includes(row.status))fail("STUDIO_CANONICAL_CONTACT_REQUIRED");
    const qa=await qaFor(tx,context.session,record,row.id),expires=Date.parse(p.expiresAt as string);

@@ -77,6 +77,13 @@ test("Studio persists real immutable artifacts and independently signed, revocab
    await assert.rejects(withCrmRead(session,tx=>tx.execute("update crm_website_studio_artifacts set version=99 where id=$1",[demoId]),options),{code:"42501"});
    const forced=await db.admin.query("select relrowsecurity,relforcerowsecurity from pg_class where relname like 'crm_website_studio_%' and relkind='r'");assert.equal(forced.rows.length,4);assert.ok(forced.rows.every(r=>r.relrowsecurity&&r.relforcerowsecurity));
   });
+  await t.test("direct runtime SQL cannot drift acceptance, QA or preview artifact scope",async()=>{
+   const sameTenantProject=randomUUID();await db.admin.query("insert into projects(id,workspace_id,name,type,division) values($1,$2,'Wrong same-tenant scope','Website','WEB_DESIGN')",[sameTenantProject,ids.workspace]);
+   await assert.rejects(withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_acceptances(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,accepted_by) values($1,$2,$3,$4,$5,$6,$7)",[ids.workspace,sameTenantProject,ids.company,locationId,workflow.id,diagnosisId,ids.actor]),options),{code:"23503"});
+   await assert.rejects(withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_qa(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_actor_id,certificate,checked_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,'{}'::jsonb,now(),now()+interval '1 hour')",[randomUUID(),ids.workspace,sameTenantProject,ids.company,locationId,workflow.id,demoId,ids.qa]),options),{code:"23503"});
+   const savedQa=(await db.admin.query("select id from crm_website_studio_qa where artifact_id=$1",[demoId])).rows[0].id;
+   await assert.rejects(withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_preview_grants(workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_id,contact_id,invitation_hash,expires_at,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '5 minutes',$10)",[ids.workspace,ids.project,ids.company,locationId,workflow.id,diagnosisId,savedQa,ids.contact,"0".repeat(64),ids.actor]),options),{code:"23503"});
+  });
   await t.test("revocation and committed contact opt-out close HTML and assets immediately",async()=>{
    await db.admin.query("update contacts set consent_label='Abgemeldet' where id=$1",[ids.contact]);assert.equal(await preview(grantId,cookie,false,options),null);
    await db.admin.query("update contacts set consent_label='Unbekannt' where id=$1",[ids.contact]);assert.ok(await preview(grantId,cookie,false,options));
