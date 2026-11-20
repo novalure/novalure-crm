@@ -165,6 +165,21 @@ test("write routes require server-side technical permission and product access g
   assert.match(tasksRoute, /export const POST = withCrmSalesWrite\(postHandler\)/);
   assert.match(wrapper, /tasks: \{ table: "tasks", entity: "task", capability: "workspace:operate" \}/);
   assert.match(readText("src/lib/crm-command.ts"), /hasProductCapability\(freshSession\.productRole, input\.capability\)/);
-  assert.match(newsletterRoute, /requirePermissionAndProductCapability\(request, "newsletter:send", "newsletter:send"\)/);
-  assert.match(newsletterRoute, /evaluateOutboundConsent/);
+  assert.match(newsletterRoute, /POST as writeSavedMailings/);
+  assert.match(newsletterRoute, /export const POST = writeSavedMailings/);
+  const mailingRoute = readText("src/app/api/crm/newsletter/route.ts");
+  const mailingRepository = readText("src/lib/db/newsletter-workspace-repository.ts");
+  assert.match(mailingRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "workspace:operate" \}\)/);
+  assert.match(mailingRepository, /session\.permissions\.includes\("newsletter:send"\) && hasProductCapability\(session\.productRole, "newsletter:send"\) && !session\.serviceIdentity/);
+  for (const name of ["approveNewsletter", "sendNewsletterBatch", "sendNewsletterTest"]) {
+    const start = mailingRepository.indexOf(`export async function ${name}(`);
+    const next = mailingRepository.indexOf("\nexport async function ", start + 1);
+    const body = mailingRepository.slice(start, next < 0 ? undefined : next);
+    assert.ok(start >= 0, `${name} must exist`);
+    assert.match(body, /requireSend\(fresh\)/);
+    assert.match(body, /loadDraft\(tx, fresh, input\.campaignId, true\)/);
+  }
+  assert.match(mailingRepository, /assertProjectGrant\(tx, session, row\.projectId, write\)/);
+  assert.match(mailingRepository, /await evaluateOutboundConsent\(/);
+  assert.match(readText("scripts/newsletter-workspace-tests.ts"), /a consent withdrawal after approval is checked again before the provider boundary/);
 });

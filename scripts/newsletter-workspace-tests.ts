@@ -74,6 +74,14 @@ test("recipient preview uses current explicit consent, suppression, audience and
   await assert.rejects(createNewsletterDraft(session(), { projectId: foreignProject, name: "SYNTHETIC forbidden", audience: "Alle", language: "en" }, meta(), options()), /Project access/);
 });
 
+test("a project sales member cannot approve or dispatch a saved newsletter", async () => {
+  const campaign = await create(); const before = sent.length;
+  const restricted = session(agent, "agent", "project_sales_member");
+  await assert.rejects(approveNewsletter(restricted, campaign, meta(), options()), /Versandberechtigung/);
+  await assert.rejects(sendNewsletterBatch(restricted, campaign, meta(), options()), /Versandberechtigung/);
+  assert.equal(sent.length, before);
+});
+
 test("unapproved or stale revisions never dispatch and editing cancels pending recipients", async () => {
   const campaign = await create(), before = sent.length;
   await assert.rejects(sendNewsletterBatch(session(), campaign, meta(), options()), /Freigabe/);

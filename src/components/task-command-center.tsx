@@ -146,7 +146,7 @@ export function TaskCommandCenter({
   const [notice, setNotice] = useState("");
   const clock = useTaskClock();
   const referenceNow = useMemo(() => new Date(clock), [clock]);
-  const scopedWorkspaceId = workspaceId ?? projects[0]?.workspaceId ?? tasks[0]?.workspaceId ?? "";
+  const scopedWorkspaceId = workspaceId ?? "";
   const team = useCrmTeam(scopedWorkspaceId, taskDraft.projectId || activeProjectId);
   const taskEndpoint = `/api/crm/tasks?workspaceId=${encodeURIComponent(scopedWorkspaceId)}`;
   const effectiveTasks = useMemo(() => {

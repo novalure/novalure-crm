@@ -44,17 +44,36 @@ test("production schedules pin the approved booking cadence and workers use shar
   assert.deepEqual(
     vercel.crons.map((entry) => [entry.path, entry.schedule]),
     [
+      ["/api/cron/newsletter", "*/5 * * * *"],
+      ["/api/cron/notification-digests", "11,41 * * * *"],
+      ["/api/cron/lead-proof-retention", "37 3 * * *"],
+      ["/api/cron/web-expose-retention", "17 3 * * *"],
+      ["/api/cron/automations", "*/5 * * * *"],
       ["/api/cron/meeting-reminders", "* * * * *"],
       ["/api/cron/teams-alerts", "4,19,34,49 * * * *"],
       ["/api/cron/google-alerts", "9,24,39,54 * * * *"],
       ["/api/cron/property-reservations", "7 * * * *"],
       ["/api/cron/knowledge-monitoring", "0 6 * * *"],
+      ["/api/cron/mailbox-sync", "*/2 * * * *"],
     ],
   );
 
   for (const route of vercel.crons) {
     const entry = await readFile(new URL(`../src/app${route.path}/route.ts`, import.meta.url), "utf8");
     let source = entry;
+    const delegates = {
+      "/api/cron/newsletter": ["handleNewsletterCron", "newsletter-scheduler.ts"],
+      "/api/cron/notification-digests": ["handleCrmNotificationEmailCron", "crm-notification-email-worker.ts"],
+      "/api/cron/lead-proof-retention": ["handleProofRetentionCron", "lead-proof-retention-scheduler.ts"],
+      "/api/cron/web-expose-retention": ["handleWebExposeRetentionCron", "web-expose-maintenance.ts"],
+      "/api/cron/automations": ["handleAutomationCron", "automation/scheduler.ts"],
+      "/api/cron/mailbox-sync": ["handleMailboxSyncCron", "crm-mailbox-sync-worker.ts"],
+    };
+    const delegated = delegates[route.path];
+    if (delegated) {
+      assert.match(entry, new RegExp(`return\\s+${delegated[0]}\\(request\\)`));
+      source = await readFile(new URL(`../src/lib/${delegated[1]}`, import.meta.url), "utf8");
+    }
     if (route.path === "/api/cron/knowledge-monitoring") {
       assert.match(entry, /import \{ handleKnowledgeMonitoringCron \} from "@\/lib\/knowledge-center\/monitoring-delegation"/);
       assert.match(entry, /return handleKnowledgeMonitoringCron\(request\)/);
@@ -63,7 +82,7 @@ test("production schedules pin the approved booking cadence and workers use shar
     }
     assert.match(source, /isCronAuthorized/);
     assert.match(source, /areQueueWorkersPaused/);
-    assert.match(source, /runId/);
+    assert.match(source, /createCronRun/);
     assert.doesNotMatch(source, /VERCEL_ENV\s*!==\s*["']production["']/);
   }
 });

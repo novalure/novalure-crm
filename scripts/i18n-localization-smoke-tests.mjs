@@ -168,6 +168,7 @@ const botSource = readProjectFile("src/components/bot-command-center.tsx");
 const calendarCommandCenterSource = readProjectFile("src/components/calendar-command-center.tsx");
 const contactCommandCenterSource = readProjectFile("src/components/contact-command-center.tsx");
 const dailyQueueBoardSource = readProjectFile("src/components/daily-queue-board.tsx");
+const dailyWorkQueueSource = readProjectFile("src/lib/daily-work-queue.ts");
 const dashboardSource = readProjectFile("src/components/dashboard-overview.tsx");
 const dealPipelineSource = readProjectFile("src/components/deal-pipeline-workspace.tsx");
 const formCommandCenterSource = readProjectFile("src/components/form-command-center.tsx");
@@ -320,7 +321,7 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(funnelCommandCenterSource, /getCrmEnumLabel\(item\.status, language\)/);
   assert.match(funnelCommandCenterSource, /getCrmProjectTypeLabel\(project\.type, language\)/);
   assert.match(propertyCommandCenterSource, /getCrmProjectTypeLabel\(project\.type, language\)/);
-  assert.match(workspaceSource, /getCrmConsentChannelLabel\(consent\.channel, language\)/);
+  assert.doesNotMatch(workspaceSource, /\{consent\.(?:channel|status)\}/);
   assert.match(workspaceSource, /getCrmEnumLabel\(dataSource, language\)/);
   assert.match(workspaceSource, /getCrmLeadTypeKey\(lead\.type\)/);
   assert.match(workspaceSource, /getCrmSourceLabel\(source, language\)/);
@@ -343,7 +344,7 @@ test("system generated CRM default texts localize at display boundaries only", (
   assert.match(leadInboxSource, /taskTitle:\s*item\.lead\.nextAction \|\| item\.lead\.intent/);
 
   for (const [name, source, patterns] of [
-    ["daily queue", dailyQueueBoardSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
+    ["daily queue", dailyWorkQueueSource, [/getCrmSystemTextLabel\(lead\.intent,\s*input\.language\)/, /getCrmSystemTextLabel\(lead\.nextAction,\s*input\.language\)/]],
     ["dashboard", dashboardSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
     ["workspace", workspaceSource, [/getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
     ["funnel", funnelCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
@@ -409,7 +410,9 @@ test("phase 2 dashboard KPI labels stay explicit and localized", () => {
   assert.doesNotMatch(workspaceSource, /All visible leads, no time filter\.|Weighted value of open deals\./);
   assert.match(i18nSource, /noSourceData:\s*"No lead source data in this view\."/);
   assert.match(i18nSource, /noSourceData:\s*"Keine Leadquellen-Daten in dieser Ansicht\."/);
-  assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(forecastOpenDeals\.length, formatEuro\(forecastOpenPipelineValue, locale\), formatEuro\(forecastWeightedPipelineValue, locale\)\)/);
+  assert.match(dashboardSource, /formatEuro\(forecastWeightedPipelineValue, locale\)/);
+  assert.match(dashboardSource, /keine Provision/);
+  assert.match(dashboardSource, /no commission assumed/);
   assert.match(dashboardSource, /copy\.charts\.noSourceData/);
   assert.match(workspaceSource, /document\.title = `\$\{activeAreaLabel\} \| Novalure CRM`/);
 });
@@ -422,7 +425,7 @@ test("phase 2 German copy uses correct umlauts and formal login wording", () => 
   assert.match(i18nSource, /meetingOutbox:\s*"Terminvorschläge"/);
   assert.match(i18nSource, /noMeetingActions:\s*"Keine wartenden Terminvorschläge\."/);
   assert.match(dailyQueueBoardSource, /Fällige Rückrufe/);
-  assert.match(dailyQueueBoardSource, /heißen Leads, fälligen Rückrufen/);
+  assert.match(dailyQueueBoardSource, /heiße Leads, fällige Rückrufe/);
   assert.match(dailyQueueBoardSource, /Überfällige Aufgaben/);
   assert.match(crmLoadersSource, /Keine heißen Leads - Lead-Zentrale prüfen\./);
   assert.match(crmLoadersSource, /Keine überfälligen Angebote\./);

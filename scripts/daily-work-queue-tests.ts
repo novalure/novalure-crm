@@ -26,3 +26,9 @@ test('workspace and project boundaries exclude unrelated records and never resol
  base.contacts=[{...base.contacts[0],workspaceId:'foreign',name:'PRIVATE FOREIGN'}];base.users=[{...base.users[0],workspaceId:'foreign',name:'PRIVATE OWNER'}];
  const queue=buildDailyWorkQueue(base);assert.equal(queue.length,1);assert.doesNotMatch(JSON.stringify(queue),/PRIVATE/);assert.equal(queue[0].title,lead.intent);assert.equal(queue[0].owner,'Zuständigkeit nicht verfügbar');
 });
+test('known system lead text is localized at display time without mutating source data',()=>{
+ const base=input();base.contacts=[];base.tasks=[];base.events=[];base.leads=[{...lead,intent:'Verkaufsabsicht in 3 Monaten',nextAction:'Rückruf heute'}];
+ const [item]=buildDailyWorkQueue({...base,language:'en'});
+ assert.equal(item.title,'Selling intent within 3 months');assert.ok(item.meta.includes('Callback today'));
+ assert.equal(base.leads[0].intent,'Verkaufsabsicht in 3 Monaten');assert.equal(base.leads[0].nextAction,'Rückruf heute');
+});
