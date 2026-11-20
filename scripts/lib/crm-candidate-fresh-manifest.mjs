@@ -31,17 +31,17 @@ check(crmCandidateVariant.id === crmCandidateExecutionVariant &&
 const incompatiblePreview = crmCandidateVariant.excluded.map(row => row.path);
 // Preserve the reviewed 169-source / 166-execution / 125-ledger baseline verbatim.
 // New source is admitted only through this separately pinned, append-only registry.
-export const crmCandidateSourceExtensionSha256 = '51a41617e023133df7fa9a8d782f7df1d164c1e65b5640b2b7a66d10ad7eef0b';
+export const crmCandidateSourceExtensionSha256 = '6ceded43cff9e54db784e94fe596ca362ae217658ce84b257a52655fc7d4e30d';
 const extensionBytes = readFileSync(new URL('../../config/crm-candidate-fresh-website-sales-extension.json', import.meta.url));
 check(sha256(extensionBytes.toString('utf8').replace(/\r\n/g, '\n')) === crmCandidateSourceExtensionSha256,
   'CRM_QA_SOURCE_EXTENSION_REGISTRY_CHANGED');
 export const crmCandidateSourceExtension = freeze(JSON.parse(extensionBytes));
 check(crmCandidateSourceExtension.format === 'crm-candidate-source-extension-v1' &&
-  crmCandidateSourceExtension.id === 'WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205' &&
+  crmCandidateSourceExtension.id === 'WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207' &&
   crmCandidateSourceExtension.baseSourceRegistrySha256 === crmCandidateSourceManifestSha256 &&
   crmCandidateSourceExtension.baseExecutionVariantSha256 === crmCandidateExecutionVariantSha256 &&
-  crmCandidateSourceExtension.forward.length === 4 &&
-  crmCandidateSourceExtension.forward.map(row => row.path).join(',') === 'migrations/202_website_sales_ireland.sql,migrations/203_website_sales_machine.sql,migrations/204_website_sales_studio.sql,migrations/205_website_sales_lifecycle.sql' &&
+  crmCandidateSourceExtension.forward.length === 6 &&
+  crmCandidateSourceExtension.forward.map(row => row.path).join(',') === 'migrations/202_website_sales_ireland.sql,migrations/203_website_sales_machine.sql,migrations/204_website_sales_studio.sql,migrations/205_website_sales_lifecycle.sql,migrations/206_website_sales_operations.sql,migrations/207_website_sales_conversations.sql' &&
   crmCandidateSourceExtension.forward.every(row => /^[a-f0-9]{64}$/.test(row.sha256) && row.manual === false && !sources.forward.some(original => original.path === row.path)) &&
   crmCandidateSourceExtension.forward[0].path === 'migrations/202_website_sales_ireland.sql' &&
   /^[a-f0-9]{64}$/.test(crmCandidateSourceExtension.forward[0].sha256) &&

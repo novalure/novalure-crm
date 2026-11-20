@@ -62,3 +62,28 @@ PR132 release dependency, real Sales grants/keys and exact-target deployment and
 activation evidence remain separate gates. No provider call, Production access,
 new paid commitment, binding commercial action or customer message was performed.
 Teams and A1 runtime work remain outside this Sales change.
+
+## Later operations and conversations schema frontier
+
+The separately pinned `WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207` extension
+adds migrations206 and207 after the same202–205 sources. Its current additive
+inventory is175 source files /172 executions /131 canonical ledger rows. The
+original169 /166 /125 registry and execution variant remain unchanged. These
+counts describe the planned source frontier; they do not extend the historical
+16-case browser result above or attest a target installation.
+
+`scripts/qa-sales-browser-server.mjs --website-sales-operations` implies the
+optimized application, Design C application fixture, Website Sales workbench,
+Studio and lifecycle prerequisites. It checksum-checks and applies202–207 in the
+owned disposable database before starting the app. Build the actual application
+first; do not run an application build from a dependency-junction checkout.
+This flag creates no active machine grant, financial authority, topic permission
+or external action. Continue to keep the ignored fixture context private.
+
+The focused fixture/schema check is
+`node --conditions=react-server --import tsx --test scripts/website-sales-operations-browser-fixture-tests.mjs`.
+It uses the preserved124-row local application baseline plus the six separate
+extension migrations. That local fixture baseline is distinct from the native
+candidate's125-row historical baseline, which includes its manual062 source.
+Browser acceptance for the new operations flows remains a separate test and
+must be reported against the actual optimized application revision.

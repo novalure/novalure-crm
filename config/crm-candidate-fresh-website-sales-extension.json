@@ -1,6 +1,6 @@
 {
   "format": "crm-candidate-source-extension-v1",
-  "id": "WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205",
+  "id": "WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207",
   "baseSourceRegistrySha256": "c6823ea7e096242923db1038975cb59d48974fac64fc8742a693a1310f358487",
   "baseExecutionVariantSha256": "5d102a9fbd3e0c5c67e77962bd820d3f2459cf30d3cb75c588c7193cf57c063a",
   "forward": [
@@ -22,6 +22,16 @@
     {
       "path": "migrations/205_website_sales_lifecycle.sql",
       "sha256": "18b4ef5699dacc551a1da8f6cd59009fa0cccb46d17b3d10b833584b6e988202",
+      "manual": false
+    },
+    {
+      "path": "migrations/206_website_sales_operations.sql",
+      "sha256": "f4c934ca587cf3b531ec17259cb63842b4bfcf787f412afd557163894d3f236a",
+      "manual": false
+    },
+    {
+      "path": "migrations/207_website_sales_conversations.sql",
+      "sha256": "5e866b337d3df505b86fabae789c5530f8b587651b276a098583f327f72e8b8d",
       "manual": false
     }
   ]

@@ -11,13 +11,14 @@ export async function seedWebsiteSalesWorkbenchBrowser(db, account) {
   assert(path.resolve(db.directory).startsWith(path.resolve(".npm-cache/qa") + path.sep));
   assert(/^sales_qa_[a-f0-9]+$/.test(db.role));
   const extension = JSON.parse(await readFile("config/crm-candidate-fresh-website-sales-extension.json", "utf8"));
-  assert(["WEBSITE_SALES_IRELAND_202", "WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205"].includes(extension.id));
-  assert.equal(extension.forward.length, extension.id === "WEBSITE_SALES_IRELAND_202" ? 1 : 4);
+  const reviewedLengths = { WEBSITE_SALES_IRELAND_202: 1, WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205: 4, WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207: 6 };
+  assert(Object.hasOwn(reviewedLengths, extension.id));
+  assert.equal(extension.forward.length, reviewedLengths[extension.id]);
   const entry = extension.forward.find(item => item.path === "migrations/202_website_sales_ireland.sql");
   assert(entry, "The reviewed extension must include the original Website Sales predecessor");
   assert.equal(entry.path, "migrations/202_website_sales_ireland.sql");
   const sql = await readFile(entry.path, "utf8");
-  assert.equal(createHash("sha256").update(sql).digest("hex"), entry.sha256);
+  assert.equal(createHash("sha256").update(sql.replace(/\r\n/g, "\n")).digest("hex"), entry.sha256);
   const owner = new LocalSalesPool({ host: "127.0.0.1", port: db.port, database: db.database, user: "neondb_owner" });
   const client = await owner.connect();
   try {

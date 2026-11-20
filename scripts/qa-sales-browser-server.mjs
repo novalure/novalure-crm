@@ -15,13 +15,14 @@ let log;
 let readyForStop = false;
 let stopRequested = false;
 let cleanup;
-const serveBuiltApplication = process.argv.includes("--built");
-const designCIntegration = process.argv.includes("--design-c");
+const websiteSalesOperations = process.argv.includes("--website-sales-operations");
+const serveBuiltApplication = websiteSalesOperations || process.argv.includes("--built");
+const designCIntegration = websiteSalesOperations || process.argv.includes("--design-c");
 const livelistedIntegration = process.argv.includes("--livelisted");
 const propertyAssignmentRegression = process.argv.includes("--property-assignment-regression");
 const websiteSalesWorkbench = process.argv.includes("--website-sales-workbench");
-const websiteSalesStudio = process.argv.includes("--website-sales-studio");
-const websiteSalesLifecycle = process.argv.includes("--website-sales-lifecycle");
+const websiteSalesStudio = websiteSalesOperations || process.argv.includes("--website-sales-studio");
+const websiteSalesLifecycle = websiteSalesOperations || process.argv.includes("--website-sales-lifecycle");
 
 async function waitForExit(completion, durationMs) {
   let timer;
@@ -95,7 +96,7 @@ try {
   checkStop();
   const fixture = await seedSalesBrowser(db);
   if (websiteSalesWorkbench || websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-workbench-browser-fixture.mjs")).seedWebsiteSalesWorkbenchBrowser(db, fixture));
-  if (websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-studio-browser-fixture.mjs")).seedWebsiteSalesStudioBrowser(db, fixture, { lifecycle: websiteSalesLifecycle }));
+  if (websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-studio-browser-fixture.mjs")).seedWebsiteSalesStudioBrowser(db, fixture, { lifecycle: websiteSalesLifecycle, operations: websiteSalesOperations }));
   const localEncryptionKey = randomBytes(40).toString("hex");
   if (livelistedIntegration) {
     Object.assign(fixture, await (await import("./lib/livelisted-browser-fixture.mjs")).seedLivelistedBrowser(db, fixture, localEncryptionKey));
