@@ -102,7 +102,7 @@ try {
         permittedField: "MIN_MARGIN_BPS", currentValue: 3000, minimumValue: 2000, maximumValue: 6000, maximumAbsoluteChange: 500 } }, view.portfolio.version);
     await refreshOperations();
     const plan = main.getByTestId("website-operations-plan-form"); await plan.locator('[name="stage"]').selectOption("DIAGNOSIS");
-    for (const workflowId of [state.workflow.id, second.workflow.id]) await plan.locator(`input[type="checkbox"][value="${workflowId}"]`).check();
+    for (const workflowId of [state.workflow.id, second.workflow.id]) await main.getByTestId("website-operations-portfolio").locator(`input[name="opportunityId"][value="${workflowId}"]`).check();
     await plan.getByRole("button", { name: "Aufwand reservieren", exact: true }).click();
     await expect.poll(async () => (await opsRead()).allocations.filter(value => value.status === "RESERVED").length).toBe(1);
     const allocated = await opsRead(); assert.equal(allocated.cohort.denominator, 2); assert.equal(allocated.portfolio.allocatedBudgetMinor, 300); assert.equal(allocated.portfolio.allocatedCapacityMinutes, 10);
