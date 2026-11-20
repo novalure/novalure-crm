@@ -12,6 +12,29 @@ begin
   end if;
 end $role$;
 
+-- The extended projection must never silently read a predecessor schema or a
+-- similarly named, differently typed column. Migration 186 is an explicit
+-- prerequisite; this check creates nothing when the schema is incompatible.
+do $schema$
+begin
+  if exists (
+    select 1 from (values
+      ('balcony_area_sqm','numeric(10,2)'), ('terrace_area_sqm','numeric(10,2)'),
+      ('garden_area_sqm','numeric(10,2)'), ('underground_parking_count','integer'),
+      ('carport_count','integer'), ('outdoor_parking_count','integer')
+    ) expected(column_name, column_type)
+    where not exists (
+      select 1 from pg_catalog.pg_attribute a
+      where a.attrelid=pg_catalog.to_regclass('public.property_units')
+        and a.attname=expected.column_name and a.attnum>0 and not a.attisdropped
+        and not a.attnotnull and a.attgenerated=''
+        and pg_catalog.format_type(a.atttypid,a.atttypmod)=expected.column_type
+    )
+  ) then
+    raise exception 'Property detail schema 186 is required and must match';
+  end if;
+end $schema$;
+
 create table public.crm_property_observation_grants (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id),
@@ -172,7 +195,13 @@ begin
     case when 'priceCents'=any(p_fields) then u.price_cents else null end as price_cents,
     case when 'areaSqm'=any(p_fields) then u.area_sqm else null end as area_sqm,
     case when 'rooms'=any(p_fields) then u.rooms else null end as rooms,
-    case when 'status'=any(p_fields) then u.status else null end as status
+    case when 'status'=any(p_fields) then u.status else null end as status,
+    case when 'balconyAreaSqm'=any(p_fields) then u.balcony_area_sqm else null end as balcony_area_sqm,
+    case when 'terraceAreaSqm'=any(p_fields) then u.terrace_area_sqm else null end as terrace_area_sqm,
+    case when 'gardenAreaSqm'=any(p_fields) then u.garden_area_sqm else null end as garden_area_sqm,
+    case when 'undergroundParkingCount'=any(p_fields) then u.underground_parking_count else null end as underground_parking_count,
+    case when 'carportCount'=any(p_fields) then u.carport_count else null end as carport_count,
+    case when 'outdoorParkingCount'=any(p_fields) then u.outdoor_parking_count else null end as outdoor_parking_count
     into selected from public.property_units u where u.id=p_unit and u.workspace_id=p_workspace and u.project_id=p_project
       and public.crm_classification_allowed(u.workspace_id,u.data_classification,u.data_purpose);
   if not found then raise exception using errcode='42501',message='Property observation is not accessible'; end if;
@@ -180,6 +209,12 @@ begin
   if 'areaSqm'=any(p_fields) then values_json := values_json || jsonb_build_object('areaSqm',selected.area_sqm::text); end if;
   if 'rooms'=any(p_fields) then values_json := values_json || jsonb_build_object('rooms',selected.rooms::text); end if;
   if 'status'=any(p_fields) then values_json := values_json || jsonb_build_object('status',selected.status); end if;
+  if 'balconyAreaSqm'=any(p_fields) then values_json := values_json || jsonb_build_object('balconyAreaSqm',selected.balcony_area_sqm::text); end if;
+  if 'terraceAreaSqm'=any(p_fields) then values_json := values_json || jsonb_build_object('terraceAreaSqm',selected.terrace_area_sqm::text); end if;
+  if 'gardenAreaSqm'=any(p_fields) then values_json := values_json || jsonb_build_object('gardenAreaSqm',selected.garden_area_sqm::text); end if;
+  if 'undergroundParkingCount'=any(p_fields) then values_json := values_json || jsonb_build_object('undergroundParkingCount',selected.underground_parking_count::text); end if;
+  if 'carportCount'=any(p_fields) then values_json := values_json || jsonb_build_object('carportCount',selected.carport_count::text); end if;
+  if 'outdoorParkingCount'=any(p_fields) then values_json := values_json || jsonb_build_object('outdoorParkingCount',selected.outdoor_parking_count::text); end if;
   return jsonb_build_object('binding',binding,'unitId',selected.id,'workspaceId',selected.workspace_id,
     'projectId',selected.project_id,'objectVersion',selected.version::text,'updatedAt',selected.updated_at,'values',values_json);
 end $function$;

@@ -56,7 +56,8 @@ function numberValue(field: PropertyObservationField, raw: unknown): number {
   const value = Number(text);
   if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return invalid();
   if (integerFields.has(field) && !Number.isSafeInteger(value)) return invalid();
-  if (field !== "priceCents" && value > 99_999_999) return invalid();
+  if (field !== "priceCents" && value > 99_999_999.99) return invalid();
+  if (integerFields.has(field) && field !== "priceCents" && value > 10_000) return invalid();
   return value;
 }
 

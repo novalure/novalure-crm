@@ -12,6 +12,7 @@ import type { TenantPool } from "../src/lib/db/tenant-client";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>; let reader: pg.Pool; let otherReader: pg.Pool;
+let schemaPreconditionsChecked = false;
 const workspaceId = randomUUID(), actorId = randomUUID(), projectId = randomUUID(), unitId = randomUUID(), grantId = randomUUID();
 const foreignWorkspaceId = randomUUID(), foreignActorId = randomUUID(), foreignProjectId = randomUUID(), foreignUnitId = randomUUID();
 const privateUnitId = randomUUID(), privateGrantId = randomUUID();
@@ -48,7 +49,25 @@ before(async () => {
     await db.admin.query(`grant novalure_property_reader to ${login}`);
     await db.admin.query(`grant usage on schema public to ${login}`);
   }
-  await db.admin.query(await readFile("migrations/staged/property_observation_grants_candidate.sql", "utf8"));
+  const stagedMigration = await readFile("migrations/staged/property_observation_grants_candidate.sql", "utf8");
+  // Transactional DDL simulates a predecessor or an incompatible replacement
+  // on this disposable database only. A failed candidate must install nothing.
+  const schemaTest = await db.admin.connect();
+  try {
+    for (const incompatible of [
+      "alter table public.property_units rename column balcony_area_sqm to qa_missing_balcony_area_sqm",
+      "alter table public.property_units rename column balcony_area_sqm to qa_original_balcony_area_sqm; alter table public.property_units add column balcony_area_sqm text",
+    ]) {
+      await schemaTest.query("begin");
+      try {
+        await schemaTest.query(incompatible);
+        await assert.rejects(schemaTest.query(stagedMigration), /Property detail schema 186 is required/);
+      } finally { await schemaTest.query("rollback"); }
+      assert.equal((await schemaTest.query("select to_regclass('public.crm_property_observation_grants') as created")).rows[0].created, null);
+    }
+    schemaPreconditionsChecked = true;
+  } finally { schemaTest.release(); }
+  await db.admin.query(stagedMigration);
   reader = new pg.Pool({ host: "127.0.0.1", port: db.port, user: readerLogin, database: "postgres", max: 6 });
   otherReader = new pg.Pool({ host: "127.0.0.1", port: db.port, user: otherLogin, database: "postgres", max: 2 });
   await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC','managed_by_novalure','{}'),($2,'FOREIGN SYNTHETIC','managed_by_novalure','{}')", [workspaceId,foreignWorkspaceId]);
@@ -71,8 +90,42 @@ test("dedicated role performs an exact-scope, non-authoritative read", async () 
   assert.equal(result.actorId, actorId); assert.equal(result.authority, "NOT_ESTABLISHED"); assert.equal(result.sourceApproval, "NOT_EXPOSED");
   assert.deepEqual(result.fields, [
     { field: "priceCents", value: 0, valueState: "PRESENT" }, { field: "areaSqm", value: 75.5, valueState: "PRESENT" },
-    { field: "status", value: "available", valueState: "PRESENT" }, { field: "balconyAreaSqm", value: null, valueState: "NOT_EXPOSED" },
+    { field: "status", value: "available", valueState: "PRESENT" }, { field: "balconyAreaSqm", value: null, valueState: "EXPLICIT_UNKNOWN" },
   ]);
+});
+
+test("candidate rejects a pre-186 or incompatible detail schema before installation", () => {
+  assert.equal(schemaPreconditionsChecked, true);
+});
+
+test("detail reads preserve null and zero and require every selected field grant", async () => {
+  const detailFields = ["balconyAreaSqm", "terraceAreaSqm", "gardenAreaSqm", "undergroundParkingCount", "carportCount", "outdoorParkingCount"] as const;
+  await db.admin.query("update property_units set balcony_area_sqm=0,terrace_area_sqm=19.25,garden_area_sqm=null,underground_parking_count=0,carport_count=2,outdoor_parking_count=null,version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  try {
+    await assert.rejects(read({ ...request, fields: detailFields }), /accessible/i);
+    for (const deniedField of detailFields) {
+      await db.admin.query("update crm_property_observation_grants set allowed_fields=$2 where id=$1", [grantId, detailFields.filter(field => field !== deniedField)]);
+      await assert.rejects(read({ ...request, fields: [deniedField] }), /accessible/i);
+    }
+    await db.admin.query("update crm_property_observation_grants set allowed_fields=$2 where id=$1", [grantId, [...detailFields]]);
+    const observed = (await read({ ...request, fields: detailFields })).observation;
+    assert.deepEqual(observed.fields, [
+      { field: "balconyAreaSqm", value: 0, valueState: "PRESENT" },
+      { field: "terraceAreaSqm", value: 19.25, valueState: "PRESENT" },
+      { field: "gardenAreaSqm", value: null, valueState: "EXPLICIT_UNKNOWN" },
+      { field: "undergroundParkingCount", value: 0, valueState: "PRESENT" },
+      { field: "carportCount", value: 2, valueState: "PRESENT" },
+      { field: "outdoorParkingCount", value: null, valueState: "EXPLICIT_UNKNOWN" },
+    ]);
+    assert.equal(observed.authority, "NOT_ESTABLISHED");
+    assert.equal(observed.sourceApproval, "NOT_EXPOSED");
+    assert.deepEqual((await read({ ...request, fields: ["gardenAreaSqm"] })).observation.fields,
+      [{ field: "gardenAreaSqm", value: null, valueState: "EXPLICIT_UNKNOWN" }]);
+    await assert.rejects(read({ ...request, fields: ["gardenAreaSqm", "priceCents"] }), /accessible/i);
+  } finally {
+    await db.admin.query("update crm_property_observation_grants set allowed_fields=$2 where id=$1", [grantId, [...request.fields]]);
+    await db.admin.query("update property_units set balcony_area_sqm=null,terrace_area_sqm=null,garden_area_sqm=null,underground_parking_count=null,carport_count=null,outdoor_parking_count=null,version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  }
 });
 
 test("HTTP is default closed and needs verified workload and exact persisted grant", async () => {

@@ -36,6 +36,17 @@ test("projects only explicitly requested fields and preserves CRM identifiers", 
   assert.equal(result.objectVersion, 3);
 });
 
+test("detail values respect database precision and parking count bounds", () => {
+  const result = makePropertyObservation({ ...base, requestedFields: ["balconyAreaSqm", "carportCount"],
+    row: { balconyAreaSqm: "99999999.99", carportCount: "10000" } });
+  assert.deepEqual(result.fields, [
+    { field: "balconyAreaSqm", value: 99999999.99, valueState: "PRESENT" },
+    { field: "carportCount", value: 10000, valueState: "PRESENT" },
+  ]);
+  for (const [field, value] of [["balconyAreaSqm", "100000000"], ["balconyAreaSqm", "1.001"], ["carportCount", "10001"], ["carportCount", "0.5"]] as const)
+    assert.throws(() => makePropertyObservation({ ...base, requestedFields: [field], row: { [field]: value } }), /CRM_PROPERTY_OBSERVATION_INVALID/);
+});
+
 test("rejects malformed scope, metadata, field selection and unsupported raw data", () => {
   for (const patch of [
     { actorId: "anonymous" }, { projectId: "not-a-uuid" }, { sourceRevision: "x" },
