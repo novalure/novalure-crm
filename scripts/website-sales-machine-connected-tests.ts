@@ -15,16 +15,17 @@ import { CRM_MACHINE_AUDIENCE, CRM_MACHINE_ENVIRONMENT, CRM_MACHINE_ISSUER, CRM_
 import { handleWebsiteSalesMachine, websiteSalesMachinePath } from "../src/lib/website-sales-machine";
 import { registerWebsiteSalesMachineAccess } from "../src/lib/website-sales-machine-registration";
 import { runWebsiteSalesIrelandCommand, websiteSalesIrelandContract } from "../src/lib/db/website-sales-ireland-repositories";
+import { executeSalesOperationsCommand } from "../src/lib/db/website-sales-operations-repositories";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
-type Target = "workflow" | "studio" | "lifecycle";
+type Target = "workflow" | "studio" | "lifecycle" | "autonomy";
 type Scope = { tenantId: string; projectId: string; crmWorkspaceId: string; crmProjectId: string; companyId: string; locationId: string };
 type Identity = { workloadId: string; grantId: string; departmentId: "SALES"; agentId: string; taskId: string };
 type Result = { contractVersion: string; persisted: boolean; commandId: string; auditReference: string; correlationId: string;
-  data: { workflow?: { id: string; version: number; evidenceDigest: string; leadId: string | null; dealId: string | null; nextTaskId: string | null };
+  data: Record<string, unknown> & { workflow?: { id: string; version: number; evidenceDigest: string; leadId: string | null; dealId: string | null; nextTaskId: string | null };
     artifactId?: string; refreshId?: string }; currentData?: unknown };
 type Runtime = { enqueue(target: Target, command: Record<string, unknown>): Promise<{ id: string }>;
-  run(id: string): Promise<Result>; status(id: string): Promise<{ status: string } | null> };
+  run(id: string): Promise<Result>; status(id: string): Promise<{ status: string } | null>; originalCommand(id: string): Promise<Record<string, unknown> | null> };
 type Cipher = object;
 type Store = object;
 type Machine = object;
@@ -47,6 +48,12 @@ const evelynRoot = path.resolve(path.dirname(source), "../..");
 test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTTP → CRM handler and PostgreSQL recover committed response loss", { timeout: 240000 }, async t => {
   const external = await import(pathToFileURL(source).href) as ExternalRuntime;
   const storage = await import(pathToFileURL(path.join(path.dirname(source), "website-sales-execution-store.ts")).href) as ExternalStore;
+  const allocations = await import(pathToFileURL(path.join(path.dirname(source), "website-sales-allocation.ts")).href) as {
+    websiteSalesAllocationOperationId(id: string, purpose: "stage" | "claim" | "settle"): string;
+    createWebsiteSalesAllocationExecutor(input: { allocationId: string; expectedAllocationVersion: number; resourceGrants: unknown[] }, ports: {
+      original(id: string): Promise<Record<string, unknown> | null>; execute(target: Target, request: Record<string, unknown>): Promise<Result>;
+    }): { original(target: Target, id: string): Promise<Record<string, unknown> | null>; execute(target: Target, request: Record<string, unknown>): Promise<Result> };
+  };
   t.diagnostic(`Evelyn runtime source SHA256 ${createHash("sha256").update(await readFile(source)).digest("hex")}; synthetic OIDC verifier, real Ed25519/HTTP/PostgreSQL; no provider acceptance claim`);
   const db = await startLocalSalesDb();
   let server: Server | undefined, executionPool: Pool | undefined;
@@ -66,7 +73,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
   };
   try {
     await applySalesSchema(db, { maxMigrationNumber: 90 });
-    for (const file of ["170_crm_personal_mailbox.sql", "202_website_sales_ireland.sql", "203_website_sales_machine.sql", "204_website_sales_studio.sql", "205_website_sales_lifecycle.sql"]) {
+    for (const file of ["170_crm_personal_mailbox.sql", "202_website_sales_ireland.sql", "203_website_sales_machine.sql", "204_website_sales_studio.sql", "205_website_sales_lifecycle.sql", "206_website_sales_operations.sql", "207_website_sales_conversations.sql"]) {
       await db.admin.query("begin");
       try { await db.admin.query(await readFile(`migrations/${file}`, "utf8")); await db.admin.query("commit"); }
       catch (error) { await db.admin.query("rollback"); throw error; }
@@ -98,7 +105,8 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       await registrar.query("set role connected_sales_registrar");
       await registerWebsiteSalesMachineAccess(registrar, { workloadId: ids.workload, workloadActorId: ids.actor, grantId: ids.grant, actorId: ids.actor,
         projectId: ids.project, companyId: ids.company, locationId, departmentId: "SALES", agentId, taskId: ids.task,
-        scopes: ["crm.website-sales.read", "crm.website-sales.observe", "crm.website-sales.qualify", "crm.website-sales.studio.read", "crm.website-sales.studio.create-diagnosis", "crm.website-sales.lifecycle.read", "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.reconcile"],
+        scopes: ["crm.website-sales.read", "crm.website-sales.observe", "crm.website-sales.qualify", "crm.website-sales.studio.read", "crm.website-sales.studio.create-diagnosis", "crm.website-sales.lifecycle.read", "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.reconcile",
+          "crm.website-sales.autonomy.read", "crm.website-sales.autonomy.plan-portfolio", "crm.website-sales.autonomy.claim-allocation", "crm.website-sales.autonomy.settle-allocation"],
         publicKey: pair.publicKey.export({ format: "der", type: "spki" }).toString("base64url"), authorityReference: "SYNTHETIC connected contract acceptance", expiresAt: null });
     } finally { try { await registrar.query("rollback"); await registrar.query("reset role"); } finally { registrar.release(); } }
 
@@ -109,6 +117,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
     await db.admin.query("grant create on database postgres to evelyn_prod_owner; grant evelyn_prod_owner to evelyn_prod_migration; grant evelyn_prod_migration to qa_admin");
     await db.admin.query(await readFile(path.join(evelynRoot, "migrations/production/001_foundation.sql"), "utf8"));
     await db.admin.query(await readFile(path.join(evelynRoot, "migrations/sales/001_website_sales_execution.sql"), "utf8"));
+    await db.admin.query(await readFile(path.join(evelynRoot, "migrations/sales/002_website_sales_operations_target.sql"), "utf8"));
     executionPool = new Pool({ host: "127.0.0.1", port: db.port, user: "evelyn_prod_runtime", database: "postgres", max: 4 });
     const scope: Scope = { tenantId: randomUUID(), projectId: randomUUID(), crmWorkspaceId: CRM_MACHINE_WORKSPACE_ID, crmProjectId: ids.project, companyId: ids.company, locationId };
     assert.notEqual(scope.tenantId, scope.crmWorkspaceId); assert.notEqual(scope.projectId, scope.crmProjectId);
@@ -122,19 +131,20 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
         const result = await callback(client as unknown as QueryClient); await client.query("commit"); return result;
       } catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
     } };
-    let origin = "", loseNextExecute = false;
+    let origin = "", loseNextExecute = false, loseOperation: string | null = null;
     const calls: string[] = [], serverErrors: string[] = [];
     server = createServer((incoming, outgoing) => { void (async () => {
       try {
         if (incoming.method !== "POST" || incoming.url !== websiteSalesMachinePath) { outgoing.writeHead(404).end(); return; }
         const chunks: Buffer[] = []; let bytes = 0;
         for await (const chunk of incoming) { const buffer = Buffer.from(chunk); bytes += buffer.byteLength; if (bytes > 131072) { outgoing.writeHead(413).end(); return; } chunks.push(buffer); }
-        const body = Buffer.concat(chunks), envelope = JSON.parse(body.toString("utf8")) as { target: Target; operation: string };
+        const body = Buffer.concat(chunks), envelope = JSON.parse(body.toString("utf8")) as { target: Target; operation: string; request?: { operation: string } };
         calls.push(`${envelope.target}:${envelope.operation}`);
         const headers = new Headers(); for (const [name, value] of Object.entries(incoming.headers)) if (typeof value === "string") headers.set(name, value);
         const response = await handleWebsiteSalesMachine(new Request(origin+websiteSalesMachinePath, { method: "POST", headers, body }), { ...options, machineAuth: oidc() });
         const payload = await response.text();
-        if (loseNextExecute && envelope.operation === "execute" && response.ok) { loseNextExecute = false; outgoing.destroy(); return; }
+        if (response.status === 409) { const code = (JSON.parse(payload) as { code?: unknown }).code; t.diagnostic(`CRM bounded conflict: ${typeof code === "string" && /^[A-Z0-9_]+$/.test(code) ? code : "UNCLASSIFIED"}`); }
+        if ((loseNextExecute || loseOperation === envelope.request?.operation) && envelope.operation === "execute" && response.ok) { loseNextExecute = false; loseOperation = null; outgoing.destroy(); return; }
         outgoing.writeHead(response.status, { "content-type": "application/json", "cache-control": "no-store" }); outgoing.end(payload);
       } catch (error) { serverErrors.push(error instanceof Error ? error.name : "UNKNOWN"); outgoing.writeHead(503).end(); }
     })(); });
@@ -187,10 +197,47 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
           expectedNetPriceMinor: 250000, estimatedDeliveryCostMinor: 50000, minimumMarginBasisPoints: 3000, requiredCapacityMinutes: 60, availableCapacityMinutes: 600, rightsVerified: true, budgetReference: null },
       }, { workflowId: qualification.data.workflow!.id, expectedWorkflowVersion: qualification.data.workflow!.version, expectedEvidenceDigest: qualification.data.workflow!.evidenceDigest }), async () => { assert.equal((await snapshot()).artifacts, 1); });
     });
+    let refreshed: Result;
     await t.test("lifecycle refresh is reconciled without duplicating the canonical lead deal task or observation", async () => {
-      await recover("lifecycle", command("website-sales-lifecycle-v1", "refresh_evidence", { prospect: prospect(true), locationVersion: 1 }, { expectedVersion: qualification.data.workflow!.version }), async () => {
+      refreshed = await recover("lifecycle", command("website-sales-lifecycle-v1", "refresh_evidence", { prospect: prospect(true), locationVersion: 1 }, { expectedVersion: qualification.data.workflow!.version }), async () => {
         const counts = await snapshot(); assert.equal(counts.refreshes, 1); assert.equal(counts.observations, 2); assert.equal(counts.leads, 1); assert.equal(counts.deals, 1); assert.equal(counts.tasks, 1);
       });
+    });
+    await t.test("actual CRM allocation and actual Evelyn worker recover claim, stage and settlement response loss without a second effect", async () => {
+      const ownerId = randomUUID();
+      await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic policy owner','synthetic-owner@example.invalid','owner','novalure_operator','active')", [ownerId, CRM_MACHINE_WORKSPACE_ID]);
+      const owner: AppSession = { ...session, userId: ownerId, role: "owner", permissions: getRolePermissions("owner") };
+      const past = new Date(Date.now() - 60000).toISOString(), future = new Date(Date.now() + 3600000).toISOString();
+      const configured = await executeSalesOperationsCommand(owner, { contractVersion: "website-sales-operations-v1", operation: "configure_portfolio", projectId: ids.project, companyId: ids.company, locationId,
+        expectedVersion: 0, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { title: "Synthetic approved resource window", budgetMinor: 30, capacityMinutes: 10, windowStart: past, windowEnd: future,
+          managedResources: [{ projectId: ids.project, companyId: ids.company, locationId }], stageEstimates: [{ stage: "DIAGNOSIS", estimatedCostMinor: 30, requiredMinutes: 10 }],
+          policy: { enabled: true, validFrom: past, validUntil: future, maxOpportunities: 1, maxPerCompany: 1, maxCostPerOpportunityMinor: 30, maxMinutesPerOpportunity: 10,
+            minimumKnownSignals: 2, minimumScore: 1, weights: { FIT: 5000, NEED: 5000, INTENT: 0, URGENCY: 0, ENGAGEMENT: 0 } } } }, options);
+      const workflow = refreshed!.data.workflow!; assert(workflow);
+      const planCommand = command("website-sales-operations-v1", "plan_portfolio", { portfolioId: configured.data.portfolioId, resourceGrants: [], candidates: [{ projectId: ids.project,
+        companyId: ids.company, locationId, workflowId: workflow.id, expectedWorkflowVersion: workflow.version, expectedEvidenceDigest: workflow.evidenceDigest, requestedStage: "DIAGNOSIS", purpose: "INTERNAL_RESEARCH", dialogSourceId: null }] }, { expectedVersion: configured.data.version });
+      const planned = await freshRuntime().enqueue("autonomy", planCommand), plannedReceipt = await freshRuntime().run(planned.id);
+      const allocationId = (plannedReceipt.data.allocationIds as string[])[0]!; assert(allocationId);
+      const stageId = allocations.websiteSalesAllocationOperationId(allocationId, "stage");
+      const previous = (await db.admin.query("select artifact_digest from crm_website_studio_artifacts where workflow_id=$1 and kind='DIAGNOSIS' order by version desc limit 1", [workflow.id])).rows[0];
+      const stage = command("website-sales-studio-api-v1", "create_diagnosis", { version: 2, previousArtifactDigest: previous.artifact_digest,
+        recommendations: [{ text: "New synthetic scoped observation", evidenceIds: ["business_need"] }], scope: { included: ["Proposed structure"], excluded: ["Publication and payments"] },
+        investmentPlan: { estimatedCostMinor: 30, availableBudgetMinor: 30, expectedNetPriceMinor: 250000, estimatedDeliveryCostMinor: 50000, minimumMarginBasisPoints: 3000,
+          requiredCapacityMinutes: 10, availableCapacityMinutes: 10, rightsVerified: true, budgetReference: `crm-allocation:${allocationId}:1` } },
+      { idempotencyKey: stageId, workflowId: workflow.id, expectedWorkflowVersion: workflow.version, expectedEvidenceDigest: workflow.evidenceDigest });
+      const worker = () => allocations.createWebsiteSalesAllocationExecutor({ allocationId, expectedAllocationVersion: 1, resourceGrants: [] }, {
+        original: id => freshRuntime().originalCommand(id), execute: async (target, request) => { const runtime = freshRuntime(), row = await runtime.enqueue(target, request); return runtime.run(row.id); } });
+      for (const phase of ["claim_allocation", "create_diagnosis", "settle_allocation"]) {
+        loseOperation = phase; const original = await worker().original("studio", stageId);
+        await assert.rejects(worker().execute("studio", original ?? stage), (error: unknown) => !!error && typeof error === "object" && "outcome" in error && error.outcome === "UNKNOWN");
+        assert.equal(loseOperation, null, `${phase} actually committed before its response was lost`);
+      }
+      await worker().execute("studio", (await worker().original("studio", stageId))!);
+      assert.equal((await snapshot()).artifacts, 2); assert.equal((await db.admin.query("select count(*) from crm_website_sales_ops_effects where allocation_id=$1", [allocationId])).rows[0].count, "1");
+      const allocation = (await db.admin.query("select status,version from crm_website_sales_ops_allocations where id=$1", [allocationId])).rows[0];
+      assert.deepEqual(allocation, { status: "COMPLETED", version: 3 });
+      assert.equal((await db.admin.query("select count(*) from evelyn_prod.website_sales_execution where target='autonomy'")).rows[0].count, "3");
+      assert.equal((await snapshot()).deliveries, 0);
     });
     await t.test("revocation denies committed cached data and all effects remain internal", async () => {
       await db.admin.query("update crm_website_sales_machine_grants set revoked_at=clock_timestamp() where id=$1", [ids.grant]);
