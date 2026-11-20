@@ -26,7 +26,7 @@
     "test:studio-sales-qa-readiness": "node --conditions=react-server --import tsx --test scripts/studio-sales-qa-readiness-tests.ts",
     "release:verify-vercel-env": "node --use-system-ca scripts/verify-vercel-production-env.mjs",
     "security:production": "npm audit --omit=dev --audit-level=moderate",
-    "test:unit": "node --import tsx --test scripts/phase0-smoke-tests.mjs scripts/phase1-persistence-smoke-tests.mjs scripts/phase2-pipeline-smoke-tests.mjs scripts/phase3-rbac-smoke-tests.mjs scripts/phase4-validation-smoke-tests.mjs scripts/phase5-copy-smoke-tests.mjs scripts/phase6-bot-grounding-smoke-tests.mjs scripts/phase7-mobile-smoke-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs scripts/i18n-localization-smoke-tests.mjs scripts/company-profile-settings-smoke-tests.mjs scripts/contact-access-rbac-smoke-tests.mjs scripts/contact-empty-state-regression-tests.mjs scripts/property-department-smoke-tests.mjs scripts/design-foundations-smoke-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs scripts/page-metadata-localization-tests.mjs scripts/password-input-accessibility-tests.mjs scripts/touch-target-smoke-tests.mjs scripts/durable-queue-smoke-tests.mjs scripts/cron-runtime-smoke-tests.mjs scripts/database-diagnostics-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/open-redirect-security-tests.mjs scripts/security-headers-smoke-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/p2-11-provider-and-assignee-tests.mjs scripts/auth-security-tests.mjs scripts/admin-navigation-smoke-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs scripts/csrf-security-tests.mjs scripts/deal-input-validation-tests.mjs scripts/oauth-state-security-tests.mjs scripts/public-submission-abuse-tests.mjs scripts/bot-document-share-lifecycle-tests.mjs scripts/unit-board-price-parser-smoke-tests.mjs scripts/unit-board-state-accessibility-tests.mjs scripts/lead-inbox-date-safety-tests.mjs scripts/app-role-grant-regression-tests.mjs scripts/production-rls-cutover-tests.mjs",
+    "test:unit": "node --import tsx --test scripts/phase0-smoke-tests.mjs scripts/phase1-persistence-smoke-tests.mjs scripts/phase2-pipeline-smoke-tests.mjs scripts/phase3-rbac-smoke-tests.mjs scripts/phase4-validation-smoke-tests.mjs scripts/phase5-copy-smoke-tests.mjs scripts/phase6-bot-grounding-smoke-tests.mjs scripts/phase7-mobile-smoke-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs scripts/i18n-localization-smoke-tests.mjs scripts/company-profile-settings-smoke-tests.mjs scripts/contact-access-rbac-smoke-tests.mjs scripts/contact-empty-state-regression-tests.mjs scripts/property-department-smoke-tests.mjs scripts/design-foundations-smoke-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs scripts/page-metadata-localization-tests.mjs scripts/password-input-accessibility-tests.mjs scripts/touch-target-smoke-tests.mjs scripts/durable-queue-smoke-tests.mjs scripts/cron-runtime-smoke-tests.mjs scripts/database-diagnostics-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/open-redirect-security-tests.mjs scripts/security-headers-smoke-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/p2-11-provider-and-assignee-tests.mjs scripts/auth-security-tests.mjs scripts/admin-navigation-smoke-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs scripts/csrf-security-tests.mjs scripts/deal-input-validation-tests.mjs scripts/oauth-state-security-tests.mjs scripts/public-submission-abuse-tests.mjs scripts/bot-document-share-lifecycle-tests.mjs scripts/unit-board-price-parser-smoke-tests.mjs scripts/unit-board-state-accessibility-tests.mjs scripts/lead-inbox-date-safety-tests.mjs scripts/app-role-grant-regression-tests.mjs scripts/production-rls-cutover-tests.mjs scripts/website-sales-workbench-client-tests.ts scripts/crm-team-reader-tests.ts",
     "test:integration": "node --test scripts/qa-security-and-scope-smoke-tests.mjs scripts/qa-livegang-seed-tests.mjs",
     "test:media-routes": "node --conditions=react-server --experimental-test-module-mocks --import tsx --test --test-concurrency=1 scripts/media-route-http-tests.ts",
     "test:crm-candidate-fresh": "node --test scripts/crm-candidate-fresh-plan-tests.mjs scripts/crm-candidate-fresh-database-tests.mjs && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/design-c-current-application-schema-tests.ts",
@@ -69,7 +69,7 @@
     "qa:lead-idempotency": "node scripts/qa-lead-idempotency.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
     "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs",
-    "test:sales": "node --conditions=react-server --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts scripts/editor-preflight-rls-tests.ts",
+    "test:sales": "node --conditions=react-server --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts scripts/editor-preflight-rls-tests.ts scripts/website-sales-ireland-tests.ts scripts/website-sales-workbench-tests.ts",
     "qa:sales:server": "node scripts/qa-sales-browser-server.mjs",
     "qa:sales:browser": "node scripts/qa-sales-browser.mjs",
     "qa:sales:e2e": "node scripts/qa-sales-e2e.mjs",
@@ -117,7 +117,13 @@
     "test:knowledge-assistant-quota": "node --conditions=react-server --import tsx --test scripts/knowledge-connected-assistant-quota-tests.ts",
     "test:customer-onboarding": "node --conditions=react-server --import tsx --test scripts/customer-workspace-provisioning-tests.ts && npm run test:webchat-customer-product",
     "test:webchat-customer-product": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/webchat-customer-product-tests.ts scripts/webchat-customer-portal-tests.ts",
-    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts scripts/native-assistant-late-authority-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
+    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts scripts/native-assistant-late-authority-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs",
+    "test:website-sales-ireland": "node --conditions=react-server --import tsx --test scripts/website-sales-ireland-tests.ts",
+    "test:website-sales-connected": "node --conditions=react-server --import tsx --test scripts/website-sales-connected-tests.ts",
+    "test:website-sales-workbench": "node --conditions=react-server --import tsx --test scripts/website-sales-workbench-tests.ts",
+    "test:website-sales-workbench-client": "node --import tsx --test scripts/website-sales-workbench-client-tests.ts",
+    "qa:website-sales-workbench": "node scripts/qa-website-sales-workbench.mjs",
+    "test:website-sales-complete": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-sales-ireland-tests.ts scripts/website-sales-workbench-tests.ts scripts/website-sales-machine-tests.ts scripts/website-sales-studio-tests.ts scripts/website-sales-studio-http-tests.ts scripts/website-sales-lifecycle-tests.ts scripts/website-sales-operations-tests.ts scripts/website-sales-conversation-tests.ts scripts/website-sales-topic-projection-tests.ts && node --import tsx --test scripts/website-sales-workbench-client-tests.ts scripts/website-sales-studio-client-tests.ts scripts/website-sales-lifecycle-client-tests.ts scripts/website-sales-write-barrier-tests.ts scripts/website-sales-operations-client-tests.ts scripts/website-sales-operations-receipt-tests.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -127,6 +133,7 @@
     "@types/react-grid-layout": "^1.3.6",
     "@vercel/blob": "2.8.0",
     "@vercel/oidc": "4.0.6",
+    "ai": "^7.0.148",
     "dompurify": "3.4.17",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
@@ -142,7 +149,7 @@
     "server-only": "0.0.1",
     "sharp": "0.35.5",
     "yauzl": "3.4.0",
-    "ai": "^7.0.148"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

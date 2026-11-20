@@ -1,0 +1,38 @@
+{
+  "format": "crm-candidate-source-extension-v1",
+  "id": "WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207",
+  "baseSourceRegistrySha256": "c6823ea7e096242923db1038975cb59d48974fac64fc8742a693a1310f358487",
+  "baseExecutionVariantSha256": "5d102a9fbd3e0c5c67e77962bd820d3f2459cf30d3cb75c588c7193cf57c063a",
+  "forward": [
+    {
+      "path": "migrations/202_website_sales_ireland.sql",
+      "sha256": "6c4fce55b90fdbb4579c8a97f4d8891c54cab987c939d47a5d9b3282dae9b0fb",
+      "manual": false
+    },
+    {
+      "path": "migrations/203_website_sales_machine.sql",
+      "sha256": "5abbe6f37a87d94b14da5b9361c1c8f9fd23bc8af3a9b29a463338a06d62cbec",
+      "manual": false
+    },
+    {
+      "path": "migrations/204_website_sales_studio.sql",
+      "sha256": "1f87253407d64a75eb1586717ee5e813489e7694acb3c945d8922c25754e0064",
+      "manual": false
+    },
+    {
+      "path": "migrations/205_website_sales_lifecycle.sql",
+      "sha256": "18b4ef5699dacc551a1da8f6cd59009fa0cccb46d17b3d10b833584b6e988202",
+      "manual": false
+    },
+    {
+      "path": "migrations/206_website_sales_operations.sql",
+      "sha256": "f4c934ca587cf3b531ec17259cb63842b4bfcf787f412afd557163894d3f236a",
+      "manual": false
+    },
+    {
+      "path": "migrations/207_website_sales_conversations.sql",
+      "sha256": "e383b4fbc96d5a7b21a52ed8e68c2144cbbdea27d9008bfe5701ffa8744a6429",
+      "manual": false
+    }
+  ]
+}

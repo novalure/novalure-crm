@@ -1,0 +1,4 @@
+import { websiteSalesPreviewAccessCsp, websiteSalesPreviewAccessScript } from "@/lib/website-sales-preview-access";
+import { websiteStudioPrivateHeaders } from "@/lib/website-sales-studio-http";
+export const runtime="nodejs";
+export async function GET(){return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>Private concept preview</title></head><body><main><h1>Private concept preview</h1><p id="status" role="status">Checking your private invitation…</p></main><script>${websiteSalesPreviewAccessScript}</script></body></html>`,{headers:{...websiteStudioPrivateHeaders,"Content-Type":"text/html; charset=utf-8","Content-Security-Policy":websiteSalesPreviewAccessCsp}});}

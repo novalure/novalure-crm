@@ -29,6 +29,41 @@ check(crmCandidateVariant.id === crmCandidateExecutionVariant &&
   crmCandidateVariant.sourceRegistrySha256 === crmCandidateSourceManifestSha256 &&
   crmCandidateVariant.excluded.length === 3, 'CRM_QA_EXECUTION_VARIANT_INVALID');
 const incompatiblePreview = crmCandidateVariant.excluded.map(row => row.path);
+// Preserve the reviewed 169-source / 166-execution / 125-ledger baseline verbatim.
+// New source is admitted only through this separately pinned, append-only registry.
+export const crmCandidateSourceExtensionSha256 = 'b70ef31bff2e8b34e42b61eb1631e23a9f6a0c197c9611f09ef5557c227b4244';
+const extensionBytes = readFileSync(new URL('../../config/crm-candidate-fresh-website-sales-extension.json', import.meta.url));
+check(sha256(extensionBytes.toString('utf8').replace(/\r\n/g, '\n')) === crmCandidateSourceExtensionSha256,
+  'CRM_QA_SOURCE_EXTENSION_REGISTRY_CHANGED');
+export const crmCandidateSourceExtension = freeze(JSON.parse(extensionBytes));
+check(crmCandidateSourceExtension.format === 'crm-candidate-source-extension-v1' &&
+  crmCandidateSourceExtension.id === 'WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207' &&
+  crmCandidateSourceExtension.baseSourceRegistrySha256 === crmCandidateSourceManifestSha256 &&
+  crmCandidateSourceExtension.baseExecutionVariantSha256 === crmCandidateExecutionVariantSha256 &&
+  crmCandidateSourceExtension.forward.length === 6 &&
+  crmCandidateSourceExtension.forward.map(row => row.path).join(',') === 'migrations/202_website_sales_ireland.sql,migrations/203_website_sales_machine.sql,migrations/204_website_sales_studio.sql,migrations/205_website_sales_lifecycle.sql,migrations/206_website_sales_operations.sql,migrations/207_website_sales_conversations.sql' &&
+  crmCandidateSourceExtension.forward.every(row => /^[a-f0-9]{64}$/.test(row.sha256) && row.manual === false && !sources.forward.some(original => original.path === row.path)) &&
+  crmCandidateSourceExtension.forward[0].path === 'migrations/202_website_sales_ireland.sql' &&
+  /^[a-f0-9]{64}$/.test(crmCandidateSourceExtension.forward[0].sha256) &&
+  crmCandidateSourceExtension.forward[0].manual === false &&
+  sources.forward.every(row => row.path !== crmCandidateSourceExtension.forward[0].path), 'CRM_QA_SOURCE_EXTENSION_INVALID');
+export const crmCandidateCurrentSources = freeze({ format: 'crm-candidate-current-migration-sources-v1',
+  baseSourceRevision: sources.sourceRevision, baseSourceRegistrySha256: crmCandidateSourceManifestSha256,
+  sourceExtensionSha256: crmCandidateSourceExtensionSha256,
+  forward: [...sources.forward, ...crmCandidateSourceExtension.forward], staged087: sources.staged087 });
+const selectedSources = crmCandidateCurrentSources.forward.filter(row => !incompatiblePreview.includes(row.path));
+const sourceNumber = row => Number(row.path.split('/').at(-1).slice(0, 3));
+export const crmCandidateCurrentCoverage = freeze({
+  sourceInventorySqlFiles: crmCandidateCurrentSources.forward.length,
+  executedOriginalSqlFiles: selectedSources.length,
+  historicalExecutionsBeforeLedger: selectedSources.filter(row => sourceNumber(row) < 41).length,
+  expectedCanonicalLedgerRows: selectedSources.filter(row => sourceNumber(row) >= 41).length,
+});
+check(sources.forward.length === crmCandidateVariant.sourceInventorySqlFiles &&
+  sources.forward.filter(row => !incompatiblePreview.includes(row.path)).length === crmCandidateVariant.executedOriginalSqlFiles &&
+  sources.forward.filter(row => sourceNumber(row) < 41).length === crmCandidateVariant.historicalExecutionsBeforeLedger &&
+  sources.forward.filter(row => sourceNumber(row) >= 41 && !incompatiblePreview.includes(row.path)).length === crmCandidateVariant.expectedCanonicalLedgerRows,
+  'CRM_QA_BASELINE_VARIANT_COUNTS_CHANGED');
 const oldProjects = new Set(['misty-cloud-70835427', 'weathered-term-98273025', 'super-block-59791927', 'green-thunder-49879900']);
 const shaPattern = /^[a-f0-9]{64}$/;
 const revisionPattern = /^[a-f0-9]{40}$/;
@@ -87,19 +122,22 @@ export function createCrmCandidateManifest(files, stagedFiles, headCommit) {
         name: version.slice(4), checksum: row.sha256, manual: row.manual === true, content });
     });
   };
-  const forward = capture(files, sources.forward);
+  const forward = capture(files, crmCandidateCurrentSources.forward);
   const staged087 = capture(stagedFiles, sources.staged087);
   const excluded = forward.filter(row => incompatiblePreview.includes(row.path));
   check(excluded.length === 3 && excluded.every(row => row.manual), 'CRM_QA_EXACT_PREVIEW_EXCLUSION_REQUIRED');
   const selected = forward.filter(row => !incompatiblePreview.includes(row.path));
-  check(selected.length === 166 && selected.filter(row => row.number >= 41).length === 125, 'CRM_QA_STANDALONE_VARIANT_COUNTS');
+  check(selected.length === crmCandidateCurrentCoverage.executedOriginalSqlFiles &&
+    selected.filter(row => row.number >= 41).length === crmCandidateCurrentCoverage.expectedCanonicalLedgerRows, 'CRM_QA_STANDALONE_VARIANT_COUNTS');
   const early = forward.filter(row => row.number <= 85);
-  check(early.length === 83 && forward.filter(row => row.number < 41).length === 41 &&
-    forward.filter(row => row.number >= 41).length === 128, 'CRM_QA_SQL_COUNTS_CHANGED');
+  check(early.length === 83 && forward.filter(row => row.number < 41).length === crmCandidateCurrentCoverage.historicalExecutionsBeforeLedger &&
+    forward.filter(row => row.number >= 41).length === crmCandidateCurrentCoverage.expectedCanonicalLedgerRows + excluded.length, 'CRM_QA_SQL_COUNTS_CHANGED');
   const media = early.splice(early.findIndex(row => row.number === 62), 1)[0];
   early.splice(early.findIndex(row => row.number === 60), 0, media);
   const bound = { format: 'crm-candidate-original-migration-manifest-v1', headCommit,
     sourceRegistrySha256: crmCandidateSourceManifestSha256,
+    sourceExtensionSha256: crmCandidateSourceExtensionSha256,
+    coverage: crmCandidateCurrentCoverage,
     executionVariant: crmCandidateExecutionVariant,
     executionVariantSha256: crmCandidateExecutionVariantSha256,
     excluded: excluded.map(({ path, checksum }) => ({ path, checksum, execution: 'NOT_EXECUTED_INCOMPATIBLE_PREVIEW_VARIANT' })),

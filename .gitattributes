@@ -1,5 +1,8 @@
 *.sql text eol=lf
 migrations/*.sql text eol=lf
+# Keep canonical cross-repository Sales contracts byte-identical on Windows.
+src/lib/website-prospect.ts text eol=lf
+src/lib/website-sales-studio.ts text eol=lf
 docs/go-live/changed-files-2026-08-11.md whitespace=-blank-at-eof
 # Immutable historical console evidence retains its original hashed bytes.
 # Keep source whitespace checks enabled; these exact logs contain progress CRs.

@@ -1,9 +1,10 @@
 import { getOfferApprovalReference } from "./approval-reference-repositories";
 import { randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
-import { assertCrmUuid, assertExpectedVersion, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "@/lib/crm-command";
+import { assertCrmUuid, assertExpectedVersion, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmCommandPreflight, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "@/lib/crm-command";
 import { assertFreshOfferSession, assertOfferApproval, nextOfferStatus, offerApprovalPayload, offerDate, offerText, offerTotal, parseOfferContent, OfferValidationError, type OfferAction, type OfferContent, type OfferStatus } from "@/lib/offer-workflow";
 import { evaluateOutboundConsent } from "@/lib/db/consent-policy";
+import { assertWebsiteSalesOfferEvidence, websiteSalesOfferInvalidated } from "./website-sales-offer-evidence";
 
 type OfferRow = { id: string; workspaceId: string; projectId: string; division: string; dealId: string; contactId: string; leadId: string; organizationId: string; status: OfferStatus; revision: number; version: number; approvalId: string | null; followUpStatus: string; followUpAt: string | null; responseReference: string | null; content: OfferContent; contentDigest: string; totalNetCents: string | number };
 type ApprovalRow = { id: string; revision: number; digest: string; actorId: string; expiresAt: string; decision: string };
@@ -59,7 +60,8 @@ async function readView(tx: TenantTransaction, session: AppSession, dealId: stri
   const row = await tx.queryOne<OfferRow>(`${selectOffer} where o.workspace_id=$1::uuid and o.deal_id=$2::uuid`, [session.workspaceId, dealId]);
   const approverId = await approvalConfig(tx, session);
   const deliveries = row ? await tx.query(`select id,revision,content_digest as "contentDigest",recipient_email as "recipientEmail",status,receipt_reference as "receiptReference",attested_by as "attestedBy",attested_at as "attestedAt",created_at as "createdAt" from crm_offer_deliveries where workspace_id=$1::uuid and offer_id=$2::uuid order by revision desc`, [session.workspaceId, row.id]) : [];
-  return { approvalReference: row?.approvalId ? await getOfferApprovalReference(session, row.approvalId) : null, offer: row ? normalize(row) : null, approval: row ? await currentApproval(tx, row) : null, deliveries, approverConfigured: Boolean(approverId), canApprove: approverId === session.userId, dealVersion: Number(deal.version), deliverySemantics: "manual_attestation_only", contractExecutionEnabled: false };
+  const evidenceInvalidated = row ? await websiteSalesOfferInvalidated(tx, session.workspaceId, row.id, Number(row.revision)) : false;
+  return { approvalReference: row?.approvalId ? await getOfferApprovalReference(session, row.approvalId) : null, offer: row ? normalize(row) : null, approval: row ? await currentApproval(tx, row) : null, deliveries, approverConfigured: Boolean(approverId), canApprove: !evidenceInvalidated && approverId === session.userId, evidenceInvalidated, blockedReason: evidenceInvalidated ? "OFFER_EVIDENCE_INVALIDATED" : null, dealVersion: Number(deal.version), deliverySemantics: "manual_attestation_only", contractExecutionEnabled: false };
 }
 export async function getOfferWorkflow(session: AppSession, dealId: string, options: TenantTransactionOptions = {}) {
   assertCrmUuid(dealId, "dealId");
@@ -72,7 +74,8 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
     assertCrmUuid(input.projectId, "projectId");
     if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) error("INVALID_OFFER_PAYLOAD", 400);
     const expectedVersion = assertExpectedVersion(input.expectedVersion);
-    return await executeCrmCommand(session, offerCommandInput(input), async (tx, context) => {
+    return await withCrmCommandPreflight(session, offerCommandInput(input), async (outer, fresh) => {
+    const result = await executeCrmCommand(fresh, offerCommandInput(input), async (tx, context) => {
       const session = context.session;
       if (input.operation === "create") {
         fields(input.payload, ["content", "leadId", "organizationName"]);
@@ -108,6 +111,7 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
       if (!row || row.projectId !== input.projectId) error("OFFER_NOT_FOUND", 404);
       const offer = normalize(row);
       if (offer.version !== expectedVersion) error("VERSION_CONFLICT");
+      await assertWebsiteSalesOfferEvidence(tx, session, offer, input.operation);
       const status = nextOfferStatus(offer.status, input.operation);
       const payload = input.payload;
       if (input.operation === "revise") {
@@ -189,6 +193,11 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
       const updated = await tx.queryOne(`update crm_offers set status=$3,version=version+1,updated_at=now() where workspace_id=$1::uuid and id=$2::uuid and version=$4 returning id`, [session.workspaceId, offer.id, status, expectedVersion]);
       if (!updated) error("VERSION_CONFLICT");
       return { id: offer.id, ...(await readView(tx, session, offer.dealId)) };
+    }, options);
+    // The callback is skipped on receipt replay; current invalidations still apply before disclosure.
+    const current = await outer.queryOne<OfferRow>(`${selectOffer} where o.workspace_id=$1 and o.id=$2`, [fresh.workspaceId, result.data.id]);
+    if (current) await assertWebsiteSalesOfferEvidence(outer, fresh, normalize(current), "read");
+    return result;
     }, options);
   } catch (cause) {
     if (cause instanceof OfferValidationError) throw new CrmCommandError(cause.code, cause.code, cause.code.includes("AUTHENTICATION") ? 401 : 409);
