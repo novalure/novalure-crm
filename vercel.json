@@ -2,6 +2,7 @@
   "buildCommand": "npm run build -- --webpack",
   "git": {
     "deploymentEnabled": {
+      "codex/property-crm-task-fence-20261120": false,
       "codex/crm-property-object-fence-20261120": false,
       "codex/crm-baseline-repair-20261120": false,
       "codex/shared-learning-package4-20261102": false,
