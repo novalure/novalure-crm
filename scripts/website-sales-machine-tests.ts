@@ -9,12 +9,14 @@ import { handleWebsiteSalesMachine, websiteSalesMachineContract, websiteSalesMac
   type WebsiteSalesMachineRequest, type WebsiteSalesMachineOptions } from "../src/lib/website-sales-machine";
 import { registerWebsiteSalesMachineAccess, type WebsiteSalesMachineRegistration } from "../src/lib/website-sales-machine-registration";
 import { websiteSalesIrelandContract, runWebsiteSalesIrelandCommand, type WebsiteSalesIrelandCommand } from "../src/lib/db/website-sales-ireland-repositories";
+import { websiteSalesStudioContract, type WebsiteSalesStudioCommand } from "../src/lib/website-sales-studio-types";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
-type Workflow = { version: number; evidenceDigest: string; status: string; canContact: false; offerDraftId: string; blockedReason: string | null };
-type View = { location: { id: string }; workflow: Workflow };
-type Reply = { code: string; status: string; data: View; currentData: View; machine: { departmentId: string }; replayed: boolean; persisted: boolean };
+type Workflow = { id: string; version: number; evidenceDigest: string; status: string; canContact: false; offerDraftId: string; blockedReason: string | null };
+type View = { location: { id: string }; workflow: Workflow; companyName?: string };
+type Reply = { code: string; status: string; data: View; currentData: View; machine: { departmentId: string }; replayed: boolean; persisted: boolean;
+  requestHash: string; idempotencyKey: string; scope: { workspaceId: string; projectId: string; companyId: string; locationId: string | null } };
 
 test("dedicated Sales machine authority and receipt reconciliation use real PostgreSQL and canonical CRM effects", { timeout: 240000 }, async t => {
   const db = await startLocalSalesDb();
@@ -91,6 +93,7 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
     const installer = await db.admin.connect();
     try { await installer.query("set role sales_machine_installer"); await installer.query("begin"); await installer.query(await readFile("migrations/203_website_sales_machine.sql", "utf8")); await installer.query("commit"); }
     finally { try { await installer.query("rollback"); await installer.query("reset role"); } finally { installer.release(); } }
+    await db.admin.query("begin"); await db.admin.query(await readFile("migrations/204_website_sales_studio.sql", "utf8")); await db.admin.query("commit");
 
     await t.test("new migration seeds no workload, grant or business authority; OIDC alone is denied", async () => {
       const request = envelope(command("register_location", { countryCode: "IE", address: "1 Main Street, Dublin", sourceUrl: "https://example.invalid/location", sourceReference: "Synthetic fact" }));
@@ -116,7 +119,7 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
       assert.equal((await call(request, ids.grant, {}, {}, credential(request, ids.grant, key.privateKey, { requestHash: "a".repeat(64) }))).status, 401);
       assert.equal((await call(request, ids.grant, {}, {}, credential(request, ids.grant, key.privateKey, { issuedAt: 1, expiresAt: 2 }))).status, 401);
       assert.equal((await call({ ...request, actorId: ids.actor })).status, 400);
-      assert.equal((await call({ ...request, target: "studio" })).status, 403);
+      assert.equal((await call({ ...request, target: "studio" })).status, 400);
       assert.equal((await call(request, ids.grant, {}, { machineAuth: { ...auth(), env: { CRM_MACHINE_AUTH_ENABLED: "0", VERCEL_ENV: "production", NODE_ENV: "production" } } })).status, 403);
       assert.deepEqual(await totals(), before);
     });
@@ -126,6 +129,8 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
       const first = await call(request, ids.grant, {}, {}, signed); assert.equal(first.status, 200, JSON.stringify(first.body));
       locationId = first.body.data.location.id;
       assert.equal(first.body.machine.departmentId, "SALES"); assert.equal(first.body.persisted, true);
+      assert.equal(first.body.requestHash, crmPayloadDigest(request)); assert.ok("idempotencyKey" in request.request); assert.equal(first.body.idempotencyKey, request.request.idempotencyKey);
+      assert.deepEqual(first.body.scope, { workspaceId: CRM_MACHINE_WORKSPACE_ID, projectId: ids.project, companyId: ids.company, locationId: null });
       assert.equal((await db.admin.query("select registration_basis from crm_company_locations where id=$1", [locationId])).rows[0].registration_basis, "REGISTERED_DELEGATION");
       assert.equal((await call(request, ids.grant, {}, {}, signed)).body.code, "NONCE_REPLAY");
       const replay = await call(request); assert.equal(replay.status, 200); assert.equal(replay.body.replayed, true); assert.equal(replay.body.data.location.id, locationId);
@@ -143,6 +148,9 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
       observe = command("observe", { prospect: prospect() }, { locationId, locationVersion: 1 });
       assert.equal((await call(envelope(observe))).status, 403);
       await provision(registration({ grantId: ids.locationGrant, locationId, scopes: ["crm.website-sales.read", "crm.website-sales.observe", "crm.website-sales.qualify", "crm.website-sales.prepare-draft", "crm.website-sales.stop", "crm.website-sales.reconcile"] }));
+      const canonical = await call({ contractVersion: websiteSalesMachineContract, operation: "read", request: { projectId: ids.project, companyId: ids.company, locationId, correlationId: randomUUID() } }, ids.locationGrant);
+      assert.equal(canonical.status, 200); assert.equal(canonical.body.data.companyName, "Synthetic Irish company"); assert.equal(canonical.body.data.workflow, null);
+      assert.equal(canonical.body.data.location.id, locationId);
       const result = await call(envelope(observe), ids.locationGrant); assert.equal(result.status, 200, JSON.stringify(result.body)); workflow = result.body.data.workflow;
       assert.equal(workflow.status, "OBSERVED"); assert.equal(workflow.canContact, false);
       assert.equal((await call(envelope({ ...observe, companyId: ids.foreignCompany }), ids.locationGrant)).status, 403);
@@ -175,6 +183,46 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
       const second = randomUUID();
       await provision(registration({ grantId: second, locationId, scopes: ["crm.website-sales.observe", "crm.website-sales.reconcile"] }));
       assert.equal((await call(envelope(observe, "reconcile"), second)).status, 409);
+    });
+    await t.test("dedicated Studio scopes create real diagnosis, concept, acceptance and demo while excluding QA, preview and outbound authority", async () => {
+      const studioGrant = randomUUID(), scope = { projectId: ids.project, companyId: ids.company, locationId };
+      const studio = (operation: WebsiteSalesStudioCommand["operation"], payload: Record<string, unknown>): WebsiteSalesMachineRequest => ({
+        contractVersion: websiteSalesMachineContract, target: "studio", operation: "execute", request: {
+          contractVersion: websiteSalesStudioContract, operation, ...scope, workflowId: workflow.id,
+          expectedWorkflowVersion: workflow.version, expectedEvidenceDigest: workflow.evidenceDigest,
+          idempotencyKey: randomUUID(), correlationId: randomUUID(), payload,
+        },
+      });
+      const investmentPlan = { estimatedCostMinor: 0, availableBudgetMinor: 0, expectedNetPriceMinor: 250000, estimatedDeliveryCostMinor: 50000,
+        minimumMarginBasisPoints: 3000, requiredCapacityMinutes: 60, availableCapacityMinutes: 600, rightsVerified: true, budgetReference: null };
+      const claim = { text: "Synthetic scoped source fact", evidenceIds: ["business_need"] }, contentScope = { included: ["Proposed website structure"], excluded: ["Customer assets, publication and payments"] };
+      const diagnosis = studio("create_diagnosis", { version: 1, previousArtifactDigest: null, recommendations: [claim], scope: contentScope, investmentPlan });
+      assert.equal((await call(diagnosis, ids.locationGrant)).status, 403);
+      await provision(registration({ grantId: studioGrant, locationId, scopes: ["crm.website-sales.studio.read", "crm.website-sales.studio.create-diagnosis",
+        "crm.website-sales.studio.create-concept", "crm.website-sales.studio.accept-concept", "crm.website-sales.studio.build-demo", "crm.website-sales.reconcile"] }));
+      const getArtifact = (reply: Reply) => reply.data as unknown as { artifactId: string; artifactDigest: string; kind: string };
+      const diagnosed = await call(diagnosis, studioGrant); assert.equal(diagnosed.status, 200, JSON.stringify(diagnosed.body));
+      assert.equal(diagnosed.body.requestHash, crmPayloadDigest(diagnosis));
+      const d = getArtifact(diagnosed.body); assert.equal(d.kind, "DIAGNOSIS");
+      const concept = await call(studio("create_concept", { version: 1, previousArtifactDigest: null, diagnosisDigest: d.artifactDigest,
+        objective: "Clearer public information", hero: claim, sections: [{ title: "Proposed service information", body: claim }], visualDirection: "STUDIO_BLUE", scope: contentScope, investmentPlan }), studioGrant);
+      assert.equal(concept.status, 200, JSON.stringify(concept.body)); const c = getArtifact(concept.body);
+      const demo = studio("build_demo", { version: 1, previousArtifactDigest: null, conceptDigest: c.artifactDigest, investmentPlan });
+      assert.equal((await call(demo, studioGrant)).status, 409);
+      assert.equal((await call(studio("accept_concept", { artifactId: c.artifactId }), studioGrant)).status, 200);
+      const built = await call(demo, studioGrant); assert.equal(built.status, 200, JSON.stringify(built.body)); assert.equal(getArtifact(built.body).kind, "DEMO");
+      const readRequest: WebsiteSalesMachineRequest = { contractVersion: websiteSalesMachineContract, target: "studio", operation: "read", request: { ...scope, correlationId: randomUUID() } };
+      const read = await call(readRequest, studioGrant); assert.equal(read.status, 200); assert.equal(read.body.requestHash, crmPayloadDigest(readRequest));
+      const stored = read.body.data as unknown as { artifacts: { artifact: { kind: string } }[] };
+      assert.deepEqual(stored.artifacts.map(row => row.artifact.kind).sort(), ["CONCEPT", "DEMO", "DIAGNOSIS"]);
+      assert.equal((await call(diagnosis, studioGrant)).body.replayed, true);
+      const before = await totals(), reconciled = await call({ ...diagnosis, operation: "reconcile" }, studioGrant);
+      assert.equal(reconciled.status, 200); assert.equal(reconciled.body.status, "COMMITTED");
+      assert.deepEqual(await totals(), before);
+      for (const operation of ["submit_qa", "create_preview", "revoke_preview"] as const) assert.equal((await call(studio(operation, {}), studioGrant)).status, 403);
+      assert.equal((await db.admin.query("select count(*) from crm_website_studio_qa")).rows[0].count, "0");
+      assert.equal((await db.admin.query("select count(*) from crm_website_studio_preview_grants")).rows[0].count, "0");
+      assert.equal((await totals()).deliveries, 0);
     });
     await t.test("revocation and delegation expiry during a real command-lock wait deny receipt exposure with zero business writes", async () => {
       for (const mode of ["revocation", "expiry"] as const) {

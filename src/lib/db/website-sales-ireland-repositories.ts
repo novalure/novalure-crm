@@ -171,7 +171,10 @@ async function view(tx: TenantTransaction, session: AppSession, scope: Scope, re
 export async function getWebsiteSalesIrelandWorkflow(session: AppSession, scope: Scope, options: TenantTransactionOptions = {}) {
   websiteSalesActorAuthority(session, scope, "read");
   assertCrmUuid(scope.projectId); assertCrmUuid(scope.companyId); assertCrmUuid(scope.locationId);
-  return withCrmRead(session, async (tx, fresh) => { await company(tx, fresh, scope); return view(tx, fresh, scope); }, options);
+  return withCrmRead(session, async (tx, fresh) => {
+    const canonicalCompany = await company(tx, fresh, scope);
+    return { ...await view(tx, fresh, scope), companyName: canonicalCompany.name };
+  }, options);
 }
 function offerKey(key: string) {
   const hash = createHash("sha256").update(`website-sales-offer:${key}`).digest("hex");
