@@ -156,8 +156,24 @@ try {
   await step("changed approved facts regenerate a new stored answer for the same question", async () => {
     const form = main.getByTestId("website-conversation-fact"), revised = "Das überarbeitete Konzept umfasst vier responsive Informationsseiten.";
     await form.locator('[name="topic"]').selectOption("SCOPE"); await form.locator('[name="text"]').fill(revised); await form.locator('[name="reference"]').fill("https://example.invalid/revised-scope");
-    await form.getByRole("checkbox").check(); await form.getByRole("button", { name: "Information freigeben", exact: true }).click();
-    await expect.poll(async () => (await dialogRead()).facts.some(value => value.current && value.fact.version === 2)).toBe(true);
+    let release, held;
+    const released = new Promise(resolve => { release = resolve; }), received = new Promise(resolve => { held = resolve; });
+    const pattern = "**/api/crm/website-sales/conversation?*", handler = async route => {
+      const request = route.request();
+      if (request.method() === "GET" && !request.headers().accept?.includes("application/json")) { held(); await released; }
+      await route.continue();
+    };
+    await main.route(pattern, handler);
+    try {
+      const parentFresh = main.waitForResponse(response => new URL(response.url()).pathname === "/api/crm/website-sales/workbench" && new URL(response.url()).searchParams.get("view") === "detail" && response.request().method() === "GET" && response.status() === 200);
+      await form.getByRole("checkbox").check(); await form.getByRole("button", { name: "Information freigeben", exact: true }).click();
+      await expect.poll(async () => (await dialogRead()).facts.some(value => value.current && value.fact.version === 2)).toBe(true);
+      await received; await parentFresh;
+      await expect(main.locator("[data-website-sales-workbench]").getByText("Aktuelle CRM-Daten werden geladen…", { exact: true })).toHaveCount(0);
+      await expect(main.getByTestId("website-operations-conversation").getByRole("button", { name: "Kundenfrage bearbeiten", exact: true })).toBeDisabled();
+      await expect(main.getByTestId("website-sales-operations").locator('form button[type="submit"]:enabled')).toHaveCount(0);
+      await expect(form.locator('[name="text"]')).toHaveValue(revised);
+    } finally { release(); await main.unroute(pattern, handler); }
     await main.getByTestId("website-operations-conversation").getByRole("button", { name: "Kundenfrage bearbeiten", exact: true }).click();
     await expect(main.getByTestId("website-conversation-draft")).toContainText(revised);
   });
