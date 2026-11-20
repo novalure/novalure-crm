@@ -328,9 +328,9 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
       </Surface>
     </div>
     {workflow && locationId ? <>
-      <WebsiteSalesStudio key={`studio:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || Boolean(pending) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)} />
-      <WebsiteSalesLifecyclePanel key={`lifecycle:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(operationsRecovery)} onRefreshEvidence={workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT" ? () => { setShowResearch(true); } : undefined} />
-      <WebsiteSalesOperationsPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery)} onStateChanged={refresh} />
+      <WebsiteSalesStudio key={`studio:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)} />
+      <WebsiteSalesLifecyclePanel key={`lifecycle:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(operationsRecovery)} onRefreshEvidence={workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT" ? () => { setShowResearch(true); } : undefined} />
+      <WebsiteSalesOperationsPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery)} onStateChanged={refresh} />
     </> : null}
   </section>;
 }
