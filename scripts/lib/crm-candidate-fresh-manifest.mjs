@@ -31,7 +31,7 @@ check(crmCandidateVariant.id === crmCandidateExecutionVariant &&
 const incompatiblePreview = crmCandidateVariant.excluded.map(row => row.path);
 // Preserve the reviewed 169-source / 166-execution / 125-ledger baseline verbatim.
 // New source is admitted only through this separately pinned, append-only registry.
-export const crmCandidateSourceExtensionSha256 = '6ceded43cff9e54db784e94fe596ca362ae217658ce84b257a52655fc7d4e30d';
+export const crmCandidateSourceExtensionSha256 = 'b70ef31bff2e8b34e42b61eb1631e23a9f6a0c197c9611f09ef5557c227b4244';
 const extensionBytes = readFileSync(new URL('../../config/crm-candidate-fresh-website-sales-extension.json', import.meta.url));
 check(sha256(extensionBytes.toString('utf8').replace(/\r\n/g, '\n')) === crmCandidateSourceExtensionSha256,
   'CRM_QA_SOURCE_EXTENSION_REGISTRY_CHANGED');
