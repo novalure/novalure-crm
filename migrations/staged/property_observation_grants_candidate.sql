@@ -27,7 +27,7 @@ begin
       select 1 from pg_catalog.pg_attribute a
       where a.attrelid=pg_catalog.to_regclass('public.property_units')
         and a.attname=expected.column_name and a.attnum>0 and not a.attisdropped
-        and not a.attnotnull and a.attgenerated=''
+        and not a.attnotnull and not a.atthasdef and a.attgenerated='' and a.attidentity=''
         and pg_catalog.format_type(a.atttypid,a.atttypmod)=expected.column_type
     )
   ) then
