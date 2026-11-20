@@ -173,7 +173,7 @@ try {
       await expect(main.getByTestId("website-operations-conversation").getByRole("button", { name: "Kundenfrage bearbeiten", exact: true })).toBeDisabled();
       await expect(main.getByTestId("website-sales-operations").locator('form button[type="submit"]:enabled')).toHaveCount(0);
       await expect(form.locator('[name="text"]')).toHaveValue(revised);
-    } finally { release(); await main.unroute(pattern, handler); }
+    } finally { release(); await main.unrouteAll({ behavior: "wait" }); }
     await main.getByTestId("website-operations-conversation").getByRole("button", { name: "Kundenfrage bearbeiten", exact: true }).click();
     await expect(main.getByTestId("website-conversation-draft")).toContainText(revised);
   });
