@@ -3,8 +3,8 @@ import type { WebsiteDemoArtifact } from "./website-sales-studio";
 export async function websiteStudioBody(request:Request,limit=120000):Promise<unknown>{
  if(Number(request.headers.get("content-length")??0)>limit)throw new CrmCommandError("PAYLOAD_TOO_LARGE","Request too large",413);
  const reader=request.body?.getReader();if(!reader)throw new CrmCommandError("INVALID_JSON","JSON required",400);
- const chunks:Uint8Array[]=[];let size=0;const timer=setTimeout(()=>{void reader.cancel();},10000);
- try{for(;;){const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>limit)throw new CrmCommandError("PAYLOAD_TOO_LARGE","Request too large",413);chunks.push(next.value);}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.byteLength;}return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));}
+ const chunks:Uint8Array[]=[];let size=0,timedOut=false;const timer=setTimeout(()=>{timedOut=true;void reader.cancel();},10000);
+ try{for(;;){const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>limit)throw new CrmCommandError("PAYLOAD_TOO_LARGE","Request too large",413);chunks.push(next.value);}if(timedOut)throw new CrmCommandError("BODY_TIMEOUT","Request body timed out",408);const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.byteLength;}return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));}
  catch(error){if(error instanceof CrmCommandError)throw error;throw new CrmCommandError("INVALID_JSON","Invalid JSON",400);}
  finally{clearTimeout(timer);void reader.cancel();reader.releaseLock();}
 }
