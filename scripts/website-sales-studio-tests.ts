@@ -91,6 +91,11 @@ test("Studio persists real immutable artifacts and independently signed, revocab
    const grant=randomUUID(),token=randomBytes(32).toString("hex");await withCrmRead(session,tx=>tx.execute("insert into crm_website_studio_preview_grants(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,qa_id,contact_id,invitation_hash,expires_at,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+interval '5 minutes',$11)",[grant,ids.workspace,ids.project,ids.company,locationId,workflow.id,demoId,payload.certificateId,ids.contact,createHash("sha256").update(token).digest("hex"),ids.actor]),options);
    assert.equal(await preview(grant,token,true,options),null,"A valid signature for a different workflow cannot authorize this stored grant");
   });
+  await t.test("reply stop preserves verified QA metadata for internal handoff while preview creation remains blocked",async()=>{
+   await db.admin.query("update crm_website_sales_workflows set status='STOPPED',stop_reason='REPLY_RECEIVED',stop_source_reference='Synthetic received reply' where id=$1",[workflow.id]);
+   try{const current=await read(session,scope,options);assert.equal(current.blockedReason,"REPLY_RECEIVED");assert.ok(current.artifacts.find(a=>a.id===demoId)?.qa);assert.equal(current.canContact,false);await assert.rejects(execute(session,cmd("create_preview",{artifactId:demoId,contactId:ids.contact,expiresAt:new Date(Date.now()+600000).toISOString()}),options),{code:"REPLY_RECEIVED"});}
+   finally{await db.admin.query("update crm_website_sales_workflows set status='QUALIFIED',stop_reason=null,stop_source_reference=null where id=$1",[workflow.id]);}
+  });
   await t.test("revocation and committed contact opt-out close HTML and assets immediately",async()=>{
    await db.admin.query("update contacts set consent_label='Abgemeldet' where id=$1",[ids.contact]);assert.equal(await preview(grantId,cookie,false,options),null);
    await db.admin.query("update contacts set consent_label='Unbekannt' where id=$1",[ids.contact]);assert.ok(await preview(grantId,cookie,false,options));
