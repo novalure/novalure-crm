@@ -289,24 +289,25 @@ test('historical061 module imports and renders independently without any new CRM
   // Own test output is intentionally retained; no tracked source was renamed or removed.
 });
 
-test('exact170-file current inventory appends202 to unchanged169-source baseline; standalone167-execution/126-ledger and83 early originals', () => {
+test('exact173-file current inventory appends202–205 to unchanged169-source baseline; standalone170-execution/129-ledger and83 early originals', () => {
   const actual = loadCrmCandidateCommittedManifest(headCommit);
   assert.equal(actual.sha256, manifest.sha256);
-  assert.equal(actual.forward.length, 170); assert.equal(actual.early.length, 83);
-  assert.equal(actual.forward.filter(row => row.number >= 41).length, 129);
-  assert.equal(actual.selected.length, 167);
-  assert.equal(actual.selected.filter(row => row.number >= 41).length, 126);
+  assert.equal(actual.forward.length, 173); assert.equal(actual.early.length, 83);
+  assert.equal(actual.forward.filter(row => row.number >= 41).length, 132);
+  assert.equal(actual.selected.length, 170);
+  assert.equal(actual.selected.filter(row => row.number >= 41).length, 129);
   assert.deepEqual(actual.forward.slice(0, 169).map(row => ({ path: row.path, sha256: row.checksum, manual: row.manual })), crmCandidateOriginalSources.forward);
   assert.equal(sha256(readFileSync('config/crm-candidate-fresh-migrations.json', 'utf8').replace(/\r\n/g, '\n')), crmCandidateSourceManifestSha256);
   assert.equal(sha256(readFileSync('config/crm-candidate-fresh-execution-variant.json', 'utf8').replace(/\r\n/g, '\n')), crmCandidateExecutionVariantSha256);
   assert.deepEqual([crmCandidateVariant.sourceInventorySqlFiles, crmCandidateVariant.executedOriginalSqlFiles, crmCandidateVariant.expectedCanonicalLedgerRows], [169, 166, 125]);
-  const added = actual.forward.at(-1), registered = crmCandidateSourceExtension.forward[0];
+  const added = actual.forward.find(row => row.number === 202), registered = crmCandidateSourceExtension.forward[0];
+  assert.deepEqual(actual.forward.slice(169).map(row => ({ path: row.path, sha256: row.checksum, manual: row.manual })), crmCandidateSourceExtension.forward);
   assert.equal(added.path, 'migrations/202_website_sales_ireland.sql');
   assert.equal(added.checksum, '6c4fce55b90fdbb4579c8a97f4d8891c54cab987c939d47a5d9b3282dae9b0fb');
   assert.equal(added.checksum, registered.sha256);
   assert.equal(actual.sourceExtensionSha256, crmCandidateSourceExtensionSha256);
   assert.ok(actual.standard.some(row => row.path === added.path && row.checksum === added.checksum && !row.manual));
-  assert.deepEqual(actual.coverage, { sourceInventorySqlFiles: 170, executedOriginalSqlFiles: 167, historicalExecutionsBeforeLedger: 41, expectedCanonicalLedgerRows: 126 });
+  assert.deepEqual(actual.coverage, { sourceInventorySqlFiles: 173, executedOriginalSqlFiles: 170, historicalExecutionsBeforeLedger: 41, expectedCanonicalLedgerRows: 129 });
   assert.deepEqual(actual.excluded.map(row => row.path), ['migrations/097_studio_sales_calendar_bridge.sql',
     'migrations/098_studio_enquiry_handoff.sql', 'migrations/099_studio_enquiry_public_launch.sql']);
   assert.ok(actual.excluded.every(row => row.execution === 'NOT_EXECUTED_INCOMPATIBLE_PREVIEW_VARIANT'));
@@ -398,12 +399,10 @@ test('official planner preserves explicit manual predecessors and tokens bind fu
   const beforeExtension = manifest.selected.filter(row => row.number >= 41 && row.number < 202).map(ledgerRow);
   assert.equal(beforeExtension.length, 125, 'Historical standalone ledger remains unchanged before the additive202 step');
   const appended = planCrmCandidateOfficialStep({ ...input, migration: null, ledgerRows: beforeExtension });
-  assert.deepEqual(appended.plan.map(row => ({ version: row.version, checksum: row.checksum })), [{
-    version: '202_website_sales_ireland', checksum: crmCandidateSourceExtension.forward[0].sha256,
-  }]);
+  assert.deepEqual(appended.plan.map(row => ({ version: row.version, checksum: row.checksum })), crmCandidateSourceExtension.forward.map(row => ({version:row.path.split('/').at(-1).replace(/\.sql$/, ''),checksum:row.sha256})));
 });
 
-test('synthetic orchestration only: all086–202 and actual staged source identities retained; failures do not claim full success', async () => {
+test('synthetic orchestration only: all086–205 and actual staged source identities retained; failures do not claim full success', async () => {
   const initial = manifest.early.filter(row => row.number >= 41).map(ledgerRow);
   const rows = [...initial], events = [], calls = [], stageSql = [];
   let observedRoles = providerRoles, observedMemberships = providerMemberships;
@@ -419,9 +418,9 @@ test('synthetic orchestration only: all086–202 and actual staged source identi
     providerRoleBaseline: { roles: providerRoles, sha256: digest(providerRoles) } };
   const runOfficial = async row => { calls.push(row?.version || 'STANDARD'); rows.push(...(row ? [row] : manifest.standard).map(ledgerRow)); };
   const result = await completeCrmCandidateFreshSchema({ client, manifest, earlyResult, runOfficial, journal: async event => events.push(event) });
-  assert.equal(result.ledger.rows, 126); assert.equal(result.forwardSqlFiles, 167);
-  assert.equal(result.sourceInventorySqlFiles, 170); assert.equal(result.excluded.length, 3);
-  assert.equal(result.status, 'PASS_NEW_NATIVE_STANDALONE_SCHEMA_202');
+  assert.equal(result.ledger.rows, 129); assert.equal(result.forwardSqlFiles, 170);
+  assert.equal(result.sourceInventorySqlFiles, 173); assert.equal(result.excluded.length, 3);
+  assert.equal(result.status, 'PASS_NEW_NATIVE_STANDALONE_SCHEMA_205');
   assert.equal(result.sourceExtensionSha256, crmCandidateSourceExtensionSha256);
   assert.ok(rows.some(row => row.version === '202_website_sales_ireland' && row.checksum === crmCandidateSourceExtension.forward[0].sha256));
   assert.equal(result.productionReadiness, false); assert.equal(result.applicationAcceptance, 'PENDING_EXISTING_MANUAL_QA');
