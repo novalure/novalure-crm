@@ -1,5 +1,11 @@
 import { CrmCommandError } from "./crm-command";
 import type { WebsiteDemoArtifact } from "./website-sales-studio";
+import { isWebExposeOriginAllowed } from "./web-expose-http";
+/** The external configured origin remains authoritative behind Next's proxy URL. */
+export function websiteStudioExchangeOrigin(request: Request, configuredOrigin: string): URL | null {
+ try { const origin = new URL(configuredOrigin); return isWebExposeOriginAllowed(request, origin.origin) ? origin : null; }
+ catch { return null; }
+}
 export async function websiteStudioBody(request:Request,limit=120000):Promise<unknown>{
  if(Number(request.headers.get("content-length")??0)>limit)throw new CrmCommandError("PAYLOAD_TOO_LARGE","Request too large",413);
  const reader=request.body?.getReader();if(!reader)throw new CrmCommandError("INVALID_JSON","JSON required",400);
