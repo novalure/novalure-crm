@@ -121,6 +121,7 @@ try {
     }; });
     await form.getByRole("button", { name: "Preisvorschlag erstellen", exact: true }).click();
     await expect(main.getByTestId("website-sales-operations").getByText(/Ergebnis unbestätigt/).first()).toBeVisible();
+    await expect.poll(async () => (await admin.query("select count(*)::int n from crm_website_sales_ops_quotes where workflow_id=$1", [state.workflow.id])).rows[0].n).toBe(1);
     await expect(main.getByTestId("website-sales-operations").getByText("Die Änderung wurde nicht gespeichert. Prüfen Sie die Angaben und laden Sie den aktuellen Stand.", { exact: true })).toHaveCount(0);
     await main.reload({ waitUntil: "domcontentloaded" }); const panel = main.getByTestId("website-sales-operations"); await expect(panel).toBeVisible();
     await expect(main.locator("[data-website-sales-workbench]").getByLabel("Unternehmen", { exact: true })).toBeDisabled();
