@@ -22,10 +22,14 @@ export async function seedWebsiteSalesWorkbenchBrowser(db, account) {
   try {
     const identity = (await client.query("select current_user as actor,rolsuper,rolbypassrls from pg_roles where rolname=current_user")).rows[0];
     assert.deepEqual(identity, { actor: "neondb_owner", rolsuper: false, rolbypassrls: true });
-    await client.query("begin");
-    await client.query(sql);
-    await client.query("insert into novalure_schema_migrations(version,name,checksum) values('202_website_sales_ireland','website_sales_ireland',$1)", [entry.sha256]);
-    await client.query("commit");
+    const existing = (await client.query("select checksum from novalure_schema_migrations where version='202_website_sales_ireland'")).rows[0];
+    if (existing) assert.equal(existing.checksum, entry.sha256, "Existing Website Sales migration must match the original pinned source");
+    else {
+      await client.query("begin");
+      await client.query(sql);
+      await client.query("insert into novalure_schema_migrations(version,name,checksum) values('202_website_sales_ireland','website_sales_ireland',$1)", [entry.sha256]);
+      await client.query("commit");
+    }
   } catch (error) {
     await client.query("rollback");
     throw error;

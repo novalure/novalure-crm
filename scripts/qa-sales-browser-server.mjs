@@ -20,6 +20,8 @@ const designCIntegration = process.argv.includes("--design-c");
 const livelistedIntegration = process.argv.includes("--livelisted");
 const propertyAssignmentRegression = process.argv.includes("--property-assignment-regression");
 const websiteSalesWorkbench = process.argv.includes("--website-sales-workbench");
+const websiteSalesStudio = process.argv.includes("--website-sales-studio");
+const websiteSalesLifecycle = process.argv.includes("--website-sales-lifecycle");
 
 async function waitForExit(completion, durationMs) {
   let timer;
@@ -74,7 +76,7 @@ process.stdin.on("end", requestStop);
 process.stdin.resume();
 
 try {
-  if (websiteSalesWorkbench && (!designCIntegration || !serveBuiltApplication)) throw new Error("Website Sales browser QA requires the optimized build and current isolated application schema");
+  if ((websiteSalesWorkbench || websiteSalesStudio || websiteSalesLifecycle) && (!designCIntegration || !serveBuiltApplication)) throw new Error("Website Sales browser QA requires the optimized build and current isolated application schema");
   for (const name of [".env.local", ".env.production.local", ".env.development.local", ".env.production", ".env.development", ".env"]) {
     try { await access(name); throw new Error("Refusing to run browser QA in a checkout with environment files"); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -92,7 +94,8 @@ try {
   }
   checkStop();
   const fixture = await seedSalesBrowser(db);
-  if (websiteSalesWorkbench) Object.assign(fixture, await (await import("./lib/website-sales-workbench-browser-fixture.mjs")).seedWebsiteSalesWorkbenchBrowser(db, fixture));
+  if (websiteSalesWorkbench || websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-workbench-browser-fixture.mjs")).seedWebsiteSalesWorkbenchBrowser(db, fixture));
+  if (websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-studio-browser-fixture.mjs")).seedWebsiteSalesStudioBrowser(db, fixture, { lifecycle: websiteSalesLifecycle }));
   const localEncryptionKey = randomBytes(40).toString("hex");
   if (livelistedIntegration) {
     Object.assign(fixture, await (await import("./lib/livelisted-browser-fixture.mjs")).seedLivelistedBrowser(db, fixture, localEncryptionKey));
@@ -116,6 +119,7 @@ try {
   if (livelistedIntegration) env.NOVALURE_AUTH_ENCRYPTION_KEY = localEncryptionKey;
   if (livelistedIntegration) env.NOVALURE_TRUSTED_CLIENT_IP_HEADER = "x-forwarded-for";
   if (responseCapture) env.CRM_QA_SERVER_RESPONSE_CAPTURE = JSON.stringify(responseCapture);
+  if (fixture.websiteStudio) env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS = JSON.stringify(fixture.websiteStudio.publicKeys);
   log = createWriteStream(".npm-cache/qa/sales-browser-server.log");
   // Keep the existing loopback-only development database transport and normal
   // login/MFA policy, while optionally checking optimized assets without HMR.
