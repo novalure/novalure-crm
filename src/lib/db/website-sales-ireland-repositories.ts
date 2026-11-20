@@ -2,12 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import {
   assertCrmFields, assertCrmUuid, assertExpectedVersion, assertProjectGrant,
-  CrmCommandError, crmPayloadDigest, executeCrmCommand, withCrmCommandPreflight, withCrmRead,
+  CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmCommandPreflight, withCrmRead,
   type CrmCommandContext, type TenantTransaction, type TenantTransactionOptions,
 } from "@/lib/crm-command";
 import { executeOfferCommand } from "@/lib/db/offer-repositories";
 import { parseOfferContent, OfferValidationError } from "@/lib/offer-workflow";
 import { decideWebsiteInvestment, qualifyWebsiteProspect, type WebsiteProspectQualification } from "@/lib/website-prospect";
+import { websiteSalesActorAuthority } from "@/lib/website-sales-machine-authority";
 
 export const websiteSalesIrelandContract = "website-sales-ireland-v1";
 export const websiteSalesIrelandPath = "/api/crm/website-sales";
@@ -90,10 +91,6 @@ function validateCommand(raw: WebsiteSalesIrelandCommand): WebsiteSalesIrelandCo
   }
   return raw;
 }
-function assertSession(session: AppSession) {
-  // No machine grant is issued or inferred. Existing Task-only machine authentication remains unchanged.
-  if (session.serviceIdentity || !session.authenticated || session.source === "demo") fail("SESSION_REQUIRED", 401);
-}
 async function company(tx: TenantTransaction, session: AppSession, scope: Pick<Scope, "projectId" | "companyId">) {
   await assertProjectGrant(tx, session, scope.projectId);
   // Keep the canonical offer repository's business-lock order. An organization SHARE lock here
@@ -172,7 +169,7 @@ async function view(tx: TenantTransaction, session: AppSession, scope: Scope, re
   }, canContact: false as const };
 }
 export async function getWebsiteSalesIrelandWorkflow(session: AppSession, scope: Scope, options: TenantTransactionOptions = {}) {
-  assertSession(session);
+  websiteSalesActorAuthority(session, scope, "read");
   assertCrmUuid(scope.projectId); assertCrmUuid(scope.companyId); assertCrmUuid(scope.locationId);
   return withCrmRead(session, async (tx, fresh) => { await company(tx, fresh, scope); return view(tx, fresh, scope); }, options);
 }
@@ -187,14 +184,35 @@ async function updateWorkflow(tx: TenantTransaction, context: CrmCommandContext,
   if (!changed) fail("VERSION_CONFLICT");
 }
 
-/** Bounded session service adapter. All business writes, receipt, audit and domain event share one tenant transaction. */
-export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: WebsiteSalesIrelandCommand, options: TenantTransactionOptions = {}) {
-  assertSession(session);
+/** Shared exact command identity for execution and effect-free receipt lookup. */
+export function websiteSalesIrelandCommandInput(session: AppSession, raw: WebsiteSalesIrelandCommand) {
   const input = validateCommand(raw);
-  const command = { operation: `website_sales.ireland.${input.operation}`, projectId: input.projectId,
+  const machine = websiteSalesActorAuthority(session, input, input.operation);
+  return { operation: `website_sales.ireland.${input.operation}`, projectId: input.projectId,
     resourceId: input.locationId ?? input.companyId, expectedVersion: input.expectedVersion,
     idempotencyKey: input.idempotencyKey, correlationId: input.correlationId, capability: "pipeline:write" as const,
-    payload: input };
+    payload: machine ? { request: input, machine } : input };
+}
+
+/** Reads the original receipt only, then projects current evidence/stop state. Never invokes an effect. */
+export async function reconcileWebsiteSalesIrelandCommand(session: AppSession, raw: WebsiteSalesIrelandCommand, options: TenantTransactionOptions = {}) {
+  const command = websiteSalesIrelandCommandInput(session, raw);
+  return withCrmCommandPreflight(session, command, async (tx, fresh) => {
+    await company(tx, fresh, raw);
+    const receipt = await reconcileCrmCommand<{ location: LocationRow; workflow: unknown; canContact: false }>(fresh, command, options);
+    if (receipt.status === "NOT_FOUND") return receipt;
+    // Registration receipts also bind their generated location to the still-current company.
+    const scope = { projectId: raw.projectId, companyId: raw.companyId,
+      locationId: raw.locationId ?? receipt.data.location.id };
+    const currentData = await view(tx, fresh, scope);
+    return { ...receipt, currentData };
+  }, options);
+}
+
+/** Existing sessions or the dedicated verified Sales contract; one canonical CRM transaction. */
+export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: WebsiteSalesIrelandCommand, options: TenantTransactionOptions = {}) {
+  const input = validateCommand(raw);
+  const command = websiteSalesIrelandCommandInput(session, input);
   return withCrmCommandPreflight(session, command, async (tx, fresh) => {
     const canonicalCompany = await company(tx, fresh, input);
     if (input.operation === "register_location") {
@@ -208,8 +226,9 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
         const existing = await commandTx.queryOne<LocationRow>(`${locationSelect} where workspace_id=$1 and company_id=$2 and location_key=$3`, [fresh.workspaceId, input.companyId, locationKey]);
         if (existing) return { location: { ...existing, version: Number(existing.version) }, workflow: null, canContact: false as const };
         const id = randomUUID();
-        await commandTx.execute(`insert into crm_company_locations(id,workspace_id,project_id,company_id,location_key,country_code,address,source_url,source_reference,registered_by)
-          values($1,$2,$3,$4,$5,'IE',$6,$7,$8,$9)`, [id, fresh.workspaceId, input.projectId, input.companyId, locationKey, address, sourceUrl, sourceReference, fresh.userId]);
+        await commandTx.execute(`insert into crm_company_locations(id,workspace_id,project_id,company_id,location_key,country_code,address,source_url,source_reference,registered_by,registration_basis)
+          values($1,$2,$3,$4,$5,'IE',$6,$7,$8,$9,$10)`, [id, fresh.workspaceId, input.projectId, input.companyId, locationKey, address, sourceUrl, sourceReference, fresh.userId,
+          fresh.serviceIdentity ? "REGISTERED_DELEGATION" : "SESSION_ATTESTED"]);
         return { location: await location(commandTx, fresh, { ...input, locationId: id }), workflow: null, canContact: false as const };
       }, options);
       return result;
