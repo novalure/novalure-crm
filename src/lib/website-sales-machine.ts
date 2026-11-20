@@ -1,5 +1,6 @@
 import {WebsiteSalesOperationsError} from "./website-sales-operations-contracts";
 import {executeWebsiteSalesConversationCommand,readWebsiteSalesConversation,reconcileWebsiteSalesConversationCommand,websiteSalesConversationCommandInput,parseWebsiteSalesConversationCommand} from "./db/website-sales-conversation-repositories";
+import { compactWebsiteSalesOperationsReceipt } from "./website-sales-operations-receipt";
 import {websiteSalesConversationContract,type SalesConversationCommand} from "./website-sales-conversation-types";
 import "server-only";
 import { createPublicKey, randomUUID, verify } from "node:crypto";
@@ -209,12 +210,15 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
         if (await tx.queryOne("select nonce from crm_website_sales_machine_events where grant_id=$1 and nonce=$2", [grant.id, nonce])) denied("NONCE_REPLAY", 409);
         let result: Record<string, unknown>;
         if (body.operation === "execute") {
-          result = body.target === "autonomy" ? (body.request.contractVersion===websiteSalesConversationContract?{...await executeWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options),contractVersion:websiteSalesConversationContract,persisted:true}:{...await executeSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options)}) : body.target === "studio"
+          result = body.target === "autonomy" ? (body.request.contractVersion===websiteSalesConversationContract?{...await executeWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options),contractVersion:websiteSalesConversationContract,persisted:true}:compactWebsiteSalesOperationsReceipt(await executeSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options))) : body.target === "studio"
             ? { ...await executeWebsiteSalesStudioCommand(fresh, body.request as WebsiteSalesStudioCommand, options) }
             : body.target === "lifecycle" ? { ...await executeWebsiteSalesLifecycleCommand(fresh, body.request as WebsiteSalesLifecycleCommand, options), contractVersion: websiteSalesLifecycleContract, persisted: true }
             : { ...await runWebsiteSalesIrelandCommand(fresh, body.request as WebsiteSalesIrelandCommand, options), contractVersion: websiteSalesIrelandContract, persisted: true };
         } else if (body.operation === "reconcile") {
-          if(body.target==="autonomy")result={...(body.request.contractVersion===websiteSalesConversationContract?await reconcileWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options):await reconcileSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options)),contractVersion:websiteSalesMachineContract};
+          if(body.target==="autonomy") {
+            const reconciled = body.request.contractVersion===websiteSalesConversationContract?await reconcileWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options):await reconcileSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options);
+            result={...(body.request.contractVersion!==websiteSalesConversationContract && reconciled.status==="COMMITTED" ? compactWebsiteSalesOperationsReceipt(reconciled, true) : reconciled),contractVersion:websiteSalesMachineContract};
+          }
           else if (body.target === "studio") {
             const receipt = await reconcileWebsiteSalesStudioCommand(fresh, body.request as WebsiteSalesStudioCommand, options);
             result = { ...receipt, contractVersion: websiteSalesMachineContract,

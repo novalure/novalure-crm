@@ -3,6 +3,7 @@ import { assertCrmUuid, CrmCommandError } from "@/lib/crm-command";
 import { executeSalesOperationsCommand, readSalesOperations } from "@/lib/db/website-sales-operations-repositories";
 import { salesOperationsBody, salesOperationsError } from "@/lib/website-sales-operations-http";
 import { websiteSalesOperationsContract } from "@/lib/website-sales-operations-types";
+import { compactWebsiteSalesOperationsReceipt } from "@/lib/website-sales-operations-receipt";
 export async function GET(request: Request) {
   try {
     const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" }); if (!auth.ok) return auth.response;
@@ -16,6 +17,6 @@ export async function POST(request: Request) {
   try {
     const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" }); if (!auth.ok) return auth.response;
     const input = await salesOperationsBody(request), result = await executeSalesOperationsCommand(auth.session, input);
-    return Response.json({ ...result, contractVersion: websiteSalesOperationsContract, persisted: true, correlationId: input.correlationId }, { headers: { "Cache-Control": "private, no-store" } });
+    return Response.json({ ...compactWebsiteSalesOperationsReceipt(result), contractVersion: websiteSalesOperationsContract, persisted: true, correlationId: input.correlationId }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return salesOperationsError(error); }
 }
