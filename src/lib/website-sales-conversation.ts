@@ -121,8 +121,8 @@ export function prepareWebsiteSalesConversationDraft(raw: unknown, now: string):
   const input = websiteSalesConversationInputSchema.parse(raw), time = Date.parse(timestamp.parse(now));
   const factsDigest = websiteSalesConversationFactsDigest(input.facts, input.quoteBinding, now);
   if (factsDigest !== input.expectedFactsDigest) throw new Error('SALES_CONVERSATION_FACTS_CHANGED');
-  const duplicate = input.previousAnswers.find(prior => prior.topicTurnId === input.topic.id
-    || input.topic.messageId !== null && prior.messageId === input.topic.messageId && prior.sourceHash === input.topic.sourceHash && prior.factsDigest === factsDigest);
+  const duplicate = input.previousAnswers.find(prior => prior.factsDigest === factsDigest && prior.sourceHash === input.topic.sourceHash
+    && prior.messageId === input.topic.messageId && (prior.topicTurnId === input.topic.id || input.topic.messageId !== null));
   const common = { contractVersion: websiteSalesConversationContract, identity: input.identity, workflowVersion: input.workflowVersion,
     evidenceDigest: input.evidenceDigest, conversationVersion: input.conversationVersion, topicTurnId: input.topic.id,
     sourceMessageId: input.topic.messageId, sourceHash: input.topic.sourceHash, language: input.topic.language,

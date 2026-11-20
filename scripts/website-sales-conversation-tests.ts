@@ -118,6 +118,22 @@ test("persisted source-bound Sales conversations use actual canonical records an
       assert.equal(outcomes.filter(value => value.status === "fulfilled").length, 1);
       assert.equal(outcomes.filter(value => value.status === "rejected" && value.reason.code === "CONVERSATION_VERSION_CONFLICT").length, 1);
     });
+    await t.test("changed approved facts regenerate the same canonical topic, while unchanged renewals remain current and deduplicated", async () => {
+      const initial = await read(session, scope, options), before = initial.turns.filter(turn => turn.topicTurnId === canonicalTopicId && turn.draft);
+      assert.equal(before.length, 1); const firstId = before[0].id;
+      await grant(messageId); // A non-content CAS change must not hide an unchanged source-bound answer.
+      assert.equal((await read(session, scope, options)).turns.find(turn => turn.id === firstId)?.current, true);
+      const replacement = { ...publicFact, text: "Updated approved service scope includes a documented accessibility review." };
+      await execute(owner, await command("record_answer_fact", replacement, owner), options);
+      let current = await read(session, scope, options); assert.equal(current.turns.find(turn => turn.id === firstId)?.draft, null);
+      const regenerated = await execute(session, await command("draft_answer", { topicTurnId: canonicalTopicId, expectedFactsDigest: current.factsDigest }), options);
+      current = await read(session, scope, options); const draft = current.turns.find(turn => turn.id === regenerated.data.draftTurnId)?.draft;
+      assert.equal(draft?.status, "DRAFT_READY"); assert(draft?.body?.includes(replacement.text)); assert.notEqual(regenerated.data.draftTurnId, firstId);
+      const count = (await db.admin.query("select count(*)::int as n from crm_website_sales_conversation_turns where topic_turn_id=$1", [canonicalTopicId])).rows[0].n;
+      const duplicate = await execute(session, await command("advance_conversation", { canonicalMessageId: messageId, language: "en" }), options);
+      assert.equal(duplicate.data.draftTurnId, regenerated.data.draftTurnId);
+      assert.equal((await db.admin.query("select count(*)::int as n from crm_website_sales_conversation_turns where topic_turn_id=$1", [canonicalTopicId])).rows[0].n, count);
+    });
     await t.test("revoking purpose hides historical derived drafts and rejects new work; cached replay leaks no body", async () => {
       await grant(messageId, false);
       assert.equal(await withCrmRead(session, tx => readCurrentSalesConversationTopic(tx, session, scope, canonicalTopicId), options), null);
@@ -227,6 +243,25 @@ test("persisted source-bound Sales conversations use actual canonical records an
       assert.equal(stopped.data.conversation.stopReason, "OPT_OUT"); assert.equal(stopped.data.draftTurnId, undefined);
       assert.equal((await db.admin.query("select consent_label from contacts where id=$1", [contactId])).rows[0].consent_label, "Abgemeldet");
       assert.equal((await db.admin.query("select count(*)::int as n from crm_website_sales_ops_effects where command_id=$1", [stopped.commandId])).rows[0].n, 0);
+    });
+    await t.test("an actual canonical quote revision hides the former price answer and permits a newly bound answer to the same message", async () => {
+      const priceCase = await freshScope("Price regeneration"), selected = priceCase.scope;
+      const scopedCommand = async (operation: SalesConversationCommand["operation"], payload: Record<string, unknown>) => { const current = await read(session, selected, options); return { contractVersion: websiteSalesConversationContract, operation, ...selected, expectedConversationVersion: current.conversation?.version ?? 0, expectedWorkflowVersion: current.workflow.version, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload }; };
+      const ops = (operation: Parameters<typeof executeSalesOperationsCommand>[1]["operation"], payload: Record<string, unknown>, expectedVersion: number) => executeSalesOperationsCommand(owner, { contractVersion: websiteSalesOperationsContract, operation, ...selected, expectedVersion, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload }, options);
+      await runWebsiteSalesIrelandCommand(session, { ...base, locationId: selected.locationId, operation: "prepare_offer", expectedVersion: priceCase.workflow.version, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { expectedEvidenceDigest: priceCase.workflow.evidenceDigest, content: { subject: "Synthetic website draft", recipientName: "Synthetic Price regeneration", recipientEmail: `${priceCase.contactId}@example.invalid`, scope: "Bounded website project", paymentPlan: "Owner-reviewed", discounts: "None", specialTerms: "Draft only", riskComplianceNotes: "No sending", terms: "Final approval required", validUntil: until, currency: "EUR", taxBasis: "NET", items: [{ description: "Website", quantity: 1, unitNetCents: 10000 }] } } }, options);
+      const rule = await ops("register_price_rule", { label: "Synthetic price policy", estimatedDeliveryCostMinor: 1000, policy: { enabled: true, validFrom: new Date(Date.now() - 60000).toISOString(), validUntil: until, currency: "EUR", products: [{ sku: "WEBSITE", unitNetPriceMinor: 10000, minimumUnitNetPriceMinor: 7000, maxDiscountBps: 2000 }], minimumMarginBps: 3000, maximumNegotiationRounds: 4, maxQuoteAgeMinutes: 60, negotiationStepBps: 500, maximumCounteroffers: 2 } }, 0);
+      const quote = async (discount: number) => { const current = await read(session, selected, options), proposed = await ops("propose_price", { ruleId: rule.data.ruleId, ruleVersion: 1, mode: discount ? "REQUESTED_DISCOUNT" : "INITIAL", requestedDiscountBps: discount, lines: [{ sku: "WEBSITE", quantity: 1 }] }, current.workflow.version), projected = await readSalesOperations(owner, selected, options), stored = projected.quotes.find(value => value.id === proposed.data.quoteId)!; await ops("apply_quote", { quoteId: stored.id, quoteDigest: stored.quoteDigest, expectedQuoteVersion: stored.version }, current.workflow.version); };
+      await quote(0);
+      const question = await incoming("What is the price?", { contactId: priceCase.contactId, leadId: priceCase.workflow.leadId });
+      await execute(session, await scopedCommand("authorize_topic_extraction", { canonicalMessageId: question, allow: true }), options);
+      const initial = await execute(session, await scopedCommand("advance_conversation", { canonicalMessageId: question, language: "en" }), options);
+      assert((await read(session, selected, options)).turns.find(value => value.id === initial.data.draftTurnId)?.draft?.body?.includes("100.00"));
+      await quote(1000);
+      const changed = await read(session, selected, options); assert.equal(changed.turns.find(value => value.id === initial.data.draftTurnId)?.draft, null);
+      const second = await execute(session, await scopedCommand("draft_answer", { topicTurnId: initial.data.topicTurnId, expectedFactsDigest: changed.factsDigest }), options);
+      const final = await read(session, selected, options), revised = final.turns.find(value => value.id === second.data.draftTurnId)?.draft;
+      assert.equal(revised?.status, "DRAFT_READY"); assert(revised?.body?.includes("90.00")); assert.equal(revised?.workflowVersion, final.workflow.version); assert.notEqual(second.data.draftTurnId, initial.data.draftTurnId);
+      const duplicate = await execute(session, await scopedCommand("draft_answer", { topicTurnId: initial.data.topicTurnId, expectedFactsDigest: final.factsDigest }), options); assert.equal(duplicate.data.draftTurnId, second.data.draftTurnId);
     });
     await t.test("all effects stay internal and a revoked current identity cannot read cached receipts", async () => {
       const counters = (await db.admin.query("select (select count(*) from crm_offer_deliveries)::int as offers,(select count(*) from crm_outreach_deliveries)::int as outreach,(select count(*) from crm_website_sales_conversations where workflow_id=$1)::int as conversations", [workflowId])).rows[0];

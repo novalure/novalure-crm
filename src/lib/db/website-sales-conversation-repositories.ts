@@ -84,10 +84,13 @@ async function read(tx: TenantTransaction, session: AppSession, scope: SalesConv
   const [saved, loaded, sourceRows, turns] = await Promise.all([conversation(tx, session, scope), facts(tx, session, scope, row), sources(tx, session, row), storedTurns(tx, session, row)]);
   const reason = hardStop(state), projectedSources = sourceRows.map(source => ({ messageId: source.messageId, receivedAt: source.receivedAt, sourceHash: source.sourceHash, topicCode: source.topicCode,
     language: source.language, basis: source.basis, blockedReason: source.blockedReason, authorized: source.authorized, canAuthorize: source.canAuthorize }));
+  const latestDraftTopics = new Set<string>();
   const projectedTurns = turns.map(turn => {
     const permitted = turn.sourceKind === "HUMAN_RECORDED_TOPIC" || sourceRows.some(source => source.messageId === turn.messageId && source.sourceHash === turn.sourceHash && source.authorized && !["CONTACT_STOPPED", "SOURCE_CHANGED", "PURPOSE_PERMISSION_REQUIRED"].includes(source.blockedReason ?? ""));
-    const current = !reason && permitted && (!turn.draft || turn.draft.factsDigest === loaded.digest && turn.draft.evidenceDigest === row.evidenceDigest
-      && turn.draft.workflowVersion === row.version && turn.draft.conversationVersion === saved?.version);
+    const latest = !turn.draft || !latestDraftTopics.has(turn.topicTurnId!);
+    if (turn.draft) latestDraftTopics.add(turn.topicTurnId!);
+    const current = !reason && permitted && latest && (!turn.draft || turn.draft.factsDigest === loaded.digest && turn.draft.evidenceDigest === row.evidenceDigest
+      && turn.draft.workflowVersion === row.version);
     return { ...turn, topicCode: permitted ? turn.topicCode : "UNKNOWN" as const, current, draft: current ? turn.draft : null };
   });
   const grant = await tx.queryOne<{ allowed: boolean }>("select crm_project_access($1,$2,true) as allowed", [session.workspaceId, scope.projectId]);
@@ -227,7 +230,7 @@ export async function executeWebsiteSalesConversationCommand(session: AppSession
         if (topic.topicCode === "OPT_OUT") {
           await stopCanonical(tx, fresh, input, row, `crm-topic:${topic.messageId ?? topic.id}:${topic.sourceHash}`, options); next.status = "STOPPED"; next.stopReason = "OPT_OUT";
         } else if (input.operation !== "record_topic") {
-          const prior = turns.find(turn => turn.topicTurnId === topic.id && turn.draft?.factsDigest === loaded.digest);
+          const prior = turns.find(turn => turn.topicTurnId === topic.id && turn.draft?.factsDigest === loaded.digest && turn.draft.evidenceDigest === row.evidenceDigest && turn.draft.workflowVersion === row.version);
           if (prior && !additions.length) return { workflow: currentWorkflow(state), conversation: summary(previous!, loaded.digest), topicTurnId: topic.id, draftTurnId: prior.id, ...(topic.messageId ? { messageId: topic.messageId } : {}), canContact: false };
           const draft = prepareWebsiteSalesConversationDraft({ identity: { workspaceId: fresh.workspaceId, projectId: row.projectId, companyId: row.companyId, locationId: row.locationId }, workflowVersion: row.version,
             evidenceDigest: row.evidenceDigest, conversationVersion: next.version, expectedFactsDigest: loaded.digest,

@@ -72,7 +72,9 @@ create table crm_website_sales_conversation_turns (
  check(kind not in('ANSWER_DRAFTED','CLARIFICATION_REQUIRED') or topic_turn_id is not null and draft is not null and facts_digest is not null)
 );
 create unique index website_sales_conversation_source_dedupe on crm_website_sales_conversation_turns(workspace_id,workflow_id,message_id,source_hash,kind)
- where message_id is not null;
+ where message_id is not null and kind='TOPIC_RECORDED';
+create unique index website_sales_conversation_answer_dedupe on crm_website_sales_conversation_turns(workspace_id,workflow_id,message_id,source_hash,kind,facts_digest,evidence_digest,((draft->>'workflowVersion')))
+ where message_id is not null and kind in('ANSWER_DRAFTED','CLARIFICATION_REQUIRED');
 
 create function crm_website_sales_conversation_update_guard() returns trigger language plpgsql set search_path=pg_catalog,public as $$
 begin
