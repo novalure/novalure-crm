@@ -14,10 +14,12 @@ function assertCronDelegation(entry, handler, relativeModule) {
   const imports = file.statements.filter(ts.isImportDeclaration).filter(item => ts.isStringLiteral(item.moduleSpecifier) && item.moduleSpecifier.text === path);
   assert.equal(imports.length, 1);
   const names = imports[0].importClause?.namedBindings;
-  assert.ok(names && ts.isNamedImports(names));
-  assert.ok(names.elements.some(item => item.name.text === handler && !item.propertyName));
+  assert.ok(names && ts.isNamedImports(names) && !imports[0].importClause?.isTypeOnly);
+  assert.ok(names.elements.some(item => item.name.text === handler && !item.propertyName && !item.isTypeOnly));
   const get = file.statements.find(item => ts.isFunctionDeclaration(item) && item.name?.text === "GET");
-  assert.ok(get && ts.isFunctionDeclaration(get) && get.modifiers?.some(item => item.kind === ts.SyntaxKind.ExportKeyword));
+  assert.ok(get && ts.isFunctionDeclaration(get) && get.modifiers?.some(item => item.kind === ts.SyntaxKind.ExportKeyword) && get.modifiers?.some(item => item.kind === ts.SyntaxKind.AsyncKeyword));
+  assert.equal(get.parameters.length, 1);
+  assert.ok(ts.isIdentifier(get.parameters[0].name) && get.parameters[0].name.text === "request");
   assert.equal(get.body?.statements.length, 1);
   const statement = get.body?.statements[0];
   assert.ok(statement && ts.isReturnStatement(statement) && statement.expression && ts.isCallExpression(statement.expression));
@@ -33,6 +35,8 @@ test("delegated cron source is bound to the handler that is checked", () => {
   assert.throws(() => assertCronDelegation(entry.replace("return handleNewsletterCron", "return handleDifferentCron"), "handleNewsletterCron", "newsletter-scheduler.ts"));
   assert.throws(() => assertCronDelegation(`// ${entry}\n` + entry.replace("@/lib/newsletter-scheduler", "@/lib/unverified"), "handleNewsletterCron", "newsletter-scheduler.ts"));
   assert.throws(() => assertCronDelegation(entry.replace("return handleNewsletterCron", "const handleNewsletterCron = malicious; return handleNewsletterCron"), "handleNewsletterCron", "newsletter-scheduler.ts"));
+  assert.throws(() => assertCronDelegation(entry.replace("import {", "import type {"), "handleNewsletterCron", "newsletter-scheduler.ts"));
+  assert.throws(() => assertCronDelegation(entry.replace("GET(request)", "GET(request, handleNewsletterCron)"), "handleNewsletterCron", "newsletter-scheduler.ts"));
 });
 
 test("cron authorization fails closed unless an explicit local-only override is set", () => {
