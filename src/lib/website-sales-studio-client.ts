@@ -9,6 +9,13 @@ export function subscribeStudioPending(listener:()=>void){listeners.add(listener
 function notify(){for(const listener of listeners)listener();}
 function key(workspaceId:string,actorId:string){if(!uuid.test(workspaceId)||!uuid.test(actorId))throw Error("STUDIO_SCOPE_INVALID");return `novalure.website-studio.pending.v1:${actorId}:${workspaceId}`;}
 function record(raw:unknown):Record<string,unknown>{if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("INVALID_STUDIO_RESPONSE");return raw as Record<string,unknown>;}
+export type StudioInvitation={grantId:string;token:string;origin:string};
+export function parseStudioInvitation(raw:unknown,grantId?:string):StudioInvitation{
+ const value=record(raw);if(typeof value.grantId!=="string"||!uuid.test(value.grantId)||grantId!==undefined&&value.grantId!==grantId||typeof value.token!=="string"||!/^[a-f0-9]{64}$/.test(value.token)||typeof value.origin!=="string")throw Error("INVALID_INVITATION");
+ const url=new URL(value.origin);if(value.origin!==url.origin||url.username||url.password||url.pathname!=="/"||url.search||url.hash||url.protocol!=="https:"&&!(url.protocol==="http:"&&["localhost","127.0.0.1","[::1]"].includes(url.hostname)))throw Error("INVALID_INVITATION");
+ return{grantId:value.grantId,token:value.token,origin:value.origin};
+}
+export function studioInvitationUrl(raw:unknown):string{const invitation=parseStudioInvitation(raw),url=new URL("/sales-preview/access",invitation.origin);url.hash=new URLSearchParams({grant:invitation.grantId,token:invitation.token}).toString();return url.href;}
 function validCommand(raw:unknown):WebsiteSalesStudioCommand {const c=record(raw);if(c.contractVersion!==websiteSalesStudioContract||!["create_diagnosis","create_concept","accept_concept","build_demo","submit_qa","create_preview","revoke_preview"].includes(String(c.operation))||["projectId","companyId","locationId","workflowId","idempotencyKey","correlationId"].some(k=>typeof c[k]!=="string"||!uuid.test(c[k] as string))||typeof c.expectedEvidenceDigest!=="string"||!sha.test(c.expectedEvidenceDigest)||!Number.isSafeInteger(c.expectedWorkflowVersion)||Number(c.expectedWorkflowVersion)<1)throw Error("INVALID_STUDIO_RECOVERY");record(c.payload);return c as unknown as WebsiteSalesStudioCommand;}
 export function studioPending(workspaceId:string,actorId:string):StudioPending|undefined{
  const k=key(workspaceId,actorId),cached=pending.get(k);if(cached)return cached;if(typeof window==="undefined")return undefined;
@@ -34,7 +41,7 @@ export async function writeStudio(workspaceId:string,actorId:string,command:Webs
  try{const {response,data}=await request(`${websiteSalesStudioPath}?workspaceId=${encodeURIComponent(workspaceId)}`,{method:"POST",body:value.body,headers:{"content-type":"application/json","idempotency-key":command.idempotencyKey,"x-correlation-id":command.correlationId}});
   if(!response.ok){if(response.status>=500)throw Error("SERVER_UNKNOWN");if(!existing)clear(workspaceId,actorId);throw new StudioBrowserError(existing?"UNKNOWN":"DENIED",String(data.code??"STUDIO_DENIED"));}
   const effect=receipt(data,command);if(data.contractVersion!==websiteSalesStudioContract||data.persisted!==true||data.correlationId!==command.correlationId)throw Error("INVALID_STUDIO_RECEIPT");
-  if(data.invitation!==undefined){const invitation=record(data.invitation);if(command.operation!=="create_preview"||invitation.grantId!==effect.grantId||typeof invitation.token!=="string"||!/^[a-f0-9]{64}$/.test(invitation.token))throw Error("INVALID_INVITATION");}
+  if(data.invitation!==undefined){if(command.operation!=="create_preview")throw Error("INVALID_INVITATION");parseStudioInvitation(data.invitation,String(effect.grantId));}
   clear(workspaceId,actorId);return data;
  }catch(error){if(error instanceof StudioBrowserError&&error.outcome==="DENIED")throw error;value.state="UNKNOWN";value.currentRead=false;value.retryAllowed=false;pending.set(key(workspaceId,actorId),value);notify();throw new StudioBrowserError("UNKNOWN",error instanceof StudioBrowserError?error.code:"STUDIO_OUTCOME_UNKNOWN");}
 }
