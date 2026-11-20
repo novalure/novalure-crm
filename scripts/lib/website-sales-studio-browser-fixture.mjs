@@ -8,9 +8,11 @@ import { LocalSalesPool } from "./local-sales-db.mjs";
 /** Disposable loopback fixture only. No auth session, MFA state, live recipient or provider is seeded. */
 export async function seedWebsiteSalesStudioBrowser(db,account,{lifecycle=false}={}){
  assert.equal(db.fixtureMode,"design-c-current-application-originals");assert.equal(db.database,"neondb");assert(/^sales_qa_[a-f0-9]+$/.test(db.role));assert(path.resolve(db.directory).startsWith(path.resolve(".npm-cache/qa")+path.sep));
+ const extension=JSON.parse(await readFile("config/crm-candidate-fresh-website-sales-extension.json","utf8"));
  const owner=new LocalSalesPool({host:"127.0.0.1",port:db.port,database:db.database,user:"neondb_owner"});
  const applied=[];try{for(const file of ["203_website_sales_machine.sql","204_website_sales_studio.sql",...(lifecycle?["205_website_sales_lifecycle.sql"]:[])]){
   const sql=await readFile(path.resolve("migrations",file),"utf8"),checksum=createHash("sha256").update(sql.replace(/\r\n/g,"\n")).digest("hex"),version=file.slice(0,-4),existing=(await owner.query("select checksum from novalure_schema_migrations where version=$1",[version])).rows[0];
+  if(extension.id==="WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205"){const pinned=extension.forward.find(entry=>entry.path===`migrations/${file}`);assert(pinned,`Reviewed extension must pin ${file}`);assert.equal(pinned.sha256,checksum,`Browser fixture requires exact pinned ${file}`);}
   if(existing){assert.equal(existing.checksum,checksum,`Existing ${version} must match its original source`);continue;}
   const connection=await owner.connect();try{await connection.query("begin");await connection.query(sql);await connection.query("insert into novalure_schema_migrations(version,name,checksum) values($1,$2,$3)",[version,file.slice(4,-4),checksum]);await connection.query("commit");applied.push({file,checksum});}catch(error){await connection.query("rollback");throw error;}finally{connection.release();}
  }}finally{await owner.end();}
