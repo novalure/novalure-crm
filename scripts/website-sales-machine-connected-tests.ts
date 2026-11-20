@@ -16,6 +16,7 @@ import { handleWebsiteSalesMachine, websiteSalesMachinePath } from "../src/lib/w
 import { registerWebsiteSalesMachineAccess } from "../src/lib/website-sales-machine-registration";
 import { runWebsiteSalesIrelandCommand, websiteSalesIrelandContract } from "../src/lib/db/website-sales-ireland-repositories";
 import { executeSalesOperationsCommand } from "../src/lib/db/website-sales-operations-repositories";
+import { executeWebsiteSalesConversationCommand, readWebsiteSalesConversation } from "../src/lib/db/website-sales-conversation-repositories";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 type Target = "workflow" | "studio" | "lifecycle" | "autonomy";
@@ -106,7 +107,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       await registerWebsiteSalesMachineAccess(registrar, { workloadId: ids.workload, workloadActorId: ids.actor, grantId: ids.grant, actorId: ids.actor,
         projectId: ids.project, companyId: ids.company, locationId, departmentId: "SALES", agentId, taskId: ids.task,
         scopes: ["crm.website-sales.read", "crm.website-sales.observe", "crm.website-sales.qualify", "crm.website-sales.studio.read", "crm.website-sales.studio.create-diagnosis", "crm.website-sales.lifecycle.read", "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.reconcile",
-          "crm.website-sales.autonomy.read", "crm.website-sales.autonomy.plan-portfolio", "crm.website-sales.autonomy.claim-allocation", "crm.website-sales.autonomy.settle-allocation"],
+          "crm.website-sales.autonomy.read", "crm.website-sales.autonomy.plan-portfolio", "crm.website-sales.autonomy.claim-allocation", "crm.website-sales.autonomy.settle-allocation", "crm.website-sales.conversation.advance-conversation"],
         publicKey: pair.publicKey.export({ format: "der", type: "spki" }).toString("base64url"), authorityReference: "SYNTHETIC connected contract acceptance", expiresAt: null });
     } finally { try { await registrar.query("rollback"); await registrar.query("reset role"); } finally { registrar.release(); } }
 
@@ -197,7 +198,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
           expectedNetPriceMinor: 250000, estimatedDeliveryCostMinor: 50000, minimumMarginBasisPoints: 3000, requiredCapacityMinutes: 60, availableCapacityMinutes: 600, rightsVerified: true, budgetReference: null },
       }, { workflowId: qualification.data.workflow!.id, expectedWorkflowVersion: qualification.data.workflow!.version, expectedEvidenceDigest: qualification.data.workflow!.evidenceDigest }), async () => { assert.equal((await snapshot()).artifacts, 1); });
     });
-    let refreshed: Result;
+    let refreshed: Result, operationsOwner: AppSession, portfolioState: { id: string; version: number };
     await t.test("lifecycle refresh is reconciled without duplicating the canonical lead deal task or observation", async () => {
       refreshed = await recover("lifecycle", command("website-sales-lifecycle-v1", "refresh_evidence", { prospect: prospect(true), locationVersion: 1 }, { expectedVersion: qualification.data.workflow!.version }), async () => {
         const counts = await snapshot(); assert.equal(counts.refreshes, 1); assert.equal(counts.observations, 2); assert.equal(counts.leads, 1); assert.equal(counts.deals, 1); assert.equal(counts.tasks, 1);
@@ -207,16 +208,18 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       const ownerId = randomUUID();
       await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic policy owner','synthetic-owner@example.invalid','owner','novalure_operator','active')", [ownerId, CRM_MACHINE_WORKSPACE_ID]);
       const owner: AppSession = { ...session, userId: ownerId, role: "owner", permissions: getRolePermissions("owner") };
+      operationsOwner = owner;
       const past = new Date(Date.now() - 60000).toISOString(), future = new Date(Date.now() + 3600000).toISOString();
       const configured = await executeSalesOperationsCommand(owner, { contractVersion: "website-sales-operations-v1", operation: "configure_portfolio", projectId: ids.project, companyId: ids.company, locationId,
-        expectedVersion: 0, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { title: "Synthetic approved resource window", budgetMinor: 30, capacityMinutes: 10, windowStart: past, windowEnd: future,
-          managedResources: [{ projectId: ids.project, companyId: ids.company, locationId }], stageEstimates: [{ stage: "DIAGNOSIS", estimatedCostMinor: 30, requiredMinutes: 10 }],
+        expectedVersion: 0, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { title: "Synthetic approved resource window", budgetMinor: 30, capacityMinutes: 11, windowStart: past, windowEnd: future,
+          managedResources: [{ projectId: ids.project, companyId: ids.company, locationId }], stageEstimates: [{ stage: "DIAGNOSIS", estimatedCostMinor: 30, requiredMinutes: 10 }, { stage: "CONVERSATION", estimatedCostMinor: 0, requiredMinutes: 1 }],
           policy: { enabled: true, validFrom: past, validUntil: future, maxOpportunities: 1, maxPerCompany: 1, maxCostPerOpportunityMinor: 30, maxMinutesPerOpportunity: 10,
             minimumKnownSignals: 2, minimumScore: 1, weights: { FIT: 5000, NEED: 5000, INTENT: 0, URGENCY: 0, ENGAGEMENT: 0 } } } }, options);
       const workflow = refreshed!.data.workflow!; assert(workflow);
       const planCommand = command("website-sales-operations-v1", "plan_portfolio", { portfolioId: configured.data.portfolioId, resourceGrants: [], candidates: [{ projectId: ids.project,
         companyId: ids.company, locationId, workflowId: workflow.id, expectedWorkflowVersion: workflow.version, expectedEvidenceDigest: workflow.evidenceDigest, requestedStage: "DIAGNOSIS", purpose: "INTERNAL_RESEARCH", dialogSourceId: null }] }, { expectedVersion: configured.data.version });
       const planned = await freshRuntime().enqueue("autonomy", planCommand), plannedReceipt = await freshRuntime().run(planned.id);
+      portfolioState = { id: configured.data.portfolioId!, version: Number(plannedReceipt.data.version) };
       const allocationId = (plannedReceipt.data.allocationIds as string[])[0]!; assert(allocationId);
       const stageId = allocations.websiteSalesAllocationOperationId(allocationId, "stage");
       const previous = (await db.admin.query("select artifact_digest from crm_website_studio_artifacts where workflow_id=$1 and kind='DIAGNOSIS' order by version desc limit 1", [workflow.id])).rows[0];
@@ -237,6 +240,46 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       const allocation = (await db.admin.query("select status,version from crm_website_sales_ops_allocations where id=$1", [allocationId])).rows[0];
       assert.deepEqual(allocation, { status: "COMPLETED", version: 3 });
       assert.equal((await db.admin.query("select count(*) from evelyn_prod.website_sales_execution where target='autonomy'")).rows[0].count, "3");
+      assert.equal((await snapshot()).deliveries, 0);
+    });
+    await t.test("allocated canonical dialog stops the old sequence once and recovers its new-version draft without raw mail or duplicate effects", async () => {
+      const scopeIds = { projectId: ids.project, companyId: ids.company, locationId }, owner = operationsOwner!;
+      const current = () => readWebsiteSalesConversation(owner, scopeIds, options);
+      const dialog = async (operation: "record_answer_fact" | "authorize_topic_extraction", payload: Record<string, unknown>) => {
+        const view = await current(); return executeWebsiteSalesConversationCommand(owner, { contractVersion: "website-sales-conversation-v1", operation, ...scopeIds,
+          expectedWorkflowVersion: view.workflow.version, expectedConversationVersion: view.conversation?.version ?? 0, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload }, options);
+      };
+      const approvedFact = "The draft includes three responsive information pages.";
+      await dialog("record_answer_fact", { topicCode: "SCOPE", text: approvedFact, sourceReference: "https://example.invalid/approved-service-scope",
+        validUntil: new Date(Date.now() + 3600000).toISOString(), classification: "APPROVED_SALES" });
+      const messageId = randomUUID(), connectionId = randomUUID(), privateMarker = "SYNTHETIC_PRIVATE_BOUNDARY_" + randomUUID();
+      const body = "What is included in the scope? " + privateMarker, mailbox = await db.admin.connect();
+      try {
+        await mailbox.query("begin"); await mailbox.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [owner.workspaceId, owner.userId]);
+        await mailbox.query("insert into crm_mailbox_connections(id,workspace_id,user_id,provider,account_label,status,granted_scopes) values($1,$2,$3,'google','SYNTHETIC disconnected fixture','disconnected','[]'::jsonb)", [connectionId, owner.workspaceId, owner.userId]);
+        await mailbox.query("insert into crm_mailbox_messages(id,workspace_id,user_id,connection_id,provider_id,subject,from_label,from_address,received_at,body_text,content_hash) values($1,$2,$3,$4,$5,'SYNTHETIC scoped question','SYNTHETIC existing contact','synthetic-contact@example.invalid',clock_timestamp(),$6,$7)", [messageId, owner.workspaceId, owner.userId, connectionId, `synthetic-${messageId}`, body, createHash("sha256").update(body).digest("hex")]);
+        await mailbox.query("insert into crm_mailbox_links(workspace_id,user_id,message_id,project_id,lead_id,contact_id,share_body,confirmed_reply,review_reason) values($1,$2,$3,$4,$5,$6,false,true,'SYNTHETIC exact confirmed link')", [owner.workspaceId, owner.userId, messageId, ids.project, refreshed!.data.workflow!.leadId, ids.contact]);
+        await mailbox.query("commit");
+      } catch (error) { await mailbox.query("rollback"); throw error; } finally { mailbox.release(); }
+      await dialog("authorize_topic_extraction", { canonicalMessageId: messageId, allow: true });
+      const before = await current(), portfolio = portfolioState!;
+      const planCommand = command("website-sales-operations-v1", "plan_portfolio", { portfolioId: portfolio.id, resourceGrants: [], candidates: [{ ...scopeIds,
+        workflowId: before.workflow.id, expectedWorkflowVersion: before.workflow.version, expectedEvidenceDigest: before.workflow.evidenceDigest,
+        requestedStage: "CONVERSATION", purpose: "NEW_CUSTOMER_DIALOG", dialogSourceId: messageId }] }, { expectedVersion: portfolio.version });
+      const planned = await freshRuntime().enqueue("autonomy", planCommand), receipt = await freshRuntime().run(planned.id), allocationId = (receipt.data.allocationIds as string[])[0]!;
+      assert(allocationId); const stageId = allocations.websiteSalesAllocationOperationId(allocationId, "stage");
+      const stage = command("website-sales-conversation-v1", "advance_conversation", { canonicalMessageId: messageId, language: "en", resourceGrants: [] },
+        { idempotencyKey: stageId, expectedWorkflowVersion: before.workflow.version, expectedConversationVersion: before.conversation!.version });
+      const worker = () => allocations.createWebsiteSalesAllocationExecutor({ allocationId, expectedAllocationVersion: 1, resourceGrants: [] }, {
+        original: id => freshRuntime().originalCommand(id), execute: async (target, request) => { const runtime = freshRuntime(), row = await runtime.enqueue(target, request); return runtime.run(row.id); } });
+      loseOperation = "advance_conversation"; await assert.rejects(worker().execute("autonomy", stage), (error: unknown) => !!error && typeof error === "object" && "outcome" in error && error.outcome === "UNKNOWN");
+      assert.equal(loseOperation, null); const recovered = await worker().execute("autonomy", (await worker().original("autonomy", stageId))!);
+      assert.equal(recovered.contractVersion, "website-sales-conversation-v1");
+      const after = await current(); assert.equal(after.workflow.version, before.workflow.version + 1); assert.equal(after.workflow.status, "STOPPED");
+      assert.equal(after.workflow.stopReason, "REPLY_RECEIVED"); const answer = after.turns.find(turn => turn.draft?.status === "DRAFT_READY"); assert(answer?.draft); assert(answer.draft.body?.includes(approvedFact));
+      assert.equal(answer.draft.workflowVersion, after.workflow.version); assert(!JSON.stringify(after).includes(privateMarker));
+      assert.equal((await db.admin.query("select count(*) from crm_website_sales_ops_effects where allocation_id=$1", [allocationId])).rows[0].count, "1");
+      assert.equal((await db.admin.query("select status from crm_website_sales_ops_allocations where id=$1", [allocationId])).rows[0].status, "COMPLETED");
       assert.equal((await snapshot()).deliveries, 0);
     });
     await t.test("revocation denies committed cached data and all effects remain internal", async () => {
