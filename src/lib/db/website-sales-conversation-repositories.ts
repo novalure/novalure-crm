@@ -230,7 +230,8 @@ export async function executeWebsiteSalesConversationCommand(session: AppSession
         if (topic.topicCode === "OPT_OUT") {
           await stopCanonical(tx, fresh, input, row, `crm-topic:${topic.messageId ?? topic.id}:${topic.sourceHash}`, options); next.status = "STOPPED"; next.stopReason = "OPT_OUT";
         } else if (input.operation !== "record_topic") {
-          const prior = turns.find(turn => turn.topicTurnId === topic.id && turn.draft?.factsDigest === loaded.digest && turn.draft.evidenceDigest === row.evidenceDigest && turn.draft.workflowVersion === row.version);
+          const binding = { evidenceDigest: row.evidenceDigest, workflowVersion: row.version };
+          const prior = turns.find(turn => turn.topicTurnId === topic.id && turn.draft?.factsDigest === loaded.digest && turn.draft.evidenceDigest === binding.evidenceDigest && turn.draft.workflowVersion === binding.workflowVersion);
           if (prior && !additions.length) return { workflow: currentWorkflow(state), conversation: summary(previous!, loaded.digest), topicTurnId: topic.id, draftTurnId: prior.id, ...(topic.messageId ? { messageId: topic.messageId } : {}), canContact: false };
           const draft = prepareWebsiteSalesConversationDraft({ identity: { workspaceId: fresh.workspaceId, projectId: row.projectId, companyId: row.companyId, locationId: row.locationId }, workflowVersion: row.version,
             evidenceDigest: row.evidenceDigest, conversationVersion: next.version, expectedFactsDigest: loaded.digest,
