@@ -11,6 +11,11 @@ function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
 }
+async function bounded(promise, label, milliseconds = 15000) {
+  let timer;
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error(`${label} timed out`)), milliseconds); })]); }
+  finally { clearTimeout(timer); }
+}
 /** Independent host-side issuer. No builder-supplied PASS booleans are accepted.
  * The signing key is supplied only to this process, never the application/HTML.
  */
@@ -32,6 +37,8 @@ export async function inspectAndSignWebsiteDemo(options) {
   const directory = path.resolve(outputDirectory);
   await mkdir(directory, { recursive: true });
   const page = await context.newPage();
+  page.setDefaultTimeout(10000);
+  let analysisContext;
   const errors = [], forbidden = [], requests = [], scans = [], layouts = [];
   const assetResponses = new Map();
   const expectedAssets = new Map(artifact.content.assets.map(asset => [new URL(`./assets/${encodeURIComponent(asset.path)}`, renderUrl).href, asset]));
@@ -40,7 +47,7 @@ export async function inspectAndSignWebsiteDemo(options) {
     if (!asset) return;
     // Inspect the bytes loaded by the authenticated browser itself. A separate
     // APIRequestContext has different browser-origin metadata and can be denied.
-    const evidence = response.body().then(body => ({ status: response.status(), digest: digest(body) }))
+    const evidence = response.body().then(body => ({ status: response.status(), digest: digest(body), body }))
       .catch(() => ({ status: response.status(), digest: null }));
     assetResponses.set(asset.path, evidence);
   });
@@ -54,38 +61,72 @@ export async function inspectAndSignWebsiteDemo(options) {
   try {
     const loaded = await page.goto(renderUrl.href, { waitUntil: "networkidle" });
     assert.equal(loaded?.status(), 200, "QA must inspect the actual server-bound artifact");
-    assert.equal(digest(await loaded.body()), artifact.content.htmlDigest, "Served HTML must be byte-identical to the artifact");
+    const htmlBytes = await loaded.body();
+    assert.equal(digest(htmlBytes), artifact.content.htmlDigest, "Served HTML must be byte-identical to the artifact");
     const responseHeaders = await loaded.allHeaders();
     assert(responseHeaders["content-security-policy"]?.includes("script-src 'none'"));
     assert(responseHeaders["x-robots-tag"]?.includes("noindex"));
+    const cachedAssets = new Map();
     for (const asset of artifact.content.assets) {
       assert(/^[a-zA-Z0-9_.-]+$/.test(asset.path), "Asset path is a single safe component");
       const response = await assetResponses.get(asset.path);
       assert(response, "QA browser must actually load every manifest asset");
       assert.equal(response.status, 200, "Browser-loaded asset must be authorized");
       assert.equal(response.digest, asset.sha256, "Every browser-loaded asset must match the manifest");
+      cachedAssets.set(new URL(`./assets/${encodeURIComponent(asset.path)}`, renderUrl).href, { asset, body: response.body });
     }
-    const cdp = await context.newCDPSession(page);
+    const unsafe = await bounded(page.evaluate(() => ({
+      elements: document.querySelectorAll("script,iframe,object,embed,form,input,textarea,select,meta[http-equiv='refresh']").length,
+      handlers: [...document.querySelectorAll("*")].some(element => [...element.attributes].some(attribute => /^on/i.test(attribute.name))),
+      links: [...document.querySelectorAll("a[href]")].every(link => link.getAttribute("href")?.startsWith("#")),
+    })), "Source DOM safety inspection");
+    assert.equal(unsafe.elements, 0); assert.equal(unsafe.handlers, false); assert.equal(unsafe.links, true);
+    // The original document keeps its strict HTTP sandbox. Its disabled script
+    // callbacks also disable async axe. Audit the exact already-verified bytes in
+    // a separate context with no cookies and no live network, then compare layout.
+    const browser = context.browser(); assert(browser, "Independent analysis requires an isolated browser context");
+    analysisContext = await browser.newContext({ bypassCSP: true, serviceWorkers: "block", acceptDownloads: false });
+    const analysisRequests = [];
+    await analysisContext.route("**/*", async route => {
+      const request = route.request(), url = request.url();
+      if (request.method() === "GET" && url === renderUrl.href) return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: htmlBytes });
+      const cached = cachedAssets.get(url);
+      if (request.method() === "GET" && cached) return route.fulfill({ status: 200, contentType: cached.asset.mediaType, body: cached.body });
+      if (request.method() === "GET" && url === new URL("/favicon.ico", base).href) return route.fulfill({ status: 404, body: "" });
+      analysisRequests.push({ method: request.method(), path: new URL(url).pathname });
+      return route.abort("blockedbyclient");
+    });
+    const analysisPage = await analysisContext.newPage(); analysisPage.setDefaultTimeout(10000);
+    const analysisErrors = [];
+    analysisPage.on("pageerror", error => analysisErrors.push(error.message));
+    analysisPage.on("console", message => { if (message.type() === "error") analysisErrors.push(message.text()); });
+    await analysisPage.goto(renderUrl.href, { waitUntil: "networkidle", timeout: 15000 });
     const axeSource = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
-    // Trusted DevTools instrumentation; the page's restrictive CSP is unchanged.
-    await cdp.send("Runtime.evaluate", { expression: axeSource, returnByValue: false, allowUnsafeEvalBlockedByCSP: true });
+    await analysisPage.addScriptTag({ content: axeSource });
     for (const [name, viewport] of [["desktop", { width: 1440, height: 1000 }], ["tablet", { width: 834, height: 1112 }], ["mobile", { width: 390, height: 844 }]]) {
       await page.setViewportSize(viewport);
-      await page.evaluate(() => document.fonts.ready);
-      const measurements = await page.evaluate(() => ({
+      await analysisPage.setViewportSize(viewport);
+      const measurements = await bounded(page.evaluate(() => ({
         width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+        fontsLoaded: document.fonts.status === "loaded",
         images: [...document.images].every(image => image.complete && image.naturalWidth > 0),
         dangerous: document.querySelectorAll("script,iframe,object,embed,form,input,textarea,select,[onclick],[onerror],[onload]").length,
         links: [...document.querySelectorAll("a[href]")].map(link => ({ href: link.getAttribute("href"), height: link.getBoundingClientRect().height })),
-      }));
+      })), "Protected document layout inspection");
       assert(measurements.scrollWidth <= measurements.width + 1, `${name} layout must fit`);
       assert(measurements.images, "Images must actually load");
+      assert(measurements.fontsLoaded, "The actual protected page must have loaded its fonts");
       assert.equal(measurements.dangerous, 0, "Demo cannot contain effectful controls or executable content");
       assert(measurements.links.every(link => link.href?.startsWith("#")), "Demo navigation stays in the simulated document");
-      const scan = await page.evaluate(async () => {
+      const mirrored = await bounded(analysisPage.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+        heading: document.querySelector("h1")?.getBoundingClientRect().toJSON() })), "Offline layout comparison");
+      const actualHeading = await bounded(page.evaluate(() => document.querySelector("h1")?.getBoundingClientRect().toJSON()), "Protected heading measurement");
+      assert.equal(mirrored.width, measurements.width); assert.equal(mirrored.scrollWidth, measurements.scrollWidth);
+      for (const dimension of ["x", "y", "width", "height"]) assert(Math.abs(mirrored.heading[dimension] - actualHeading[dimension]) <= 1, "Exact-byte offline analysis must retain the actual rendered layout");
+      const scan = await bounded(analysisPage.evaluate(async () => {
         const result = await window.axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] } });
         return { violations: result.violations.map(item => ({ id: item.id, impact: item.impact, targets: item.nodes.map(node => node.target) })), incomplete: result.incomplete.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) })) };
-      });
+      }), "Offline accessibility analysis");
       scans.push({ name, ...scan }); assert.deepEqual(scan.violations, [], `${name} accessibility violations require repair`);
       await page.screenshot({ path: path.join(directory, `${name}.png`), fullPage: true });
       layouts.push({ name, ...measurements });
@@ -100,12 +141,25 @@ export async function inspectAndSignWebsiteDemo(options) {
       outline: document.activeElement ? getComputedStyle(document.activeElement).outlineStyle : "none" }));
     assert.equal(focused.tag, "A"); assert(focused.href?.startsWith("#")); assert.notEqual(focused.outline, "none");
     await page.keyboard.press("Enter");
-    await page.getByRole("link", { name: "Proposal", exact: true }).click();
+    async function focusNative(predicate, label) {
+      for (let step = 0; step < 20; step++) {
+        await page.keyboard.press("Tab");
+        const active = await bounded(page.evaluate(() => ({ tag: document.activeElement?.tagName, href: document.activeElement?.getAttribute("href"), text: document.activeElement?.textContent?.trim() })), "Native keyboard focus inspection");
+        if (predicate(active)) return;
+      }
+      throw Error(`Keyboard could not reach ${label}`);
+    }
+    await focusNative(active => active.href === "#proposal", "Proposal");
+    await page.keyboard.press("Enter"); await page.waitForURL(url => url.hash === "#proposal", { timeout: 3000 });
     assert.equal(new URL(page.url()).hash, "#proposal");
-    await page.getByRole("link", { name: "Scope", exact: true }).click();
+    await focusNative(active => active.href === "#scope", "Scope");
+    await page.keyboard.press("Enter"); await page.waitForURL(url => url.hash === "#scope", { timeout: 3000 });
     assert.equal(new URL(page.url()).hash, "#scope");
-    await page.getByText("Exclusions and assumptions", { exact: true }).click();
-    assert.equal(await page.locator("details").getAttribute("open"), "");
+    await focusNative(active => active.tag === "SUMMARY" && active.text === "Exclusions and assumptions", "scope details");
+    await page.keyboard.press("Space");
+    assert.equal(await bounded(page.evaluate(() => document.querySelector("details")?.getAttribute("open")), "Native details state"), "");
+    assert.deepEqual(analysisRequests, [], "Offline accessibility analysis cannot access the live network");
+    assert.deepEqual(analysisErrors, [], "Accessibility analysis must complete without script errors");
     assert.deepEqual(errors, [], "Browser errors cannot be signed away"); assert.deepEqual(forbidden, []);
     const now = Date.now(), expiry = Math.min(now + 3600000, Date.parse(artifact.validUntil));
     assert(expiry > now + 1000);
@@ -115,7 +169,7 @@ export async function inspectAndSignWebsiteDemo(options) {
       checks: { desktop: true, tablet: true, mobile: true, reducedMotion: true, keyboard: true, noConsoleErrors: true, noSideEffects: true } };
     const privateKey = createPrivateKey(privateKeyPem); assert.equal(privateKey.asymmetricKeyType, "ed25519");
     const certificate = { payload, signature: sign(null, Buffer.from(canonical(payload)), privateKey).toString("base64url") };
-    await writeFile(path.join(directory, "rendered-qa.json"), JSON.stringify({ artifactId: artifactRecord.id, artifactDigest: artifact.artifactDigest, actualHtmlDigest: artifact.content.htmlDigest, layouts, scans, focused, errors, forbidden, requests, certificate }, null, 2));
+    await writeFile(path.join(directory, "rendered-qa.json"), JSON.stringify({ artifactId: artifactRecord.id, artifactDigest: artifact.artifactDigest, actualHtmlDigest: artifact.content.htmlDigest, layouts, scans, accessibilityAnalysis: "BYTE_IDENTICAL_OFFLINE_DOM_NO_AUTHENTICATION_NO_LIVE_NETWORK", analysisRequests, focused, errors, forbidden, requests, certificate }, null, 2));
     return certificate;
-  } finally { await page.close(); }
+  } finally { await analysisContext?.close(); await page.close(); }
 }
