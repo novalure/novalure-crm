@@ -184,7 +184,7 @@ test("Website Sales Ireland uses canonical CRM rows, durable evidence, scoped tr
       const controlledPool = interceptedPool({ before: async (sql, pid) => {
         if (sql.includes("select email,name from contacts")) contactAttempt.resolve(pid);
       }, after: async sql => {
-        if (sql.includes("union all select 'REPLY_RECEIVED'")) initialStopRead.resolve();
+        if (sql.includes('as "optedOut"') && sql.includes("crm_website_sales_has_reply(")) initialStopRead.resolve();
       } });
       const holder = await db.admin.connect();
       let committed = false;

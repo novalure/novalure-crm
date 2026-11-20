@@ -10,6 +10,7 @@ import { handleWebsiteSalesMachine, websiteSalesMachineContract, websiteSalesMac
 import { registerWebsiteSalesMachineAccess, type WebsiteSalesMachineRegistration } from "../src/lib/website-sales-machine-registration";
 import { websiteSalesIrelandContract, runWebsiteSalesIrelandCommand, type WebsiteSalesIrelandCommand } from "../src/lib/db/website-sales-ireland-repositories";
 import { websiteSalesStudioContract, type WebsiteSalesStudioCommand } from "../src/lib/website-sales-studio-types";
+import { websiteSalesLifecycleContract } from "../src/lib/website-sales-lifecycle-types";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
@@ -94,6 +95,10 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
     try { await installer.query("set role sales_machine_installer"); await installer.query("begin"); await installer.query(await readFile("migrations/203_website_sales_machine.sql", "utf8")); await installer.query("commit"); }
     finally { try { await installer.query("rollback"); await installer.query("reset role"); } finally { installer.release(); } }
     await db.admin.query("begin"); await db.admin.query(await readFile("migrations/204_website_sales_studio.sql", "utf8")); await db.admin.query("commit");
+    for (const file of ["170_crm_personal_mailbox.sql", "205_website_sales_lifecycle.sql"]) {
+      await db.admin.query("begin"); try { await db.admin.query(await readFile(`migrations/${file}`, "utf8")); await db.admin.query("commit"); }
+      catch (error) { await db.admin.query("rollback"); throw error; }
+    }
 
     await t.test("new migration seeds no workload, grant or business authority; OIDC alone is denied", async () => {
       const request = envelope(command("register_location", { countryCode: "IE", address: "1 Main Street, Dublin", sourceUrl: "https://example.invalid/location", sourceReference: "Synthetic fact" }));
@@ -223,6 +228,28 @@ test("dedicated Sales machine authority and receipt reconciliation use real Post
       assert.equal((await db.admin.query("select count(*) from crm_website_studio_qa")).rows[0].count, "0");
       assert.equal((await db.admin.query("select count(*) from crm_website_studio_preview_grants")).rows[0].count, "0");
       assert.equal((await totals()).deliveries, 0);
+    });
+    await t.test("dedicated lifecycle grant refreshes real CRM evidence and reconciles it without human attestation or private-mail authority", async () => {
+      const grantId = randomUUID(), nextProspect = prospect();
+      nextProspect.evidence = nextProspect.evidence.map(e => ({ ...e, observedAt: new Date(Date.now()-1000).toISOString(), finding: "New machine-scoped synthetic inspection" }));
+      const request: WebsiteSalesMachineRequest = { contractVersion: websiteSalesMachineContract, target: "lifecycle", operation: "execute", request: {
+        contractVersion: websiteSalesLifecycleContract, operation: "refresh_evidence", projectId: ids.project, companyId: ids.company, locationId,
+        expectedVersion: workflow.version, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { prospect: nextProspect, locationVersion: 1 },
+      } };
+      assert.equal((await call(request, ids.locationGrant)).status, 403);
+      await provision(registration({ grantId, locationId, scopes: ["crm.website-sales.lifecycle.read", "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.lifecycle.ingest-reply", "crm.website-sales.lifecycle.create-handoff", "crm.website-sales.reconcile"] }));
+      const before = await totals(), result = await call(request, grantId); assert.equal(result.status, 200, JSON.stringify(result.body));
+      workflow = result.body.data.workflow; assert.equal(workflow.status, "QUALIFIED"); assert.equal(result.body.requestHash, crmPayloadDigest(request));
+      assert.deepEqual(await totals(), { ...before, receipts: before.receipts+1, events: before.events+1 });
+      const after = await totals(), reconciled = await call({ ...request, operation: "reconcile" }, grantId);
+      assert.equal(reconciled.status, 200); assert.equal(reconciled.body.status, "COMMITTED"); assert.equal(reconciled.body.currentData.workflow.version, workflow.version);
+      assert.deepEqual(await totals(), after);
+      const viewed = await call({ contractVersion: websiteSalesMachineContract, target: "lifecycle", operation: "read", request: { projectId: ids.project, companyId: ids.company, locationId, correlationId: randomUUID() } }, grantId);
+      assert.equal(viewed.status, 200); assert.equal(viewed.body.data.workflow.version, workflow.version);
+      for (const operation of ["authorize_reply_classification", "record_customer_acceptance"]) {
+        assert.equal((await call({ ...request, request: { ...request.request, operation, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: {} } }, grantId)).status, 403);
+      }
+      assert.deepEqual(await totals(), after);
     });
     await t.test("revocation and delegation expiry during a real command-lock wait deny receipt exposure with zero business writes", async () => {
       for (const mode of ["revocation", "expiry"] as const) {

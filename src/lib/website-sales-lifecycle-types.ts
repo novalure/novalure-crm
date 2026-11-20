@@ -18,9 +18,9 @@ export type WebsiteSalesInboundCandidate = { messageId: string; receivedAt: stri
   classification: WebsiteSalesReplyClassification; bodyShared: boolean; canAuthorizeClassification: boolean };
 export type WebsiteSalesInboundEvent = { id: string; messageId: string; classification: WebsiteSalesReplyClassification;
   classificationBasis: "BOUNDED_SOURCE_RULES_REVIEW_REQUIRED"; nextTaskId: string | null; late: boolean; createdAt: string };
-export type WebsiteSalesCustomerAcceptance = WebsiteSalesCustomerAcceptancePayload & { id: string; createdAt: string;
+export type WebsiteSalesCustomerAcceptance = WebsiteSalesCustomerAcceptancePayload & { id: string; version: number; current: boolean; createdAt: string;
   attestationKind: "OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE" };
-export type WebsiteSalesHandoff = { id: string; customerAcceptanceId: string; taskId: string; createdAt: string; snapshotDigest: string };
+export type WebsiteSalesHandoff = { id: string; customerAcceptanceId: string; taskId: string; createdAt: string; snapshotDigest: string; current: boolean };
 export type WebsiteSalesLifecycleRead = WebsiteSalesLifecycleScope & {
   contractVersion: typeof websiteSalesLifecycleContract; source: "database"; workspaceId: string;
   workflow: WebsiteSalesWorkbenchWorkflow; inboundCandidates: WebsiteSalesInboundCandidate[]; responses: WebsiteSalesInboundEvent[];

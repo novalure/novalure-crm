@@ -50,7 +50,7 @@ create table crm_website_sales_customer_acceptances (
  acceptance_digest text not null check(acceptance_digest ~ '^[a-f0-9]{64}$'),
  scope jsonb not null check(jsonb_typeof(scope)='object' and octet_length(scope::text)<=16000),
  attestation_kind text not null default 'OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE' check(attestation_kind='OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE'),
- accepted_by uuid not null,created_at timestamptz not null default now(),unique(workspace_id,id),unique(workspace_id,project_id,company_id,location_id,workflow_id,id),unique(workspace_id,workflow_id,acceptance_digest),
+ version integer not null check(version>0),accepted_by uuid not null,created_at timestamptz not null default now(),unique(workspace_id,id),unique(workspace_id,project_id,company_id,location_id,workflow_id,id),unique(workspace_id,workflow_id,version),
  foreign key(workspace_id,project_id,company_id,location_id,workflow_id) references crm_website_sales_workflows(workspace_id,project_id,company_id,location_id,id),
  foreign key(workspace_id,project_id,company_id,location_id,workflow_id,concept_artifact_id) references crm_website_studio_artifacts(workspace_id,project_id,company_id,location_id,workflow_id,id),
  foreign key(workspace_id,project_id,company_id,location_id,workflow_id,demo_artifact_id) references crm_website_studio_artifacts(workspace_id,project_id,company_id,location_id,workflow_id,id),
@@ -76,10 +76,28 @@ do $$ declare relation text;begin
   execute format('create trigger website_sales_lifecycle_immutable before update or delete or truncate on %I for each statement execute function crm_reject_immutable_mutation()',relation);
  end loop;
 end $$;
+-- Project writers cannot impersonate a personal mailbox owner or forge immutable attribution.
+create policy sales_reply_permission_actor on crm_website_sales_reply_permissions as restrictive for insert to novalure_tenant_app
+ with check(source_user_id=nullif(current_setting('app.actor_id',true),'')::uuid and authorized_by=source_user_id);
+create policy sales_reply_revocation_actor on crm_website_sales_reply_revocations as restrictive for insert to novalure_tenant_app
+ with check(revoked_by=nullif(current_setting('app.actor_id',true),'')::uuid and exists(
+  select 1 from crm_website_sales_reply_permissions p where p.workspace_id=crm_website_sales_reply_revocations.workspace_id
+   and p.project_id=crm_website_sales_reply_revocations.project_id and p.id=crm_website_sales_reply_revocations.permission_id
+   and p.source_user_id=nullif(current_setting('app.actor_id',true),'')::uuid));
+create policy sales_customer_acceptance_actor on crm_website_sales_customer_acceptances as restrictive for insert to novalure_tenant_app
+ with check(accepted_by=nullif(current_setting('app.actor_id',true),'')::uuid);
+do $$ declare relation text;begin
+ foreach relation in array array['crm_website_sales_refreshes','crm_website_sales_inbound_events','crm_website_sales_handoffs'] loop
+  execute format('create policy sales_lifecycle_record_actor on %I as restrictive for insert to novalure_tenant_app with check(created_by=nullif(current_setting(''app.actor_id'',true),'''')::uuid)',relation);
+ end loop;
+end $$;
 
 -- The non-runtime function owner receives a context-limited read policy only.
 -- Runtime personal-mail policies and column privileges remain unchanged.
 do $$ declare relation text;begin
+ execute format('create policy sales_inbound_workspace_owner on workspaces for select to %I using(id=nullif(current_setting(''app.tenant_id'',true),'''')::uuid)',current_user);
+ execute format('create policy sales_inbound_member_owner on workspace_users for select to %I using(workspace_id=nullif(current_setting(''app.tenant_id'',true),'''')::uuid and id=nullif(current_setting(''app.actor_id'',true),'''')::uuid)',current_user);
+ execute format('create policy sales_inbound_grant_owner on project_pipeline_permissions for select to %I using(workspace_id=nullif(current_setting(''app.tenant_id'',true),'''')::uuid and user_id=nullif(current_setting(''app.actor_id'',true),'''')::uuid)',current_user);
  foreach relation in array array['crm_website_sales_workflows','contacts','crm_website_sales_reply_permissions','crm_website_sales_reply_revocations'] loop
   execute format('create policy sales_inbound_projection_owner on %I for select to %I using(workspace_id=nullif(current_setting(''app.tenant_id'',true),'''')::uuid and crm_project_access(workspace_id,project_id,false))',relation,current_user);
  end loop;

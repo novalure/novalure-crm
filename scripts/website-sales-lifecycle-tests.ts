@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import type { AppSession } from "../src/lib/auth/session";
@@ -12,9 +12,12 @@ import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { withCrmRead } from "../src/lib/crm-command";
 import { executeWebsiteSalesLifecycleCommand as execute, readWebsiteSalesLifecycle as read, reconcileWebsiteSalesLifecycleCommand as reconcile } from "../src/lib/db/website-sales-lifecycle-repositories";
 import { websiteSalesLifecycleContract, type WebsiteSalesLifecycleCommand } from "../src/lib/website-sales-lifecycle-types";
+import { executeWebsiteSalesStudioCommand, readWebsiteSalesStudio } from "../src/lib/db/website-sales-studio-repositories";
+import { canonicalWebsiteStudioQaPayload, websiteSalesStudioContract, type WebsiteSalesStudioCommand, type WebsiteStudioQaPayload } from "../src/lib/website-sales-studio-types";
 
 test("Website Sales lifecycle refreshes canonical records and processes owner-authorized canonical replies", { timeout: 240000 }, async t => {
   const db = await startLocalSalesDb();
+  const originalQaKeys = process.env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS;
   try {
     await applySalesSchema(db, { maxMigrationNumber: 90 });
     await db.admin.query("begin");
@@ -93,6 +96,60 @@ test("Website Sales lifecycle refreshes canonical records and processes owner-au
       if (receipt.status === "COMMITTED") assert.equal(receipt.currentData.workflow.version, current.version);
       assert.deepEqual(await counts(), before);
     });
+    const qaId = randomUUID(), pmId = randomUUID();
+    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic independent QA','qa@example.invalid','agent','novalure_sales','active'),($3,$2,'Synthetic PM','pm@example.invalid','agent','novalure_sales','active')", [qaId, ids.workspace, pmId]);
+    await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true),($1,$2,$4,true,false)", [ids.workspace, ids.project, qaId, pmId]);
+    const qaSession = { ...session, userId: qaId }, pmSession = { ...session, userId: pmId };
+    let latestCustomerAcceptanceId: string;
+    let customerAcceptancePayload: Record<string, unknown>;
+    await t.test("human customer acceptance binds current accepted concept, independent signed QA and one immutable canonical PM task", async () => {
+      const studio = (operation: WebsiteSalesStudioCommand["operation"], payload: Record<string, unknown>): WebsiteSalesStudioCommand => ({ contractVersion: websiteSalesStudioContract, operation, ...scope,
+        workflowId: current.id, expectedWorkflowVersion: current.version, expectedEvidenceDigest: current.evidenceDigest, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload });
+      const plan = { estimatedCostMinor: 0, availableBudgetMinor: 0, expectedNetPriceMinor: 250000, estimatedDeliveryCostMinor: 50000, minimumMarginBasisPoints: 3000, requiredCapacityMinutes: 60, availableCapacityMinutes: 600, rightsVerified: true, budgetReference: null };
+      const claim = { text: "New synthetic source inspection", evidenceIds: ["business_need"] }, contentScope = { included: ["Proposed website structure"], excluded: ["Publication, payments and unlicensed assets"] };
+      const d = await executeWebsiteSalesStudioCommand(session, studio("create_diagnosis", { version: 1, previousArtifactDigest: null, recommendations: [claim], scope: contentScope, investmentPlan: plan }), options);
+      const c = await executeWebsiteSalesStudioCommand(session, studio("create_concept", { version: 1, previousArtifactDigest: null, diagnosisDigest: d.data.artifactDigest, objective: "A clearer public website", hero: claim,
+        sections: [{ title: "Proposed service details", body: claim }], visualDirection: "STUDIO_BLUE", scope: contentScope, investmentPlan: plan }), options);
+      await executeWebsiteSalesStudioCommand(session, studio("accept_concept", { artifactId: c.data.artifactId }), options);
+      const demo = await executeWebsiteSalesStudioCommand(session, studio("build_demo", { version: 1, previousArtifactDigest: null, conceptDigest: c.data.artifactDigest, investmentPlan: plan }), options);
+      const acceptance = lifecycle("record_customer_acceptance", { conceptArtifactId: c.data.artifactId, demoArtifactId: demo.data.artifactId,
+        sourceReference: "Synthetic operator-recorded customer acceptance; not a signed contract", included: ["Website structure and service details"], excluded: ["Publishing and payments"], acceptanceCriteria: ["Customer reviews the agreed scope"], prerequisites: ["Licensed customer assets supplied"] });
+      await assert.rejects(execute(session, acceptance, options), { code: "SIGNED_RENDERED_QA_REQUIRED" });
+      const view = await readWebsiteSalesStudio(session, scope, options), artifact = view.artifacts.find(a => a.id === demo.data.artifactId)?.artifact;
+      assert.ok(artifact); assert.equal(artifact.kind, "DEMO"); if (artifact.kind !== "DEMO") throw new Error("Expected actual demo artifact");
+      const qaKey = generateKeyPairSync("ed25519"), revision = "a".repeat(40), checkedAt = new Date().toISOString();
+      process.env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS = JSON.stringify([{ issuer: "SYNTHETIC isolated rendered QA test", keyId: "synthetic-key-1", workspaceId: ids.workspace, projectId: ids.project, qaActorId: qaId, sourceRevision: revision, publicKeySpkiPem: qaKey.publicKey.export({ format: "pem", type: "spki" }).toString() }]);
+      const payload: WebsiteStudioQaPayload = { contractVersion: "website-sales-rendered-qa-v1", issuer: "SYNTHETIC isolated rendered QA test", keyId: "synthetic-key-1", certificateId: randomUUID(),
+        workspaceId: ids.workspace, ...scope, workflowId: current.id, artifactDigest: artifact.artifactDigest, htmlDigest: artifact.content.htmlDigest, assetManifestDigest: artifact.content.assetManifestDigest,
+        evidenceDigest: current.evidenceDigest, qaActorId: qaId, sourceRevision: revision, checkedAt, expiresAt: new Date(Date.now()+600000).toISOString(),
+        checks: { desktop: true, tablet: true, mobile: true, reducedMotion: true, keyboard: true, noConsoleErrors: true, noSideEffects: true } };
+      const certificate = { payload, signature: sign(null, Buffer.from(canonicalWebsiteStudioQaPayload(payload)), qaKey.privateKey).toString("base64url") };
+      await executeWebsiteSalesStudioCommand(qaSession, studio("submit_qa", { artifactId: demo.data.artifactId, certificate }), options);
+      const saved = await execute(session, acceptance, options); assert.ok(saved.data.customerAcceptanceId); current = saved.data.workflow;
+      const duplicate = await execute(session, lifecycle("record_customer_acceptance", acceptance.payload), options); assert.equal(duplicate.data.customerAcceptanceId, saved.data.customerAcceptanceId);
+      const handoff = lifecycle("create_handoff", { customerAcceptanceId: saved.data.customerAcceptanceId, pmOwnerId: pmId }), before = await counts();
+      const result = await execute(session, handoff, options); assert.ok(result.data.handoffId); assert.ok(result.data.taskId);
+      assert.equal((await counts()).tasks, before.tasks+1); assert.equal((await counts()).deliveries, 0);
+      assert.equal((await execute(session, handoff, options)).data.taskId, result.data.taskId);
+      assert.equal((await execute(session, lifecycle("create_handoff", handoff.payload), options)).data.taskId, result.data.taskId);
+      const task = (await db.admin.query("select owner_user_id,metadata from tasks where id=$1", [result.data.taskId])).rows[0];
+      assert.equal(task.owner_user_id, pmId); assert.equal(task.metadata.attestationKind, "OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE");
+      assert.equal(task.metadata.contractExecutionEnabled, false); assert.equal(task.metadata.invoiceEnabled, false); assert.equal(task.metadata.outboundEnabled, false);
+      customerAcceptancePayload = { ...acceptance.payload, included: ["Corrected customer scope: structure only"] };
+      const corrected = await execute(session, lifecycle("record_customer_acceptance", customerAcceptancePayload), options); current = corrected.data.workflow;
+      assert.ok(corrected.data.customerAcceptanceId); latestCustomerAcceptanceId = corrected.data.customerAcceptanceId;
+      await assert.rejects(execute(session, lifecycle("create_handoff", { customerAcceptanceId: saved.data.customerAcceptanceId, pmOwnerId: pmId }), options), { code: "CURRENT_CUSTOMER_ACCEPTANCE_REQUIRED" });
+      const correctedHandoff = await execute(session, lifecycle("create_handoff", { customerAcceptanceId: latestCustomerAcceptanceId, pmOwnerId: pmId }), options);
+      assert.notEqual(correctedHandoff.data.taskId, result.data.taskId);
+      const currentView = await read(session, scope, options);
+      assert.deepEqual(currentView.customerAcceptances.map(a => [a.version, a.current]), [[2, true], [1, false]]);
+      assert.equal(currentView.handoffs.find(h => h.id === result.data.handoffId)?.current, false);
+      assert.equal((await db.admin.query("select metadata->>'websiteSalesHandoffStatus' as status from tasks where id=$1", [result.data.taskId])).rows[0].status, "SUPERSEDED_SCOPE_REVIEW_REQUIRED");
+      const other = await observed();
+      await assert.rejects(withCrmRead(session, tx => tx.execute(`insert into crm_website_sales_customer_acceptances(id,workspace_id,project_id,company_id,location_id,workflow_id,concept_artifact_id,demo_artifact_id,concept_digest,demo_digest,evidence_digest,source_reference,scope,accepted_by,acceptance_digest,version)
+        select $2,workspace_id,project_id,company_id,$3,$4,concept_artifact_id,demo_artifact_id,concept_digest,demo_digest,evidence_digest,source_reference,scope,accepted_by,$5,99 from crm_website_sales_customer_acceptances where id=$1`,
+      [saved.data.customerAcceptanceId, randomUUID(), other.locationId, other.row.id, "b".repeat(64)]), options), { code: "23503" });
+    });
     const messageId = randomUUID(), connectionId = randomUUID();
     await t.test("real canonical message association exposes no private body and requires the personal owner's explicit bounded consent", async () => {
       await withCrmRead(session, async tx => {
@@ -102,12 +159,30 @@ test("Website Sales lifecycle refreshes canonical records and processes owner-au
       }, options);
       let view = await read(session, scope, options); assert.equal(view.inboundCandidates[0]?.classification, "UNCLEAR");
       assert.ok(!JSON.stringify(view).includes("I am interested"));
+      assert.equal((await withCrmRead(qaSession, tx => tx.queryOne<{ allowed: boolean }>("select crm_project_access($1,$2,true) as allowed", [ids.workspace, ids.project]), options))?.allowed, true);
+      await assert.rejects(withCrmRead(qaSession, tx => tx.execute(`insert into crm_website_sales_reply_permissions(id,workspace_id,project_id,company_id,location_id,workflow_id,source_user_id,message_id,authorized_by,purpose,version,expires_at)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$7,'BOUNDED_CLASSIFICATION_ONLY',99,now()+interval '1 hour')`, [randomUUID(), ids.workspace, ids.project, ids.company, scope.locationId, current.id, ids.actor, messageId]), options), { code: "42501" });
       const allow = lifecycle("authorize_reply_classification", { canonicalMessageId: messageId, allowBoundedClassification: true });
-      assert.ok((await execute(session, allow, options)).data.replyPermissionId);
+      const permissionId = (await execute(session, allow, options)).data.replyPermissionId; assert.ok(permissionId);
+      for (const forgedActor of [ids.actor, qaId]) await assert.rejects(withCrmRead(qaSession, tx => tx.execute("insert into crm_website_sales_reply_revocations(id,workspace_id,project_id,permission_id,revoked_by) values($1,$2,$3,$4,$5)", [randomUUID(), ids.workspace, ids.project, permissionId, forgedActor]), options), { code: "42501" });
       view = await read(session, scope, options); assert.equal(view.inboundCandidates[0]?.classification, "OUT_OF_OFFICE");
       await execute(session, lifecycle("authorize_reply_classification", { canonicalMessageId: messageId, allowBoundedClassification: false }), options);
       assert.equal((await read(session, scope, options)).inboundCandidates[0]?.classification, "UNCLEAR");
       await execute(session, lifecycle("authorize_reply_classification", { canonicalMessageId: messageId, allowBoundedClassification: true }), options);
+    });
+    await t.test("derived classification works under a non-owner NOLOGIN/NOBYPASSRLS projection role while other members cannot read private mail", async () => {
+      await db.admin.query("create role sales_source_projection nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
+      await db.admin.query("grant usage on schema public to sales_source_projection; grant select on workspaces,workspace_users,project_pipeline_permissions,crm_website_sales_workflows,contacts,crm_mailbox_links,crm_mailbox_messages,crm_website_sales_reply_permissions,crm_website_sales_reply_revocations to sales_source_projection; grant execute on all functions in schema public to sales_source_projection");
+      await db.admin.query("create policy lifecycle_workspace_probe on workspaces for select to sales_source_projection using(id=nullif(current_setting('app.tenant_id',true),'')::uuid)");
+      await db.admin.query("create policy lifecycle_member_probe on workspace_users for select to sales_source_projection using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and id=nullif(current_setting('app.actor_id',true),'')::uuid)");
+      await db.admin.query("create policy lifecycle_grant_probe on project_pipeline_permissions for select to sales_source_projection using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and user_id=nullif(current_setting('app.actor_id',true),'')::uuid)");
+      for (const table of ["crm_website_sales_workflows", "contacts", "crm_website_sales_reply_permissions", "crm_website_sales_reply_revocations"]) await db.admin.query(`create policy lifecycle_projection_probe on ${table} for select to sales_source_projection using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and crm_project_access(workspace_id,project_id,false))`);
+      await db.admin.query("create policy lifecycle_link_probe on crm_mailbox_links for select to sales_source_projection using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and confirmed_reply and crm_project_access(workspace_id,project_id,false))");
+      await db.admin.query("create policy lifecycle_message_probe on crm_mailbox_messages for select to sales_source_projection using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and exists(select 1 from crm_mailbox_links l where l.workspace_id=crm_mailbox_messages.workspace_id and l.user_id=crm_mailbox_messages.user_id and l.message_id=crm_mailbox_messages.id and l.confirmed_reply and crm_project_access(l.workspace_id,l.project_id,false)))");
+      await db.admin.query("alter function crm_website_sales_inbound_source(uuid,uuid,uuid,uuid) owner to sales_source_projection");
+      const candidate = (await read(pmSession, scope, options)).inboundCandidates[0]; assert.equal(candidate?.classification, "OUT_OF_OFFICE"); assert.equal(candidate?.canAuthorizeClassification, false);
+      assert.equal((await withCrmRead(pmSession, tx => tx.queryOne<{ n: number }>("select count(*)::int as n from crm_mailbox_messages"), options))?.n, 0);
+      await assert.rejects(execute(pmSession, lifecycle("authorize_reply_classification", { canonicalMessageId: messageId, allowBoundedClassification: true }), options), { code: "PERSONAL_MESSAGE_OWNER_REQUIRED" });
     });
     await t.test("out-of-office stops the old sequence, closes its pending task and creates one internal timing-review task", async () => {
       const request = lifecycle("ingest_reply", { canonicalMessageId: messageId }), before = await counts();
@@ -126,5 +201,13 @@ test("Website Sales lifecycle refreshes canonical records and processes owner-au
       const forced = (await db.admin.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relname in('crm_website_sales_refreshes','crm_website_sales_offer_invalidations','crm_website_sales_reply_permissions','crm_website_sales_reply_revocations','crm_website_sales_inbound_events','crm_website_sales_customer_acceptances','crm_website_sales_handoffs')")).rows;
       assert.equal(forced.length, 7); assert.ok(forced.every(row => row.relrowsecurity && row.relforcerowsecurity));
     });
-  } finally { await db.stop(); }
+    await t.test("central opt-out after a reply stop dominates reply exceptions for both acceptance and handoff", async () => {
+      assert.equal(current.stopReason, "REPLY_RECEIVED");
+      await withCrmRead(session, tx => tx.execute("insert into consent_records(workspace_id,project_id,contact_id,channel,status,source) values($1,$2,$3,'E-Mail','Abgemeldet','SYNTHETIC late central opt-out')", [ids.workspace, ids.project, ids.contact]), options);
+      assert.notEqual((await db.admin.query("select consent_label from contacts where id=$1", [ids.contact])).rows[0].consent_label, "Abgemeldet");
+      assert.equal((await read(session, scope, options)).workflow.blockedReason, "OPT_OUT");
+      await assert.rejects(execute(session, lifecycle("record_customer_acceptance", customerAcceptancePayload), options), { code: "OPT_OUT" });
+      await assert.rejects(execute(session, lifecycle("create_handoff", { customerAcceptanceId: latestCustomerAcceptanceId, pmOwnerId: pmId }), options), { code: "OPT_OUT" });
+    });
+  } finally { if (originalQaKeys === undefined) delete process.env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS; else process.env.WEBSITE_SALES_STUDIO_QA_PUBLIC_KEYS = originalQaKeys; await db.stop(); }
 });

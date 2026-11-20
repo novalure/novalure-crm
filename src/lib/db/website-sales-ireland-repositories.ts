@@ -143,14 +143,14 @@ async function contactStop(tx: TenantTransaction, session: AppSession, row: Work
   const stopped = await tx.queryOne<{ reason: string }>(`select stop_reason as reason from crm_website_sales_workflows
     where workspace_id=$1 and contact_id=$2 and status='STOPPED' and stop_reason in('OPT_OUT','REPLY_RECEIVED','UNKNOWN_DELIVERY')
     order by case stop_reason when 'OPT_OUT' then 0 when 'UNKNOWN_DELIVERY' then 1 else 2 end limit 1`, [session.workspaceId, row.contactId]);
-  if (stopped) return stopped.reason;
-  const blocked = await tx.queryOne<{ reason: string }>(`select 'OPT_OUT'::text as reason where exists(
+  const blocked = await tx.queryOne<{ optedOut: boolean; replied: boolean }>(`select (exists(
     select 1 from consent_records where workspace_id=$1 and contact_id=$2 and status ~* '(opt.?out|abgemeldet|unsubscribe|widerspruch|stop|^no$|^false$)')
     or exists(select 1 from newsletter_suppressions s join contacts c on c.workspace_id=s.workspace_id and lower(c.email)=lower(s.email)
-      where c.workspace_id=$1 and c.id=$2)
-    union all select 'REPLY_RECEIVED'::text where crm_website_sales_has_reply($1,$4,$2,$3::timestamptz) limit 1`,
+      where c.workspace_id=$1 and c.id=$2)) as "optedOut",crm_website_sales_has_reply($1,$4,$2,$3::timestamptz) as replied`,
   [session.workspaceId, row.contactId, row.createdAt, row.projectId]);
-  return blocked?.reason ?? null;
+  if (blocked?.optedOut || stopped?.reason === "OPT_OUT") return "OPT_OUT";
+  if (stopped?.reason === "UNKNOWN_DELIVERY") return "UNKNOWN_DELIVERY";
+  return stopped?.reason === "REPLY_RECEIVED" || blocked?.replied ? "REPLY_RECEIVED" : null;
 }
 async function view(tx: TenantTransaction, session: AppSession, scope: Scope, registered?: LocationRow) {
   const currentLocation = registered ?? await location(tx, session, scope);
@@ -159,7 +159,8 @@ async function view(tx: TenantTransaction, session: AppSession, scope: Scope, re
   const current = qualification(row.prospect);
   bindProspect(current, session, scope);
   const investmentDecision = row.investmentPlan === null ? null : decideWebsiteInvestment(row.investmentPlan, current, new Date().toISOString());
-  const blockedReason = row.status === "STOPPED" ? row.stopReason : await contactStop(tx, session, row)
+  const stopped = await contactStop(tx, session, row);
+  const blockedReason = stopped === "OPT_OUT" || stopped === "UNKNOWN_DELIVERY" ? stopped : row.status === "STOPPED" ? row.stopReason : stopped
     ?? (row.locationVersion !== currentLocation.version ? "LOCATION_CHANGED" : current.status !== "READY" ? "STALE_OR_UNQUALIFIED_EVIDENCE" : null);
   return { location: currentLocation, workflow: {
     id: row.id, workspaceId: session.workspaceId, ...scope, locationVersion: row.locationVersion, version: row.version,

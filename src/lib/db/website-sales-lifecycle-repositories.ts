@@ -56,10 +56,14 @@ async function read(tx: TenantTransaction, session: AppSession, scope: WebsiteSa
     bodyShared: source.bodyShared, canAuthorizeClassification: source.canAuthorizeClassification }));
   const responses = await tx.query<WebsiteSalesLifecycleRead["responses"][number]>(`select id,message_id as "messageId",classification,classification_basis as "classificationBasis",
     next_task_id as "nextTaskId",late,created_at::text as "createdAt" from crm_website_sales_inbound_events where workspace_id=$1 and workflow_id=$2 order by created_at desc,id desc limit 25`, [session.workspaceId, row.id]);
-  const saved = await tx.query<{ id: string; conceptArtifactId: string; demoArtifactId: string; sourceReference: string; scope: Pick<WebsiteSalesCustomerAcceptance, "included" | "excluded" | "acceptanceCriteria" | "prerequisites">; createdAt: string }>(`select id,concept_artifact_id as "conceptArtifactId",demo_artifact_id as "demoArtifactId",source_reference as "sourceReference",scope,created_at::text as "createdAt"
-    from crm_website_sales_customer_acceptances where workspace_id=$1 and workflow_id=$2 order by created_at desc,id desc limit 25`, [session.workspaceId, row.id]);
-  const handoffs = await tx.query<WebsiteSalesLifecycleRead["handoffs"][number]>(`select id,customer_acceptance_id as "customerAcceptanceId",task_id as "taskId",snapshot_digest as "snapshotDigest",created_at::text as "createdAt"
-    from crm_website_sales_handoffs where workspace_id=$1 and workflow_id=$2 order by created_at desc,id desc limit 25`, [session.workspaceId, row.id]);
+  const saved = await tx.query<{ id: string; version: number; current: boolean; conceptArtifactId: string; demoArtifactId: string; sourceReference: string; scope: Pick<WebsiteSalesCustomerAcceptance, "included" | "excluded" | "acceptanceCriteria" | "prerequisites">; createdAt: string }>(`select a.id,a.version,
+    a.evidence_digest=$3 and not exists(select 1 from crm_website_sales_customer_acceptances newer where newer.workspace_id=a.workspace_id and newer.workflow_id=a.workflow_id and newer.version>a.version) as current,
+    a.concept_artifact_id as "conceptArtifactId",a.demo_artifact_id as "demoArtifactId",a.source_reference as "sourceReference",a.scope,a.created_at::text as "createdAt"
+    from crm_website_sales_customer_acceptances a where a.workspace_id=$1 and a.workflow_id=$2 order by a.version desc limit 25`, [session.workspaceId, row.id, row.evidenceDigest]);
+  const handoffs = await tx.query<WebsiteSalesLifecycleRead["handoffs"][number]>(`select h.id,h.customer_acceptance_id as "customerAcceptanceId",h.task_id as "taskId",h.snapshot_digest as "snapshotDigest",h.created_at::text as "createdAt",
+    a.evidence_digest=$3 and not exists(select 1 from crm_website_sales_customer_acceptances newer where newer.workspace_id=a.workspace_id and newer.workflow_id=a.workflow_id and newer.version>a.version) as current
+    from crm_website_sales_handoffs h join crm_website_sales_customer_acceptances a on a.workspace_id=h.workspace_id and a.id=h.customer_acceptance_id
+    where h.workspace_id=$1 and h.workflow_id=$2 order by h.created_at desc,h.id desc limit 25`, [session.workspaceId, row.id, row.evidenceDigest]);
   const allowed = await tx.queryOne<{ allowed: boolean }>("select crm_project_access($1,$2,true) as allowed", [session.workspaceId, scope.projectId]);
   return { contractVersion: websiteSalesLifecycleContract, source: "database", workspaceId: session.workspaceId, ...scope,
     workflow: current, inboundCandidates, responses, customerAcceptances: saved.map(({ scope: acceptedScope, ...acceptance }) => ({ ...acceptance, ...acceptedScope, attestationKind: "OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE" })), handoffs,
@@ -80,7 +84,7 @@ function ready(state: State, allowReply = false) {
 type ArtifactRow = { id: string; createdBy: string; artifact: WebsiteStudioArtifact };
 async function acceptedArtifacts(tx: TenantTransaction, session: AppSession, row: Row, conceptId: string, demoId: string) {
   const selected = await tx.query<ArtifactRow>(`select id,created_by as "createdBy",artifact from crm_website_studio_artifacts
-    where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5 and id=any($6::uuid[]) for share`,
+    where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5 and id=any($6::uuid[])`,
   [session.workspaceId, row.projectId, row.companyId, row.locationId, row.id, [conceptId, demoId]]);
   const conceptRow = selected.find(a => a.id === conceptId), demoRow = selected.find(a => a.id === demoId);
   if (!conceptRow || !demoRow) fail("CURRENT_ACCEPTED_DEMO_REQUIRED");
@@ -199,15 +203,22 @@ export async function executeWebsiteSalesLifecycleCommand(session: AppSession, r
         const artifacts = await acceptedArtifacts(tx, fresh, row, String(p.conceptArtifactId), String(p.demoArtifactId));
         const acceptedScope = { included: p.included, excluded: p.excluded, acceptanceCriteria: p.acceptanceCriteria, prerequisites: p.prerequisites };
         const acceptanceDigest = crmPayloadDigest({ workflowId: row.id, conceptDigest: artifacts.concept.artifactDigest, demoDigest: artifacts.demo.artifactDigest, sourceReference: p.sourceReference, scope: acceptedScope });
-        const prior = await tx.queryOne<{ id: string }>("select id from crm_website_sales_customer_acceptances where workspace_id=$1 and workflow_id=$2 and acceptance_digest=$3", [fresh.workspaceId, row.id, acceptanceDigest]);
-        const id = prior?.id ?? randomUUID();
-        if (!prior) await tx.execute(`insert into crm_website_sales_customer_acceptances(id,workspace_id,project_id,company_id,location_id,workflow_id,concept_artifact_id,demo_artifact_id,concept_digest,demo_digest,evidence_digest,source_reference,scope,accepted_by,acceptance_digest)
-          values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15)`, [id, fresh.workspaceId, row.projectId, row.companyId, row.locationId, row.id, p.conceptArtifactId, p.demoArtifactId,
-          artifacts.concept.artifactDigest, artifacts.demo.artifactDigest, row.evidenceDigest, p.sourceReference, JSON.stringify(acceptedScope), fresh.userId, acceptanceDigest]);
-        return { customerAcceptanceId: id, workflow: workflow(state) };
+        const latest = await tx.queryOne<{ id: string; version: number; digest: string }>("select id,version,acceptance_digest as digest from crm_website_sales_customer_acceptances where workspace_id=$1 and workflow_id=$2 order by version desc limit 1", [fresh.workspaceId, row.id]);
+        const unchanged = latest?.digest === acceptanceDigest, id = unchanged ? latest.id : randomUUID();
+        if (!unchanged) {
+          await tx.execute(`insert into crm_website_sales_customer_acceptances(id,workspace_id,project_id,company_id,location_id,workflow_id,concept_artifact_id,demo_artifact_id,concept_digest,demo_digest,evidence_digest,source_reference,scope,accepted_by,acceptance_digest,version)
+          values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16)`, [id, fresh.workspaceId, row.projectId, row.companyId, row.locationId, row.id, p.conceptArtifactId, p.demoArtifactId,
+          artifacts.concept.artifactDigest, artifacts.demo.artifactDigest, row.evidenceDigest, p.sourceReference, JSON.stringify(acceptedScope), fresh.userId, acceptanceDigest, Number(latest?.version ?? 0)+1]);
+          await tx.execute(`update tasks set metadata=metadata||$3::jsonb,version=version+1,updated_at=now()
+            where workspace_id=$1 and status='open' and id in(select task_id from crm_website_sales_handoffs where workspace_id=$1 and workflow_id=$2)`,
+          [fresh.workspaceId, row.id, JSON.stringify({ websiteSalesHandoffStatus: "SUPERSEDED_SCOPE_REVIEW_REQUIRED", supersededByAcceptanceId: id })]);
+          await tx.execute("update crm_website_sales_workflows set version=version+1,last_command_id=$4,last_correlation_id=$5,updated_at=now() where workspace_id=$1 and id=$2 and version=$3", [fresh.workspaceId, row.id, row.version, context.commandId, context.correlationId]);
+        }
+        return { customerAcceptanceId: id, workflow: workflow(await websiteSalesIrelandState(tx, fresh, input)) };
       }
       const acceptance = await tx.queryOne<{ id: string; conceptId: string; demoId: string; conceptDigest: string; demoDigest: string; evidenceDigest: string; sourceReference: string; scope: unknown; acceptedBy: string }>(`select id,concept_artifact_id as "conceptId",demo_artifact_id as "demoId",concept_digest as "conceptDigest",demo_digest as "demoDigest",evidence_digest as "evidenceDigest",source_reference as "sourceReference",scope,accepted_by as "acceptedBy"
-        from crm_website_sales_customer_acceptances where workspace_id=$1 and workflow_id=$2 and id=$3`, [fresh.workspaceId, row.id, p.customerAcceptanceId]);
+        from crm_website_sales_customer_acceptances a where workspace_id=$1 and workflow_id=$2 and id=$3
+          and not exists(select 1 from crm_website_sales_customer_acceptances newer where newer.workspace_id=a.workspace_id and newer.workflow_id=a.workflow_id and newer.version>a.version)`, [fresh.workspaceId, row.id, p.customerAcceptanceId]);
       if (!acceptance || acceptance.evidenceDigest !== row.evidenceDigest) fail("CURRENT_CUSTOMER_ACCEPTANCE_REQUIRED");
       const artifacts = await acceptedArtifacts(tx, fresh, row, acceptance.conceptId, acceptance.demoId);
       if (artifacts.concept.artifactDigest !== acceptance.conceptDigest || artifacts.demo.artifactDigest !== acceptance.demoDigest) fail("CURRENT_CUSTOMER_ACCEPTANCE_REQUIRED");
@@ -216,7 +227,7 @@ export async function executeWebsiteSalesLifecycleCommand(session: AppSession, r
       let ownerId: string | null = null;
       if (p.pmOwnerId !== undefined) {
         const owner = await tx.queryOne<{ id: string }>(`select u.id from workspace_users u join project_pipeline_permissions p on p.workspace_id=u.workspace_id and p.user_id=u.id
-          where u.workspace_id=$1 and u.id=$2 and p.project_id=$3 and p.can_read and u.status='active' and u.product_role not in('external_partner','client_viewer') for share of u,p`, [fresh.workspaceId, p.pmOwnerId, row.projectId]);
+          where u.workspace_id=$1 and u.id=$2 and p.project_id=$3 and p.can_read and u.status='active' and u.product_role not in('external_partner','client_viewer')`, [fresh.workspaceId, p.pmOwnerId, row.projectId]);
         if (!owner) fail("PM_OWNER_NOT_GRANTED", 403); ownerId = owner.id;
       }
       const id = randomUUID(), taskId = randomUUID();
