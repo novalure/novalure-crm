@@ -99,13 +99,16 @@ async function read(tx: TenantTransaction, session: AppSession, scope: SalesConv
 export async function readWebsiteSalesConversation(session: AppSession, scope: SalesConversationScope, options: TenantTransactionOptions = {}) {
   websiteSalesActorAuthority(session, scope, "read", "autonomy"); return withCrmRead(session, (tx, fresh) => read(tx, fresh, scope), options);
 }
-function childStopKey(key: string) { const h = crmPayloadDigest({ kind: "conversation-optout", key }); return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`; }
+function childStopKey(key: string, reason: string) { const h = crmPayloadDigest({ kind: "conversation-stop", key, reason }); return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`; }
+async function stopAcquisition(session: AppSession, input: SalesConversationCommand, row: Workflow, reason: "OPT_OUT" | "REPLY_RECEIVED", sourceReference: string, options: TenantTransactionOptions) {
+  if (row.status !== "STOPPED") await withWebsiteSalesConversationStop(session, () => runWebsiteSalesIrelandCommand(session, { contractVersion: websiteSalesIrelandContract, operation: "stop", projectId: row.projectId,
+    companyId: row.companyId, locationId: row.locationId, expectedVersion: row.version, idempotencyKey: childStopKey(input.idempotencyKey, reason), correlationId: input.correlationId,
+    payload: { reason, sourceReference } }, options));
+}
 async function stopCanonical(tx: TenantTransaction, session: AppSession, input: SalesConversationCommand, row: Workflow, sourceReference: string, options: TenantTransactionOptions) {
   await tx.execute("update contacts set consent_label='Abgemeldet',version=version+1,updated_at=now() where workspace_id=$1 and project_id=$2 and organization_id=$3 and id=$4", [session.workspaceId, row.projectId, row.companyId, row.contactId]);
   await tx.execute("insert into consent_records(workspace_id,project_id,contact_id,channel,status,source,metadata) values($1,$2,$3,'E-Mail','Abgemeldet','website-sales-topic-optout',$4::jsonb)", [session.workspaceId, row.projectId, row.contactId, JSON.stringify({ sourceReference, conversationCommandId: input.idempotencyKey })]);
-  if (row.status !== "STOPPED") await withWebsiteSalesConversationStop(session, () => runWebsiteSalesIrelandCommand(session, { contractVersion: websiteSalesIrelandContract, operation: "stop", projectId: row.projectId,
-    companyId: row.companyId, locationId: row.locationId, expectedVersion: row.version, idempotencyKey: childStopKey(input.idempotencyKey), correlationId: input.correlationId,
-    payload: { reason: "OPT_OUT", sourceReference } }, options));
+  await stopAcquisition(session, input, row, "OPT_OUT", sourceReference, options);
 }
 async function persistConversation(tx: TenantTransaction, session: AppSession, row: Workflow, previous: Conversation | null, next: Conversation, commandId: string) {
   if (previous) {
@@ -124,8 +127,11 @@ async function insertTurn(tx: TenantTransaction, session: AppSession, row: Workf
 export async function executeWebsiteSalesConversationCommand(session: AppSession, raw: SalesConversationCommand, options: TenantTransactionOptions = {}) {
   const input = parseWebsiteSalesConversationCommand(raw), command = websiteSalesConversationCommandInput(session, raw);
   return withCrmCommandPreflight(session, command, async (outer, fresh) => {
+    // Same order as portfolio planning/claiming: project operations lock before workflow/location locks.
+    // The lock grants no resource authority; a derived opt-out still needs no allocation or live lease.
+    await outer.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`website-sales-operations:${fresh.workspaceId}:${input.projectId}`]);
     const run = () => executeCrmCommand(fresh, command, async (tx, context): Promise<SalesConversationEffect> => {
-      const state = await websiteSalesIrelandState(tx, context.session, input, true), row = state.row;
+      let state = await websiteSalesIrelandState(tx, context.session, input, true), row = state.row;
       if (!row?.contactId || !row.leadId) fail("QUALIFIED_CONTACT_REQUIRED");
       if (row.version !== input.expectedWorkflowVersion) fail("WORKFLOW_VERSION_CONFLICT");
       const previous = await conversation(tx, fresh, input, true);
@@ -187,6 +193,14 @@ export async function executeWebsiteSalesConversationCommand(session: AppSession
           }
         }
         assertReady(state); if (previous?.status === "STOPPED") fail("CONVERSATION_STOPPED");
+        if (p.canonicalMessageId && row.status !== "STOPPED") {
+          const reply = (await sources(tx, fresh, row, String(p.canonicalMessageId), String(p.language)))[0];
+          if (!reply?.authorized || ["CONTACT_STOPPED", "SOURCE_CHANGED", "PURPOSE_PERMISSION_REQUIRED"].includes(reply.blockedReason ?? "")) fail("TOPIC_PERMISSION_REQUIRED", 403);
+          // Only a confirmed canonical reply ends the original acquisition sequence. Manual topics do not.
+          await stopAcquisition(fresh, input, row, "REPLY_RECEIVED", `crm-topic:${reply.messageId}:${reply.sourceHash}`, options);
+          state = await websiteSalesIrelandState(tx, fresh, input); row = state.row!;
+          loaded = await facts(tx, fresh, input, row);
+        }
         const turns = await storedTurns(tx, fresh, row), additions: { turn: StoredTurn; sourceUserId: string | null }[] = [];
         let topic: StoredTurn, sourceUserId: string | null = null;
         if (input.operation === "draft_answer") {
