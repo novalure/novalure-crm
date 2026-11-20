@@ -58,6 +58,16 @@ const visualQaContentHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
 ] as const;
 
+// Next applies configured headers after Route Handler responses. Preserve the
+// renderer's strict policy at that outer boundary for HTML and every asset.
+const websiteStudioHeaders = [
+  { key: "Content-Security-Policy", value: "default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-same-origin" },
+  { key: "Cache-Control", value: "private, no-store" },
+  { key: "Referrer-Policy", value: "no-referrer" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+] as const;
+
 const nextConfig: NextConfig = {
   // The canonical Node ESM domain module retains its .js import in both repositories.
   turbopack: { resolveAlias: { "./website-prospect.js": "./src/lib/website-prospect.ts" } },
@@ -121,6 +131,7 @@ const nextConfig: NextConfig = {
         headers: [...baselineSecurityHeaders],
         source: "/:path*",
       },
+      ...["/api/crm/website-sales/studio/qa-render/:path*", "/sales-preview/:grantId/render", "/sales-preview/:grantId/assets/:path*"].map(source => ({ source, headers: [...websiteStudioHeaders] })),
       {
         headers: [...protectedPageHeaders],
         source: "/",
