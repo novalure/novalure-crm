@@ -33,6 +33,17 @@ export async function inspectAndSignWebsiteDemo(options) {
   await mkdir(directory, { recursive: true });
   const page = await context.newPage();
   const errors = [], forbidden = [], requests = [], scans = [], layouts = [];
+  const assetResponses = new Map();
+  const expectedAssets = new Map(artifact.content.assets.map(asset => [new URL(`./assets/${encodeURIComponent(asset.path)}`, renderUrl).href, asset]));
+  page.on("response", response => {
+    const asset = expectedAssets.get(response.url());
+    if (!asset) return;
+    // Inspect the bytes loaded by the authenticated browser itself. A separate
+    // APIRequestContext has different browser-origin metadata and can be denied.
+    const evidence = response.body().then(body => ({ status: response.status(), digest: digest(body) }))
+      .catch(() => ({ status: response.status(), digest: null }));
+    assetResponses.set(asset.path, evidence);
+  });
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
   page.on("request", request => {
@@ -49,9 +60,10 @@ export async function inspectAndSignWebsiteDemo(options) {
     assert(responseHeaders["x-robots-tag"]?.includes("noindex"));
     for (const asset of artifact.content.assets) {
       assert(/^[a-zA-Z0-9_.-]+$/.test(asset.path), "Asset path is a single safe component");
-      const response = await context.request.get(new URL(`./assets/${encodeURIComponent(asset.path)}`, renderUrl).href);
-      assert.equal(response.status(), 200);
-      assert.equal(digest(await response.body()), asset.sha256, "Every served asset must match the manifest");
+      const response = await assetResponses.get(asset.path);
+      assert(response, "QA browser must actually load every manifest asset");
+      assert.equal(response.status, 200, "Browser-loaded asset must be authorized");
+      assert.equal(response.digest, asset.sha256, "Every browser-loaded asset must match the manifest");
     }
     const cdp = await context.newCDPSession(page);
     const axeSource = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
