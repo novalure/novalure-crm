@@ -303,7 +303,7 @@ async function registerEvidence(tx:TenantTransaction,session:AppSession,c:SalesO
  const nonfinancial=["NO_RESPONSE","ABANDONED","FULFILLED"].includes(p.kind);
  if(nonfinancial&&p.sourceSystem!=="CRM"||!nonfinancial&&p.sourceSystem==="CRM")fail("FINANCIAL_SOURCE_KIND_INVALID",400);
  // CRM observations are explicit owner attestations recorded by this actual canonical command, not bank or delivery verification.
- 
+
  const body={...p,recordId:nonfinancial?commandId:p.recordId,sourceId:id,origin:a.origin,observedAt:now(),approvalReference:nonfinancial?null:commandId,sourceConfidence:nonfinancial?"CRM_CANONICAL_EVENT" as const:"OPERATOR_RECORDED_FINANCIAL_DOCUMENT" as const};
  const source=outcomeSourceSchema.parse({...body,sourceDigest:websiteSalesOutcomeSourceDigest(body)});
  const originals=await tx.query<{source:z.infer<typeof outcomeSourceSchema>}>("select source from crm_website_sales_ops_financial_sources where workspace_id=$1 and project_id=$2 order by created_at,id limit 5001",[session.workspaceId,c.projectId]);if(originals.length>=5000)fail("COHORT_EVENT_WINDOW_LIMIT_REQUIRED");
