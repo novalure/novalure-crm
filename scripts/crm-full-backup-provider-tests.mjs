@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+import { gzipSync } from 'node:zlib';
 import { createCrmBackupProviderPorts } from './lib/crm-full-backup-providers.mjs';
-import { BACKUP_SCOPE, defaultCrmBackupConfig, runCrmFullBackup } from './lib/crm-full-backup.mjs';
+import { BACKUP_SCOPE, defaultCrmBackupConfig, runCrmFullBackup, sha256 } from './lib/crm-full-backup.mjs';
 
 const clock = Date.parse('2026-11-01T20:00:00Z');
 const config = { ...defaultCrmBackupConfig, snapshotId: 'snap-synthetic-backup-proof' };
@@ -38,8 +40,9 @@ function fixture(overrides = {}) {
     }
     let value;
     if (u.pathname === root && method === 'GET') value = { project: { id: config.neonProjectId, owner: { subscription_type: 'launch_v3' } } };
-    else if (u.pathname === `${root}/branches` && method === 'GET') value = { branches: [source, ...(restored ? [restored] : [])] };
-    else if (u.pathname === `${root}/snapshots` && method === 'GET') value = { snapshots: [{ id: config.snapshotId, source_branch_id: source.id, created_at: new Date(clock).toISOString() }] };
+    else if (u.pathname === `${root}/branches` && method === 'GET') value = { branches: [source, ...(restored ? [restored] : []), ...(overrides.extraBranches ?? [])] };
+    else if (u.pathname === `${root}/snapshots` && method === 'GET') value = { snapshots: overrides.snapshotAbsent ? [] : [{ id: config.snapshotId, source_branch_id: source.id,
+      created_at: new Date(clock).toISOString(), expires_at: overrides.snapshotExpiresAt ?? '2026-11-09T20:00:00.000Z' }] };
     else if (u.pathname === `${root}/endpoints/${config.productionEndpointId}` && method === 'GET') value = { endpoint: production };
     else if (u.pathname === `${root}/snapshots/${config.snapshotId}/restore` && method === 'POST') {
       restored = { id: copiedId, project_id: config.neonProjectId, name: body.name, default: false, primary: false,
@@ -50,7 +53,14 @@ function fixture(overrides = {}) {
       // mistaken for owned backup computes.
       value = { branch: restored, endpoints: [production], operations: [] };
       if (overrides.lostRestoreAck) throw new Error('SYNTHETIC transport failure after creation');
-    } else if (u.pathname === `${root}/branches/${copiedId}` && method === 'GET') value = { branch: restored };
+    } else if (u.pathname === `${root}/branches/${copiedId}` && method === 'DELETE') {
+      if (overrides.deleteWithoutEffect) throw new Error('SYNTHETIC unknown delete without confirmed effect');
+      assert.ok(restored); restored = undefined; copied.length = 0;
+      if (overrides.lostDeleteAck) throw new Error('SYNTHETIC lost delete response');
+      value = { operations: [] };
+    } else if (u.pathname === `${root}/branches/${copiedId}` && method === 'GET') {
+      if (!restored) return overrides.malformedAfterDelete ? { ok: true, json: async () => ({}) } : { ok: false, status: 404 }; value = { branch: restored };
+    }
     else if (u.pathname === `${root}/branches/${copiedId}/endpoints` && method === 'GET') value = { endpoints: copied };
     else if (u.pathname === `${root}/endpoints` && method === 'POST') {
       const endpoint = { id: copiedEndpointId, project_id: config.neonProjectId, branch_id: body.endpoint.branch_id,
@@ -59,7 +69,7 @@ function fixture(overrides = {}) {
       copied.push(endpoint); value = { endpoint, operations: [] };
     } else if (u.pathname === `${root}/endpoints/${copiedEndpointId}`) {
       const endpoint = copied.find(row => row.id === copiedEndpointId);
-      assert.ok(endpoint);
+      if (!endpoint) return { ok: false, status: 404 };
       if (method === 'PATCH') { endpoint.disabled = body.endpoint.disabled; endpoint.current_state = endpoint.disabled ? 'idle' : 'active'; }
       value = { endpoint, operations: [] };
     } else if (u.pathname === `${root}/connection_uri` && method === 'GET') {
@@ -70,7 +80,7 @@ function fixture(overrides = {}) {
   const blob = {
     list: async options => { blobs.push({ method: 'list', storeId: options.storeId });
       return { blobs: [{ pathname, size: 3, url: url(options.storeId, pathname, overrides.publicBlob ? 'public' : 'private') }], hasMore: false }; },
-    get: async (path, options) => { blobs.push({ method: 'get', storeId: options.storeId, path, access: options.access, useCache: options.useCache });
+    get: async (path, options) => { blobs.push({ method: 'get', storeId: options.storeId, path, access: options.access, useCache: options.useCache, headers: options.headers });
       const bytes = options.storeId === config.sourceStoreId ? Buffer.from('abc') : stored.get(path);
       if (!bytes) return null;
       return { statusCode: 200, blob: { pathname: path, url: url(options.storeId, path) }, stream: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) }; },
@@ -89,6 +99,95 @@ function fixture(overrides = {}) {
     wait: async () => {}, pollLimit: 2, ...patch });
   return { make, calls, blobs, copied, stored, source, production };
 }
+
+async function completedCopy(f) {
+  const ports = await f.make(), restored = await ports.restoreSnapshot(restoreArgs);
+  const endpoint = await ports.prepareIsolatedEndpoint(restored.branch, []);
+  await ports.disableIsolatedEndpoint(endpoint);
+  const backupId = 'backup-synthetic-proof', base = { format: 'crm-full-backup-v1', scope: BACKUP_SCOPE, backupId,
+    projectId: config.neonProjectId, sourceBranchId: config.sourceBranchId, productionEndpointId: config.productionEndpointId,
+    sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId };
+  const settings = { access: 'private', allowOverwrite: false, addRandomSuffix: false, contentType: 'application/json' };
+  await ports.writeTarget(`${config.prefix}/sets/${backupId}/RUNNING.json`, Buffer.from(JSON.stringify({ ...base, status: 'RUNNING' })), settings);
+  const manifestPath = `${config.prefix}/sets/${backupId}/manifest.json`, manifest = Buffer.from(JSON.stringify({ ...base,
+    status: 'DATA_COMPLETE', isolatedBranch: restored.branch, snapshot: await ports.snapshotInfo(config.snapshotId), expiresAt: '2026-11-08T20:00:00.000Z' }));
+  await ports.writeTarget(manifestPath, manifest, settings);
+  return { ports, branch: restored.branch, args: { branch: restored.branch, manifestPath, manifestSha256: sha256(manifest) } };
+}
+
+test('only a read-back DATA_COMPLETE manifest and current physical Main snapshot permit exact own root removal', async () => {
+  const f = fixture(), c = await completedCopy(f), result = await c.ports.deleteIsolatedBranch(c.args);
+  assert.equal(result.status, 'OWN_RESTORE_ROOT_REMOVED'); assert.equal(result.branchId, copiedId);
+  assert.equal(result.physicalSnapshot.id, config.snapshotId);
+  assert.equal(result.recoverableThrough, '2026-11-08T20:00:00.000Z');
+  assert.equal(f.calls.filter(row => row.method === 'DELETE').length, 1);
+  assert.equal(f.calls.some(row => row.method === 'DELETE' && row.pathname.endsWith('/' + config.sourceBranchId)), false);
+});
+
+test('missing completion, tampered manifest, expired snapshot, active compute, children or foreign branch forbid deletion', async () => {
+  for (const kind of ['no-completion', 'tampered', 'expired', 'active', 'child', 'foreign']) {
+    const overrides = {}, f = fixture(overrides), c = await completedCopy(f);
+    if (kind === 'no-completion') c.args.manifestPath = config.prefix + '/sets/backup-foreign/manifest.json';
+    if (kind === 'tampered') f.stored.set(c.args.manifestPath, Buffer.from('SYNTHETIC altered target'));
+    if (kind === 'expired') overrides.snapshotExpiresAt = '2026-11-08T19:59:59.999Z';
+    if (kind === 'active') { f.copied[0].disabled = false; f.copied[0].current_state = 'active'; }
+    if (kind === 'child') overrides.extraBranches = [{ id: 'br-synthetic-other-child', parent_id: copiedId, project_id: config.neonProjectId }];
+    if (kind === 'foreign') c.args.branch = { id: config.sourceBranchId, name: 'main' };
+    await assert.rejects(c.ports.deleteIsolatedBranch(c.args));
+    assert.equal(f.calls.some(row => row.method === 'DELETE'), false);
+  }
+});
+
+test('a lost DELETE reply is confirmed by native404; an unresolved DELETE is never repeated', async () => {
+  const f = fixture({ lostDeleteAck: true }), c = await completedCopy(f);
+  assert.equal((await c.ports.deleteIsolatedBranch(c.args)).status, 'OWN_RESTORE_ROOT_REMOVED');
+  assert.equal((await c.ports.deleteIsolatedBranch(c.args)).status, 'OWN_RESTORE_ROOT_REMOVED');
+  assert.equal(f.calls.filter(row => row.method === 'DELETE').length, 1);
+  const pending = fixture({ deleteWithoutEffect: true }), p = await completedCopy(pending);
+  await assert.rejects(p.ports.deleteIsolatedBranch(p.args), code('ISOLATED_BRANCH_DELETE_UNCONFIRMED'));
+  await assert.rejects(p.ports.deleteIsolatedBranch(p.args), code('ISOLATED_BRANCH_DELETE_UNCONFIRMED'));
+  assert.equal(pending.calls.filter(row => row.method === 'DELETE').length, 1);
+});
+
+test('an HTTP200 missing resource body is not a native404 deletion proof', async () => {
+  const f = fixture({ malformedAfterDelete: true }), c = await completedCopy(f);
+  await assert.rejects(c.ports.deleteIsolatedBranch(c.args), code('ISOLATED_RESOURCE_READ_UNCONFIRMED'));
+  assert.equal(f.calls.filter(row => row.method === 'DELETE').length, 1);
+});
+
+test('actual Blob SDK offline identity request preserves authorization and original stored file bytes', async () => {
+  const require = createRequire(import.meta.url), { MockAgent, getGlobalDispatcher, setGlobalDispatcher } = require('undici');
+  const sdk = await import('@vercel/blob'), previous = getGlobalDispatcher(), agent = new MockAgent();
+  agent.disableNetConnect(); setGlobalDispatcher(agent);
+  const original = Buffer.from('SYNTHETIC original stored byte stream '.repeat(1000)); let authorized = false, identity = false;
+  try {
+    const origin = `https://${config.sourceStoreId.slice(6).toLowerCase()}.private.blob.vercel-storage.com`;
+    agent.get(origin).intercept({ method: 'GET', path: '/' + pathname + '?cache=0' }).reply(options => {
+      const headers = new Headers(options.headers); identity = headers.get('accept-encoding') === 'identity';
+      authorized = headers.get('authorization')?.startsWith('Bearer ') === true;
+      return { statusCode: 200, data: original, responseOptions: { headers: { 'content-length': String(original.length), 'content-type': 'application/pdf', etag: '"synthetic-strong"' } } };
+    });
+    const ports = await fixture().make({ blob: sdk }), result = await ports.readSourceFile({ pathname });
+    assert.deepEqual(Buffer.from(await new Response(result.body).arrayBuffer()), original);
+    assert.equal(identity, true); assert.equal(authorized, true); agent.assertNoPendingInterceptors();
+  } finally { setGlobalDispatcher(previous); await agent.close(); }
+});
+
+test('the previous SDK compressed transport already returned decoded original bytes; broker metadata failure is not a proven product failure', async () => {
+  const require = createRequire(import.meta.url), { MockAgent, getGlobalDispatcher, setGlobalDispatcher } = require('undici');
+  const sdk = await import('@vercel/blob'), previous = getGlobalDispatcher(), agent = new MockAgent();
+  agent.disableNetConnect(); setGlobalDispatcher(agent);
+  const original = Buffer.from('SYNTHETIC stored bytes '.repeat(1000)), compressed = gzipSync(original);
+  try {
+    const origin = `https://${config.sourceStoreId.slice(6).toLowerCase()}.private.blob.vercel-storage.com`;
+    agent.get(origin).intercept({ method: 'GET', path: '/' + pathname + '?cache=0' }).reply(200, compressed,
+      { headers: { 'content-encoding': 'gzip', 'content-length': String(compressed.length), 'content-type': 'application/pdf', etag: 'W/"synthetic-strong"' } });
+    const ports = await fixture().make({ blob: { get: (path, options) => { const legacy = { ...options }; delete legacy.headers; return sdk.get(path, legacy); } } });
+    const result = await ports.readSourceFile({ pathname }), actual = Buffer.from(await new Response(result.body).arrayBuffer());
+    assert.deepEqual(actual, original); assert.equal(actual.length, original.length); assert.notEqual(actual.length, compressed.length);
+    agent.assertNoPendingInterceptors();
+  } finally { setGlobalDispatcher(previous); await agent.close(); }
+});
 
 test('plan readiness and missing management credentials perform no SDK/fetch operation', async () => {
   const f = fixture({ env: { NEON_API_KEY: undefined } }), ports = await f.make();
@@ -188,6 +287,7 @@ test('source storage exposes only reads and wrong/public store receipts fail clo
   assert.equal((await ports.listSourceObjects())[0].storeId, config.sourceStoreId);
   const receipt = await ports.readSourceFile({ pathname });
   assert.equal(receipt.storeId, config.sourceStoreId);
+  assert.deepEqual(f.blobs.find(row => row.method === 'get').headers, { 'accept-encoding': 'identity' });
   assert.equal(f.blobs.filter(row => row.storeId === config.sourceStoreId).every(row => ['get', 'list'].includes(row.method)), true);
   const bad = fixture({ publicBlob: true }), badPorts = await bad.make();
   await assert.rejects(badPorts.listSourceObjects(), code('BLOB_OBJECT_STORE_MISMATCH'));
@@ -269,5 +369,7 @@ test('real adapter ports integrate with the orchestrator claim, private copies a
   assert.equal(f.stored.has(`${config.prefix}/snapshots/${config.snapshotId}/claim.json`), true);
   assert.equal(f.stored.has(`${config.prefix}/sets/backup-synthetic-adapter-proof/FULL.json`), true);
   assert.equal(f.copied.every(ep => ep.disabled === true && ep.current_state === 'idle'), true);
+  assert.equal(result.restoreRootCleanup.status, 'OWN_RESTORE_ROOT_REMOVED');
+  assert.equal(f.calls.filter(row => row.method === 'DELETE').length, 1);
   assert.equal(f.blobs.filter(call => call.storeId === config.sourceStoreId).every(call => ['get', 'list'].includes(call.method)), true);
 });

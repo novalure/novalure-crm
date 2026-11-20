@@ -76,7 +76,7 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
   const pollLimit = options.pollLimit ?? 60;
   requireValue(typeof request === 'function' && Number.isSafeInteger(pollLimit) && pollLimit >= 1 && pollLimit <= 120, 'BACKUP_PROVIDER_OPTIONS_INVALID');
   let blob, verifier, verifiedTokenDigest = null, originalProduction = null;
-  const owned = new Map(), ownRuns = new Set();
+  const owned = new Map(), ownRuns = new Set(), completeManifests = new Map(), deleteAttempts = new Set();
   const sdk = async () => blob ??= options.blob ?? await import('@vercel/blob');
   const oidcVerifier = async () => verifier ??= options.verifyOidc ?? (await import('@vercel/oidc')).verifyVercelOidcToken;
   const credentialsReady = async () => ({
@@ -258,6 +258,68 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       throw safeFailure(error);
     }
   }
+  async function snapshotInfo(requested) {
+    const result = await neon(`${projectPath}/snapshots`);
+    requireValue(Array.isArray(result.snapshots), 'SNAPSHOT_INVENTORY_INVALID');
+    const selected = result.snapshots.filter(row => row.source_branch_id === config.sourceBranchId && (!requested || row.id === requested))
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+    requireValue(selected && snapshotId.test(selected.id) && Number.isFinite(Date.parse(selected.created_at)), 'SOURCE_SNAPSHOT_REQUIRED');
+    requireValue(typeof selected.expires_at === 'string' && Number.isFinite(Date.parse(selected.expires_at)) && Date.parse(selected.expires_at) > now(), 'SOURCE_SNAPSHOT_EXPIRY_UNCONFIRMED');
+    return { id: selected.id, sourceBranchId: selected.source_branch_id, createdAt: selected.created_at, expiresAt: selected.expires_at };
+  }
+  async function maybeResource(path, field) {
+    try {
+      const value = (await neon(path))[field];
+      requireValue(value && typeof value === 'object' && !Array.isArray(value), 'ISOLATED_RESOURCE_READ_UNCONFIRMED');
+      return value;
+    }
+    catch (error) { if (error instanceof CrmBackupError && error.code === 'NEON_HTTP_404') return null; throw error; }
+  }
+  async function deleteIsolatedBranch({ branch, manifestPath, manifestSha256 }) {
+    const saved = owned.get(branch?.id), manifest = completeManifests.get(branch?.id);
+    requireValue(saved && branch.id !== config.sourceBranchId && branch.name === saved.name && manifest &&
+      manifest.pathname === manifestPath && manifest.sha256 === manifestSha256 && manifest.snapshotId === saved.snapshotId,
+    'ISOLATED_DELETE_DATA_COMPLETE_REQUIRED');
+    const receipt = await readBlob(config.targetStoreId, manifestPath), parts = []; let bytes = 0;
+    try {
+      requireValue(receipt?.body, 'ISOLATED_DELETE_MANIFEST_UNCONFIRMED');
+      for await (const part of receipt.body) {
+        const buffer = Buffer.from(part); bytes += buffer.length; parts.push(buffer);
+        requireValue(bytes <= manifest.bytes && bytes <= 10 * 1024 * 1024, 'ISOLATED_DELETE_MANIFEST_UNCONFIRMED');
+      }
+      const actual = Buffer.concat(parts);
+      try { requireValue(actual.length === manifest.bytes && createHash('sha256').update(actual).digest('hex') === manifest.sha256, 'ISOLATED_DELETE_MANIFEST_UNCONFIRMED'); }
+      finally { actual.fill(0); }
+    } finally { parts.forEach(part => part.fill(0)); }
+    await readProductionBinding();
+    const recovery = await snapshotInfo(saved.snapshotId);
+    requireValue(recovery.id === manifest.snapshotId && recovery.sourceBranchId === config.sourceBranchId &&
+      recovery.createdAt === manifest.snapshotCreatedAt && Date.parse(recovery.expiresAt) >= Date.parse(manifest.recoverableThrough),
+    'ISOLATED_DELETE_PHYSICAL_RECOVERY_UNCONFIRMED');
+    const existing = await maybeResource(`${projectPath}/branches/${segment(branch.id)}`, 'branch');
+    let endpointIds = [];
+    if (existing) {
+      await assertOwned(branch);
+      requireValue(!(await listBranches()).some(row => row.parent_id === branch.id), 'ISOLATED_DELETE_HAS_CHILDREN');
+      const endpoints = await getIsolatedEndpoints(branch);
+      requireValue(endpoints.every(ep => ep.disabled === true && ep.currentState === 'idle'), 'ISOLATED_DELETE_COMPUTE_NOT_IDLE');
+      endpointIds = endpoints.map(ep => ep.id);
+      if (!deleteAttempts.has(branch.id)) {
+        deleteAttempts.add(branch.id);
+        try { const result = await mutation(`${projectPath}/branches/${segment(branch.id)}`, undefined, 'DELETE'); await waitOperations(result.operations); }
+        catch { /* An uncertain DELETE is reconciled only by exact resource GETs. */ }
+      }
+    }
+    for (let attempt = 0; attempt < pollLimit; attempt++) {
+      if (!await maybeResource(`${projectPath}/branches/${segment(branch.id)}`, 'branch')) {
+        for (const id of endpointIds) requireValue(!await maybeResource(`${projectPath}/endpoints/${segment(id)}`, 'endpoint'), 'ISOLATED_DELETE_ENDPOINT_UNCONFIRMED');
+        await readProductionBinding();
+        return { status: 'OWN_RESTORE_ROOT_REMOVED', branchId: branch.id, observedAt: new Date(now()).toISOString(),
+          physicalSnapshot: recovery, recoverableThrough: manifest.recoverableThrough };
+      }
+      requireValue(attempt + 1 < pollLimit, 'ISOLATED_BRANCH_DELETE_UNCONFIRMED'); await wait(1000);
+    }
+  }
   async function prepareIsolatedEndpoint(branch, endpoints) {
     await assertOwned(branch);
     const actual = await getIsolatedEndpoints(branch);
@@ -318,7 +380,8 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
     assertPathname(pathname);
     try {
       const auth = await blobOptions(storeId);
-      const result = await (await sdk()).get(pathname, { ...auth, access: 'private', useCache: false });
+      const result = await (await sdk()).get(pathname, { ...auth, access: 'private', useCache: false,
+        headers: { 'accept-encoding': 'identity' } });
       if (result === null) return null;
       requireValue(result.statusCode === 200 && result.stream, 'PRIVATE_BLOB_READ_UNCONFIRMED');
       assertBlobObject(result.blob, storeId, pathname);
@@ -357,18 +420,19 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
         /^[a-z0-9][a-z0-9-]{5,100}$/u.test(record.backupId ?? '')) ||
         (setParts.length === 2 && setParts[1] === 'RUNNING.json' && boundRecord(record) && record.status === 'RUNNING' && record.backupId === setParts[0])) ownRuns.add(record.backupId);
       if (!failureRun) await readProductionBinding();
+      if (record?.status === 'DATA_COMPLETE' && boundRecord(record) && ownRuns.has(record.backupId) &&
+        pathname === `${config.prefix}/sets/${record.backupId}/manifest.json` && owned.has(record.isolatedBranch?.id) &&
+        record.snapshot?.id === owned.get(record.isolatedBranch.id).snapshotId && record.snapshot.sourceBranchId === config.sourceBranchId &&
+        Number.isFinite(Date.parse(record.expiresAt))) {
+        completeManifests.set(record.isolatedBranch.id, { pathname, bytes: bytes.length,
+          sha256: createHash('sha256').update(bytes).digest('hex'), snapshotId: record.snapshot.id,
+          snapshotCreatedAt: record.snapshot.createdAt, recoverableThrough: record.expiresAt });
+      }
       return { storeId: config.targetStoreId, pathname, access: 'private' };
     } catch (error) { throw safeFailure(error); }
   }
   return Object.freeze({ credentialsReady, readProductionBinding, restoreSnapshot, waitForRestore, getIsolatedEndpoints, prepareIsolatedEndpoint, captureDatabase,
-    snapshotInfo: async requested => {
-      const result = await neon(`${projectPath}/snapshots`);
-      requireValue(Array.isArray(result.snapshots), 'SNAPSHOT_INVENTORY_INVALID');
-      const selected = result.snapshots.filter(row => row.source_branch_id === config.sourceBranchId && (!requested || row.id === requested))
-        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
-      requireValue(selected && snapshotId.test(selected.id) && Number.isFinite(Date.parse(selected.created_at)), 'SOURCE_SNAPSHOT_REQUIRED');
-      return { id: selected.id, sourceBranchId: selected.source_branch_id, createdAt: selected.created_at };
-    },
+    snapshotInfo, deleteIsolatedBranch,
     listSourceObjects: () => listObjects(config.sourceStoreId),
     listTargetRecords: prefix => { requireValue(typeof prefix === 'string' && prefix.startsWith(config.prefix + '/'), 'TARGET_BACKUP_PREFIX_REQUIRED'); return listObjects(config.targetStoreId, prefix); },
     readSourceFile: file => readBlob(config.sourceStoreId, file.pathname), readTarget: pathname => readBlob(config.targetStoreId, pathname),

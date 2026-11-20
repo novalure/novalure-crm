@@ -125,7 +125,7 @@ async function exactBytes(receipt, { storeId, pathname, bytes, maxBytes }) {
   return Buffer.concat(chunks, length);
 }
 
-/** Pure retention proposal. This module has NO delete-storage/branch port. */
+/** Pure retention proposal. It never deletes historical sets or branches. */
 export function planBackupRetention(index, { now = new Date(), keepDays = 7, sourceStoreId, targetStoreId, prefix = 'crm-full-backups' }) {
   requireValue(Array.isArray(index) && sourceStoreId !== targetStoreId && /^store_/.test(sourceStoreId ?? '') && /^store_/.test(targetStoreId ?? '') && Number.isInteger(keepDays) && keepDays >= 1 && keepDays <= 35, 'INVALID_RETENTION_PLAN');
   const at = new Date(now).getTime(); requireValue(Number.isFinite(at), 'INVALID_RETENTION_TIME');
@@ -164,26 +164,44 @@ export async function readCrmBackupIndex({ config: input, ports }) {
     requireValue(full.status === 'FULL' && full.scope === BACKUP_SCOPE && full.projectId === config.neonProjectId && full.sourceBranchId === config.sourceBranchId && full.productionEndpointId === config.productionEndpointId && full.sourceStoreId === config.sourceStoreId && full.targetStoreId === config.targetStoreId && full.backupId === candidate.backupId && full.snapshotId === candidate.snapshotId && full.manifestSha256 === candidate.manifestSha256 && full.manifestPath === root + '/manifest.json' && full.cleanup?.status === 'OBSERVED_DISABLED_AND_IDLE' && Array.isArray(full.cleanup.endpoints) && full.cleanup.endpoints.length > 0 && full.cleanup.endpoints.every(ep => ep.disabled === true && ep.currentState === 'idle'), 'INVALID_BACKUP_FULL_MARKER');
     const manifest = await readJson(full.manifestPath);
     requireValue(manifest && sha256(manifest.bytes) === full.manifestSha256 && manifest.value.snapshot?.id === full.snapshotId && manifest.value.snapshot.sourceBranchId === config.sourceBranchId && manifest.value.backupId === full.backupId && manifest.value.scope === BACKUP_SCOPE && manifest.value.files?.length === full.fileCount && manifest.value.historicalReferences?.length === full.historicalReferenceCount, 'BACKUP_MANIFEST_HASH_MISMATCH');
+    // Historical FULL markers retained a disabled copy. New markers explicitly
+    // record its removal and the real snapshot, not fingerprints as row data.
+    if (full.restoreRootCleanup !== undefined) {
+      const cleanup = full.restoreRootCleanup;
+      requireValue(cleanup?.status === 'OWN_RESTORE_ROOT_REMOVED' && cleanup.branchId === full.isolatedBranchId &&
+        cleanup.physicalSnapshot?.id === full.snapshotId && cleanup.physicalSnapshot.sourceBranchId === config.sourceBranchId &&
+        cleanup.physicalSnapshot.createdAt === manifest.value.snapshot.createdAt &&
+        cleanup.recoverableThrough === manifest.value.expiresAt &&
+        Date.parse(cleanup.physicalSnapshot.expiresAt) >= Date.parse(cleanup.recoverableThrough), 'BACKUP_PHYSICAL_RECOVERY_UNCONFIRMED');
+    }
     index.push(full);
   }
   return index;
 }
 
 /** No truthy callback result can replace the individual evidence gates. */
-export async function runCrmFullBackup({ config: input, ports, now = () => new Date(), backupId = 'backup-' + randomUUID() }) {
+export async function runCrmFullBackup({ config: input, ports, now = () => new Date(), backupId = 'backup-' + randomUUID(), retainForAcceptance }) {
   const config = validateBackupConfig(input);
   requireValue(/^[a-z0-9][a-z0-9-]{5,100}$/.test(backupId), 'INVALID_BACKUP_ID');
-  for (const name of ['credentialsReady', 'readProductionBinding', 'snapshotInfo', 'listSourceObjects', 'restoreSnapshot', 'waitForRestore', 'getIsolatedEndpoints', 'prepareIsolatedEndpoint', 'captureDatabase', 'readSourceFile', 'readTarget', 'writeTarget', 'disableIsolatedEndpoint']) requireValue(typeof ports?.[name] === 'function', 'BACKUP_PORTS_REQUIRED');
+  for (const name of ['credentialsReady', 'readProductionBinding', 'snapshotInfo', 'listSourceObjects', 'restoreSnapshot', 'waitForRestore', 'getIsolatedEndpoints', 'prepareIsolatedEndpoint', 'captureDatabase', 'readSourceFile', 'readTarget', 'writeTarget', 'disableIsolatedEndpoint', 'deleteIsolatedBranch']) requireValue(typeof ports?.[name] === 'function', 'BACKUP_PORTS_REQUIRED');
+  const timestamp = () => new Date(typeof now === 'function' ? now() : now).toISOString();
+  const acceptance = retainForAcceptance === undefined ? null : Object.freeze({ deadlineAt: retainForAcceptance?.deadlineAt, run: retainForAcceptance?.run });
+  if (retainForAcceptance !== undefined) {
+    requireValue(retainForAcceptance && Object.keys(retainForAcceptance).sort().join(',') === 'deadlineAt,run' &&
+      typeof acceptance.run === 'function' && typeof acceptance.deadlineAt === 'string' &&
+      Date.parse(acceptance.deadlineAt) > Date.parse(timestamp()) &&
+      Date.parse(acceptance.deadlineAt) <= Date.parse(timestamp()) + 3600000, 'INVALID_BACKUP_ACCEPTANCE_LEASE');
+  }
   const ready = await ports.credentialsReady();
   requireValue(ready?.neonApiKey === true, 'BLOCKED_NEON_API_KEY_REQUIRED');
   requireValue(ready?.productionOidc === true && ready.projectId === config.backupProjectId && ready.teamId === config.teamId && ready.environment === 'production', 'BLOCKED_PRODUCTION_OIDC_REQUIRED');
-  const timestamp = () => new Date(typeof now === 'function' ? now() : now).toISOString();
   const root = `${config.prefix}/sets/${backupId}`, createdAt = timestamp();
+  const recoverableThrough = new Date(Date.parse(createdAt) + config.retentionDays * 86400000).toISOString();
   const evidence = { format: 'crm-full-backup-v1', backupId, status: 'RUNNING', scope: BACKUP_SCOPE, createdAt,
     sourceStoreId: config.sourceStoreId, targetStoreId: config.targetStoreId,
     projectId: config.neonProjectId, sourceBranchId: config.sourceBranchId, productionEndpointId: config.productionEndpointId,
     wholeApplicationBackup: false, legacyPublicFilesCopied: false, retentionDays: config.retentionDays };
-  let branch = null, initial = null, cleanup = null, snapshot = null, claimOwned = false, fullMarkerAttempted = false;
+  let branch = null, initial = null, cleanup = null, snapshot = null, restoreRootCleanup = null, claimOwned = false, fullMarkerAttempted = false;
   const checkProduction = async () => {
     const receipt = productionReceipt(await ports.readProductionBinding(), config);
     if (initial) requireValue(digest(receipt) === digest(initial), 'PRODUCTION_BINDING_CHANGED');
@@ -234,6 +252,7 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     initial = await checkProduction();
     snapshot = await ports.snapshotInfo(config.snapshotId);
     requireValue(/^snap-[a-z0-9-]{5,100}$/.test(snapshot?.id ?? '') && snapshot.sourceBranchId === config.sourceBranchId && Number.isFinite(Date.parse(snapshot.createdAt)) && (!config.snapshotId || config.snapshotId === snapshot.id), 'SNAPSHOT_SOURCE_BINDING_MISMATCH');
+    requireValue(Date.parse(snapshot.expiresAt) >= Date.parse(recoverableThrough), 'SOURCE_SNAPSHOT_RETENTION_UNCONFIRMED');
     evidence.snapshot = snapshot;
     const claimPath = `${config.prefix}/snapshots/${snapshot.id}/claim.json`;
     requireValue(await ports.readTarget(claimPath) === null, 'BACKUP_SNAPSHOT_ALREADY_CLAIMED');
@@ -306,12 +325,40 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
       versionBindingsSha256: inventory.versionBindingsSha256, legacyPublic: inventory.legacyPublic,
       unreferencedSourceObjects: sourceObjects.filter(object => !referenced.has(object.pathname)),
       excludedScope: ['Legacy-public and public files are inventoried but not copied', 'Unreferenced source-store objects are reported, not silently included', 'No authenticated restored application acceptance is claimed'],
-      cleanup, expiresAt: new Date(Date.parse(createdAt) + config.retentionDays * 86400000).toISOString() };
+      cleanup, expiresAt: recoverableThrough };
     const manifestReceipt = await save(root + '/manifest.json', manifest);
+    let acceptanceFailure = false;
+    if (acceptance) {
+      // Only a trusted host can supply a function. Neither the CLI, config JSON,
+      // environment nor HTTP inputs can retain a copy or supply this callback.
+      const controller = new AbortController(); let timer;
+      try {
+        const remaining = Date.parse(acceptance.deadlineAt) - Date.parse(timestamp());
+        requireValue(remaining > 0, 'BACKUP_ACCEPTANCE_DEADLINE_EXCEEDED');
+        timer = setTimeout(() => controller.abort(), remaining);
+        // Abort requests cancellation but is not proof that the host has closed
+        // its SQL/browser work. Await its real settlement/finally before touching
+        // the copy. An ignored abort can never advance deletion or publish FULL.
+        await acceptance.run({
+          branch: structuredClone(branch), snapshot: structuredClone(snapshot), deadlineAt: acceptance.deadlineAt, signal: controller.signal,
+        });
+        requireValue(!controller.signal.aborted && Date.parse(timestamp()) < Date.parse(acceptance.deadlineAt), 'BACKUP_ACCEPTANCE_DEADLINE_EXCEEDED');
+      } catch { acceptanceFailure = true; }
+      finally { clearTimeout(timer); controller.abort(); cleanup = await shutDown(); }
+    }
+    // DATA_COMPLETE has already been read back byte-for-byte. The provider also
+    // rechecks that exact private manifest and a live Main snapshot whose real
+    // expiry covers the promised retention before deleting only its own copy.
+    restoreRootCleanup = await ports.deleteIsolatedBranch({ branch, manifestPath: manifestReceipt.pathname, manifestSha256: manifestReceipt.sha256 });
+    requireValue(restoreRootCleanup?.status === 'OWN_RESTORE_ROOT_REMOVED' && restoreRootCleanup.branchId === branch.id &&
+      restoreRootCleanup.physicalSnapshot?.id === snapshot.id && restoreRootCleanup.physicalSnapshot.sourceBranchId === config.sourceBranchId &&
+      restoreRootCleanup.physicalSnapshot.createdAt === snapshot.createdAt && restoreRootCleanup.recoverableThrough === recoverableThrough &&
+      Date.parse(restoreRootCleanup.physicalSnapshot.expiresAt) >= Date.parse(recoverableThrough), 'ISOLATED_BRANCH_CLEANUP_UNCONFIRMED');
+    if (acceptanceFailure) throw new CrmBackupError('BACKUP_ACCEPTANCE_HELD');
     await checkProduction();
     const full = { ...evidence, status: 'FULL', snapshotId: snapshot.id, isolatedBranchId: branch.id,
       completedAt: timestamp(), manifestPath: manifestReceipt.pathname, manifestSha256: manifestReceipt.sha256,
-      fileCount: files.length, fileBytes: files.reduce((sum, file) => sum + file.bytes, 0), historicalReferenceCount: inventory.references.length, cleanup };
+      fileCount: files.length, fileBytes: files.reduce((sum, file) => sum + file.bytes, 0), historicalReferenceCount: inventory.references.length, cleanup, restoreRootCleanup };
     // Index first, commit marker last. Readers must verify FULL.json AND its hash.
     await save(`${config.prefix}/index/${backupId}-FULL.json`, { ...full, status: 'COMMIT_CANDIDATE', requiresVerifiedFullMarker: true });
     fullMarkerAttempted = true;
@@ -328,7 +375,7 @@ export async function runCrmFullBackup({ config: input, ports, now = () => new D
     // be 'repaired' by moving an endpoint or touching an unverified branch.
     if (branch && !cleanup && productionVerification.status === 'UNCHANGED') try { cleanup = await shutDown(); } catch (failure) { cleanupCode = errorCode(failure); cleanupFailure = failure; }
     const incomplete = { ...evidence, status: 'INCOMPLETE', failureCode: errorCode(error), ...backupProviderDiagnostics(error), completedAt: timestamp(),
-      isolatedBranchId: branch?.id ?? null, productionVerification, cleanup: cleanup ?? { status: 'UNCONFIRMED', failureCode: cleanupCode, ...backupProviderDiagnostics(cleanupFailure) },
+      isolatedBranchId: branch?.id ?? null, productionVerification, cleanup: cleanup ?? { status: 'UNCONFIRMED', failureCode: cleanupCode, ...backupProviderDiagnostics(cleanupFailure) }, restoreRootCleanup,
       fullMarkerState: fullMarkerAttempted ? 'MAY_EXIST_BUT_SUPPRESSED' : 'NOT_ATTEMPTED' };
     // A duplicate invocation must not attach INCOMPLETE to an earlier valid
     // FULL set. Only the atomic claim owner may append this run's evidence.

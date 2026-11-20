@@ -50,7 +50,7 @@ function fixture(overrides = {}) {
   const ports = {
     credentialsReady: async () => ({ neonApiKey: true, productionOidc: true, projectId: config.backupProjectId, teamId: config.teamId, environment: 'production' }),
     readProductionBinding: async () => { events.push('readProductionBinding'); return structuredClone(production); },
-    snapshotInfo: async id => { events.push('snapshotInfo'); return { id, sourceBranchId: config.sourceBranchId, createdAt: NOW }; },
+    snapshotInfo: async id => { events.push('snapshotInfo'); return { id, sourceBranchId: config.sourceBranchId, createdAt: NOW, expiresAt: '2026-11-09T20:00:00.000Z' }; },
     listSourceObjects: async () => { events.push('listSourceObjects'); return [...assets.map(a => ({ storeId: config.sourceStoreId, pathname: a.pathname, size: a.bytes, access: 'private' })), { storeId: config.sourceStoreId, pathname: `${workspaceId}/orphan-private.pdf`, size: 4, access: 'private' }]; },
     restoreSnapshot: async args => {
       events.push('restoreSnapshot');
@@ -79,11 +79,120 @@ function fixture(overrides = {}) {
       return { storeId: config.targetStoreId, pathname, access: 'private' };
     },
     disableIsolatedEndpoint: async actual => { events.push('disableIsolatedEndpoint'); assert.equal(actual.id, endpoint.id); endpoint.disabled = true; endpoint.currentState = 'idle'; return { ...actual, disabled: true, currentState: 'idle' }; },
+    deleteIsolatedBranch: async ({ branch, manifestPath, manifestSha256 }) => {
+      events.push('deleteIsolatedBranch'); assert.equal(branch.id, endpoint.branchId);
+      assert.equal(endpoint.disabled, true); assert.equal(endpoint.currentState, 'idle');
+      const bytes = target.get(manifestPath); assert.ok(bytes); assert.equal(sha256(bytes), manifestSha256);
+      const manifest = JSON.parse(bytes); assert.equal(manifest.status, 'DATA_COMPLETE');
+      return { status: 'OWN_RESTORE_ROOT_REMOVED', branchId: branch.id, observedAt: NOW,
+        physicalSnapshot: await ports.snapshotInfo(config.snapshotId), recoverableThrough: manifest.expiresAt };
+    },
     ...overrides,
   };
   return { config: { ...config }, ports, events, writes, target, files, inventory, production, endpoint, receipt, run: () => runCrmFullBackup({ config: { ...config }, ports, now: NOW, backupId }) };
 }
 const assertNoFull = f => assert.equal(f.writes.filter(write => isFull(write.pathname)).length, 0, 'A failed backup must not leave a FULL completion marker');
+
+test('ordinary FULL removes its exact restore root only after durable DATA_COMPLETE and before publishing completion', async () => {
+  const f = fixture(), result = await f.run();
+  assert.equal(result.restoreRootCleanup.status, 'OWN_RESTORE_ROOT_REMOVED');
+  assert.equal(result.restoreRootCleanup.physicalSnapshot.id, config.snapshotId);
+  assert.equal(result.restoreRootCleanup.recoverableThrough, '2026-11-08T20:00:00.000Z');
+  const saved = f.events.indexOf(`writeTarget:crm-full-backups/sets/${backupId}/manifest.json`);
+  const removed = f.events.indexOf('deleteIsolatedBranch');
+  const completed = f.events.indexOf(`writeTarget:crm-full-backups/sets/${backupId}/FULL.json`);
+  assert.ok(saved >= 0 && removed > saved && completed > removed);
+  assert.equal((await readCrmBackupIndex({ config, ports: f.ports }))[0].restoreRootCleanup.status, 'OWN_RESTORE_ROOT_REMOVED');
+});
+
+test('a fingerprint cannot replace a physical source snapshot covering the promised retention', async () => {
+  for (const expiresAt of [undefined, 'not-a-time', NOW, '2026-11-08T19:59:59.999Z']) {
+    const f = fixture();
+    f.ports.snapshotInfo = async id => ({ id, sourceBranchId: config.sourceBranchId, createdAt: NOW, expiresAt });
+    await assert.rejects(f.run(), error => error.code === 'SOURCE_SNAPSHOT_RETENTION_UNCONFIRMED');
+    assert.equal(f.events.includes('restoreSnapshot'), false);
+    assert.equal(f.events.includes('deleteIsolatedBranch'), false); assertNoFull(f);
+  }
+});
+
+test('trusted host retains the same copy only inside its bounded acceptance callback, then always removes it', async () => {
+  const f = fixture(); let called = false;
+  const lease = { deadlineAt: '2026-11-01T20:01:00.000Z', run: async ({ branch, snapshot, signal }) => {
+    called = true; assert.equal(branch.id, f.endpoint.branchId); assert.equal(snapshot.id, config.snapshotId);
+    assert.equal(signal.aborted, false); assert.equal(f.events.includes('deleteIsolatedBranch'), false);
+    assert.equal(JSON.parse(f.target.get(`crm-full-backups/sets/${backupId}/manifest.json`)).status, 'DATA_COMPLETE');
+    f.endpoint.disabled = false; f.endpoint.currentState = 'active';
+    throw new Error('SYNTHETIC_PRIVATE_ACCEPTANCE_ERROR');
+  } };
+  await assert.rejects(runCrmFullBackup({ config, ports: f.ports, now: NOW, backupId, retainForAcceptance: lease }), error => error.code === 'BACKUP_ACCEPTANCE_HELD');
+  assert.equal(called, true); assert.equal(f.endpoint.disabled, true); assert.equal(f.endpoint.currentState, 'idle');
+  assert.equal(f.events.filter(event => event === 'deleteIsolatedBranch').length, 1); assertNoFull(f);
+  const incomplete = JSON.parse(f.target.get(`crm-full-backups/sets/${backupId}/INCOMPLETE.json`));
+  assert.equal(incomplete.restoreRootCleanup.status, 'OWN_RESTORE_ROOT_REMOVED');
+  assert.equal(JSON.stringify(incomplete).includes('SYNTHETIC_PRIVATE_ACCEPTANCE_ERROR'), false);
+});
+
+test('acceptance deadline aborts a stalled host callback and still disables and removes only its own copy', async () => {
+  const f = fixture(); let aborted = false;
+  await assert.rejects(runCrmFullBackup({ config, ports: f.ports, now: NOW, backupId,
+    retainForAcceptance: { deadlineAt: '2026-11-01T20:00:00.020Z', run: async ({ signal }) => {
+      return new Promise((_, reject) => signal.addEventListener('abort', () => {
+        aborted = true; reject(new Error('SYNTHETIC host acknowledged abort and settled'));
+      }, { once: true }));
+    } },
+  }), error => error.code === 'BACKUP_ACCEPTANCE_HELD');
+  assert.equal(aborted, true); assert.equal(f.endpoint.disabled, true);
+  assert.equal(f.events.filter(event => event === 'deleteIsolatedBranch').length, 1); assertNoFull(f);
+});
+
+test('an ignored abort never permits deletion while the trusted acceptance callback remains unsettled', { timeout: 2000 }, async () => {
+  const f = fixture(); let finish, sawAbort;
+  const aborted = new Promise(resolve => { sawAbort = resolve; });
+  const pending = runCrmFullBackup({ config, ports: f.ports, now: NOW, backupId,
+    retainForAcceptance: { deadlineAt: '2026-11-01T20:00:00.020Z', run: async ({ signal }) => {
+      signal.addEventListener('abort', sawAbort, { once: true });
+      await new Promise(resolve => { finish = resolve; });
+    } },
+  });
+  await aborted;
+  assert.equal(f.events.includes('deleteIsolatedBranch'), false); assertNoFull(f);
+  assert.equal(f.events.filter(event => event === 'disableIsolatedEndpoint').length, 1, 'only pre-acceptance shutdown has happened');
+  finish();
+  await assert.rejects(pending, error => error.code === 'BACKUP_ACCEPTANCE_HELD');
+  assert.equal(f.events.filter(event => event === 'deleteIsolatedBranch').length, 1); assertNoFull(f);
+});
+
+test('serialized, expired or unbounded acceptance overrides are denied before any remote port', async () => {
+  for (const retainForAcceptance of [true, {}, { deadlineAt: NOW, run: async () => {} },
+    { deadlineAt: '2026-11-01T21:00:00.001Z', run: async () => {} },
+    { deadlineAt: '2026-11-01T20:01:00.000Z', run: true }]) {
+    const f = fixture();
+    await assert.rejects(runCrmFullBackup({ config, ports: f.ports, now: NOW, backupId, retainForAcceptance }), error => error.code === 'INVALID_BACKUP_ACCEPTANCE_LEASE');
+    assert.equal(f.events.length, 0);
+  }
+  assert.throws(() => validateBackupConfig({ ...config, retainForAcceptance: true }), error => error.code === 'UNKNOWN_BACKUP_CONFIG_FIELD');
+});
+
+test('the trusted acceptance function and deadline are captured before awaiting any provider', async () => {
+  const f = fixture(); let originalCalled = false;
+  const lease = { deadlineAt: '2026-11-01T20:01:00.000Z', run: async ({ deadlineAt }) => {
+    originalCalled = true; assert.equal(deadlineAt, '2026-11-01T20:01:00.000Z');
+  } };
+  const ready = f.ports.credentialsReady;
+  f.ports.credentialsReady = async () => {
+    lease.deadlineAt = '2027-11-01T20:00:00.000Z'; lease.run = async () => { throw new Error('must not replace captured host callback'); };
+    return ready();
+  };
+  const result = await runCrmFullBackup({ config, ports: f.ports, now: NOW, backupId, retainForAcceptance: lease });
+  assert.equal(originalCalled, true); assert.equal(result.restoreRootCleanup.status, 'OWN_RESTORE_ROOT_REMOVED');
+});
+
+test('an unconfirmed restore-root removal never yields a FULL marker', async () => {
+  const f = fixture();
+  f.ports.deleteIsolatedBranch = async () => { throw new CrmBackupError('ISOLATED_BRANCH_DELETE_UNCONFIRMED'); };
+  await assert.rejects(f.run(), error => error.code === 'ISOLATED_BRANCH_DELETE_UNCONFIRMED'); assertNoFull(f);
+  assert.equal(f.endpoint.disabled, true);
+});
 
 test('actual backup failures reach the signed warning bridge without new FULL or production mutations', async t => {
   const cases = [
