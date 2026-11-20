@@ -67,6 +67,12 @@ before(async () => {
       } finally { await schemaTest.query("rollback"); }
       assert.equal((await schemaTest.query("select to_regclass('public.crm_property_observation_grants') as created")).rows[0].created, null);
     }
+    await schemaTest.query("begin");
+    try {
+      await schemaTest.query("alter table public.property_units alter column version drop not null");
+      await assert.rejects(schemaTest.query(stagedMigration), /Property version schema is required/);
+    } finally { await schemaTest.query("rollback"); }
+    assert.equal((await schemaTest.query("select to_regclass('public.crm_property_observation_grants') as created")).rows[0].created, null);
     schemaPreconditionsChecked = true;
   } finally { schemaTest.release(); }
   await db.admin.query(stagedMigration);
@@ -276,4 +282,106 @@ test("grant revocation serializes behind an active property transaction", async 
     assert.equal(blocked,true);
   } finally { release(); await reading; await revocation; revoker.release(); }
   try { await assert.rejects(read(), /accessible/i); } finally { await db.admin.query("update crm_property_observation_grants set revoked_at=null where id=$1", [grantId]); }
+});
+
+test("project-access revocation serializes behind an active property transaction", async () => {
+  const id = await identity(); let release!: () => void, entered!: () => void;
+  const paused = new Promise<void>(resolve => { release = resolve; }); const ready = new Promise<void>(resolve => { entered = resolve; });
+  const reading = withPropertyObservationTransaction(pool(), async client => { const result = await client.query<{ result: unknown }>(observeSql, sqlArguments(id)); assert.ok(result.rows[0]?.result); entered(); await paused; });
+  await ready; const revoker = await db.admin.connect(); const pid = (await revoker.query("select pg_backend_pid() as pid")).rows[0].pid;
+  const revocation = revoker.query("update project_pipeline_permissions set can_read=false where workspace_id=$1 and project_id=$2 and user_id=$3", [workspaceId,projectId,actorId]);
+  try {
+    let blocked = false; for (let attempt=0; attempt<50 && !blocked; attempt++) { blocked = (await db.admin.query("select cardinality(pg_blocking_pids($1)) > 0 as blocked", [pid])).rows[0].blocked === true; if (!blocked) await new Promise(resolve => setTimeout(resolve,20)); }
+    assert.equal(blocked,true);
+  } finally { release(); await reading; await revocation; revoker.release(); }
+  try { await assert.rejects(read(), /accessible/i); } finally { await db.admin.query("update project_pipeline_permissions set can_read=true where workspace_id=$1 and project_id=$2 and user_id=$3", [workspaceId,projectId,actorId]); }
+});
+
+test("property mutations serialize behind the current observation until transaction commit", async () => {
+  const id = await identity(); let release!: () => void, entered!: () => void;
+  const paused = new Promise<void>(resolve => { release = resolve; }); const ready = new Promise<void>(resolve => { entered = resolve; });
+  const reading = withPropertyObservationTransaction(pool(), async client => { const result = await client.query<{ result: unknown }>(observeSql, sqlArguments(id)); assert.ok(result.rows[0]?.result); entered(); await paused; });
+  await ready; const writer = await db.admin.connect(); const pid = (await writer.query("select pg_backend_pid() as pid")).rows[0].pid;
+  const update = writer.query("update property_units set price_cents=888,version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  try {
+    let blocked = false; for (let attempt=0; attempt<50 && !blocked; attempt++) { blocked = (await db.admin.query("select cardinality(pg_blocking_pids($1)) > 0 as blocked", [pid])).rows[0].blocked === true; if (!blocked) await new Promise(resolve => setTimeout(resolve,20)); }
+    assert.equal(blocked,true);
+  } finally { release(); await reading; await update; writer.release(); }
+  try { assert.equal((await read()).observation.fields.find(item => item.field === "priceCents")?.value, 888); }
+  finally { await db.admin.query("update property_units set price_cents=0,version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]); }
+});
+
+test("a writer committed first is reflected by a reader that waited on the unit lock", async () => {
+  const writer = await db.admin.connect(); let readerPid = 0; let ready!: () => void;
+  const connected = new Promise<void>(resolve => { ready = resolve; });
+  const traced: TenantPool = { connect: async () => {
+    const client = await reader.connect(); readerPid = Number((await client.query("select pg_backend_pid() as pid")).rows[0].pid); ready();
+    return client as unknown as Awaited<ReturnType<TenantPool["connect"]>>;
+  } };
+  await writer.query("begin");
+  await writer.query("update property_units set price_cents=444,version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  const pending = read(request, traced).then(value => ({ value, error: null }), error => ({ value: null, error }));
+  try {
+    await connected;
+    let blocked = false; for (let attempt=0; attempt<50 && !blocked; attempt++) { blocked = (await db.admin.query("select cardinality(pg_blocking_pids($1)) > 0 as blocked", [readerPid])).rows[0].blocked === true; if (!blocked) await new Promise(resolve => setTimeout(resolve,20)); }
+    assert.equal(blocked,true);
+    await writer.query("commit");
+    const result = await pending; if (result.error) throw result.error;
+    assert.equal(result.value?.observation.fields.find(item => item.field === "priceCents")?.value, 444);
+  } finally {
+    await writer.query("rollback").catch(() => undefined); writer.release(); await pending;
+    await db.admin.query("update property_units set price_cents=0,version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  }
+});
+
+test("staged version guard advances legacy updates exactly once and rejects version manipulation", async () => {
+  const version = async () => Number((await db.admin.query("select version from property_units where id=$1", [unitId])).rows[0].version);
+  const before = await version();
+  await db.admin.query("update property_units set rooms=rooms+1,area_sqm=area_sqm+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  assert.equal(await version(), before + 1);
+  await db.admin.query("update property_units set status='reserved',version=version+1,updated_at=clock_timestamp() where id=$1", [unitId]);
+  assert.equal(await version(), before + 2);
+  await assert.rejects(db.admin.query("update property_units set version=version+2 where id=$1", [unitId]), /advance exactly once/i);
+  await assert.rejects(db.admin.query("update property_units set version=1 where id=$1", [unitId]), /advance exactly once/i);
+  await assert.rejects(db.admin.query("update property_units set project_id=$2 where id=$1", [unitId,foreignProjectId]), /identity is immutable/i);
+  assert.equal(await version(), before + 2);
+  const record = await db.admin.query("select workspace_id,project_id,unit_number from property_units where id=$1", [unitId]);
+  const row = record.rows[0];
+  await db.admin.query("insert into property_units(workspace_id,project_id,unit_number,status) values($1,$2,$3,'available') on conflict(project_id,unit_number) do update set area_sqm=property_units.area_sqm+1", [row.workspace_id,row.project_id,row.unit_number]);
+  assert.equal(await version(), before + 3);
+  await db.admin.query("update property_units set rooms=rooms-1,area_sqm=area_sqm-2,status='available',updated_at=clock_timestamp() where id=$1", [unitId]);
+  assert.equal(await version(), before + 4);
+});
+
+test("version overflow fails closed without publishing an update", async () => {
+  const client = await db.admin.connect();
+  try {
+    await client.query("begin");
+    const id = randomUUID();
+    await client.query("insert into property_units(id,workspace_id,project_id,unit_number,version) values($1,$2,$3,'SYNTHETIC OVERFLOW',9223372036854775807)", [id,workspaceId,projectId]);
+    await assert.rejects(client.query("update property_units set rooms=1 where id=$1", [id]), /out of range/i);
+  } finally { await client.query("rollback"); client.release(); }
+});
+
+test("property deletion and project status changes cannot pass a locked observation before commit", async () => {
+  for (const action of [
+    { sql: "delete from property_units where id=$1", args: [unitId] },
+    { sql: "update projects set status='Archiviert' where id=$1", args: [projectId] },
+  ]) {
+    const id = await identity(); let release!: () => void, entered!: () => void;
+    const paused = new Promise<void>(resolve => { release = resolve; }); const ready = new Promise<void>(resolve => { entered = resolve; });
+    const reading = withPropertyObservationTransaction(pool(), async client => { const result = await client.query<{ result: unknown }>(observeSql, sqlArguments(id)); assert.ok(result.rows[0]?.result); entered(); await paused; });
+    await ready; const writer = await db.admin.connect(); await writer.query("begin"); const pid = (await writer.query("select pg_backend_pid() as pid")).rows[0].pid;
+    const mutation = writer.query(action.sql, action.args).then(() => null, error => error as Error);
+    try {
+      let blocked = false; for (let attempt=0; attempt<50 && !blocked; attempt++) { blocked = (await db.admin.query("select cardinality(pg_blocking_pids($1)) > 0 as blocked", [pid])).rows[0].blocked === true; if (!blocked) await new Promise(resolve => setTimeout(resolve,20)); }
+      assert.equal(blocked,true);
+    } finally {
+      release(); await reading; const failure = await mutation; await writer.query("rollback"); writer.release();
+      // Existing immutable related receipts can legitimately reject deletion
+      // after the row lock is released. This still proves it could not pass it.
+      if (failure && action.sql.startsWith("delete")) assert.match(failure.message, /immutable/i);
+      else if (failure) throw failure;
+    }
+  }
 });

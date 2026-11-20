@@ -35,6 +35,38 @@ begin
   end if;
 end $schema$;
 
+-- Every UPDATE, including an UPSERT update or a path that previously forgot
+-- to increment the version, advances it exactly once. This staged guard makes
+-- no assertion about deleted/re-created unit IDs or writes before installation.
+do $version_schema$
+begin
+  if not exists (select 1 from pg_attribute a where a.attrelid='public.property_units'::regclass
+      and a.attname='version' and a.atttypid='bigint'::regtype and a.attnotnull
+      and a.attgenerated='' and a.attidentity='' and not a.attisdropped) then
+    raise exception 'Property version schema is required';
+  end if;
+end $version_schema$;
+create function public.crm_property_observation_advance_version()
+returns trigger language plpgsql security invoker set search_path=pg_catalog,public as $version$
+begin
+  if old.version < 1 then
+    raise exception using errcode='23514',message='Invalid previous property version';
+  end if;
+  if new.id is distinct from old.id or new.workspace_id is distinct from old.workspace_id
+     or new.project_id is distinct from old.project_id then
+    raise exception using errcode='23514',message='Property unit identity is immutable';
+  end if;
+  if new.version=old.version then new.version:=old.version+1;
+  elsif new.version<>old.version+1 then
+    raise exception using errcode='23514',message='Property version must advance exactly once';
+  end if;
+  return new;
+end $version$;
+revoke all on function public.crm_property_observation_advance_version() from public;
+create trigger crm_property_observation_version_guard before update on public.property_units
+  for each row execute function public.crm_property_observation_advance_version();
+alter table public.property_units enable always trigger crm_property_observation_version_guard;
+
 create table public.crm_property_observation_grants (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id),
@@ -188,9 +220,16 @@ begin
     set_config('app.property_project_id',p_project::text,true), set_config('app.property_unit_id',p_unit::text,true);
   select * into member from public.crm_lock_active_member(p_workspace,p_actor);
   if not found or member.role <> 'agent' or member.operating_model not in ('novalure_internal','self_service_customer','managed_by_novalure','hybrid') then return null; end if;
+  -- A project status change serializes through this transaction. Product
+  -- semantics for reading archived projects are not established here.
+  perform p.id from public.projects p where p.id=p_project and p.workspace_id=p_workspace for share of p;
+  if not found then return null; end if;
   binding := public.crm_lock_property_observation_grant(p_workspace,p_actor,p_project,p_unit,p_issuer,p_subject,p_audience,p_owner_id,p_workload_project_id,p_environment,p_fields,p_jti_hash,p_token_expires);
   if binding is null then return null; end if;
   perform set_config('app.property_grant_id',binding->>'grantId',true);
+  -- Row lock protects the selected object and its classification against
+  -- concurrent UPDATE/DELETE until this transaction commits. It cannot order
+  -- a later HTTP delivery against revocation after the commit.
   select u.id,u.workspace_id,u.project_id,u.version,u.updated_at,
     case when 'priceCents'=any(p_fields) then u.price_cents else null end as price_cents,
     case when 'areaSqm'=any(p_fields) then u.area_sqm else null end as area_sqm,
@@ -203,7 +242,8 @@ begin
     case when 'carportCount'=any(p_fields) then u.carport_count else null end as carport_count,
     case when 'outdoorParkingCount'=any(p_fields) then u.outdoor_parking_count else null end as outdoor_parking_count
     into selected from public.property_units u where u.id=p_unit and u.workspace_id=p_workspace and u.project_id=p_project
-      and public.crm_classification_allowed(u.workspace_id,u.data_classification,u.data_purpose);
+      and public.crm_classification_allowed(u.workspace_id,u.data_classification,u.data_purpose)
+    for share of u;
   if not found then raise exception using errcode='42501',message='Property observation is not accessible'; end if;
   if 'priceCents'=any(p_fields) then values_json := values_json || jsonb_build_object('priceCents',selected.price_cents::text); end if;
   if 'areaSqm'=any(p_fields) then values_json := values_json || jsonb_build_object('areaSqm',selected.area_sqm::text); end if;
