@@ -55,7 +55,8 @@ function fixture(overrides = {}) {
       if (overrides.lostRestoreAck) throw new Error('SYNTHETIC transport failure after creation');
     } else if (u.pathname === `${root}/branches/${copiedId}` && method === 'DELETE') {
       if (overrides.deleteWithoutEffect) throw new Error('SYNTHETIC unknown delete without confirmed effect');
-      assert.ok(restored); restored = undefined; copied.length = 0;
+      assert.ok(restored); restored = undefined;
+      if (!overrides.keepEndpointAfterDelete) copied.length = 0;
       if (overrides.lostDeleteAck) throw new Error('SYNTHETIC lost delete response');
       value = { operations: [] };
     } else if (u.pathname === `${root}/branches/${copiedId}` && method === 'GET') {
@@ -147,6 +148,21 @@ test('a lost DELETE reply is confirmed by native404; an unresolved DELETE is nev
   await assert.rejects(p.ports.deleteIsolatedBranch(p.args), code('ISOLATED_BRANCH_DELETE_UNCONFIRMED'));
   await assert.rejects(p.ports.deleteIsolatedBranch(p.args), code('ISOLATED_BRANCH_DELETE_UNCONFIRMED'));
   assert.equal(pending.calls.filter(row => row.method === 'DELETE').length, 1);
+});
+
+test('branch404 with a known endpoint200 remains held across GET-only re-entry until every known endpoint is404', async () => {
+  const f = fixture({ lostDeleteAck: true, keepEndpointAfterDelete: true }), c = await completedCopy(f);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(c.ports.deleteIsolatedBranch(c.args), code('ISOLATED_DELETE_ENDPOINT_UNCONFIRMED'));
+    assert.equal(f.calls.filter(row => row.method === 'DELETE').length, 1);
+    assert.equal(f.copied.length, 1);
+  }
+  const endpointReads = f.calls.filter(row => row.method === 'GET' && row.pathname.endsWith('/endpoints/' + copiedEndpointId));
+  assert.ok(endpointReads.length >= 2);
+  f.copied.length = 0;
+  assert.equal((await c.ports.deleteIsolatedBranch(c.args)).status, 'OWN_RESTORE_ROOT_REMOVED');
+  assert.equal(f.calls.filter(row => row.method === 'DELETE').length, 1);
+  assert.equal(f.calls.some(row => row.method === 'DELETE' && row.pathname.endsWith('/' + config.sourceBranchId)), false);
 });
 
 test('an HTTP200 missing resource body is not a native404 deletion proof', async () => {

@@ -297,19 +297,21 @@ export async function createCrmBackupProviderPorts(input, options = {}) {
       recovery.createdAt === manifest.snapshotCreatedAt && Date.parse(recovery.expiresAt) >= Date.parse(manifest.recoverableThrough),
     'ISOLATED_DELETE_PHYSICAL_RECOVERY_UNCONFIRMED');
     const existing = await maybeResource(`${projectPath}/branches/${segment(branch.id)}`, 'branch');
-    let endpointIds = [];
+    // Keep every exact owned endpoint across GET-only reconciliation re-entry.
+    // A branch404 alone cannot erase an earlier endpoint200 observation.
+    const endpointIds = saved.deleteEndpointIds ??= new Set();
     if (existing) {
       await assertOwned(branch);
       requireValue(!(await listBranches()).some(row => row.parent_id === branch.id), 'ISOLATED_DELETE_HAS_CHILDREN');
       const endpoints = await getIsolatedEndpoints(branch);
       requireValue(endpoints.every(ep => ep.disabled === true && ep.currentState === 'idle'), 'ISOLATED_DELETE_COMPUTE_NOT_IDLE');
-      endpointIds = endpoints.map(ep => ep.id);
+      for (const endpoint of endpoints) endpointIds.add(endpoint.id);
       if (!deleteAttempts.has(branch.id)) {
         deleteAttempts.add(branch.id);
         try { const result = await mutation(`${projectPath}/branches/${segment(branch.id)}`, undefined, 'DELETE'); await waitOperations(result.operations); }
         catch { /* An uncertain DELETE is reconciled only by exact resource GETs. */ }
       }
-    }
+    } else requireValue(deleteAttempts.has(branch.id), 'ISOLATED_DELETE_KNOWN_ENDPOINTS_REQUIRED');
     for (let attempt = 0; attempt < pollLimit; attempt++) {
       if (!await maybeResource(`${projectPath}/branches/${segment(branch.id)}`, 'branch')) {
         for (const id of endpointIds) requireValue(!await maybeResource(`${projectPath}/endpoints/${segment(id)}`, 'endpoint'), 'ISOLATED_DELETE_ENDPOINT_UNCONFIRMED');
