@@ -50,7 +50,7 @@ function websiteSalesIrelandState(tx:TenantTransaction,session:AppSession,scope:
 type State=Awaited<ReturnType<typeof canonicalState>>;
 type AssignmentRow={id:string;origin:OperationsOrigin;enteredAt:string;workflowId:string;projectId:string;companyId:string;locationId:string};
 const pcols=`id,version,title,policy_id as "policyId",budget_minor as "budgetMinor",capacity_minutes as "capacityMinutes",window_start::text as "windowStart",window_end::text as "windowEnd"`;
-const polcols=`p.project_id as "projectId",p.id,p.policy_group_id as "policyGroupId",p.version,p.kind,p.label,p.policy,p.settings,p.policy_digest as "policyDigest",p.created_at::text as "createdAt",exists(select 1 from crm_website_sales_ops_activations a where a.workspace_id=p.workspace_id and a.policy_id=p.id) as active`;
+const polcols=`p.project_id as "projectId",p.id,p.policy_group_id as "policyGroupId",p.version,p.kind,p.label,p.policy,p.settings,p.policy_digest as "policyDigest",p.created_at::text as "createdAt",(exists(select 1 from crm_website_sales_ops_activations a where a.workspace_id=p.workspace_id and a.policy_id=p.id) and not exists(select 1 from crm_website_sales_ops_policies newer join crm_website_sales_ops_activations activation on activation.workspace_id=newer.workspace_id and activation.policy_id=newer.id where newer.workspace_id=p.workspace_id and newer.project_id=p.project_id and newer.policy_group_id=p.policy_group_id and newer.version>p.version)) as active`;
 const qcols=`id,project_id as "projectId",company_id as "companyId",location_id as "locationId",workflow_id as "workflowId",rule_id as "ruleId",rule_version as "ruleVersion",version,status,quote,quote_digest as "quoteDigest",offer_id as "offerId",offer_version as "offerVersion",offer_revision as "offerRevision",offer_digest as "offerDigest",applied_at::text as "appliedAt",created_at::text as "createdAt"`;
 type QuoteRow={id:string;projectId:string;companyId:string;locationId:string;workflowId:string;ruleId:string;ruleVersion:number;version:number;status:"PROPOSED"|"APPLIED";quote:WebsiteSalesPriceProposal;quoteDigest:string;offerId:string;offerVersion:number;offerRevision:number;offerDigest:string;appliedAt:string|null;createdAt:string};
 function fail(code:string,status=409):never{throw new CrmCommandError(code,code,status);}
@@ -78,11 +78,11 @@ async function policy(tx:TenantTransaction,session:AppSession,id:string,kind?:Po
  const eligible=(await tx.queryOne<{allowed:boolean}>("select crm_lock_sales_policy_owner($1,$2) as allowed",[session.workspaceId,row.id]))?.allowed;
  if(!eligible||row.policyDigest!==websiteSalesPolicyDigest(row.policy as {approval:unknown}))fail("CURRENT_POLICY_APPROVAL_REQUIRED");return row;
 }
-async function state(tx:TenantTransaction,session:AppSession,scope:SalesOperationsScope,allowReply=false){
- await guard(tx,session,scope);const s=await websiteSalesIrelandState(tx,session,scope);
+async function state(tx:TenantTransaction,session:AppSession,scope:SalesOperationsScope,options:{allowReply?:boolean;lock?:boolean}={}){
+ await guard(tx,session,scope);const s=await websiteSalesIrelandState(tx,session,scope,options.lock===true);
  if(!s.row||!s.current.workflow)fail("WORKFLOW_NOT_FOUND",404);const w=s.current.workflow;
- if(w.blockedReason&&!(allowReply&&w.blockedReason==="REPLY_RECEIVED")||w.qualificationStatus!=="READY")fail(w.blockedReason??"CURRENT_EVIDENCE_REQUIRED");
- if(w.status==="STOPPED"&&!(allowReply&&w.stopReason==="REPLY_RECEIVED"))fail("WORKFLOW_STOPPED");return s;
+ if(w.blockedReason&&!(options.allowReply&&w.blockedReason==="REPLY_RECEIVED")||w.qualificationStatus!=="READY")fail(w.blockedReason??"CURRENT_EVIDENCE_REQUIRED");
+ if(w.status==="STOPPED"&&!(options.allowReply&&w.stopReason==="REPLY_RECEIVED"))fail("WORKFLOW_STOPPED");return s;
 }
 async function assignment(tx:TenantTransaction,session:AppSession,scope:SalesOperationsScope,workflowId:string,portfolioId:string,actorId:string){
  let row=await tx.queryOne<AssignmentRow>(`select id,origin,entered_at::text as "enteredAt",workflow_id as "workflowId",project_id as "projectId",company_id as "companyId",location_id as "locationId" from crm_website_sales_ops_assignments where workspace_id=$1 and portfolio_id=$2 and workflow_id=$3`,[session.workspaceId,portfolioId,workflowId]);
@@ -127,7 +127,7 @@ export async function readCurrentSalesPriceFact(tx:TenantTransaction,session:App
  const rule=await policy(tx,session,row.ruleId,"PRICING",true,scope.projectId),approval=rule.policy.approval as {approvedBy:string;approvedAt:string};
  return{id:quote.quoteId,identity:quote.identity,version:quote.version,topicCode:"PRICE" as const,kind:"PRICE_QUOTE" as const,
   text:`Non-binding draft net price: EUR ${BigInt(quote.netPriceMinor)/BigInt(100)}.${(BigInt(quote.netPriceMinor)%BigInt(100)).toString().padStart(2,"0")}. Final offer approval remains required.`,sourceReference:`crm-quote:${quote.quoteId}:v${quote.version}`,
-  sourceDigest:quote.digest,observedAt:row.appliedAt!,validUntil:quote.validUntil,approvedBy:approval.approvedBy,approvedAt:approval.approvedAt,classification:"APPROVED_SALES" as const};
+  sourceDigest:quote.digest,observedAt:new Date(row.appliedAt!).toISOString(),validUntil:quote.validUntil,approvedBy:approval.approvedBy,approvedAt:approval.approvedAt,classification:"APPROVED_SALES" as const};
 }
 
 async function cohort(tx:TenantTransaction,session:AppSession,projectId:string,version:number,resource?:SalesOperationsScope):Promise<OutcomeCohort|null>{
@@ -248,10 +248,19 @@ async function registerPrice(tx:TenantTransaction,session:AppSession,c:SalesOper
  checkedVersion(c.expectedVersion,version);const result=await approvedPolicy(tx,session,c.projectId,"PRICING",p.label,p.policy,commandId,p.policyGroupId,true,{estimatedDeliveryCostMinor:p.estimatedDeliveryCostMinor,skuLabels:p.skuLabels??{}});
  return{ruleId:result.id,policyId:result.id,version:result.version,canContact:false as const};
 }
-async function priceInput(tx:TenantTransaction,session:AppSession,c:SalesOperationsCommand,p:z.infer<typeof payloads.propose_price>){
- const s=await state(tx,session,c,true),w=s.current.workflow!;checkedVersion(c.expectedVersion,w.version);
- await tx.queryOne("select id from crm_offers where workspace_id=$1 and id=$2 for update",[session.workspaceId,w.offerDraftId]);
+async function lockedPriceState(tx:TenantTransaction,session:AppSession,c:SalesOperationsCommand){
+ // The outer operations transaction already owns the project lock. Match lifecycle refresh:
+ // location/workflow -> deal -> offer -> quote, before checking or changing any price binding.
+ const s=await state(tx,session,c,{allowReply:true,lock:true}),w=s.current.workflow!;checkedVersion(c.expectedVersion,w.version);
+ const deal=await tx.queryOne("select id from deals where workspace_id=$1 and project_id=$2 and id=$3 and contact_id=$4 and lead_id=$5 and organization_id=$6 for update",[session.workspaceId,c.projectId,w.dealId,w.contactId,w.leadId,c.companyId]);
+ if(!deal)fail("DEAL_SCOPE_DENIED",403);
+ const locked=await tx.queryOne("select id from crm_offers where workspace_id=$1 and project_id=$2 and id=$3 and deal_id=$4 for update",[session.workspaceId,c.projectId,w.offerDraftId,w.dealId]);
+ if(!locked)fail("CANONICAL_OFFER_DRAFT_REQUIRED");
  const offer=await offers(tx,session,w);if(offer.status!=="DRAFT")fail("DRAFT_ONLY_PRICE_REVIEW_REQUIRED");
+ return{s,w,offer};
+}
+async function priceInput(tx:TenantTransaction,session:AppSession,c:SalesOperationsCommand,p:z.infer<typeof payloads.propose_price>){
+ const {s,w,offer}=await lockedPriceState(tx,session,c);
  const rule=await policy(tx,session,p.ruleId,"PRICING",true,c.projectId);checkedVersion(p.ruleVersion,rule.version);
  const bucket=await portfolio(tx,session,c.projectId,true);if(!bucket)fail("PORTFOLIO_REQUIRED");const a=await assignment(tx,session,c,w.id,bucket.id,session.userId);
  const prior=await tx.queryOne<QuoteRow>(`select ${qcols} from crm_website_sales_ops_quotes where workspace_id=$1 and workflow_id=$2 order by created_at desc,id desc limit 1`,[session.workspaceId,w.id]);
@@ -272,18 +281,19 @@ async function proposePrice(tx:TenantTransaction,session:AppSession,c:SalesOpera
  return{quoteId:id,version:input.binding.workflowVersion,canContact:false as const};
 }
 async function applyQuote(tx:TenantTransaction,session:AppSession,c:SalesOperationsCommand,options:TenantTransactionOptions){
+ const {s,w,offer}=await lockedPriceState(tx,session,c);
  const p=payload(c,"apply_quote"),q=await tx.queryOne<QuoteRow>(`select ${qcols} from crm_website_sales_ops_quotes where workspace_id=$1 and id=$2 and project_id=$3 and company_id=$4 and location_id=$5 for update`,[session.workspaceId,p.quoteId,c.projectId,c.companyId,c.locationId]);if(!q||q.quoteDigest!==p.quoteDigest)fail("CURRENT_QUOTE_REQUIRED");checkedVersion(p.expectedQuoteVersion,q.version);
  if(q.status!=="PROPOSED"||q.quote.status==="BLOCKED"||Date.parse(q.quote.validUntil)<=Date.now())fail("QUOTE_BLOCKED_OR_EXPIRED");
- const s=await state(tx,session,c,true),w=s.current.workflow!;checkedVersion(c.expectedVersion,w.version);await policy(tx,session,q.ruleId,"PRICING",true,c.projectId);
+ await policy(tx,session,q.ruleId,"PRICING",true,c.projectId);
  const {proposalDigest,...unsigned}=q.quote;if(proposalDigest!==websiteSalesOperationsDigest(unsigned)||crmPayloadDigest(bind(s,await assignment(tx,session,c,w.id,(await portfolio(tx,session,c.projectId))!.id,session.userId)))!==crmPayloadDigest(q.quote.binding))fail("QUOTE_BINDING_CHANGED");
- await tx.queryOne("select id from crm_offers where workspace_id=$1 and id=$2 for update",[session.workspaceId,q.offerId]);const offer=await offers(tx,session,w);
- if(offer.status!=="DRAFT"||offer.version!==q.offerVersion||offer.revision!==q.offerRevision||offer.contentDigest!==q.offerDigest)fail("QUOTE_OFFER_CHANGED");
+ if(offer.id!==q.offerId||offer.version!==q.offerVersion||offer.revision!==q.offerRevision||offer.contentDigest!==q.offerDigest)fail("QUOTE_OFFER_CHANGED");
  const content=parseOfferContent({...offer.content,discounts:`Rule-bounded draft discount: ${q.quote.requestedDiscountBps} basis points. Final offer approval required.`,validUntil:q.quote.validUntil,
   items:q.quote.lines.map(line=>({description:line.sku,quantity:1,unitNetCents:line.netMinor}))});
  await executeOfferCommand(session,{operation:"revise",offerId:offer.id,projectId:c.projectId,expectedVersion:offer.version,idempotencyKey:childKey(c.idempotencyKey,"quote-offer"),correlationId:c.correlationId,payload:{content}},options);
  const current=await offers(tx,session,w);await tx.execute("update crm_website_sales_ops_quotes set status='APPLIED',version=version+1,offer_version=$3,offer_revision=$4,offer_digest=$5,applied_at=clock_timestamp() where workspace_id=$1 and id=$2",[session.workspaceId,q.id,current.version,current.revision,current.contentDigest]);
  await tx.execute(`update tasks set metadata=metadata||$3::jsonb,version=version+1,updated_at=clock_timestamp() where workspace_id=$1 and id in(select task_id from crm_website_sales_handoffs where workspace_id=$1 and workflow_id=$2)`,[session.workspaceId,w.id,JSON.stringify({websiteSalesHandoffStatus:"REPRICED_REVIEW_REQUIRED",supersededByQuoteId:q.id})]);
- await tx.execute("update crm_website_sales_workflows set version=version+1,updated_at=clock_timestamp() where workspace_id=$1 and id=$2",[session.workspaceId,w.id]);
+ const advanced=await tx.queryOne("update crm_website_sales_workflows set version=version+1,updated_at=clock_timestamp() where workspace_id=$1 and project_id=$2 and id=$3 and version=$4 returning id",[session.workspaceId,c.projectId,w.id,c.expectedVersion]);
+ if(!advanced)fail("VERSION_CONFLICT");
  return{quoteId:q.id,version:w.version+1,canContact:false as const};
 }
 

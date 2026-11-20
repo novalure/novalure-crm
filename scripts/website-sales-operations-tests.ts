@@ -1,3 +1,4 @@
+import {websiteSalesAnswerFactSchema} from "../src/lib/website-sales-conversation";
 import {websiteSalesPolicyDigest} from "../src/lib/website-sales-operations-contracts";
 import {readSalesAcceptancePrice} from "../src/lib/db/website-sales-price-acceptance";
 import {executeWebsiteSalesLifecycleCommand,readWebsiteSalesLifecycle} from "../src/lib/db/website-sales-lifecycle-repositories";
@@ -15,7 +16,7 @@ import type {TenantPool} from "../src/lib/db/tenant-client";
 import {withCrmRead} from "../src/lib/crm-command";
 import {startLocalSalesDb,applySalesSchema} from "./lib/local-sales-db.mjs";
 import {runWebsiteSalesIrelandCommand,websiteSalesIrelandContract,type WebsiteSalesIrelandCommand} from "../src/lib/db/website-sales-ireland-repositories";
-import {executeSalesOperationsCommand as execute,readSalesOperations as read,reconcileSalesOperationsCommand as reconcile} from "../src/lib/db/website-sales-operations-repositories";
+import {executeSalesOperationsCommand as execute,readSalesOperations as read,reconcileSalesOperationsCommand as reconcile,readCurrentSalesPriceFact} from "../src/lib/db/website-sales-operations-repositories";
 import {websiteSalesOperationsContract,type SalesOperationsCommand} from "../src/lib/website-sales-operations-types";
 import {executeWebsiteSalesStudioCommand} from "../src/lib/db/website-sales-studio-repositories";
 
@@ -92,7 +93,7 @@ test("Canonical Sales operations reserve shared resources, revise only DRAFT, an
    const pricing={enabled:true,validFrom:past,validUntil:future,currency:'EUR',products:[{sku:'WEBSITE',unitNetPriceMinor:10000,minimumUnitNetPriceMinor:7000,maxDiscountBps:2000}],minimumMarginBps:3000,maximumNegotiationRounds:4,maxQuoteAgeMinutes:60,negotiationStepBps:500,maximumCounteroffers:2};
    ruleId=(await execute(session,command('register_price_rule',{label:'Owner website policy',policy:pricing,estimatedDeliveryCostMinor:1000}),opts)).data.ruleId!;
    const proposed=await execute(session,command('propose_price',{ruleId,ruleVersion:1,mode:'INITIAL',requestedDiscountBps:0,lines:[{sku:'WEBSITE',quantity:1}]},flows[0].version),opts);quoteId=proposed.data.quoteId!;const before=await read(session,scopes[0],opts);quoteDigest=before.quotes.find(q=>q.id===quoteId)!.quoteDigest;assert.equal(before.quotes[0].quote.netMinor,10000);
-   const apply=await execute(session,command('apply_quote',{quoteId,quoteDigest,expectedQuoteVersion:1},flows[0].version),opts);flows[0]={...flows[0],version:apply.data.version};const offer=(await db.admin.query('select status,version,revision,approval_id from crm_offers where id=$1',[flows[0].offerDraftId])).rows[0];assert.equal(offer.status,'DRAFT');assert.equal(offer.revision,2);assert.equal(offer.approval_id,null);
+   const apply=await execute(session,command('apply_quote',{quoteId,quoteDigest,expectedQuoteVersion:1},flows[0].version),opts);flows[0]={...flows[0],version:apply.data.version};const offer=(await db.admin.query('select status,version,revision,approval_id from crm_offers where id=$1',[flows[0].offerDraftId])).rows[0];assert.equal(offer.status,'DRAFT');assert.equal(offer.revision,2);assert.equal(offer.approval_id,null);const priceFact=await withCrmRead(session,tx=>readCurrentSalesPriceFact(tx,session,scopes[0]),opts);assert.ok(priceFact);assert.equal(websiteSalesAnswerFactSchema.parse(priceFact).sourceDigest,quoteDigest);
    await assert.rejects(execute(session,command('apply_quote',{quoteId,quoteDigest,expectedQuoteVersion:1},flows[0].version),opts),{code:'VERSION_CONFLICT'});
    await assert.rejects(execute(session,command('propose_price',{ruleId,ruleVersion:1,mode:'AUTO_COUNTEROFFER',requestedDiscountBps:0,lines:[{sku:'WEBSITE',quantity:1}]},flows[0].version),opts),{code:'PRICE_OBJECTION_SOURCE_REQUIRED'});
   });
@@ -138,7 +139,7 @@ test("Canonical Sales operations reserve shared resources, revise only DRAFT, an
    assert.equal((candidate.candidate.proposal as {proposedValue:number}).proposedValue,3500);
    await assert.rejects(execute(session,command('promote_improvement',{improvementId:candidate.id,candidateDigest:candidate.candidateDigest,decisionId:randomUUID()},portfolioVersion),opts),{code:'CURRENT_HUMAN_PROMOTION_APPROVAL_REQUIRED'});
    const reviewed=await execute(session,command('review_improvement',{improvementId:candidate.id,candidateDigest:candidate.candidateDigest,decision:'APPROVED',validUntil:new Date(Date.now()+600000).toISOString()},portfolioVersion),opts);
-   const promoted=await execute(session,command('promote_improvement',{improvementId:candidate.id,candidateDigest:candidate.candidateDigest,decisionId:reviewed.data.decisionId},portfolioVersion),opts);assert.ok(promoted.data.policyId);const current=(await read(session,scopes[0],opts)).policies.find(x=>x.id===promoted.data.policyId)!;assert.equal(current.policy.minimumMarginBps,3500);assert.equal(current.active,true);
+   const promoted=await execute(session,command('promote_improvement',{improvementId:candidate.id,candidateDigest:candidate.candidateDigest,decisionId:reviewed.data.decisionId},portfolioVersion),opts);assert.ok(promoted.data.policyId);const current=(await read(session,scopes[0],opts)).policies.find(x=>x.id===promoted.data.policyId)!;assert.equal(current.policy.minimumMarginBps,3500);assert.equal(current.active,true);assert.equal((await read(session,scopes[0],opts)).policies.find(x=>x.id===ruleId)!.active,false);
   });
   await t.test('improvement authority cannot cross a project through a foreign pricing policy group',async()=>{
    const foreignProject=randomUUID(),foreignId=randomUUID();await db.admin.query("insert into projects(id,workspace_id,name,type,division)values($1,$2,'Other scoped portfolio','Website','WEB_DESIGN')",[foreignProject,ws]);
@@ -152,6 +153,55 @@ test("Canonical Sales operations reserve shared resources, revise only DRAFT, an
    const unknown=await make('CONCEPT'),i=companies.indexOf(a.companyId);const released=await execute(session,command('settle_allocation',{allocationId:unknown.id,expectedAllocationVersion:2,outcome:'RELEASED'},2,i),opts);assert.equal(released.data.version,3);assert.equal((await db.admin.query('select status from crm_website_sales_ops_allocations where id=$1',[unknown.id])).rows[0].status,'RELEASED');
    const protectedRow=await make('DEMO',original.stage_operation_id);
    await assert.rejects(execute(session,command('settle_allocation',{allocationId:protectedRow.id,expectedAllocationVersion:2,outcome:'RELEASED'},2,i),opts),{code:'COMMITTED_STAGE_MUST_SETTLE'});
+  });
+  await t.test('price proposal/application and human evidence refresh share canonical lock order and stale CAS has zero effects',async()=>{
+   const pricingRule=(await read(session,scopes[1],opts)).policies.find(p=>p.kind==='PRICING'&&p.active)!;
+   const setup=async()=>{
+    const registered=await irish(1,'register_location',{countryCode:'IE',address:`${randomUUID()} Atomicity Street, Dublin, Ireland`,sourceUrl:'https://example.invalid/atomic-location',sourceReference:'Isolated canonical atomicity fixture'}),scope={...scopes[1],locationId:registered.data.location.id};
+    const original=(await db.admin.query('select prospect from crm_website_sales_observations where workspace_id=$1 and company_id=$2 order by observed_at desc limit 1',[ws,companies[1]])).rows[0].prospect as import('../src/lib/website-prospect').WebsiteProspectInput;
+    const prospect=structuredClone(original);prospect.identity={workspaceId:ws,...scope};prospect.evidence=prospect.evidence.map(e=>({...e,identity:prospect.identity,observedAt:past,validUntil:future}));
+    const observed=await irish(1,'observe',{prospect,investmentPlan:plan},{locationId:scope.locationId,locationVersion:1}),qualified=await irish(1,'qualify',{contactId:contacts[1],opportunitySummary:'Atomic canonical pricing opportunity',nextAction:'Internal review',expectedEvidenceDigest:observed.data.workflow!.evidenceDigest},{locationId:scope.locationId,expectedVersion:observed.data.workflow!.version});
+    const draft=await irish(1,'prepare_offer',{content:{...content,recipientEmail:'buyer1@example.invalid'},expectedEvidenceDigest:qualified.data.workflow!.evidenceDigest},{locationId:scope.locationId,expectedVersion:qualified.data.workflow!.version}),workflow=draft.data.workflow!;
+    const price=(operation:SalesOperationsCommand['operation'],payload:Record<string,unknown>)=>({...command(operation,payload,workflow.version,1),...scope});
+    const proposed=await execute(session,price('propose_price',{ruleId:pricingRule.id,ruleVersion:pricingRule.version,mode:'INITIAL',requestedDiscountBps:0,lines:[{sku:'WEBSITE',quantity:1}]}),opts),quote=(await read(session,scope,opts,true)).quotes.find(q=>q.id===proposed.data.quoteId)!;
+    const newer=structuredClone(prospect);newer.evidence=newer.evidence.map(e=>({...e,observedAt:new Date(Date.now()-1).toISOString(),finding:e.finding+' Updated isolated fact.'}));
+    const refresh={contractVersion:'website-sales-lifecycle-v1' as const,operation:'refresh_evidence' as const,...scope,expectedVersion:workflow.version,idempotencyKey:randomUUID(),correlationId:randomUUID(),payload:{prospect:newer,locationVersion:1}};
+    return{scope,workflow,quote,price,refresh};
+   };
+   const deadline=<T>(promise:Promise<T>,label:string)=>Promise.race([promise,new Promise<never>((_resolve,reject)=>{const timer=setTimeout(()=>reject(Error(label)),5000);timer.unref();})]);
+   for(const winner of ['refresh','apply','refresh-proposal'] as const){
+    const data=await setup(),priceOperation=winner==='refresh-proposal'?'propose_price':'apply_quote',priceCommand=data.price(priceOperation,priceOperation==='apply_quote'?{quoteId:data.quote.id,quoteDigest:data.quote.quoteDigest,expectedQuoteVersion:1}:{ruleId:pricingRule.id,ruleVersion:pricingRule.version,mode:'REQUESTED_DISCOUNT',requestedDiscountBps:500,lines:[{sku:'WEBSITE',quantity:1}]});
+    let held!:()=>void,release!:()=>void,first!: (kind:string)=>void,legacyUpdate!:()=>void,loserPid=0,casUpdate=false;
+    const heldPromise=new Promise<void>(resolve=>{held=resolve;}),releasePromise=new Promise<void>(resolve=>{release=resolve;}),firstPromise=new Promise<string>(resolve=>{first=resolve;}),legacyUpdatePromise=new Promise<void>(resolve=>{legacyUpdate=resolve;});
+    const winnerRole=winner==='apply'?'price':'refresh',loserRole=winnerRole==='price'?'refresh':'price';
+    const controlledPool=(role:'price'|'refresh')=>({connect:async()=>{
+     const connection=await db.pool.connect();if(role===loserRole)loserPid=Number((await connection.query('select pg_backend_pid() as pid')).rows[0].pid);
+     return{release:connection.release.bind(connection),query:(...args:unknown[])=>{
+      const sql=typeof args[0]==='string'?args[0]:'',params=Array.isArray(args[1])?args[1]:[],locationLock=sql.includes('pg_advisory_xact_lock')&&String(params[0]).startsWith('website-sales-location:');
+      if(role===loserRole){if(locationLock)first('location');else if(sql.includes('crm_website_sales_ops_quotes')&&sql.includes('for update'))first('quote');else if(sql.includes('crm_offers')&&sql.includes('for update'))first('offer');if(sql.startsWith('update crm_website_sales_workflows'))legacyUpdate();}
+      if(role==='price'&&sql.startsWith('update crm_website_sales_workflows'))casUpdate=/and version=\$4 returning id/.test(sql)&&params[3]===data.workflow.version;
+      const result:unknown=Reflect.apply(connection.query,connection,args);
+      if(role===winnerRole&&sql.includes('from crm_website_sales_workflows w join crm_website_sales_observations')&&sql.includes('for update of w')&&result instanceof Promise)return result.then(async value=>{held();await releasePromise;return value;});
+      return result;
+     }};
+    }}) as unknown as TenantPool;
+    const priceOptions={pool:controlledPool('price')},refreshOptions={pool:controlledPool('refresh')};
+    const runPrice=()=>execute(session,priceCommand,priceOptions).then(value=>({ok:true as const,value}),error=>({ok:false as const,error})),runRefresh=()=>executeWebsiteSalesLifecycleCommand(session,data.refresh,refreshOptions).then(value=>({ok:true as const,value}),error=>({ok:false as const,error}));
+    const firstRun=winnerRole==='price'?runPrice():runRefresh();let secondRun:ReturnType<typeof runPrice>|ReturnType<typeof runRefresh>|undefined;
+    try{
+     await deadline(heldPromise,'Winning operation did not acquire the actual workflow row lock');secondRun=loserRole==='price'?runPrice():runRefresh();
+     const firstLock=await deadline(firstPromise,'Losing operation did not attempt a business lock');
+     if(firstLock!=='location')await deadline(legacyUpdatePromise,'Legacy offer-before-workflow path did not reach its conflicting workflow update');
+     let waiting=false;const until=Date.now()+2000;while(!waiting&&Date.now()<until){waiting=(await db.admin.query("select exists(select 1 from pg_locks where pid=$1 and not granted) as waiting",[loserPid])).rows[0].waiting;if(!waiting)await new Promise(resolve=>setTimeout(resolve,5));}
+     assert.equal(waiting,true,'Actual loser must wait on the held location/workflow authority');
+    }finally{release();}
+    const firstResult=await firstRun,secondResult=await secondRun!;if(!firstResult.ok)throw firstResult.error;assert.equal(secondResult.ok,false);if(!secondResult.ok)assert.equal((secondResult.error as {code:string}).code,'VERSION_CONFLICT');
+    const current=(await db.admin.query('select version,observation_id from crm_website_sales_workflows where id=$1',[data.workflow.id])).rows[0],quote=(await db.admin.query('select status,version from crm_website_sales_ops_quotes where id=$1',[data.quote.id])).rows[0],offer=(await db.admin.query('select revision from crm_offers where id=$1',[data.workflow.offerDraftId])).rows[0];
+    assert.equal(current.version,data.workflow.version+1);assert.equal(quote.status,winner==='apply'?'APPLIED':'PROPOSED');assert.equal(quote.version,winner==='apply'?2:1);assert.equal(offer.revision,winner==='apply'?2:1);
+    assert.equal((await db.admin.query('select count(*)::int n from crm_command_receipts where workspace_id=$1 and idempotency_key=$2',[ws,winner==='apply'?data.refresh.idempotencyKey:priceCommand.idempotencyKey])).rows[0].n,0,'Stale operation has no persisted receipt');
+    assert.equal((await db.admin.query('select count(*)::int n from crm_website_sales_ops_quotes where workflow_id=$1',[data.workflow.id])).rows[0].n,1,'Stale proposal/application cannot append another quote');
+    if(winner==='apply')assert.equal(casUpdate,true,'Actual workflow mutation must enforce exact CAS and require RETURNING');
+   }
   });
   await t.test('tenant isolation, actor binding and append-only source history are enforced by actual runtime RLS',async()=>{
    await assert.rejects(read({...session,workspaceId:otherWs,userId:otherActor},scopes[0],opts),{code:'PROJECT_FORBIDDEN'});
