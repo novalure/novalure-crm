@@ -107,7 +107,7 @@ export function OfferActions(props: CommerceFormProps) {
 
 export function ContractActions(props: CommerceFormProps) {
   const { data, language } = props, de = language === 'de', currentContracts = data.contracts.filter(row => recordCurrent(row, props.now)), templates = data.templates.filter(row => recordCurrent(row, props.now));
-  const offers = data.offers.filter(row => recordCurrent(row, props.now) && !['DRAFT', 'REJECTED'].includes(row.payload.status));
+  const offers = data.offers.filter(row => recordCurrent(row, props.now) && ['APPROVED', 'SENT', 'ACCEPTED'].includes(row.payload.status) && row.payload.approvalReference);
   const policies = (data.policies ?? (data.policy ? [data.policy] : [])).filter(row => recordCurrent(row, props.now));
   const pending = data.approvals.filter(row => row.status === 'PENDING' && row.currentChallenge && Date.parse(row.currentChallenge.expiresAt) > props.now);
   const approved = data.approvals.filter(row => row.status === 'APPROVED' && Date.parse(row.expiresAt) > props.now);
