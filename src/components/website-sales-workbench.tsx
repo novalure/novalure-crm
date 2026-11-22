@@ -14,11 +14,13 @@ import { studioPending, subscribeStudioPending } from "@/lib/website-sales-studi
 import { lifecyclePending, subscribeLifecyclePending, writeLifecycle } from "@/lib/website-sales-lifecycle-client";
 import { salesOperationsPending, subscribeSalesOperationsPending } from "@/lib/website-sales-operations-client";
 import { enablementPending, subscribeEnablementPending } from '@/lib/website-sales-enablement-client';
+import { commercePending, subscribeCommercePending } from '@/lib/website-sales-commerce-client';
 
 const WebsiteSalesStudio = dynamic(() => import("@/components/website-sales-studio").then(module => module.WebsiteSalesStudio));
 const WebsiteSalesLifecyclePanel = dynamic(() => import("@/components/website-sales-lifecycle-panel").then(module => module.WebsiteSalesLifecyclePanel));
 const WebsiteSalesOperationsPanel = dynamic(() => import("@/components/website-sales-operations-panel").then(module => module.WebsiteSalesOperationsPanel), { ssr: false });
 const WebsiteSalesEnablementPanel=dynamic(()=>import('@/components/website-sales-enablement-panel').then(module=>module.WebsiteSalesEnablementPanel),{ssr:false});
+const WebsiteSalesCommercePanel=dynamic(()=>import('@/components/website-sales-commerce-panel').then(module=>module.WebsiteSalesCommercePanel),{ssr:false});
 const WebsiteSalesDailyPanel=dynamic(()=>import('@/components/website-sales-enablement-panel').then(module=>module.WebsiteSalesDailyPanel),{ssr:false});
 import type { WebsiteSalesWorkbenchCompany, WebsiteSalesWorkbenchContact, WebsiteSalesWorkbenchDetailResponse,
   WebsiteSalesWorkbenchLocationItem, WebsiteSalesWorkbenchPage, WebsiteSalesWorkbenchProject } from "@/lib/website-sales-workbench-types";
@@ -223,7 +225,7 @@ export function WebsiteSalesWorkbench(props: WorkbenchProps) { return <Workbench
 function Workbench({ workspaceId, actorId, language, initialProjectId }: WorkbenchProps) {
   const copy = getWebsiteSalesCopy(language), id = useId().replace(/:/g, "");
   const [pending, setPending] = useState(() => websiteSalesPending(workspaceId, actorId));
-  const foreignOriginal = studioPending(workspaceId, actorId)?.command ?? lifecyclePending(workspaceId, actorId)?.command ?? salesOperationsPending("autonomy", workspaceId, actorId)?.command ?? salesOperationsPending("conversation", workspaceId, actorId)?.command ?? enablementPending(workspaceId,actorId)?.command;
+  const foreignOriginal = studioPending(workspaceId, actorId)?.command ?? lifecyclePending(workspaceId, actorId)?.command ?? salesOperationsPending("autonomy", workspaceId, actorId)?.command ?? salesOperationsPending("conversation", workspaceId, actorId)?.command ?? enablementPending(workspaceId,actorId)?.command ?? commercePending(workspaceId,actorId)?.command;
   const [, refreshPending] = useState(0), [showResearch, setShowResearch] = useState(false);
   const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? foreignOriginal?.projectId ?? initialProjectId ?? "");
   const [companyId, setCompanyId] = useState(() => pending?.command.companyId ?? foreignOriginal?.companyId ?? "");
@@ -237,10 +239,10 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
     function beforeUnload(event: BeforeUnloadEvent) { if (dirty.current || websiteSalesPending(workspaceId, actorId)) { event.preventDefault(); event.returnValue = ""; } }
     window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [workspaceId, actorId]);
-  useEffect(() => { const update = () => refreshPending(n => n + 1); const a = subscribeStudioPending(update), b = subscribeLifecyclePending(update), c = subscribeSalesOperationsPending(update),d=subscribeEnablementPending(update); return () => { a(); b(); c();d(); }; }, []);
+  useEffect(() => { const update = () => refreshPending(n => n + 1); const a = subscribeStudioPending(update), b = subscribeLifecyclePending(update), c = subscribeSalesOperationsPending(update),d=subscribeEnablementPending(update),e=subscribeCommercePending(update); return () => { a(); b(); c();d();e(); }; }, []);
   const studioRecovery = studioPending(workspaceId, actorId), lifecycleRecovery = lifecyclePending(workspaceId, actorId);
   const operationsRecovery = salesOperationsPending("autonomy", workspaceId, actorId) || salesOperationsPending("conversation", workspaceId, actorId);
-  const enablementRecovery=enablementPending(workspaceId,actorId);
+  const enablementRecovery=enablementPending(workspaceId,actorId),commerceRecovery=commercePending(workspaceId,actorId);
   const scope = { projectId, companyId, locationId };
   const projects = useList<WebsiteSalesWorkbenchProject>(workspaceId, "projects", {});
   const companies = useList<WebsiteSalesWorkbenchCompany>(workspaceId, "companies", { projectId }, Boolean(projectId));
@@ -249,7 +251,7 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
   const current = useDetail(workspaceId, scope), detail = current.detail, workflow = detail?.workflow;
   const project = projects.items.find(row => row.id === projectId);
   const canWrite = Boolean(detail?.canWrite ?? (project?.canWrite && companies.canWrite));
-  const locked = busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery);
+  const locked = busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery);
   const disableWrite = locked || !canWrite || current.loading || current.failed;
   const failed = projects.failed || companies.failed || contacts.failed || locations.failed || current.failed;
   function refresh() { projects.refresh(); companies.refresh(); contacts.refresh(); locations.refresh(); current.refresh();setSourceRevision(value=>value+1); }
@@ -299,12 +301,12 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
     } catch { if (mounted.current && token === generation.current) { setPending(websiteSalesPending(workspaceId, actorId)); setNotice("denied"); } }
     finally { if (mounted.current && token === generation.current) setBusy(false); }
   }
-  return <section className="space-y-5" aria-labelledby={`${id}-title`} data-website-sales-workbench onInputCapture={event => { if (!(event.target instanceof Element) || !event.target.closest("[data-website-sales-operations]")) dirty.current = true; }}>
+  return <section className="space-y-5" aria-labelledby={`${id}-title`} data-website-sales-workbench onInputCapture={event => { if (!(event.target instanceof Element) || !event.target.closest("[data-website-sales-operations],[data-website-sales-commerce]")) dirty.current = true; }}>
     <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id={`${id}-title`} className="text-2xl font-semibold tracking-tight text-slate-950">{copy.title}</h2><p className="mt-2 max-w-prose text-sm leading-6 text-stone-600">{copy.intro}</p></div><StatusChip tone="neutral">{copy.noContact}</StatusChip></div>
     {language !== "de" && language !== "en" ? <Notice>{copy.languageFallback}</Notice> : null}
     {pending?.state === "UNKNOWN" ? <Notice tone="warning" announce="polite"><p>{pending.recoveryError ? copy.recoveryInvalid : copy.unknown}</p>{!pending.recoveryError ? <><p className="mt-2 text-sm">{pending.currentRead ? copy.checkedUnknown : copy.unknownScope}</p><div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" disabled={busy} onClick={() => void readOriginal()}>{copy.checkOriginal}</Button><Button disabled={busy || !pending.currentRead} onClick={() => void reconcile()}>{copy.reconcile}</Button></div></> : null}</Notice> : null}
     {pending?.state === "IN_FLIGHT" ? <p role="status" className="text-sm text-stone-700">{copy.saving}</p> : null}
-    {!pending && (studioRecovery || lifecycleRecovery || operationsRecovery||enablementRecovery) ? <Notice tone="warning" announce="polite">{copy.unknown}</Notice> : null}
+    {!pending && (studioRecovery || lifecycleRecovery || operationsRecovery||enablementRecovery||commerceRecovery) ? <Notice tone="warning" announce="polite">{copy.unknown}</Notice> : null}
     {notice ? <Notice tone={notice === "saved" ? "success" : "danger"} announce={notice === "saved" ? "polite" : "assertive"}>{notice === "saved" ? copy.saved : copy.denied}</Notice> : null}
     {failed ? <Notice tone="danger" announce="polite"><p>{copy.loadError}</p><Button className="mt-3" variant="secondary" disabled={busy} onClick={refresh}>{copy.refresh}</Button></Notice> : null}
     {projectId&&!companyId?<WebsiteSalesDailyPanel key={`${workspaceId}:${projectId}`} workspaceId={workspaceId} projectId={projectId} language={language} blocked={locked} onOpen={selected=>{if(locked)return;generation.current++;setCompanyId(selected.companyId);setLocationId(selected.locationId);setShowResearch(false);setNotice(null);}}/>:null}
@@ -334,10 +336,11 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
       </Surface>
     </div>
     {workflow && locationId ? <>
-      <WebsiteSalesEnablementPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy||current.loading||current.failed||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)} onStateChanged={refresh}/>
-      <WebsiteSalesStudio sourceRevision={sourceRevision} key={`studio:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)} />
-      <WebsiteSalesLifecyclePanel key={`lifecycle:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)} onRefreshEvidence={workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT" ? () => { setShowResearch(true); } : undefined} />
-      <WebsiteSalesOperationsPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery)||Boolean(enablementRecovery)} onStateChanged={refresh} />
+      <WebsiteSalesCommercePanel workflowId={workflow.id} sourceRevision={sourceRevision} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy||current.loading||current.failed||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)||Boolean(enablementRecovery)} onStateChanged={refresh}/>
+      <WebsiteSalesEnablementPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy||current.loading||current.failed||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)||Boolean(commerceRecovery)} onStateChanged={refresh}/>
+      <WebsiteSalesStudio sourceRevision={sourceRevision} key={`studio:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery)} />
+      <WebsiteSalesLifecyclePanel key={`lifecycle:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery)} onRefreshEvidence={workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT" ? () => { setShowResearch(true); } : undefined} />
+      <WebsiteSalesOperationsPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery)} onStateChanged={refresh} />
     </> : null}
   </section>;
 }
