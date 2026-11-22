@@ -17,6 +17,8 @@ import { registerWebsiteSalesMachineAccess } from "../src/lib/website-sales-mach
 import { runWebsiteSalesIrelandCommand, websiteSalesIrelandContract } from "../src/lib/db/website-sales-ireland-repositories";
 import { executeSalesOperationsCommand } from "../src/lib/db/website-sales-operations-repositories";
 import { executeWebsiteSalesConversationCommand, readWebsiteSalesConversation } from "../src/lib/db/website-sales-conversation-repositories";
+import { executeWebsiteSalesEnablementCommand, readWebsiteSalesEnablement } from "../src/lib/db/website-sales-enablement-repositories";
+import { websiteSalesEnablementContract, type WebsiteSalesEnablementRead, type WebsiteSalesEnablementCommand } from "../src/lib/website-sales-enablement-types";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 type Target = "workflow" | "studio" | "lifecycle" | "autonomy";
@@ -29,7 +31,7 @@ type Runtime = { enqueue(target: Target, command: Record<string, unknown>): Prom
   run(id: string): Promise<Result>; status(id: string): Promise<{ status: string } | null>; originalCommand(id: string): Promise<Record<string, unknown> | null> };
 type Cipher = object;
 type Store = object;
-type Machine = object;
+type Machine = { invoke(target: Target, operation: "execute" | "read" | "reconcile", request: Record<string, unknown>): Promise<Record<string, unknown>> };
 type ExternalRuntime = {
   WebsiteSalesCommandCipher: new (active: string, keys: Map<string, Uint8Array>) => Cipher;
   WebsiteSalesMachineTransport: new (options: { origin: string; workspaceId: string; environment: "local"; identity: Identity;
@@ -59,7 +61,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
   const db = await startLocalSalesDb();
   let server: Server | undefined, executionPool: Pool | undefined;
   const ids = { actor: randomUUID(), project: randomUUID(), company: randomUUID(), contact: randomUUID(),
-    pipeline: randomUUID(), workload: randomUUID(), grant: randomUUID(), task: randomUUID() };
+    pipeline: randomUUID(), workload: randomUUID(), grant: randomUUID(), enablementGrant: randomUUID(), readGrant: randomUUID(), task: randomUUID() };
   const pair = generateKeyPairSync("ed25519"), commandKey = randomBytes(32), deploymentId = randomUUID();
   const options = { pool: db.pool as unknown as TenantPool };
   const agentId = "evelyn.sales.website-1"; // The actual registered CRM identifier contract is text, not UUID-only.
@@ -74,7 +76,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
   };
   try {
     await applySalesSchema(db, { maxMigrationNumber: 90 });
-    for (const file of ["170_crm_personal_mailbox.sql", "202_website_sales_ireland.sql", "203_website_sales_machine.sql", "204_website_sales_studio.sql", "205_website_sales_lifecycle.sql", "206_website_sales_operations.sql", "207_website_sales_conversations.sql"]) {
+    for (const file of ["170_crm_personal_mailbox.sql", "202_website_sales_ireland.sql", "203_website_sales_machine.sql", "204_website_sales_studio.sql", "205_website_sales_lifecycle.sql", "206_website_sales_operations.sql", "207_website_sales_conversations.sql", "208_website_sales_enablement.sql"]) {
       await db.admin.query("begin");
       try { await db.admin.query(await readFile(`migrations/${file}`, "utf8")); await db.admin.query("commit"); }
       catch (error) { await db.admin.query("rollback"); throw error; }
@@ -107,7 +109,13 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       await registerWebsiteSalesMachineAccess(registrar, { workloadId: ids.workload, workloadActorId: ids.actor, grantId: ids.grant, actorId: ids.actor,
         projectId: ids.project, companyId: ids.company, locationId, departmentId: "SALES", agentId, taskId: ids.task,
         scopes: ["crm.website-sales.read", "crm.website-sales.observe", "crm.website-sales.qualify", "crm.website-sales.studio.read", "crm.website-sales.studio.create-diagnosis", "crm.website-sales.lifecycle.read", "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.reconcile",
-          "crm.website-sales.autonomy.read", "crm.website-sales.autonomy.plan-portfolio", "crm.website-sales.autonomy.claim-allocation", "crm.website-sales.autonomy.settle-allocation", "crm.website-sales.conversation.advance-conversation"],
+          "crm.website-sales.autonomy.read", "crm.website-sales.autonomy.plan-portfolio", "crm.website-sales.autonomy.claim-allocation", "crm.website-sales.autonomy.settle-allocation", "crm.website-sales.conversation.advance-conversation",
+          "crm.website-sales.enablement.read", "crm.website-sales.enablement.propose-next-step", "crm.website-sales.enablement.propose-care", "crm.website-sales.enablement.prepare-care-offer", "crm.website-sales.enablement.scan-hygiene"],
+        publicKey: pair.publicKey.export({ format: "der", type: "spki" }).toString("base64url"), authorityReference: "SYNTHETIC connected contract acceptance", expiresAt: null });
+      for (const grantId of [ids.enablementGrant, ids.readGrant]) await registerWebsiteSalesMachineAccess(registrar, {
+        workloadId: ids.workload, workloadActorId: ids.actor, grantId, actorId: ids.actor, projectId: ids.project, companyId: ids.company, locationId,
+        departmentId: "SALES", agentId, taskId: ids.task,
+        scopes: ["crm.website-sales.enablement.read", "crm.website-sales.reconcile", ...(grantId === ids.enablementGrant ? ["crm.website-sales.enablement.propose-next-step" as const] : [])],
         publicKey: pair.publicKey.export({ format: "der", type: "spki" }).toString("base64url"), authorityReference: "SYNTHETIC connected contract acceptance", expiresAt: null });
     } finally { try { await registrar.query("rollback"); await registrar.query("reset role"); } finally { registrar.release(); } }
 
@@ -152,14 +160,17 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
     await new Promise<void>((resolve, reject) => { server!.once("error", reject); server!.listen(0, "127.0.0.1", resolve); });
     const address = server.address(); assert.ok(address && typeof address !== "string"); origin = `http://127.0.0.1:${address.port}`;
     const identity: Identity = { workloadId: ids.workload, grantId: ids.grant, departmentId: "SALES", agentId, taskId: ids.task };
-    const freshRuntime = () => new external.WebsiteSalesRuntime({ scope,
+    const enablementIdentity = { ...identity, grantId: ids.enablementGrant }, readIdentity = { ...identity, grantId: ids.readGrant };
+    const freshMachine = (selectedIdentity = identity) => new external.WebsiteSalesMachineTransport({ origin, workspaceId: scope.crmWorkspaceId, environment: "local", identity: selectedIdentity,
+      getWorkloadToken: async () => bearer, getDelegationPrivateKey: async () => pair.privateKey.export({ format: "pem", type: "pkcs8" }).toString() });
+    const freshRuntime = (selectedIdentity = identity) => new external.WebsiteSalesRuntime({ scope,
       store: new storage.PostgresWebsiteSalesExecutionStore(transactions), cipher: new external.WebsiteSalesCommandCipher("connected-v1", new Map([["connected-v1", commandKey]])),
-      machine: new external.WebsiteSalesMachineTransport({ origin, workspaceId: scope.crmWorkspaceId, environment: "local", identity,
-        getWorkloadToken: async () => bearer, getDelegationPrivateKey: async () => pair.privateKey.export({ format: "pem", type: "pkcs8" }).toString() }), environment: "local" });
+      machine: freshMachine(selectedIdentity), environment: "local" });
     const snapshot = async () => (await db.admin.query(`select (select count(*) from crm_website_sales_observations)::int as observations,
       (select count(*) from crm_website_studio_artifacts)::int as artifacts,(select count(*) from crm_website_sales_refreshes)::int as refreshes,
       (select count(*) from leads)::int as leads,(select count(*) from deals)::int as deals,(select count(*) from tasks)::int as tasks,
-      (select count(*) from crm_offer_deliveries)::int as deliveries`)).rows[0];
+      (select count(*) from crm_offer_deliveries)::int as deliveries,
+      (select count(*) from crm_website_sales_enablement_records)::int as enablement`)).rows[0];
     const command = (contractVersion: string, operation: string, payload: Record<string, unknown>, fields: Record<string, unknown> = {}) => ({ contractVersion, operation,
       projectId: ids.project, companyId: ids.company, locationId, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload, ...fields });
     const prospect = (newer = false) => {
@@ -169,14 +180,14 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
           evidenceId: kind.toLowerCase(), sourceUrl: "https://example.invalid/evidence/"+kind, observedAt: new Date(Date.now()-(newer ? 1000 : 60000)).toISOString(), validUntil: new Date(Date.now()+86400000).toISOString(),
           finding: newer ? "New synthetic scoped observation" : "Synthetic scoped observation", validityCondition: "Synthetic source remains current", confidence: 0.9 })) };
     };
-    const recover = async (target: Target, input: Record<string, unknown>, effect: () => Promise<void>) => {
-      const initial = freshRuntime(), row = await initial.enqueue(target, input); loseNextExecute = true;
+    const recover = async (target: Target, input: Record<string, unknown>, effect: () => Promise<void>, selectedIdentity = identity) => {
+      const initial = freshRuntime(selectedIdentity), row = await initial.enqueue(target, input); loseNextExecute = true;
       await assert.rejects(initial.run(row.id), (error: unknown) => !!error && typeof error === "object" && "outcome" in error && error.outcome === "UNKNOWN");
       assert.equal((await initial.status(row.id))?.status, "UNKNOWN"); await effect();
-      const before = await snapshot(), resumed = await freshRuntime().run(row.id);
+      const before = await snapshot(), resumed = await freshRuntime(selectedIdentity).run(row.id);
       assert.equal(resumed.persisted, true); assert.equal(resumed.contractVersion, input.contractVersion); assert.equal(resumed.correlationId, input.correlationId);
-      assert.equal((await freshRuntime().status(row.id))?.status, "COMMITTED"); assert.deepEqual(await snapshot(), before);
-      const cached = await freshRuntime().run(row.id); assert.equal(cached.commandId, resumed.commandId); assert.deepEqual(await snapshot(), before);
+      assert.equal((await freshRuntime(selectedIdentity).status(row.id))?.status, "COMMITTED"); assert.deepEqual(await snapshot(), before);
+      const cached = await freshRuntime(selectedIdentity).run(row.id); assert.equal(cached.commandId, resumed.commandId); assert.deepEqual(await snapshot(), before);
       assert.deepEqual(calls.slice(-3), [`${target}:execute`, `${target}:reconcile`, `${target}:reconcile`]);
       return resumed;
     };
@@ -241,6 +252,77 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       assert.deepEqual(allocation, { status: "COMPLETED", version: 3 });
       assert.equal((await db.admin.query("select count(*) from evelyn_prod.website_sales_execution where target='autonomy'")).rows[0].count, "3");
       assert.equal((await snapshot()).deliveries, 0);
+    });
+    const enablementScope = { projectId: ids.project, companyId: ids.company, locationId };
+    const enablementRead = (selectedIdentity = enablementIdentity) => freshMachine(selectedIdentity).invoke("autonomy", "read", { ...enablementScope, view: "enablement", resourceGrants: [], correlationId: randomUUID() });
+    const enablementCommand = (view: WebsiteSalesEnablementRead, operation: WebsiteSalesEnablementCommand["operation"], payload: Record<string, unknown>): WebsiteSalesEnablementCommand => ({
+      contractVersion: websiteSalesEnablementContract, operation, ...enablementScope, expectedVersion: view.aggregateVersion, expectedWorkflowVersion: view.workflowVersion,
+      idempotencyKey: randomUUID(), correlationId: randomUUID(), payload,
+    });
+    let nextStepInput: WebsiteSalesEnablementCommand, nextStepReceipt: Result;
+    await t.test("Enablement signed read binds explicit CRM resource scope and owner facts bind actual contact and task versions", async () => {
+      const envelope = await enablementRead(), view = envelope.data as WebsiteSalesEnablementRead;
+      assert.equal(envelope.contractVersion, websiteSalesEnablementContract); assert.equal(view.source, "database");
+      assert.deepEqual(view.identity, { workspaceId: CRM_MACHINE_WORKSPACE_ID, ...enablementScope });
+      assert.equal(view.aggregateVersion, 0); assert.equal(view.canApproveFacts, false); assert.equal(view.canContact, false);
+      for (const key of ["projectId", "companyId", "locationId"]) {
+        await assert.rejects(freshMachine(enablementIdentity).invoke("autonomy", "read", { ...enablementScope, [key]: randomUUID(), view: "enablement", correlationId: randomUUID() }), /SALES_HTTP_403/);
+      }
+      const owner = operationsOwner!, sourceReference = { reference: "operator-recorded:SYNTHETIC paired customer notes", digest: "a".repeat(64), basis: "OPERATOR_ATTESTATION",
+        observedAt: new Date(Date.now() - 60000).toISOString(), validUntil: new Date(Date.now() + 3600000).toISOString() }, sourceReferences = [sourceReference];
+      await executeWebsiteSalesEnablementCommand(owner, enablementCommand(view, "record_brief", { goals: ["SYNTHETIC source-bound customer goal"], audience: ["SYNTHETIC local buyers"],
+        customerBudget: { status: "UNKNOWN", amountMinor: null, currency: "EUR" }, timeframe: { status: "UNKNOWN", targetDate: null }, services: ["Informational website"],
+        sourceReferences, openQuestions: ["Confirm customer budget"], validUntil: sourceReference.validUntil }), options);
+      const afterBrief = await readWebsiteSalesEnablement(owner, enablementScope, options), contact = afterBrief.contacts.find(row => row.contactId === ids.contact), task = afterBrief.tasks.find(row => row.taskId === refreshed!.data.workflow!.nextTaskId);
+      assert(contact); assert(task);
+      await executeWebsiteSalesEnablementCommand(owner, enablementCommand(afterBrief, "record_close_plan", { contacts: [{ contactId: contact.contactId,
+        contactVersion: 999, sourceDigest: "f".repeat(64), roles: ["DECISION_MAKER", "SIGNATORY"], verificationBasis: "OPERATOR_RECORDED", sourceReferences }],
+        milestones: [{ taskId: task.taskId, taskVersion: task.version, kind: "INTERNAL_TARGET", sourceReferences }], nextStepTaskId: task.taskId,
+        sourceReferences, validUntil: sourceReference.validUntil }), options);
+      const canonical = (await enablementRead()).data as WebsiteSalesEnablementRead;
+      assert.equal(canonical.brief?.payload.customerBudget.status, "UNKNOWN"); assert.equal(canonical.brief?.payload.customerBudget.amountMinor, null);
+      assert.equal(canonical.closePlan?.payload.contacts[0]?.contactVersion, contact.version);
+      assert.equal(canonical.closePlan?.payload.contacts[0]?.sourceDigest, contact.sourceDigest);
+      nextStepInput = enablementCommand(canonical, "propose_next_step", { closePlanId: canonical.closePlan!.id, closePlanDigest: canonical.closePlan!.digest, resourceGrants: [] });
+      assert.equal((await snapshot()).enablement, 2); assert.equal((await snapshot()).deliveries, 0);
+    });
+    await t.test("Enablement machine enforces aggregate CAS, workflow CAS and the human-only fact boundary before any effect", async () => {
+      const before = await snapshot();
+      for (const changed of [{ expectedVersion: nextStepInput!.expectedVersion - 1 }, { expectedWorkflowVersion: nextStepInput!.expectedWorkflowVersion - 1 }]) {
+        const runtime = freshRuntime(enablementIdentity), row = await runtime.enqueue("autonomy", { ...nextStepInput!, ...changed, idempotencyKey: randomUUID(), correlationId: randomUUID() });
+        await assert.rejects(runtime.run(row.id), /SALES_HTTP_409/); assert.deepEqual(await snapshot(), before);
+      }
+      const ownerView = await readWebsiteSalesEnablement(operationsOwner!, enablementScope, options);
+      const unauthorized = enablementCommand(ownerView, "record_brief", ownerView.brief!.payload);
+      const runtime = freshRuntime(enablementIdentity), row = await runtime.enqueue("autonomy", unauthorized);
+      await assert.rejects(runtime.run(row.id), /SALES_HTTP_403/); assert.deepEqual(await snapshot(), before);
+    });
+    await t.test("Enablement next step survives a lost committed ACK and cold replay with one immutable fact and no duplicate canonical task", async () => {
+      const tasksBefore = (await snapshot()).tasks;
+      nextStepReceipt = await recover("autonomy", nextStepInput!, async () => {
+        const stored = (await db.admin.query("select kind,payload,record_digest from crm_website_sales_enablement_records where command_id in(select id from crm_command_receipts where idempotency_key=$1)", [nextStepInput!.idempotencyKey])).rows;
+        assert.equal(stored.length, 1); assert.equal(stored[0].kind, "NEXT_STEP"); assert.equal(stored[0].payload.taskId, refreshed!.data.workflow!.nextTaskId);
+        assert.equal(stored[0].payload.customerCommitmentCreated, false); assert.equal((await snapshot()).tasks, tasksBefore);
+      }, enablementIdentity);
+      assert.equal(nextStepReceipt.data.taskId, refreshed!.data.workflow!.nextTaskId);
+      assert.deepEqual(await freshRuntime(enablementIdentity).originalCommand(nextStepInput!.idempotencyKey), nextStepInput);
+      assert.equal((await db.admin.query("select count(*)::int n from crm_website_sales_enablement_records where kind='NEXT_STEP'")).rows[0].n, 1);
+      const state = (await enablementRead()).data as WebsiteSalesEnablementRead;
+      assert.equal(state.aggregateVersion, 3); assert.equal(state.workflowVersion, nextStepInput!.expectedWorkflowVersion);
+      assert.equal((await snapshot()).tasks, tasksBefore); assert.equal((await snapshot()).deliveries, 0);
+      await assert.rejects(freshMachine(enablementIdentity).invoke("autonomy", "execute", { ...nextStepInput!, payload: { ...nextStepInput!.payload, closePlanDigest: "f".repeat(64) } }), /SALES_HTTP_409/);
+      assert.equal((await snapshot()).enablement, 3);
+    });
+    await t.test("Enablement missing effect scope and revoked immutable registration deny receipts and reads using fresh authority", async () => {
+      const before = await snapshot();
+      assert.equal(((await enablementRead(readIdentity)).data as WebsiteSalesEnablementRead).aggregateVersion, 3);
+      await assert.rejects(freshMachine(readIdentity).invoke("autonomy", "reconcile", nextStepInput!), /SALES_HTTP_403/);
+      assert.equal((await freshRuntime(enablementIdentity).run(nextStepInput!.idempotencyKey)).commandId, nextStepReceipt!.commandId);
+      await db.admin.query("update crm_website_sales_machine_grants set revoked_at=clock_timestamp() where id=$1", [ids.enablementGrant]);
+      await assert.rejects(freshRuntime(enablementIdentity).run(nextStepInput!.idempotencyKey), /SALES_HTTP_403/);
+      await assert.rejects(enablementRead(), /SALES_HTTP_403/);
+      assert.equal((await freshRuntime(enablementIdentity).status(nextStepInput!.idempotencyKey))?.status, "COMMITTED");
+      assert.deepEqual(await snapshot(), before);
     });
     await t.test("allocated canonical dialog stops the old sequence once and recovers its new-version draft without raw mail or duplicate effects", async () => {
       const scopeIds = { projectId: ids.project, companyId: ids.company, locationId }, owner = operationsOwner!;
