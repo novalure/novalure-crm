@@ -11,6 +11,7 @@ import { parseOfferContent, OfferValidationError } from "@/lib/offer-workflow";
 import { decideWebsiteInvestment, qualifyWebsiteProspect, type WebsiteProspectQualification } from "@/lib/website-prospect";
 import { websiteSalesActorAuthority } from "@/lib/website-sales-machine-authority";
 import { websiteSalesOfferInvalidated, withWebsiteSalesOfferRevision } from "./website-sales-offer-evidence";
+import { attachWebsiteSalesInbound, lockWebsiteSalesInboundDeal } from "./website-sales-inbound-repository";
 
 export const websiteSalesIrelandContract = "website-sales-ireland-v1";
 export const websiteSalesIrelandPath = "/api/crm/website-sales";
@@ -295,6 +296,7 @@ async function runWebsiteSalesIrelandCommandImpl(session: AppSession, raw: Websi
           if (input.operation === "qualify") {
             if (row.status !== "OBSERVED") fail("INVALID_WORKFLOW_STATE");
             const contactId = assertCrmUuid(input.payload.contactId, "contactId");
+            const inbound = await lockWebsiteSalesInboundDeal(commandTx, fresh, scope, contactId);
             const contact = await commandTx.queryOne<{ id: string; consent: string }>(`select id,consent_label as consent from contacts where workspace_id=$1 and project_id=$2 and organization_id=$3 and id=$4 and archived_at is null for update`,
             [fresh.workspaceId, scope.projectId, scope.companyId, contactId]);
             if (!contact) fail("CONTACT_SCOPE_DENIED", 403);
@@ -304,15 +306,16 @@ async function runWebsiteSalesIrelandCommandImpl(session: AppSession, raw: Websi
             const summary = text(input.payload.opportunitySummary, 2000, "OPPORTUNITY_SUMMARY");
             const nextAction = text(input.payload.nextAction, 1000, "NEXT_ACTION");
             const stage = await qualifiedPipelineStage(commandTx, fresh, scope.projectId);
-            const leadId = randomUUID(), dealId = randomUUID(), taskId = randomUUID();
+            const leadId = inbound?.leadId ?? randomUUID(), dealId = inbound?.dealId ?? randomUUID(), taskId = randomUUID();
             const provenance = JSON.stringify({ websiteSalesWorkflowId: row.id, companyId: scope.companyId, locationId: scope.locationId,
               observationId: row.observationId, evidenceDigest: current.evidenceDigest, contactBasis: "NONE", outboundEnabled: false,
               websiteSalesPipeline: { pipelineId: stage.pipelineId, stageId: stage.id, stageName: stage.name } });
-            await commandTx.execute(`insert into leads(id,workspace_id,project_id,contact_id,assigned_to_user_id,source,type,status,score,intent,next_action,sales_qualification,metadata,division)
+            if (inbound) await attachWebsiteSalesInbound(commandTx, fresh, scope, contactId, inbound, provenance);
+            else await commandTx.execute(`insert into leads(id,workspace_id,project_id,contact_id,assigned_to_user_id,source,type,status,score,intent,next_action,sales_qualification,metadata,division)
               values($1,$2,$3,$4,$5,'Website Sales Ireland research','Website','Qualifiziert',0,$6,$7,$8::jsonb,$9::jsonb,'WEB_DESIGN')`,
             [leadId, fresh.workspaceId, scope.projectId, contactId, fresh.userId, summary, nextAction,
               JSON.stringify({ source: "website-sales-ireland-v1", evidenceDigest: current.evidenceDigest, path: current.input.path, qualification: "research_only", scoreBasis: "NOT_COMPUTED" }), provenance]);
-            await commandTx.execute(`insert into deals(id,workspace_id,project_id,contact_id,organization_id,owner_user_id,lead_id,name,stage,source,next_action,metadata,division)
+            if (!inbound?.dealId) await commandTx.execute(`insert into deals(id,workspace_id,project_id,contact_id,organization_id,owner_user_id,lead_id,name,stage,source,next_action,metadata,division)
               values($1,$2,$3,$4,$5,$6,$7,$8,$11,'Website Sales Ireland research',$9,$10::jsonb,'WEB_DESIGN')`,
             [dealId, fresh.workspaceId, scope.projectId, contactId, scope.companyId, fresh.userId, leadId, `${canonicalCompany.name}: Website Ireland`.slice(0, 240), nextAction, provenance, stage.name]);
             await commandTx.execute(`insert into tasks(id,workspace_id,project_id,contact_id,lead_id,owner_user_id,title,priority,status,metadata)
