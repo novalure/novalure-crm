@@ -6,7 +6,7 @@ import {commerceContractDraftSchema, type WebsiteSalesCommerceSourceEvent as Eve
 import {commerceParams,commerceExactRecord} from './website-sales-commerce-storage';
 /** A factual provider signature can close only the unchanged, separately approved canonical offer.
  * Any conflict preserves the source fact and leaves the commercial outcome for explicit review. */
-export async function projectVerifiedWebsiteSalesClosing(tx:TenantTransaction,b:CommerceExecutionBinding,job:FrozenCommerceJob,event:Extract<Event,{kind:'SIGNATURE'}>,events:Event[]){
+export async function projectVerifiedWebsiteSalesClosing(tx:TenantTransaction,b:CommerceExecutionBinding,job:Pick<FrozenCommerceJob,'kind'|'firstAttemptAt'|'payload'|'identity'>,event:Extract<Event,{kind:'SIGNATURE'}>,events:Event[]){
  if(event.payload.status!=='SIGNED'||job.kind!=='SIGNATURE_REQUEST'||!job.firstAttemptAt)return;
  const doc=await commerceExactRecord(tx,b,b,event.payload.contractRef,'CONTRACT');
  const contract=commerceContractDraftSchema.parse(doc.payload),policy=await commerceExactRecord(tx,b,b,contract.policyRef,'POLICY');

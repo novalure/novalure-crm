@@ -177,7 +177,7 @@ export async function executeWebsiteSalesCommerceCommand(s: AppSession, raw: Com
     case 'queue_contract_delivery': case 'request_signature': {
      const p = schemas[c.operation].parse(c.payload), doc = await commerceBoundRecord(tx, s, b, p.documentRef, 'CONTRACT'), d = commerceContractDraftSchema.parse(doc.payload);
      await currentWebsiteSalesCommerceApproval(tx, s.workspaceId, b, p.approvalReference, p.documentRef);
-     const payload: Json = { documentRef: p.documentRef, documentSha256: d.documentSha256, recipientEmail: d.recipientEmail, recipientDigest: d.recipientDigest, subject: d.title, text: d.body, approvalReference: p.approvalReference, ...(c.operation === 'request_signature' ? { signatureMode: 'CANONICAL_HTML',requiredAssurance:(await policy(tx,s,b,d.policyRef)).payload.signatureAssurance,acceptUntil:String((await offer(tx,s,b,d.offerRef)).content.validUntil) } : {}) };
+     const payload: Json = { documentRef: p.documentRef, documentSha256: d.documentSha256, recipientEmail: d.recipientEmail, recipientDigest: d.recipientDigest, subject: d.title, text: d.body, approvalReference: p.approvalReference, ...(c.operation === 'request_signature' ? { signatureMode: 'CANONICAL_HTML',requiredAssurance:(await commerceExactRecord(tx,s,b,d.policyRef,'POLICY')).payload.signatureAssurance,acceptUntil:String((await offer(tx,s,b,d.offerRef)).content.validUntil) } : {}) };
      outboxId = await enqueue(tx, s, b, next, c.operation === 'request_signature' ? 'SIGNATURE_REQUEST' : 'CONTRACT_SEND', { id: doc.entityId, version: doc.version }, payload, context.commandId, d.offerRef.id, d.offerRef.version); break;
     }
     case 'record_delivery_acceptance': {
