@@ -61,7 +61,8 @@ test('a stopped recipient remains blocked while an unrelated profile proceeds, a
   const validUntil = new Date(Date.now() + 60000).toISOString(); let unrelatedCalls = 0;
   const next = { id: randomUUID(), validUntil, run: async () => { unrelatedCalls++; return { results: [], externalEffectsOnlyFromClaimedJobs: true as const }; } };
   const results = await runCommerceProfileSequence([{ id: randomUUID(), validUntil, run: async () => { throw new CrmCommandError('OPT_OUT', 'Synthetic recipient stopped', 409); } }, next]);
-  assert.equal(results[0]?.status, 'BLOCKED'); assert.equal(results[0]?.code, 'OPT_OUT'); assert.equal(unrelatedCalls, 1);
+  const stopped = results[0]; assert(stopped && 'status' in stopped && 'code' in stopped);
+  assert.equal(stopped.status, 'BLOCKED'); assert.equal(stopped.code, 'OPT_OUT'); assert.equal(unrelatedCalls, 1);
   await assert.rejects(runCommerceProfileSequence([{ id: randomUUID(), validUntil, run: async () => { throw Error('Synthetic database unavailable'); } }, next]), /database unavailable/);
   assert.equal(unrelatedCalls, 1);
 });
