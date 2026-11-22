@@ -10,6 +10,7 @@ import { runWebsiteSalesCommerceWorker, type CommerceWorkerOptions } from './web
 import { recordCommerceResendEvent } from './website-sales-commerce-worker';
 import type { VerifiedResendEvent } from './resend-webhooks';
 import { CrmCommandError } from './crm-command';
+import { areQueueWorkersPaused } from './cron/runtime';
 
 const jobKinds = z.enum(['OFFER_SEND', 'CONTRACT_SEND', 'SIGNATURE_REQUEST', 'ACCOUNTING_INVOICE_REQUEST', 'SUBSCRIPTION_CHANGE']);
 const profileSchema = z.strictObject({ id: z.uuid(), identity: commerceIdentitySchema, workflowId: z.uuid(), actorId: z.uuid(), workloadId: z.uuid(),
@@ -68,6 +69,7 @@ function executorPool(config: CommerceHostConfiguration) {
 function executor(config: CommerceHostConfiguration, original: Profile, source: boolean): WebsiteSalesCommerceExecutor {
   const expected = commerceDigest(config), deadline = Math.min(Date.parse(original.validUntil), Date.now() + 55_000), selectedPool = executorPool(config);
   return createWebsiteSalesCommerceExecutor({ pool: selectedPool, assertCurrent: async (): Promise<CommerceExecutionBinding> => {
+    if (!source && areQueueWorkersPaused()) throw new CommerceSourceError(503, 'COMMERCE_WORKER_PAUSED');
     const fresh = readCommerceHostConfiguration();
     if (!fresh || commerceDigest(fresh) !== expected || Date.now() >= deadline) return unavailable();
     const current = fresh.profiles.find(profile => profile.id === original.id); if (!current || !current.identity.locationId) return unavailable();
@@ -93,6 +95,7 @@ export function authorizeCommerceWorkerRequest(request: Request, secret = proces
 }
 export async function runConfiguredCommerceWorker(request: Request) {
   authorizeCommerceWorkerRequest(request); if (new URL(request.url).search) throw new CommerceSourceError(400, 'COMMERCE_WORKER_SELECTOR_DENIED');
+  if (areQueueWorkersPaused()) return { contractVersion: 'website-sales-commerce-worker-v1', status: 'PAUSED', results: [] };
   const config = readCommerceHostConfiguration(); if (!config) return unavailable(); const started = Date.now(), results = [];
   for (const profile of config.profiles) {
     if (Date.now() - started >= 35_000) break;
