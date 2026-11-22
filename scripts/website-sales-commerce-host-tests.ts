@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { readCommerceHostConfiguration, authorizeCommerceWorkerRequest } from '../src/lib/website-sales-commerce-host';
+import { readCommerceHostConfiguration, authorizeCommerceWorkerRequest, runConfiguredCommerceWorker } from '../src/lib/website-sales-commerce-host';
 
 function fixture() {
   const identity = { workspaceId: randomUUID(), projectId: randomUUID(), companyId: randomUUID(), locationId: randomUUID() };
@@ -41,4 +41,16 @@ test('worker authorization requires its own strong exact bearer and never accept
   for (const headers of [{}, { cookie: 'novalure_session=synthetic' }, { authorization: 'Bearer wrong' }, { authorization: `Bearer  ${secret}` }])
     assert.throws(() => authorizeCommerceWorkerRequest(new Request('https://example.invalid', { headers }), secret), /UNAUTHORIZED/);
   assert.throws(() => authorizeCommerceWorkerRequest(new Request('https://example.invalid', { headers: { authorization: 'Bearer short' } }), 'short'), /UNAUTHORIZED/);
+});
+
+test('the existing global pause stops authenticated scheduled work before a database claim or provider call', async () => {
+  const keys = ['NOVALURE_WORKERS_PAUSED', 'CRM_WEBSITE_SALES_COMMERCE_WORKER_SECRET'] as const;
+  const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    process.env.NOVALURE_WORKERS_PAUSED = '1'; process.env.CRM_WEBSITE_SALES_COMMERCE_WORKER_SECRET = 'synthetic-worker-pause-secret-only-'.repeat(2);
+    const request = new Request('https://example.invalid/api/cron/website-sales-commerce', { headers: {
+      authorization: `Bearer ${process.env.CRM_WEBSITE_SALES_COMMERCE_WORKER_SECRET}` } });
+    const result = await runConfiguredCommerceWorker(request); assert.equal(result.status, 'PAUSED'); assert.deepEqual(result.results, []);
+    await assert.rejects(runConfiguredCommerceWorker(new Request(request.url)), /UNAUTHORIZED/);
+  } finally { for (const key of keys) { if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key]; } }
 });
