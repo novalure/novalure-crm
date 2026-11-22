@@ -163,17 +163,30 @@ try {
   });
   await step('lost committed template acknowledgement survives reload and blocks every Sales writer until exact reconciliation', async () => {
     const target = await openConfiguration('register_template'); await fillTemplate(target, 'SYNTHETIC lost acknowledgement template');
-    let original, captured = false;
-    await main.route('**/api/crm/website-sales/commerce?**', async route => {
-      if (route.request().method() !== 'POST' || captured) return route.continue();
-      original = route.request().postData(); const response = await route.fetch(); assert.equal(response.status(), 200); captured = true;
-      expectedFaults.push({ kind: 'COMMITTED_ACKNOWLEDGEMENT_LOST', operation: JSON.parse(original).operation }); await route.abort('failed');
+    await main.evaluate(() => {
+      const realFetch = window.fetch.bind(window); let once = true;
+      window.fetch = async (input, init) => {
+        const request = new Request(input instanceof Request ? input.clone() : new URL(String(input), location.href), init);
+        const body = request.method === 'POST' && new URL(request.url).pathname === '/api/crm/website-sales/commerce' ? await request.clone().text() : null;
+        const lose = once && body && JSON.parse(body).operation === 'register_template';
+        // Preserve actual browser cookies, Origin, Fetch Metadata and the one-time CSRF path.
+        const response = await realFetch(input, init);
+        if (lose) {
+          once = false; window.__websiteSalesCommerceLostResponse = { body, status: response.status };
+          if (response.status === 200) { await response.body?.cancel(); throw new TypeError('SYNTHETIC post-commit commerce response loss'); }
+        }
+        return response;
+      };
     });
     await target.locator('button[type="submit"]').click();
+    await expect.poll(() => main.evaluate(() => window.__websiteSalesCommerceLostResponse?.status)).not.toBeUndefined();
+    const lost = await main.evaluate(() => window.__websiteSalesCommerceLostResponse), original = lost.body;
+    assert.equal(lost.status, 200, 'The real browser must commit before the synthetic acknowledgement is discarded');
+    expectedFaults.push({ kind: 'COMMITTED_ACKNOWLEDGEMENT_LOST', operation: JSON.parse(original).operation });
     await expect(panel().getByText('Das Ergebnis ist noch nicht eindeutig bestätigt.', { exact: false })).toBeVisible();
     const key = `novalure.website-sales-commerce.pending.v1:${actor.account.userId}:${actor.account.workspaceId}`;
     const stored = await main.evaluate(key => JSON.parse(sessionStorage.getItem(key)), key); assert.equal(stored.body, original);
-    await main.unroute('**/api/crm/website-sales/commerce?**'); await main.reload(); await openCommerce(state, true);
+    await main.reload(); await openCommerce(state, true);
     await expect(main.locator('[data-website-sales-workbench] form button[type="submit"]:enabled')).toHaveCount(0);
     const reconciled = main.waitForResponse(response => new URL(response.url()).pathname === endpoint + '/reconcile' && response.request().method() === 'POST');
     await panel().getByRole('button', { name: 'Ergebnis abgleichen', exact: true }).click(); const response = await reconciled;
