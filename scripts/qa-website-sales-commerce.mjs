@@ -115,6 +115,25 @@ try {
     const template = await openConfiguration('register_template'); await expect(template.locator('[name="content"]')).toHaveValue('');
     await expect(panel().getByRole('button', { name: /^(Als bezahlt markieren|Mark paid|Unterschrift bestätigen|Confirm signature)$/ })).toHaveCount(0);
   });
+  await step('an explicit first policy is saved against the canonical offer with sourced tax issuer and payment facts', async () => {
+    const value = await current(), choice = value.offerChoices.find(row => row.offerRef.id === state.workflow.offerDraftId); assert(choice);
+    const target = await openConfiguration('configure_policy'), values = {
+      title: 'SYNTHETIC local commerce policy', entity: 'synthetic-accounting-entity', accountingCustomerReference: 'synthetic-accounting-customer',
+      issuerName: 'SYNTHETIC local test issuer', issuerAddress: 'SYNTHETIC local test address', taxRate: '20', taxAmount: '200.00',
+      termsDigest: digest('SYNTHETIC approved local-only terms'), validUntil: localDate(Date.now() + 3600000),
+    };
+    await target.locator('[name="offer"]').selectOption(`${choice.offerRef.id}:${choice.offerRef.version}:${choice.offerRef.digest}`);
+    for (const [name, content] of Object.entries(values)) await target.locator(`[name="${name}"]`).fill(content);
+    await target.locator('[name="assurance"]').selectOption('PROVIDER_ATTESTED');
+    for (const prefix of ['terms', 'accounting', 'tax']) for (const [field, content] of Object.entries({ reference: `synthetic:local-qa-${prefix}`, digest: prefix === 'terms' ? values.termsDigest : digest(`SYNTHETIC local-only ${prefix} evidence`), observedAt: localDate(Date.now() - 120000), validUntil: localDate(Date.now() + 7200000) })) await target.locator(`[name="${prefix}.${field}"]`).fill(content);
+    await target.locator('input[name$=".label"]').fill('SYNTHETIC full balance'); await target.locator('input[name$=".percentage"]').fill('100'); await target.locator('input[name$=".days"]').fill('14');
+    await target.locator('select[name$=".kind"]').selectOption('BALANCE');
+    const saved = main.waitForResponse(response => new URL(response.url()).pathname === endpoint && response.request().method() === 'POST');
+    await target.locator('button[type="submit"]').click(); const response = await saved; assert.equal(response.status(), 200);
+    const policy = (await current()).policy; assert(policy); assert.deepEqual(policy.payload.offerRef, choice.offerRef);
+    assert.equal(policy.payload.financialSnapshot.netMinor, choice.totalNetMinor); assert.equal(policy.payload.financialSnapshot.taxMinor, 20000); assert.equal(policy.payload.accountingProfile.taxRateBps, 2000);
+    assert.equal(policy.payload.accountingProfile.issuerLegalName, values.issuerName); assert.equal(policy.payload.accountingCustomerReference, values.accountingCustomerReference); assert.equal(policy.payload.paymentTerms.installments[0].percentageBps, 10000);
+  });
   await step('invalid template details focus a linked error summary without posting a command', async () => {
     const target = await openConfiguration('register_template'); let posts = 0;
     const observe = request => { if (new URL(request.url()).pathname === endpoint && request.method() === 'POST') posts++; };
