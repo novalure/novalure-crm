@@ -15,6 +15,7 @@ import { lifecyclePending, subscribeLifecyclePending, writeLifecycle } from "@/l
 import { salesOperationsPending, subscribeSalesOperationsPending } from "@/lib/website-sales-operations-client";
 import { enablementPending, subscribeEnablementPending } from '@/lib/website-sales-enablement-client';
 import { commercePending, subscribeCommercePending } from '@/lib/website-sales-commerce-client';
+import { discoveryPending } from '@/lib/website-sales-discovery-client';
 
 const WebsiteSalesStudio = dynamic(() => import("@/components/website-sales-studio").then(module => module.WebsiteSalesStudio));
 const WebsiteSalesLifecyclePanel = dynamic(() => import("@/components/website-sales-lifecycle-panel").then(module => module.WebsiteSalesLifecyclePanel));
@@ -22,6 +23,7 @@ const WebsiteSalesOperationsPanel = dynamic(() => import("@/components/website-s
 const WebsiteSalesEnablementPanel=dynamic(()=>import('@/components/website-sales-enablement-panel').then(module=>module.WebsiteSalesEnablementPanel),{ssr:false});
 const WebsiteSalesCommercePanel=dynamic(()=>import('@/components/website-sales-commerce-panel').then(module=>module.WebsiteSalesCommercePanel),{ssr:false});
 const WebsiteSalesDailyPanel=dynamic(()=>import('@/components/website-sales-enablement-panel').then(module=>module.WebsiteSalesDailyPanel),{ssr:false});
+const WebsiteSalesDiscoveryPanel=dynamic(()=>import('@/components/website-sales-discovery-panel').then(module=>module.WebsiteSalesDiscoveryPanel),{ssr:false});
 import type { WebsiteSalesWorkbenchCompany, WebsiteSalesWorkbenchContact, WebsiteSalesWorkbenchDetailResponse,
   WebsiteSalesWorkbenchLocationItem, WebsiteSalesWorkbenchPage, WebsiteSalesWorkbenchProject } from "@/lib/website-sales-workbench-types";
 
@@ -225,9 +227,11 @@ export function WebsiteSalesWorkbench(props: WorkbenchProps) { return <Workbench
 function Workbench({ workspaceId, actorId, language, initialProjectId }: WorkbenchProps) {
   const copy = getWebsiteSalesCopy(language), id = useId().replace(/:/g, "");
   const [pending, setPending] = useState(() => websiteSalesPending(workspaceId, actorId));
+  const [discoveryOriginal] = useState(() => { try { return discoveryPending(workspaceId, actorId); } catch { return null; } });
+  const [discoveryRecovery, setDiscoveryRecovery] = useState(() => { try { return Boolean(discoveryPending(workspaceId, actorId)); } catch { return true; } });
   const foreignOriginal = studioPending(workspaceId, actorId)?.command ?? lifecyclePending(workspaceId, actorId)?.command ?? salesOperationsPending("autonomy", workspaceId, actorId)?.command ?? salesOperationsPending("conversation", workspaceId, actorId)?.command ?? enablementPending(workspaceId,actorId)?.command ?? commercePending(workspaceId,actorId)?.command;
   const [, refreshPending] = useState(0), [showResearch, setShowResearch] = useState(false);
-  const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? foreignOriginal?.projectId ?? initialProjectId ?? "");
+  const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? foreignOriginal?.projectId ?? discoveryOriginal?.projectId ?? initialProjectId ?? "");
   const [companyId, setCompanyId] = useState(() => pending?.command.companyId ?? foreignOriginal?.companyId ?? "");
   const [locationId, setLocationId] = useState(() => pending?.command.locationId ?? foreignOriginal?.locationId ?? "");
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState<"saved" | "denied" | null>(null);
@@ -251,7 +255,7 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
   const current = useDetail(workspaceId, scope), detail = current.detail, workflow = detail?.workflow;
   const project = projects.items.find(row => row.id === projectId);
   const canWrite = Boolean(detail?.canWrite ?? (project?.canWrite && companies.canWrite));
-  const locked = busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery);
+  const locked = busy || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery)||discoveryRecovery;
   const disableWrite = locked || !canWrite || current.loading || current.failed;
   const failed = projects.failed || companies.failed || contacts.failed || locations.failed || current.failed;
   function refresh() { projects.refresh(); companies.refresh(); contacts.refresh(); locations.refresh(); current.refresh();setSourceRevision(value=>value+1); }
@@ -309,6 +313,9 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
     {!pending && (studioRecovery || lifecycleRecovery || operationsRecovery||enablementRecovery||commerceRecovery) ? <Notice tone="warning" announce="polite">{copy.unknown}</Notice> : null}
     {notice ? <Notice tone={notice === "saved" ? "success" : "danger"} announce={notice === "saved" ? "polite" : "assertive"}>{notice === "saved" ? copy.saved : copy.denied}</Notice> : null}
     {failed ? <Notice tone="danger" announce="polite"><p>{copy.loadError}</p><Button className="mt-3" variant="secondary" disabled={busy} onClick={refresh}>{copy.refresh}</Button></Notice> : null}
+    {projectId ? <WebsiteSalesDiscoveryPanel key={`discovery:${workspaceId}:${projectId}`} workspaceId={workspaceId} actorId={actorId} projectId={projectId} language={language}
+      blocked={busy||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery)}
+      canWrite={Boolean(project?.canWrite)} onPending={setDiscoveryRecovery} onOpen={data=>{generation.current++;setProjectId(data.identity.projectId);setCompanyId(data.identity.companyId);setLocationId(data.identity.locationId);setShowResearch(false);setNotice(null);refresh();}} /> : null}
     {projectId&&!companyId?<WebsiteSalesDailyPanel key={`${workspaceId}:${projectId}`} workspaceId={workspaceId} projectId={projectId} language={language} blocked={locked} onOpen={selected=>{if(locked)return;generation.current++;setCompanyId(selected.companyId);setLocationId(selected.locationId);setShowResearch(false);setNotice(null);}}/>:null}
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(250px,320px)_minmax(0,1fr)]">
       <aside className="min-w-0 space-y-4" aria-label={copy.project}>
