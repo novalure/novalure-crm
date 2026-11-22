@@ -11,7 +11,7 @@ function fixture() {
     databaseHostDigest: createHash('sha256').update('synthetic.neon.tech').digest('hex'), sender: 'sales@novalure.eu',
     htmlSignatureCapabilityApproved: false, maxJobsPerRun: 2, profiles: [profile], sourceConnections: [] as unknown[] };
   const env = { VERCEL: '1', VERCEL_PROJECT_ID: 'prj_R32Okl6AHijTohvuKmryuTLjWMsk', VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_SHA: config.revision };
-  const read = (value: unknown = config, patch: Record<string, string> = {}) => readCommerceHostConfiguration({ ...env, ...patch, CRM_WEBSITE_SALES_COMMERCE_HOST: JSON.stringify(value) });
+  const read = (value: unknown = config, patch: Record<string, string | undefined> = {}) => readCommerceHostConfiguration({ ...env, ...patch, NODE_ENV: 'test', CRM_WEBSITE_SALES_COMMERCE_HOST: JSON.stringify(value) });
   return { config, env, read, profile, identity };
 }
 
@@ -23,7 +23,7 @@ test('host configuration binds the actual deployment project environment revisio
   assert.throws(() => f.read({ ...f.config, profiles: [{ ...f.profile, identity: { ...f.identity, locationId: null } }] }), /HOST_NOT_CONFIGURED/);
   assert.equal(f.read({ ...f.config, enabled: false }), null);
   assert.throws(() => f.read({ ...f.config, environment: 'preview' }), /HOST_NOT_CONFIGURED/);
-  assert.equal(readCommerceHostConfiguration({}), null);
+  assert.equal(readCommerceHostConfiguration({ NODE_ENV: 'test' }), null);
 });
 
 test('registered source accounts cannot choose another profile workflow or tenant through configuration', () => {
@@ -38,7 +38,8 @@ test('registered source accounts cannot choose another profile workflow or tenan
 test('worker authorization requires its own strong exact bearer and never accepts ordinary browser state', () => {
   const secret = 'synthetic-only-worker-secret-'.repeat(2);
   assert.doesNotThrow(() => authorizeCommerceWorkerRequest(new Request('https://example.invalid', { headers: { authorization: `Bearer ${secret}` } }), secret));
-  for (const headers of [{}, { cookie: 'novalure_session=synthetic' }, { authorization: 'Bearer wrong' }, { authorization: `Bearer  ${secret}` }])
+  const variants: Record<string, string>[] = [{}, { cookie: 'novalure_session=synthetic' }, { authorization: 'Bearer wrong' }, { authorization: `Bearer  ${secret}` }];
+  for (const headers of variants)
     assert.throws(() => authorizeCommerceWorkerRequest(new Request('https://example.invalid', { headers }), secret), /UNAUTHORIZED/);
   assert.throws(() => authorizeCommerceWorkerRequest(new Request('https://example.invalid', { headers: { authorization: 'Bearer short' } }), 'short'), /UNAUTHORIZED/);
 });

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { resolve } from 'node:path';
 import { websiteSalesPreviewAccessCsp } from "./src/lib/website-sales-preview-access";
 
 const buildGitSha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "unknown";
@@ -69,9 +70,9 @@ const websiteStudioHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
 ] as const;
 
-const nextConfig: NextConfig = {
-  // The canonical Node ESM domain module retains its .js import in both repositories.
-  turbopack: { resolveAlias: {
+// Canonical Node ESM imports keep .js specifiers in both repositories. Both build
+// engines must resolve the same exact mirrors; unrelated package imports stay intact.
+const canonicalSalesAliases = {
     "./website-prospect.js": "./src/lib/website-prospect.ts",
     "./website-sales-studio.js": "./src/lib/website-sales-studio.ts",
     "./website-sales-studio-brand.js": "./src/lib/website-sales-studio-brand.ts",
@@ -80,7 +81,15 @@ const nextConfig: NextConfig = {
     "./website-sales-enablement-types.js": "./src/lib/website-sales-enablement-types.ts",
     "./website-sales-operations-contracts.js": "./src/lib/website-sales-operations-contracts.ts",
     "./website-sales-operations-outcomes.js": "./src/lib/website-sales-operations-outcomes.ts",
-  } },
+};
+const nextConfig: NextConfig = {
+  turbopack: { resolveAlias: canonicalSalesAliases },
+  webpack(config) {
+    config.resolve ??= {};
+    config.resolve.alias = { ...config.resolve.alias,
+      ...Object.fromEntries(Object.entries(canonicalSalesAliases).map(([specifier, target]) => [`${specifier}$`, resolve(__dirname, target)])) };
+    return config;
+  },
   deploymentId: deploymentIdentity,
   env: {
     NOVALURE_APPLICATION_VERSION: applicationVersion,
