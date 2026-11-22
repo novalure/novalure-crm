@@ -141,6 +141,16 @@ try {
     await expect(target.getByRole('alert')).toBeFocused(); await expect(target.getByRole('alert').getByRole('link').first()).toBeVisible();
     assert.equal(posts, 0); main.off('request', observe);
   });
+  await step('switching sections preserves extensive unsaved template input and exact evidence fields', async () => {
+    const target = await openConfiguration('register_template'), content = 'SYNTHETIC unsaved fictional template. '.repeat(120);
+    await target.locator('[name="title"]').fill('SYNTHETIC unsaved section-switch draft'); await target.locator('[name="content"]').fill(content);
+    await target.locator('[name="legal.digest"]').fill(digest('SYNTHETIC retained evidence'));
+    await expect(target.locator('[name="legal.digest"]')).toHaveAttribute('autocomplete', 'off'); await expect(target.locator('[name="legal.digest"]')).toHaveAttribute('spellcheck', 'false');
+    await stage('contract'); await expect(target).toBeHidden(); await stage('invoice'); await openConfiguration('register_template');
+    await expect(target.locator('[name="title"]')).toHaveValue('SYNTHETIC unsaved section-switch draft'); await expect(target.locator('[name="content"]')).toHaveValue(content);
+    await expect(target.locator('[name="legal.digest"]')).toHaveValue(digest('SYNTHETIC retained evidence'));
+    await expect(panel().locator('[data-commerce-section] > section:visible')).toHaveCount(1);
+  });
   await step('an owner-recorded template is persisted through the real authenticated browser and API', async () => {
     const target = await openConfiguration('register_template'); await fillTemplate(target, 'SYNTHETIC commerce browser template');
     const saved = main.waitForResponse(response => new URL(response.url()).pathname === endpoint && response.request().method() === 'POST');

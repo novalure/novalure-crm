@@ -36,8 +36,8 @@ export function CommerceField({ ctx, name, label, children, required = true }: {
 }
 function StringFields({ ctx, fields }: { ctx: FormContext; fields: { name: string; label: string; type?: 'datetime-local' | 'number'; required?: boolean; maxLength?: number; multiline?: boolean; hash?: boolean; min?: number; max?: number }[] }) {
   return <div className="grid gap-4 md:grid-cols-2">{fields.map(field => <div className={field.multiline ? 'md:col-span-2' : ''} key={field.name}><CommerceField ctx={ctx} name={field.name} label={field.label} required={field.required !== false}>
-    {field.multiline ? <Textarea {...ctx.input(field.name)} required={field.required !== false} maxLength={field.maxLength ?? 2000} rows={5} className={control} />
-      : <Input {...ctx.input(field.name)} type={field.type ?? 'text'} required={field.required !== false} maxLength={field.hash ? 64 : field.maxLength ?? 2000} pattern={field.hash ? '[a-fA-F0-9]{64}' : undefined} min={field.min} max={field.max} step={field.type === 'number' ? 1 : undefined} className={control} />}
+    {field.multiline ? <Textarea {...ctx.input(field.name)} autoComplete="off" required={field.required !== false} maxLength={field.maxLength ?? 2000} rows={5} className={control} />
+      : <Input {...ctx.input(field.name)} autoComplete="off" spellCheck={field.hash ? false : undefined} type={field.type ?? 'text'} required={field.required !== false} maxLength={field.hash ? 64 : field.maxLength ?? 2000} pattern={field.hash ? '[a-fA-F0-9]{64}' : undefined} min={field.min} max={field.max} step={field.type === 'number' ? 1 : undefined} className={control} />}
   </CommerceField></div>)}</div>;
 }
 function Choices({ ctx, name, label, items, language, value, onChange }: { ctx: FormContext; name: string; label: string; items: Choice[]; language: string; value?: string; onChange?: (value: string) => void }) {
@@ -98,7 +98,7 @@ function ActionForm({ data, language, locked, call, operation, title, label, bui
 
 export function OfferActions(props: CommerceFormProps) {
   const { data, language } = props, de = language === 'de';
-  const rows = data.offers.filter(row => recordCurrent(row, props.now) && row.payload.approvalReference && ['APPROVED', 'QUEUED'].includes(row.payload.status));
+  const rows = data.offers.filter(row => recordCurrent(row, props.now) && row.payload.approvalReference && row.payload.status === 'APPROVED');
   return <ActionForm {...props} operation="queue_offer_delivery" title={de ? 'Freigegebenes Angebot versenden' : 'Send the approved offer'} label={de ? 'Freigegebenen Versand vorbereiten' : 'Prepare the approved delivery'}
     build={form => { const row = choose(rows, text(form, 'offer'), row => commerceRefKey(row.payload.offerRef)); return { offerRef: row.payload.offerRef, approvalReference: row.payload.approvalReference }; }}>
     {ctx => <><p className="text-sm text-stone-600">{de ? 'Der Versand bleibt an die genaue Angebotsfreigabe und den dort genannten Empfänger gebunden. Eine Versandannahme ist noch kein Zustellnachweis.' : 'Delivery remains bound to the exact approved offer and recipient. Provider acceptance is not a delivery receipt.'}</p><Choices ctx={ctx} name="offer" label={de ? 'Freigegebene Angebotsfassung' : 'Approved offer version'} language={language} items={rows.map(row => ({ key: commerceRefKey(row.payload.offerRef), label: `${row.payload.recipientEmail} · ${de ? 'Fassung' : 'Version'} ${row.payload.offerRef.version} · ${formatSalesMinor(row.payload.financial.grossMinor, language)}` }))} /></>}
