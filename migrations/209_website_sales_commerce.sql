@@ -351,3 +351,6 @@ do $$declare relation text;begin
   execute format('create policy commerce_internal_classification on %I as restrictive for all to novalure_tenant_app,novalure_website_sales_commerce_executor using(data_classification=''NOVALURE_INTERNAL'' and data_purpose=''crm_sales'' and crm_classification_allowed(workspace_id,data_classification,data_purpose)) with check(data_classification=''NOVALURE_INTERNAL'' and data_purpose=''crm_sales'' and crm_classification_allowed(workspace_id,data_classification,data_purpose))',relation);
  end loop;
 end $$;
+
+grant select on crm_website_sales_enablement_records to novalure_website_sales_commerce_executor;
+create policy commerce_executor_read on crm_website_sales_enablement_records for select to novalure_website_sales_commerce_executor using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales');
