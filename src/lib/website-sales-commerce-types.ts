@@ -7,7 +7,7 @@ export const commerceUuid = z.uuid().transform(value => value.toLowerCase());
 export const commerceHash = z.hash('sha256');
 export const commerceTime = z.iso.datetime({ offset: true });
 export const commerceText = z.string().trim().min(1).max(2_000).refine(value => !/\u0000|-----BEGIN.{0,40}PRIVATE KEY|\b(?:sk-|ghp_)[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\//i.test(value), 'COMMERCE_UNSAFE_TEXT');
-const legalText = z.string().trim().min(1).max(120_000).refine(value => !/\u0000|-----BEGIN.{0,40}PRIVATE KEY|\b(?:sk-|ghp_)[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\//i.test(value), 'COMMERCE_UNSAFE_TEXT');
+const legalText = z.string().min(1).max(120_000).refine(value => value.trim().length > 0 && !/\u0000|-----BEGIN.{0,40}PRIVATE KEY|\b(?:sk-|ghp_)[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\//i.test(value), 'COMMERCE_UNSAFE_TEXT');
 export const commerceExternalId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/);
 export const commerceMinor = z.number().int().nonnegative().safe();
 export const commerceCurrency = z.enum(['EUR', 'GBP', 'USD']);
@@ -30,8 +30,12 @@ export const commercePolicySchema = z.strictObject({ title: commerceText.max(200
   standardTermsDigest: commerceHash, signatureAssurance: z.enum(['PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), maxInstallments: z.number().int().min(1).max(36),
   accountingEntityReference: commerceText.max(200), accountingSourceReference: commerceSourceReferenceSchema, accountingProfile: commerceAccountingProfileSchema,
   offerRef: commerceReferenceSchema, financialSnapshot: commerceFinancialSnapshotSchema, paymentTerms: commercePaymentTermsSchema, validUntil: commerceTime });
-export const commerceOfferSchema = z.strictObject({ offerRef: commerceReferenceSchema, dealId: commerceUuid, status: z.enum(['DRAFT', 'APPROVED', 'QUEUED', 'SENT', 'ACCEPTED', 'REJECTED']),
+export const commerceOfferSchema = z.strictObject({ offerRef: commerceReferenceSchema, dealId: commerceUuid, status: z.enum(['DRAFT', 'APPROVED', 'QUEUED', 'SENT', 'ACCEPTED', 'REJECTED', 'CANCELLED']),
   recipientEmail: z.email(), recipientDigest: commerceHash, scopeDigest: commerceHash, financial: commerceFinancialSnapshotSchema, approvalReference: commerceUuid.nullable() });
+/** Canonical NET-only choice is available before a sourced tax/payment policy exists. */
+export const commerceOfferChoiceSchema = z.strictObject({ identity: commerceIdentitySchema, workflowId: commerceUuid, offerRef: commerceReferenceSchema,
+  dealId: commerceUuid, status: z.enum(['DRAFT', 'APPROVED', 'QUEUED', 'SENT', 'ACCEPTED', 'REJECTED', 'CANCELLED']), recipientEmail: z.email(), recipientDigest: commerceHash,
+  scopeDigest: commerceHash, totalNetMinor: commerceMinor, currency: z.literal('EUR'), taxBasis: z.literal('NET') });
 export const commerceContractDraftSchema = z.strictObject({ offerRef: commerceReferenceSchema, templateRef: commerceReferenceSchema, policyRef: commerceReferenceSchema,
   title: commerceText.max(200), body: legalText, documentSha256: commerceHash, recipientEmail: z.email(), recipientDigest: commerceHash,
   financial: commerceFinancialSnapshotSchema, standardTerms: z.boolean(), status: z.enum(['DRAFT', 'APPROVAL_PENDING', 'APPROVED', 'QUEUED', 'DELIVERED', 'SIGNATURE_PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED']),
@@ -66,7 +70,8 @@ export const websiteSalesCommerceSourceEventSchema = z.discriminatedUnion('kind'
   z.strictObject({ ...sourceBase, kind: z.literal('PROVIDER_DELIVERY'), payload: z.strictObject({ outboxId: commerceUuid, documentKind: z.enum(['OFFER', 'CONTRACT', 'INVOICE_REQUEST']), documentRef: commerceReferenceSchema,
     documentSha256: commerceHash, recipientDigest: commerceHash, providerMessageId: commerceExternalId, status: z.enum(['ACCEPTED', 'DELIVERED', 'BOUNCED', 'COMPLAINED', 'FAILED']) }) }),
   z.strictObject({ ...sourceBase, kind: z.literal('SIGNATURE'), payload: z.strictObject({ contractRef: commerceReferenceSchema, documentSha256: commerceHash, envelopeId: commerceExternalId,
-    status: z.enum(['PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED']), assurance: z.enum(['EMAIL_ACCESS', 'PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), signatoryReference: commerceText.max(200), signedAt: commerceTime.nullable() }) }),
+    status: z.enum(['PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED']), assurance: z.enum(['EMAIL_ACCESS', 'PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), signatoryReference: commerceText.max(200), signedAt: commerceTime.nullable(),
+    providerSignedDocumentDigests: z.array(commerceHash).min(1).max(20).optional(), auditProofReferences: z.array(commerceSourceReferenceSchema).min(1).max(20).optional() }) }),
   z.strictObject({ ...sourceBase, kind: z.literal('DELIVERY_ACCEPTANCE'), payload: commerceDeliveryAcceptanceSchema }),
   z.strictObject({ ...sourceBase, kind: z.literal('INVOICE'), payload: z.strictObject({ invoiceRequestId: commerceUuid, contractRef: commerceReferenceSchema, financial: commerceFinancialSnapshotSchema,
     installments: z.array(commerceInstallmentSchema).min(1).max(36), status: z.enum(['ISSUED', 'VOIDED']), invoiceNumber: commerceText.max(100) }) }),
@@ -118,6 +123,7 @@ export const websiteSalesCommerceReadSchema = z.strictObject({ contractVersion: 
   sourceConnections: z.array(z.strictObject({ reference: commerceText.max(200), provider: commerceText.max(100), type: z.enum(['DELIVERY', 'SIGNATURE', 'ACCOUNTING', 'PAYMENT', 'SUBSCRIPTION', 'SERVICE']),
     status: z.enum(['DISABLED', 'READY', 'EXPIRED', 'REVOKED', 'MISCONFIGURED']), expiresAt: commerceTime.nullable() })).max(20),
   templates: z.array(commerceRecordSchema(commerceTemplateSchema)).max(25), policy: commerceRecordSchema(commercePolicySchema).nullable(), policies: z.array(commerceRecordSchema(commercePolicySchema)).max(25).optional(),
+  offerChoices: z.array(commerceOfferChoiceSchema).max(25),
   offers: z.array(commerceRecordSchema(commerceOfferSchema)).max(25), contracts: z.array(commerceRecordSchema(commerceContractDraftSchema)).max(25), approvals: z.array(commerceApprovalSchema).max(50),
   deliveryAcceptances: z.array(commerceRecordSchema(commerceDeliveryAcceptanceSchema)).max(25), invoiceRequests: z.array(commerceRecordSchema(commerceInvoiceRequestSchema)).max(25),
   invoices: z.array(websiteSalesCommerceSourceEventSchema).max(100), payments: z.array(websiteSalesCommerceSourceEventSchema).max(200),
