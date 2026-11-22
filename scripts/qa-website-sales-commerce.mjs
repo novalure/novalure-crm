@@ -26,7 +26,7 @@ const browser = await chromium.launch({ channel: process.env.CRM_QA_BROWSER_CHAN
 const contexts = [], results = [], errors = [], unexpectedNetwork = [], accessibility = [], expectedFaults = [];
 const secretValues = new Set([fixture.password]);
 const digest = value => createHash('sha256').update(value).digest('hex');
-let actor, main, state, initialTemplate;
+let actor, main, state, initialTemplate, firstPolicyValues;
 
 function scrub(value){let text=String(value);for(const secret of secretValues)if(secret)text=text.replaceAll(secret,"[redacted]");return text.replace(/#grant=[^\s"']+/g,"#[redacted]");}
 async function step(name,action){await action();results.push({name,status:"PASS"});console.log("PASS "+name);}
@@ -122,6 +122,7 @@ try {
       issuerName: 'SYNTHETIC local test issuer', issuerAddress: 'SYNTHETIC local test address', taxRate: '20', taxAmount: '200.00',
       termsDigest: digest('SYNTHETIC approved local-only terms'), validUntil: localDate(Date.now() + 3600000),
     };
+    firstPolicyValues = values;
     await target.locator('[name="offer"]').selectOption(`${choice.offerRef.id}:${choice.offerRef.version}:${choice.offerRef.digest}`);
     for (const [name, content] of Object.entries(values)) await target.locator(`[name="${name}"]`).fill(content);
     await target.locator('[name="assurance"]').selectOption('PROVIDER_ATTESTED');
@@ -201,6 +202,22 @@ try {
     await main.emulateMedia({ reducedMotion: 'reduce' }); await stage('offer'); await scan('phone-reduced-motion', { width: 390, height: 844 });
     const selector = panel().getByLabel('Schritt in der Abschlussakte', { exact: true }); await selector.focus(); await main.keyboard.press('ArrowDown');
     await expect(selector).toBeFocused(); await expect(selector).toHaveValue('contract');
+  });
+  await step('a fixed net installment is saved exactly and cannot be combined with a percentage', async () => {
+    const value = await current(), choice = value.offerChoices.find(row => row.offerRef.id === state.workflow.offerDraftId); assert(choice);
+    const target = await openConfiguration('configure_policy');
+    await target.locator('[name="offer"]').selectOption(`${choice.offerRef.id}:${choice.offerRef.version}:${choice.offerRef.digest}`);
+    for (const [name, content] of Object.entries({ ...firstPolicyValues, title: 'SYNTHETIC fixed-net commerce policy' })) await target.locator(`[name="${name}"]`).fill(content);
+    await target.locator('[name="assurance"]').selectOption('PROVIDER_ATTESTED');
+    for (const prefix of ['terms', 'accounting', 'tax']) for (const [field, content] of Object.entries({ reference: `synthetic:local-qa-${prefix}`, digest: prefix === 'terms' ? firstPolicyValues.termsDigest : digest(`SYNTHETIC local-only ${prefix} evidence`), observedAt: localDate(Date.now() - 120000), validUntil: localDate(Date.now() + 7200000) })) await target.locator(`[name="${prefix}.${field}"]`).fill(content);
+    await target.locator('input[name$=".label"]').fill('SYNTHETIC exact fixed balance'); await target.locator('input[name$=".days"]').fill('14'); await target.locator('select[name$=".kind"]').selectOption('BALANCE');
+    await target.locator('input[name$=".percentage"]').fill('100'); await target.locator('input[name$=".fixedNet"]').fill('1000.00');
+    let posts = 0; const observe = request => { if (new URL(request.url()).pathname === endpoint && request.method() === 'POST') posts++; }; main.on('request', observe);
+    await target.locator('button[type="submit"]').click(); await expect(target.getByRole('alert')).toBeFocused(); assert.equal(posts, 0); main.off('request', observe);
+    await target.locator('input[name$=".percentage"]').fill('');
+    const saved = main.waitForResponse(response => new URL(response.url()).pathname === endpoint && response.request().method() === 'POST');
+    await target.locator('button[type="submit"]').click(); const response = await saved; assert.equal(response.status(), 200);
+    const row = (await current()).policy.payload.paymentTerms.installments[0]; assert.equal(row.fixedNetMinor, choice.totalNetMinor); assert.equal(row.percentageBps, undefined);
   });
   await step('no real provider request delivery signature payment or browser exception was produced', async () => {
     const value = await current(); assert.equal(value.outbox.length, 0); assert.equal(value.invoices.length, 0); assert.equal(value.payments.length, 0); assert.equal(value.sourceEvents.length, 0);
