@@ -105,10 +105,26 @@ test('Sales enablement uses actual PostgreSQL, existing CRM records and the prot
    const demo=await executeWebsiteSalesStudioCommand(session,studioCommand('build_demo',{...revision,conceptDigest:concept.data.artifactDigest,investmentPlan,profileBinding:{profileId,version:1,digest:profileDigest}}),opts);
    const beforeRevocation=await readWebsiteSalesStudio(session,scope,opts),savedDemo=beforeRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!;
    assert.equal(savedDemo.sourceBindingsCurrent,true);assert.equal(savedDemo.qa,null,'Current sources do not imply independent rendered QA');assert.equal(beforeRevocation.artifacts.find(row=>row.id===concept.data.artifactId)!.sourceBindingsCurrent,true);assert.equal(beforeRevocation.artifacts.find(row=>row.id===diagnosis.data.artifactId)!.sourceBindingsCurrent,true);
+   // Real scoped database rows test daily source currentness; they are not rendered-QA or publication evidence.
+   const studioIds = { current: randomUUID(), older: randomUUID(), expired: randomUUID(), changed: randomUUID() }, expiredAt = new Date(Date.now() - 86400000).toISOString(), createdAt = new Date(Date.now() - 2 * 86400000).toISOString();
+   const specs = [[studioIds.current, 'DEMO', 99, future, wf.evidenceDigest], [studioIds.older, 'DEMO', 98, expiredAt, wf.evidenceDigest], [studioIds.expired, 'CONCEPT', 99, expiredAt, wf.evidenceDigest], [studioIds.changed, 'DIAGNOSIS', 99, future, 'e'.repeat(64)]] as const;
+   const studioDigests = new Map<string, string>();
+   for (const [id, kind, revision, validUntil, evidenceDigest] of specs) {
+    const body = { ...previewSnapshot, kind, version: revision, validUntil, evidenceDigest }, artifactDigest = crmPayloadDigest(body); studioDigests.set(id, artifactDigest);
+    await db.admin.query(`insert into crm_website_studio_artifacts(id,workspace_id,project_id,company_id,location_id,workflow_id,kind,version,artifact_digest,evidence_digest,artifact,created_by,created_at,valid_until) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)`, [id, ws, project, company, location, wf.id, kind, revision, artifactDigest, evidenceDigest, JSON.stringify({ ...body, artifactDigest }), actor, createdAt, validUntil]);
+   }
+   let selected = await read(session, scope, opts), stale = selected.alerts.filter(row => row.canonicalReference.startsWith('crm:studio-artifact:'));
+   assert.deepEqual(new Set(stale.map(row => row.canonicalReference)), new Set([`crm:studio-artifact:${studioIds.expired}`, `crm:studio-artifact:${studioIds.changed}`]));
+   assert.ok(stale.every(row => row.kind === 'STALE_DRAFT' && !Object.hasOwn(row, 'taskId') && !Object.hasOwn(row, 'payload')));
    const metadata = JSON.stringify(await read(session, scope, opts)); assert.equal(metadata.includes(bytes.toString('base64')), false); assert.equal(metadata.includes('bytes_bytea'), false);
    await run(command('revoke_asset', { assetId, reason: 'Recorded rights withdrawn' }));
    const afterRevocation=await readWebsiteSalesStudio(session,scope,opts);
    assert.equal(afterRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!.sourceBindingsCurrent,false,'Real persisted asset revocation marks the full bound demo stale');assert.equal(afterRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!.qa,null);assert.equal(afterRevocation.artifacts.find(row=>row.id===concept.data.artifactId)!.sourceBindingsCurrent,true,'Unchanged current brief remains independent of a revoked demo image');assert.equal(afterRevocation.artifacts.find(row=>row.id===diagnosis.data.artifactId)!.sourceBindingsCurrent,true);
+   selected = await read(session, scope, opts); stale = selected.alerts.filter(row => row.canonicalReference.startsWith('crm:studio-artifact:'));
+   const revoked = stale.find(row => row.canonicalReference === `crm:studio-artifact:${studioIds.current}`)!; assert.ok(revoked); assert.equal(revoked.version, 99); assert.equal(revoked.sourceDigest, studioDigests.get(studioIds.current)); assert.equal(stale.length, 3);
+   assert.equal(stale.some(row => row.canonicalReference === `crm:studio-artifact:${studioIds.older}`), false);
+   const projectView = await readWebsiteSalesEnablementProject(session, project, null, 1, opts); assert.deepEqual(projectView.resources, [{ identity, companyName: 'Canonical Company', locationLabel: '1 Isolated Street, Dublin, Ireland' }]);
+   assert.ok(projectView.alerts.some(row => row.canonicalReference === revoked.canonicalReference)); assert.equal(JSON.stringify(projectView).includes(bytes.toString('base64')), false); assert.equal(JSON.stringify(projectView.alerts).includes('demoProfile'), false);
    assert.equal((await db.admin.query('select crm_website_sales_demo_profile_current($1::jsonb) as ok', [JSON.stringify(previewSnapshot)])).rows[0].ok, false);
    await assert.rejects(withCrmRead(session, tx => resolveCurrentEnablementDemoProfile(tx, session, scope, { profileId, version: 1, digest: profileDigest }), opts), { code: 'ENABLEMENT_ASSET_NOT_APPROVED' });
   });

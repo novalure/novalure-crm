@@ -11,6 +11,6 @@ export type WebsiteSalesEnablementResourceRead = WebsiteSalesEnablementRead & { 
  closureReasonBindings: { recordId: string; recordDigest: string; dealId: string; dealVersion: number; outcome: string; current: boolean }[];
  briefAssessment: (EnablementAssessment & { questions: string[] }) | null; closePlanAssessment: EnablementAssessment | null; closureAnalysis: EnablementClosureAnalysis;
  coverage: { historyLimitPerKind: number; historyHasMore: boolean; hygiene: { projection: string; hasMore: boolean; current: boolean } } };
-export type WebsiteSalesEnablementProjectRead = ProjectRead & { alerts: EnablementAlert[]; closureAnalysis: EnablementClosureAnalysis; coverage: { tasksPerWorkflow: number; hasMoreTasks: boolean } };
+export type WebsiteSalesEnablementProjectRead = ProjectRead & { alerts: EnablementAlert[]; closureAnalysis: EnablementClosureAnalysis; coverage: { tasksPerWorkflow: number; hasMoreTasks: boolean }; resources?: { identity: EnablementIdentity; companyName: string; locationLabel: string }[] };
 export type WebsiteSalesEnablementEffect = { identity: EnablementIdentity; aggregateVersion: number; workflowVersion: number;
  recordId: string; recordVersion: number; recordDigest: string; taskId?: string; assetId?: string; dealId?: string; offerId?: string; offerVersion?: number; canContact: false };

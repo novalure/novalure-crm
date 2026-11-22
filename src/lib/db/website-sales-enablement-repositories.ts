@@ -10,6 +10,7 @@ import type { WebsiteSalesEnablementScope as Scope, WebsiteSalesEnablementResour
 import { websiteSalesIrelandState } from './website-sales-ireland-repositories';
 import { executeOfferCommand } from './offer-repositories';
 import { upsertDealRecord, upsertTaskRecord } from './crm-write-repositories';
+import { resolveCurrentWebsiteSalesBrief } from './website-sales-enablement-source';
 import type { Deal } from '../crm-types';
 import { assessWebsiteSalesCustomerBrief, assessWebsiteSalesClosePlan, proposeWebsiteSalesCare, prioritizeWebsiteSalesDay, scanWebsiteSalesHygiene, resolveWebsiteSalesDemoProfile, analyzeWebsiteSalesClosures, websiteSalesEnablementRecordDigest } from '../website-sales-enablement';
 
@@ -121,13 +122,38 @@ async function readContacts(tx: TenantTransaction, session: AppSession, scope: S
 }
 async function alerts(tx: TenantTransaction, session: AppSession, scope: Scope, s: State, closePlanAssessment?: { status: string; reasons: string[] } | null): Promise<EnablementAlert[]> {
  const out: EnablementAlert[] = [], bound = identity(session, scope);
- const add = (kind: EnablementAlert['kind'], label: string, canonicalReference: string, version: number, source: unknown) => out.push({ id: crmPayloadDigest({ bound, kind, canonicalReference }), identity: bound, kind, label, canonicalReference, version, sourceDigest: crmPayloadDigest(source) });
+ const add = (kind: EnablementAlert['kind'], label: string, canonicalReference: string, version: number, source: unknown, sourceDigest?: string) => out.push({ id: crmPayloadDigest({ bound, kind, canonicalReference }), identity: bound, kind, label, canonicalReference, version, sourceDigest: sourceDigest ?? crmPayloadDigest(source) });
  if (s.current.workflow!.blockedReason) add('BLOCKED_OPPORTUNITY', `Opportunity blocked: ${s.current.workflow!.blockedReason}`, `crm:workflow:${s.row!.id}`, s.row!.version, { workflow: s.row!.id, version: s.row!.version, reason: s.current.workflow!.blockedReason });
  if (s.row!.offerDraftId) {
   const offer = await tx.queryOne<{ id: string; version: number; status: string; approvalId: string | null; content: { validUntil: string }; digest: string }>(`select o.id,o.version,o.status,o.approval_id as "approvalId",r.content,r.content_digest as digest from crm_offers o join crm_offer_revisions r on r.workspace_id=o.workspace_id and r.offer_id=o.id and r.revision=o.revision where o.workspace_id=$1 and o.project_id=$2 and o.id=$3`, [session.workspaceId, scope.projectId, s.row!.offerDraftId]);
   if (offer?.status === 'DRAFT') add(Date.parse(offer.content.validUntil) <= Date.now() ? 'STALE_DRAFT' : 'WAITING_DECISION', Date.parse(offer.content.validUntil) <= Date.now() ? 'Stored offer draft has expired' : 'Final offer approval remains required', `crm:offer:${offer.id}`, Number(offer.version), { digest: offer.digest, version: Number(offer.version), validUntil: offer.content.validUntil });
  }
  if (closePlanAssessment?.status === 'BLOCKED') add('CLOSE_PLAN_CHANGED', `Close plan needs review: ${closePlanAssessment.reasons.join(', ')}`, `crm:workflow:${s.row!.id}:close-plan`, s.row!.version, closePlanAssessment);
+ const studio = await tx.query<{ id: string; kind: string; version: number; digest: string; evidenceDigest: string; validUntil: string;
+  profile: { profile: CanonicalEnablementRecord<WebsiteDemoProfile>; references: { record: CanonicalEnablementRecord<WebsiteReferenceCase>; review: WebsiteReferenceReview }[]; assets: WebsiteEnablementAssetMetadata[] } | null;
+  brief: { briefId: string; version: number; digest: string } | null }>(`select id,kind,version,artifact_digest as digest,evidence_digest as "evidenceDigest",valid_until as "validUntil",
+   artifact#>'{content,demoProfile}' as profile,
+   case when coalesce(artifact#>'{content,customerBrief}',artifact#>'{content,concept,content,customerBrief}') is null then null else
+    jsonb_build_object('briefId',coalesce(artifact#>'{content,customerBrief,id}',artifact#>'{content,concept,content,customerBrief,id}'),
+     'version',coalesce(artifact#>'{content,customerBrief,version}',artifact#>'{content,concept,content,customerBrief,version}'),
+     'digest',coalesce(artifact#>'{content,customerBrief,digest}',artifact#>'{content,concept,content,customerBrief,digest}')) end as brief
+  from(select id,kind,version,artifact_digest,evidence_digest,valid_until,artifact,row_number() over(partition by kind order by version desc,id desc) as current_rank
+   from crm_website_studio_artifacts where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5) scoped where current_rank=1 order by kind limit 3`, [session.workspaceId, scope.projectId, scope.companyId, scope.locationId, s.row!.id]);
+ for (const artifact of studio) {
+  let stale = Date.parse(iso(artifact.validUntil)) <= Date.now() || artifact.evidenceDigest !== s.row!.evidenceDigest;
+  if (!stale) try {
+   if (artifact.brief) await resolveCurrentWebsiteSalesBrief(tx, session, scope, z.object({ briefId: z.uuid(), version: z.number().int().positive(), digest: z.hash('sha256') }).parse(artifact.brief));
+   if (artifact.profile) {
+    const profile = z.object({ id: z.uuid(), version: z.number().int().positive(), digest: z.hash('sha256') }).parse(artifact.profile.profile), resolved = await resolveCurrentEnablementDemoProfile(tx, session, scope, { profileId: profile.id, version: profile.version, digest: profile.digest }, false);
+    stale = crmPayloadDigest({ profile: resolved.profile, references: resolved.references, assets: resolved.assets }) !== crmPayloadDigest(artifact.profile);
+   }
+  } catch (error) {
+   if (error instanceof CrmCommandError) { if (error.status === 401 || error.status === 403) throw error; stale = true; }
+   else if (error instanceof z.ZodError || error instanceof Error && error.message.startsWith('ENABLEMENT_')) stale = true;
+   else throw error;
+  }
+  if (stale) add('STALE_DRAFT', `Stored ${artifact.kind.toLowerCase()} needs current source review`, `crm:studio-artifact:${artifact.id}`, Number(artifact.version), null, artifact.digest);
+ }
  return out;
 }
 async function closureAnalysis(tx: TenantTransaction, session: AppSession, projectId: string): Promise<EnablementClosureAnalysis> {
@@ -152,7 +178,7 @@ async function closureAnalysis(tx: TenantTransaction, session: AppSession, proje
 }
 
 /** Approved scoped records only. Raster bodies never enter an ordinary metadata read. */
-export async function resolveCurrentEnablementDemoProfile(tx: TenantTransaction, session: AppSession, scope: Scope, binding: { profileId: string; version: number; digest: string }) {
+export async function resolveCurrentEnablementDemoProfile(tx: TenantTransaction, session: AppSession, scope: Scope, binding: { profileId: string; version: number; digest: string }, includeRasterBodies = true) {
  websiteSalesEnablementSourceAuthority(session, scope);
  const s = await state(tx, session, scope), row = await latest(tx, session, s.row.id, 'DEMO_PROFILE', binding.profileId);
  if (!row || row.version !== binding.version || row.digest !== binding.digest || !current(row, s)) fail('ENABLEMENT_PROFILE_NOT_CURRENT');
@@ -167,10 +193,14 @@ export async function resolveCurrentEnablementDemoProfile(tx: TenantTransaction,
  const selected: WebsiteEnablementAssetMetadata[] = [], rasterBodies: { assetId: string; base64: string }[] = [];
  for (const assetId of profile.payload.assetIds) {
   const asset = available.find(item => item.assetId === assetId); if (!asset || asset.revokedAt || Date.parse(asset.validUntil) <= Date.now()) fail('ENABLEMENT_ASSET_NOT_APPROVED');
-  const bytes = await tx.queryOne<{ bytes: Buffer }>('select bytes_bytea as bytes from crm_website_sales_enablement_assets where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5 and id=$6', [session.workspaceId, scope.projectId, scope.companyId, scope.locationId, s.row.id, assetId]);
-  if (!bytes || createHash('sha256').update(bytes.bytes).digest('hex') !== asset.sha256) fail('ENABLEMENT_ASSET_INTEGRITY'); selected.push(asset); rasterBodies.push({ assetId, base64: bytes.bytes.toString('base64') });
+  selected.push(asset);
+  if (includeRasterBodies) {
+   const bytes = await tx.queryOne<{ bytes: Buffer }>('select bytes_bytea as bytes from crm_website_sales_enablement_assets where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5 and id=$6', [session.workspaceId, scope.projectId, scope.companyId, scope.locationId, s.row.id, assetId]);
+   if (!bytes || createHash('sha256').update(bytes.bytes).digest('hex') !== asset.sha256) fail('ENABLEMENT_ASSET_INTEGRITY'); rasterBodies.push({ assetId, base64: bytes.bytes.toString('base64') });
+  }
  }
- const checked = resolveWebsiteSalesDemoProfile(profile, references.map(row => row.record), references.map(row => row.review), selected, await context(tx, session, scope, s), clock());
+ const ctx = includeRasterBodies ? await context(tx, session, scope, s) : { identity: identity(session, scope), workflowVersion: s.row.version, workflow: await canonicalWorkflow(tx, session, scope, s), contacts: [], tasks: [] };
+ const checked = resolveWebsiteSalesDemoProfile(profile, references.map(row => row.record), references.map(row => row.review), selected, ctx, clock());
  if (checked.status !== 'READY' || !checked.value) fail(checked.reasons[0] ?? 'ENABLEMENT_PROFILE_NOT_CURRENT');
  return { ...checked.value, rasterBodies };
 }
@@ -235,16 +265,17 @@ export async function readWebsiteSalesEnablementProject(session: AppSession, pro
  return withCrmRead(session, async (tx, fresh) => {
   await project(tx, fresh, projectId);
   const workflows = await tx.query<{ projectId: string; companyId: string; locationId: string; id: string }>(`select w.id,w.project_id as "projectId",w.company_id as "companyId",w.location_id as "locationId" from crm_website_sales_workflows w join organizations o on o.workspace_id=w.workspace_id and o.project_id=w.project_id and o.id=w.company_id where w.workspace_id=$1 and w.project_id=$2 and o.data_classification='NOVALURE_INTERNAL' and ($3::uuid is null or w.id>$3::uuid) order by w.id limit $4`, [fresh.workspaceId, projectId, cursor, limit + 1]);
-  const dailyPriorities: WebsiteSalesEnablementProjectRead['dailyPriorities'] = [], alertRows: EnablementAlert[] = []; let hasMoreTasks = false;
+  const dailyPriorities: WebsiteSalesEnablementProjectRead['dailyPriorities'] = [], alertRows: EnablementAlert[] = [], resources: NonNullable<WebsiteSalesEnablementProjectRead['resources']> = []; let hasMoreTasks = false;
   for (const scope of workflows.slice(0, limit)) {
    const s = await state(tx, fresh, scope), taskRows = await tasks(tx, fresh, scope, s); if (taskRows.length > 20) hasMoreTasks = true;
+   resources.push({ identity: identity(fresh, scope), companyName: s.company.name, locationLabel: s.location.address });
    dailyPriorities.push(...prioritizeWebsiteSalesDay({ scope: { workspaceId: fresh.workspaceId, projectId }, resources: [identity(fresh, scope)], tasks: taskRows.slice(0, 20) }, clock()).value ?? []);
    const plan = await latest(tx, fresh, s.row.id, 'CLOSE_PLAN'), evaluation = plan ? assessWebsiteSalesClosePlan(plan.payload, await context(tx, fresh, scope, s), clock()) : null;
    alertRows.push(...await alerts(tx, fresh, scope, s, evaluation));
   }
   return { contractVersion: websiteSalesEnablementContract, source: 'database', workspaceId: fresh.workspaceId, projectId, projection: 'PROJECT', dailyPriorities,
    page: { hasMore: workflows.length > limit, cursor: workflows.length > limit ? workflows[limit - 1]!.id : null }, canWrite: fresh.permissions.includes('crm:write') && fresh.productPermissions.includes('pipeline:write') && !!(await tx.queryOne<{ ok: boolean }>('select crm_project_access($1,$2,true) as ok', [fresh.workspaceId, projectId]))?.ok, canContact: false,
-   alerts: alertRows, closureAnalysis: await closureAnalysis(tx, fresh, projectId), coverage: { tasksPerWorkflow: 20, hasMoreTasks } };
+   alerts: alertRows, resources, closureAnalysis: await closureAnalysis(tx, fresh, projectId), coverage: { tasksPerWorkflow: 20, hasMoreTasks } };
  }, options);
 }
 
