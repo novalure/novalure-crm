@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   commerceContractDraftSchema, commerceDeliveryAcceptanceSchema, commerceFinancialSnapshotSchema, commerceIdentitySchema,
-  commerceInvoiceRequestSchema, commerceOfferSchema, commercePolicySchema, commerceRecordSchema, commerceSubscriptionTermsSchema,
+  commerceInvoiceRequestSchema, commerceOfferSchema, commercePolicySchema, commerceRecordSchema, commerceReferenceSchema, commerceSubscriptionTermsSchema,
   commerceTemplateSchema, commerceTime, websiteSalesCommerceSourceEventSchema,
   type CommerceIdentity, type CommerceRecord, type CommerceReference, type WebsiteSalesCommerceSourceEvent,
 } from './website-sales-commerce-types';
@@ -14,6 +14,9 @@ export type CommerceInvoiceRequest = z.infer<typeof commerceInvoiceRequestSchema
 type SourceEvent = WebsiteSalesCommerceSourceEvent;
 type SignatureEvent = Extract<SourceEvent, { kind: 'SIGNATURE' }>;
 type SubscriptionEvent = Extract<SourceEvent, { kind: 'SUBSCRIPTION' }>;
+type DeliveryEvent = Extract<SourceEvent, { kind: 'PROVIDER_DELIVERY' }>;
+export type CommerceSourcesInput = { identity: CommerceIdentity; workflowId: string; events: SourceEvent[]; historyComplete?: boolean };
+export interface CommerceCurrentSources { events: SourceEvent[]; invalidatedEventIds: string[]; complete: boolean }
 const max = BigInt(Number.MAX_SAFE_INTEGER), zero = BigInt(0), bps = BigInt(10_000);
 function evaluation(value: null, reasons?: string[], reconciliation?: boolean): CommerceEvaluation<never>;
 function evaluation<T>(value: T, reasons?: string[], reconciliation?: boolean): CommerceEvaluation<T>;
@@ -56,6 +59,109 @@ const sum = (values: number[]) => safe(values.reduce((total, value) => total + B
 function attempt<T>(fn: () => CommerceEvaluation<T>): CommerceEvaluation<T> {
   try { return fn(); } catch (error) { return evaluation(null, [error instanceof z.ZodError ? 'COMMERCE_INPUT_INVALID' : error instanceof Error && /^COMMERCE_[A-Z_]+$/.test(error.message) ? error.message : 'COMMERCE_INPUT_INVALID']); }
 }
+const sourceResourceKey = (event: SourceEvent) => commerceDigest({ system: event.source.system, provider: event.source.provider, accountReference: event.source.accountReference, resourceType: event.source.resourceType, resourceId: event.source.resourceId });
+/** First host retrieval/proof metadata remains immutable in storage, but a new read is not a new provider fact. */
+export function commerceSourceFactDigest(event: SourceEvent): string {
+  return commerceDigest({ identity: event.identity, workflowId: event.workflowId, source: event.source, kind: event.kind, payload: event.payload, occurredAt: event.occurredAt, supersedesEventId: event.supersedesEventId, confidence: event.confidence });
+}
+/** Never falls back to an older positive when the newest resource is voided, reversed or unverified. */
+export function resolveCurrentWebsiteSalesCommerceSources(input: CommerceSourcesInput, nowISO: string): CommerceEvaluation<CommerceCurrentSources> {
+  return attempt<CommerceCurrentSources>(() => {
+    commerceIdentitySchema.parse(input.identity); z.uuid().parse(input.workflowId);
+    const now = at(nowISO), rows = z.array(websiteSalesCommerceSourceEventSchema).max(1000).parse(input.events).map(event => validEvent(event, input, now));
+    const reasons: string[] = input.historyComplete === false ? ['COMMERCE_FINANCIAL_HISTORY_LIMITED'] : [];
+    const byId = new Map<string, SourceEvent>(), aliases = new Map<string, string>(), versions = new Map<string, SourceEvent>(), latest = new Map<string, SourceEvent>();
+    for (const event of [...rows].sort((a, b) => a.eventId.localeCompare(b.eventId))) {
+      const prior = byId.get(event.eventId);
+      if (prior && commerceSourceFactDigest(prior) !== commerceSourceFactDigest(event)) throw new Error('COMMERCE_SOURCE_EVENT_ID_CONFLICT');
+      if (prior) continue; byId.set(event.eventId, event);
+      const resource = sourceResourceKey(event), versionKey = `${resource}:${event.source.version}`, previous = versions.get(versionKey);
+      if (previous) {
+        if (commerceSourceFactDigest(previous) !== commerceSourceFactDigest(event)) throw new Error('COMMERCE_SOURCE_VERSION_FORK');
+        aliases.set(event.eventId, previous.eventId); continue;
+      }
+      versions.set(versionKey, event);
+      const newest = latest.get(resource);
+      if (newest && newest.kind !== event.kind) throw new Error('COMMERCE_SOURCE_KIND_CHANGED');
+      if (!newest || event.source.version > newest.source.version) latest.set(resource, event);
+    }
+    const idOf = (id: string) => aliases.get(id) ?? id, eventOf = (id: string) => byId.get(idOf(id));
+    for (const event of versions.values()) if (event.supersedesEventId) {
+      const previous = eventOf(event.supersedesEventId);
+      if (!previous) reasons.push('COMMERCE_SOURCE_PREDECESSOR_MISSING');
+      else if (sourceResourceKey(event) !== sourceResourceKey(previous) || previous.source.version >= event.source.version) throw new Error('COMMERCE_SOURCE_PREDECESSOR_CONFLICT');
+    }
+    const reversals = new Map<string, SourceEvent[]>();
+    for (const event of latest.values()) if (event.kind === 'REVERSAL') {
+      const target = eventOf(event.payload.reversesEventId);
+      if (!target) { reasons.push('COMMERCE_REVERSAL_TARGET_MISSING'); continue; }
+      if (event.payload.reversedEventDigest !== commerceSourceFactDigest(target)) throw new Error('COMMERCE_REVERSAL_DIGEST_MISMATCH');
+      if (event.confidence !== 'PROVIDER_VERIFIED' || target.confidence !== 'PROVIDER_VERIFIED' || event.source.system !== target.source.system || event.source.provider !== target.source.provider || event.source.accountReference !== target.source.accountReference || at(event.occurredAt) < at(target.occurredAt)) throw new Error('COMMERCE_REVERSAL_SOURCE_DENIED');
+      reversals.set(idOf(target.eventId), [...(reversals.get(idOf(target.eventId)) ?? []), event]);
+    }
+    const cache = new Map<string, boolean>();
+    const reversed = (rawId: string, path = new Set<string>()): boolean => {
+      const id = idOf(rawId), known = cache.get(id); if (known !== undefined) return known;
+      if (path.has(id)) throw new Error('COMMERCE_REVERSAL_CYCLE');
+      const next = new Set(path).add(id), active = (reversals.get(id) ?? []).filter(event => !reversed(event.eventId, next));
+      if (active.length > 1) throw new Error('COMMERCE_REVERSAL_DUPLICATE');
+      cache.set(id, active.length === 1); return active.length === 1;
+    };
+    for (const event of versions.values()) reversed(event.eventId);
+    const invalidated = new Set<string>(), invalidResources = new Set<string>();
+    for (const event of versions.values()) if (reversed(event.eventId)) {
+      invalidated.add(event.eventId); invalidResources.add(sourceResourceKey(event));
+      if (latest.get(sourceResourceKey(event))?.eventId !== event.eventId) reasons.push('COMMERCE_REVERSAL_OLDER_VERSION_REQUIRES_RECONCILIATION');
+    }
+    const current = [...latest.values()].filter(event => !invalidResources.has(sourceResourceKey(event)) && !reversed(event.eventId));
+    return evaluation({ events: current, invalidatedEventIds: [...invalidated], complete: reasons.length === 0 }, reasons, true);
+  });
+}
+function effectiveSource<K extends SourceEvent['kind']>(input: CommerceSourcesInput, kind: K, matches: (event: Extract<SourceEvent, { kind: K }>) => boolean, nowISO: string): CommerceEvaluation<Extract<SourceEvent, { kind: K }>> {
+  const resolved = resolveCurrentWebsiteSalesCommerceSources(input, nowISO);
+  if (resolved.status !== 'READY' || !resolved.value) return evaluation(null, resolved.reasons, true);
+  const candidates = resolved.value.events.filter((event): event is Extract<SourceEvent, { kind: K }> => event.kind === kind && event.confidence === 'PROVIDER_VERIFIED').filter(matches);
+  if (!candidates.length) return evaluation(null, [resolved.value.invalidatedEventIds.length ? 'COMMERCE_CURRENT_SOURCE_REVERSED' : 'COMMERCE_CURRENT_AUTHORITATIVE_SOURCE_REQUIRED']);
+  candidates.sort((a, b) => at(b.occurredAt) - at(a.occurredAt));
+  const first = candidates[0]!;
+  const sameTime = candidates.filter(event => at(event.occurredAt) === at(first.occurredAt));
+  if (new Set(sameTime.map(event => commerceDigest(event.payload))).size > 1) return evaluation(null, ['COMMERCE_CURRENT_SOURCE_CONFLICT'], true);
+  return evaluation(first);
+}
+export function resolveWebsiteSalesCommerceSignature(input: CommerceSourcesInput & { contractRef: CommerceReference; documentSha256: string; requiredAssurance: 'PROVIDER_ATTESTED' | 'ADVANCED' | 'QUALIFIED' }, nowISO: string): CommerceEvaluation<SignatureEvent> {
+  return attempt<SignatureEvent>(() => {
+    commerceReferenceSchema.parse(input.contractRef); z.hash('sha256').parse(input.documentSha256);
+    const requiredAssurance = z.enum(['PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']).parse(input.requiredAssurance);
+    const matches = (event: SignatureEvent) => event.source.system === 'SIGNATURE_PROVIDER' && sameRef(event.payload.contractRef, input.contractRef) && event.payload.documentSha256 === input.documentSha256;
+    const selected = effectiveSource(input, 'SIGNATURE', matches, nowISO); if (!selected.value || selected.status !== 'READY') return selected;
+    const current = resolveCurrentWebsiteSalesCommerceSources(input, nowISO).value!.events.filter((event): event is SignatureEvent => event.kind === 'SIGNATURE' && event.confidence === 'PROVIDER_VERIFIED' && matches(event));
+    if (current.some(event => ['VOIDED', 'DECLINED', 'EXPIRED'].includes(event.payload.status))) return evaluation(null, ['COMMERCE_SIGNATURE_NOT_CURRENT']);
+    const rank = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 }, event = selected.value;
+    const auditProof = !!event.payload.providerAuditProofDigests?.length || !!event.payload.auditProofReferences?.some(reference => currentSource(reference, at(nowISO)));
+    if (event.payload.status !== 'SIGNED' || !event.payload.signedAt || at(event.payload.signedAt) > at(nowISO) || rank[event.payload.assurance] < rank[requiredAssurance] || !event.payload.providerSignedDocumentDigests?.length || !auditProof) return evaluation(null, ['COMMERCE_VERIFIED_EXACT_SIGNATURE_REQUIRED']);
+    return selected;
+  });
+}
+export function resolveWebsiteSalesCommerceDelivery(input: CommerceSourcesInput & { documentKind: DeliveryEvent['payload']['documentKind']; documentRef: CommerceReference; documentSha256: string; recipientDigest: string }, nowISO: string): CommerceEvaluation<DeliveryEvent> {
+  return attempt<DeliveryEvent>(() => {
+    commerceReferenceSchema.parse(input.documentRef); z.hash('sha256').parse(input.documentSha256); z.hash('sha256').parse(input.recipientDigest);
+    z.enum(['OFFER', 'CONTRACT', 'INVOICE_REQUEST']).parse(input.documentKind);
+    const matches = (event: DeliveryEvent) => event.source.system === 'DELIVERY_PROVIDER' && event.payload.documentKind === input.documentKind && sameRef(event.payload.documentRef, input.documentRef) && event.payload.documentSha256 === input.documentSha256 && event.payload.recipientDigest === input.recipientDigest;
+    const selected = effectiveSource(input, 'PROVIDER_DELIVERY', matches, nowISO); if (!selected.value || selected.status !== 'READY') return selected;
+    const current = resolveCurrentWebsiteSalesCommerceSources(input, nowISO).value!.events.filter((event): event is DeliveryEvent => event.kind === 'PROVIDER_DELIVERY' && event.confidence === 'PROVIDER_VERIFIED' && matches(event));
+    if (current.some(event => ['BOUNCED', 'COMPLAINED', 'FAILED'].includes(event.payload.status)) || selected.value.payload.status !== 'DELIVERED') return evaluation(null, ['COMMERCE_VERIFIED_CURRENT_DELIVERY_REQUIRED']);
+    return selected;
+  });
+}
+export function resolveWebsiteSalesCommerceSubscription(input: CommerceSourcesInput & { terms: z.infer<typeof commerceSubscriptionTermsSchema> }, nowISO: string): CommerceEvaluation<SubscriptionEvent> {
+  return attempt<SubscriptionEvent>(() => {
+    const terms = commerceSubscriptionTermsSchema.parse(input.terms), matches = (event: SubscriptionEvent) => ['SERVICE_AUTHORITY', 'ACCOUNTING'].includes(event.source.system) && sameRef(event.payload.contractRef, terms.contractRef) && event.payload.planKey === terms.planKey && event.payload.termsDigest === terms.termsDigest && event.payload.originalServiceStartAt === terms.originalServiceStartAt && event.payload.currency === terms.currency;
+    const selected = effectiveSource(input, 'SUBSCRIPTION', matches, nowISO); if (!selected.value || selected.status !== 'READY') return selected;
+    const current = resolveCurrentWebsiteSalesCommerceSources(input, nowISO).value!.events.filter((event): event is SubscriptionEvent => event.kind === 'SUBSCRIPTION' && event.confidence === 'PROVIDER_VERIFIED' && matches(event));
+    if (current.some(event => ['CANCEL_PENDING', 'CANCELLED', 'EXPIRED'].includes(event.payload.status)) || !['ACTIVE', 'PAUSED'].includes(selected.value.payload.status)) return evaluation(null, ['COMMERCE_CURRENT_SUBSCRIPTION_TERMS_REQUIRED']);
+    return selected;
+  });
+}
 /** Exactly A0/C03's net threshold; nonstandard terms do not change the step count. */
 export function requiredWebsiteSalesContractApprovalSteps(raw: unknown): 1 | 2 {
   const financial = commerceFinancialSnapshotSchema.parse(raw);
@@ -95,11 +201,16 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
     return evaluation(draft);
   });
 }
-export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRecord<CommerceContractDraft>; policy: CommerceRecord<z.infer<typeof commercePolicySchema>>; signature: SignatureEvent;
+export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRecord<CommerceContractDraft>; policy: CommerceRecord<z.infer<typeof commercePolicySchema>>; signature: SignatureEvent; sourceEvents: SourceEvent[]; historyComplete?: boolean;
   deliveryAcceptance: CommerceRecord<z.infer<typeof commerceDeliveryAcceptanceSchema>> | null; stage: CommerceInvoiceRequest['stage']; installmentIds: string[] }, ctx: CommerceContext, nowISO: string): CommerceEvaluation<CommerceInvoiceRequest> {
   return attempt<CommerceInvoiceRequest>(() => {
-    const now = at(nowISO), contract = record(input.contract, commerceContractDraftSchema, ctx, now), policy = record(input.policy, commercePolicySchema, ctx, now), signature = validEvent(input.signature, ctx, now);
+    const now = at(nowISO), contract = record(input.contract, commerceContractDraftSchema, ctx, now), policy = record(input.policy, commercePolicySchema, ctx, now);
     const c = contract.payload, p = policy.payload, ref = commerceRecordReference(contract);
+    const signatureResult = resolveWebsiteSalesCommerceSignature({ identity: ctx.identity, workflowId: ctx.workflowId, events: input.sourceEvents,
+      ...(input.historyComplete === undefined ? {} : { historyComplete: input.historyComplete }), contractRef: ref, documentSha256: c.documentSha256, requiredAssurance: p.signatureAssurance }, nowISO);
+    if (signatureResult.status !== 'READY' || !signatureResult.value) return evaluation(null, signatureResult.reasons, signatureResult.status === 'NEEDS_RECONCILIATION');
+    const signature = signatureResult.value;
+    if (commerceSourceFactDigest(validEvent(input.signature, ctx, now)) !== commerceSourceFactDigest(signature)) return evaluation(null, ['COMMERCE_SIGNATURE_NOT_CURRENT']);
     if (!sameRef(c.policyRef, commerceRecordReference(policy)) || !policyCurrent(p, now) || !taxMatches(p) || commerceDigest(c.financial) !== commerceDigest(p.financialSnapshot) || commerceDigest(c.paymentTerms) !== commerceDigest(p.paymentTerms)) return evaluation(null, ['COMMERCE_CONTRACT_POLICY_BINDING_DENIED']);
     const rank = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 };
     if (signature.kind !== 'SIGNATURE' || signature.confidence !== 'PROVIDER_VERIFIED' || signature.source.system !== 'SIGNATURE_PROVIDER' || signature.payload.status !== 'SIGNED' || !sameRef(signature.payload.contractRef, ref) || signature.payload.documentSha256 !== c.documentSha256 || !signature.payload.signedAt || at(signature.payload.signedAt) > now || at(signature.payload.signedAt) < at(contract.createdAt) || at(signature.occurredAt) < at(signature.payload.signedAt) || rank[signature.payload.assurance] < rank[p.signatureAssurance]) return evaluation(null, ['COMMERCE_VERIFIED_EXACT_SIGNATURE_REQUIRED']);
@@ -174,7 +285,7 @@ export function reconcileWebsiteSalesCommerceSources(input: { identity: Commerce
       if (event.confidence !== 'PROVIDER_VERIFIED' || !['ACCOUNTING', 'PAYMENT_PROVIDER'].includes(event.source.system)) { reasons.push('COMMERCE_REVERSAL_AUTHORITY_REQUIRED'); continue; }
       const target = resolve(event.payload.reversesEventId);
       if (!target) { reasons.push('COMMERCE_REVERSAL_TARGET_MISSING'); continue; }
-      if (commerceDigest(target) !== event.payload.reversedEventDigest) throw new Error('COMMERCE_REVERSAL_DIGEST_MISMATCH');
+      if (commerceSourceFactDigest(target) !== event.payload.reversedEventDigest) throw new Error('COMMERCE_REVERSAL_DIGEST_MISMATCH');
       if (target.confidence !== 'PROVIDER_VERIFIED' || target.source.system !== event.source.system || target.source.provider !== event.source.provider || target.source.accountReference !== event.source.accountReference || at(event.occurredAt) < at(target.occurredAt)) throw new Error('COMMERCE_REVERSAL_SOURCE_DENIED');
       if (!latest.some(row => row.eventId === target.eventId)) reasons.push('COMMERCE_REVERSAL_OLDER_VERSION_REQUIRES_RECONCILIATION');
       const key = resolveId(target.eventId); reversalByTarget.set(key, [...(reversalByTarget.get(key) ?? []), event]);
@@ -272,9 +383,13 @@ export function websiteSalesServiceMonth(startAt: string, atISO: string): number
   if (current < anniversary) months--; return months + 1;
 }
 export interface CommerceRenewalProposal { subscriptionRef: CommerceReference; originalServiceStartAt: string; reviewAt: string; serviceMonth: number; planKey: 'MANAGED' | 'PERFORMANCE' | 'CONVERSION'; currency: 'EUR'; amountMinor: number; termsDigest: string; authoritativeSourceEventId: string; automaticRenewal: false; createsInvoice: false }
-export function proposeWebsiteSalesRenewal(input: { subscription: CommerceRecord<z.infer<typeof commerceSubscriptionTermsSchema>>; source: SubscriptionEvent; reviewAt: string }, ctx: CommerceContext, nowISO: string): CommerceEvaluation<CommerceRenewalProposal> {
+export function proposeWebsiteSalesRenewal(input: { subscription: CommerceRecord<z.infer<typeof commerceSubscriptionTermsSchema>>; source: SubscriptionEvent; sourceEvents: SourceEvent[]; historyComplete?: boolean; reviewAt: string }, ctx: CommerceContext, nowISO: string): CommerceEvaluation<CommerceRenewalProposal> {
   return attempt<CommerceRenewalProposal>(() => {
     const now = at(nowISO), subscription = record(input.subscription, commerceSubscriptionTermsSchema, ctx, now), source = validEvent(input.source, ctx, now), authored = subscription.payload;
+    const current = resolveWebsiteSalesCommerceSubscription({ identity: ctx.identity, workflowId: ctx.workflowId, events: input.sourceEvents, terms: authored,
+      ...(input.historyComplete === undefined ? {} : { historyComplete: input.historyComplete }) }, nowISO);
+    if (current.status !== 'READY' || !current.value) return evaluation(null, current.reasons, current.status === 'NEEDS_RECONCILIATION');
+    if (commerceSourceFactDigest(source) !== commerceSourceFactDigest(current.value)) return evaluation(null, ['COMMERCE_SUBSCRIPTION_NOT_CURRENT']);
     if (source.kind !== 'SUBSCRIPTION' || source.confidence !== 'PROVIDER_VERIFIED' || !['SERVICE_AUTHORITY', 'ACCOUNTING'].includes(source.source.system)) return evaluation(null, ['COMMERCE_AUTHORITATIVE_SUBSCRIPTION_SOURCE_REQUIRED']);
     const s = source.payload;
     if (!sameRef(s.contractRef, authored.contractRef) || s.termsDigest !== authored.termsDigest || s.planKey !== authored.planKey || s.originalServiceStartAt !== authored.originalServiceStartAt || s.currency !== 'EUR') return evaluation(null, ['COMMERCE_SUBSCRIPTION_TERMS_BINDING_DENIED']);
