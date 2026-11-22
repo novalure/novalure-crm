@@ -17,7 +17,7 @@ function newestSources<T extends Source>(rows: T[]): T[] {
 }
 
 export function commerceContractStatus(data: WebsiteSalesCommerceRead, contract: Contract, now: number): string {
-  const sources = data.sourceEvents.filter((event): event is Extract<Source, { kind: 'SIGNATURE' }> => event.kind === 'SIGNATURE' && event.confidence === 'PROVIDER_VERIFIED');
+  const sources = data.sourceEvents.filter((event): event is Extract<Source, { kind: 'SIGNATURE' }> => event.kind === 'SIGNATURE' && event.source.system === 'SIGNATURE_PROVIDER' && event.confidence === 'PROVIDER_VERIFIED');
   const latest = newestSources(sources).filter(event => refKey(event.payload.contractRef) === refKey(contract) && event.payload.documentSha256 === contract.payload.documentSha256);
   if (latest.length > 1 && new Set(latest.map(event => event.payload.status)).size > 1) return 'UNKNOWN';
   const signature = latest.toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0];

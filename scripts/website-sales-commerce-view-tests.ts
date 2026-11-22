@@ -29,6 +29,7 @@ test('immutable draft status is presented as signed only with matching provider 
   const immutableAudit = f.signature('SIGNED'); if (immutableAudit.kind !== 'SIGNATURE') throw Error(); delete immutableAudit.payload.auditProofReferences; immutableAudit.payload.providerAuditProofDigests = [hash]; f.data.sourceEvents = [immutableAudit]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNED');
   const wrongDocument = f.signature('SIGNED'); assert.equal(wrongDocument.kind, 'SIGNATURE'); if (wrongDocument.kind !== 'SIGNATURE') throw Error();
   wrongDocument.payload.documentSha256 = hash; f.data.sourceEvents = [wrongDocument]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'DRAFT');
+  const wrongAuthority = f.signature('SIGNED'); wrongAuthority.source.system = 'ACCOUNTING'; f.data.sourceEvents = [wrongAuthority]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'DRAFT');
   const manual = f.signature('SIGNED'); manual.confidence = 'OPERATOR_RECORDED'; f.data.sourceEvents = [manual]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'DRAFT');
   f.data.sourceEvents = [f.signature('SIGNED')]; f.policy.payload.signatureAssurance = 'ADVANCED'; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNATURE_PENDING');
 });
