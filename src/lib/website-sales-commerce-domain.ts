@@ -222,7 +222,8 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
         const anchor = row.anchor === 'CONTRACT_SIGNED' ? de ? 'Unterzeichnung' : 'signing' : de ? 'Kundenabnahme' : 'customer acceptance';
         const due = de ? row.dueOffsetDays === 0 ? `fällig am Tag der ${anchor}` : `fällig ${row.dueOffsetDays} ${row.dueOffsetDays === 1 ? 'Tag' : 'Tage'} nach ${anchor}`
           : row.dueOffsetDays === 0 ? `due on the day of ${anchor}` : `due ${row.dueOffsetDays} ${row.dueOffsetDays === 1 ? 'day' : 'days'} after ${anchor}`;
-        return `${row.label} (${paymentKind[row.kind]}): ${money(row.percentageBps)} %; ${due}`;
+        const amount = row.fixedNetMinor === undefined ? `${money(row.percentageBps!)} %` : `${money(row.fixedNetMinor)} ${o.financial.currency} ${de ? 'netto' : 'net'}`;
+        return `${row.label} (${paymentKind[row.kind]}): ${amount}; ${due}`;
       }),
       ...(p.contractTerm ? [`${de ? 'Beginn der Laufzeit' : 'Contract start'}: ${date(p.contractTerm.startAt)}`, `${de ? 'Ende der Laufzeit' : 'Contract end'}: ${date(p.contractTerm.endAt)}`,
         `${de ? 'Nettobetrag für die gesamte Laufzeit' : 'Full-term net amount'}: ${money(p.contractTerm.fullNetMinor)} ${o.financial.currency}`] : [])].join('\n');
@@ -246,6 +247,17 @@ export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRec
       if (previousCustomer && previousCustomer !== currentCustomer) return evaluation(null, ['COMMERCE_ACCOUNTING_CUSTOMER_MAPPING_CHANGED']);
       samePolicy = sameRef(c.policyRef, commerceRecordReference(signed)) && policy.id === signed.id && policy.version > signed.version && commerceDigest(signedTerms) === commerceDigest(currentTerms);
     }
+    const subscriptionHistory = input.sourceEvents.filter((event): event is SubscriptionEvent => event.kind === 'SUBSCRIPTION' && event.confidence === 'PROVIDER_VERIFIED' && sameRef(event.payload.contractRef, ref));
+    if (subscriptionHistory.length) {
+      const resolved = resolveCurrentWebsiteSalesCommerceSources({ identity: ctx.identity, workflowId: ctx.workflowId, events: input.sourceEvents,
+        ...(input.historyComplete === undefined ? {} : { historyComplete: input.historyComplete }) }, nowISO);
+      const current = resolved.value?.events.filter((event): event is SubscriptionEvent => event.kind === 'SUBSCRIPTION' && sameRef(event.payload.contractRef, ref)) ?? [];
+      const resourceKeys = new Set(current.map(sourceResourceKey));
+      if (resolved.status !== 'READY' || !current.length || subscriptionHistory.some(event => !resourceKeys.has(sourceResourceKey(event))) || current.some(event =>
+        event.confidence !== 'PROVIDER_VERIFIED' || !['SERVICE_AUTHORITY', 'ACCOUNTING'].includes(event.source.system) || event.payload.status !== 'ACTIVE' || !currentSource(event.payload.sourceReference, now))) {
+        return evaluation(null, ['COMMERCE_SUBSCRIPTION_BILLING_REVIEW_REQUIRED']);
+      }
+    }
     const signatureResult = resolveWebsiteSalesCommerceSignature({ identity: ctx.identity, workflowId: ctx.workflowId, events: input.sourceEvents,
       ...(input.historyComplete === undefined ? {} : { historyComplete: input.historyComplete }), contractRef: ref, documentSha256: c.documentSha256, requiredAssurance: p.signatureAssurance }, nowISO);
     if (signatureResult.status !== 'READY' || !signatureResult.value) return evaluation(null, signatureResult.reasons, signatureResult.status === 'NEEDS_RECONCILIATION');
@@ -264,8 +276,13 @@ export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRec
     let assignedNet = 0, assignedTax = 0;
     const amounts = schedule.map((row, index) => {
       const last = index === schedule.length - 1;
-      const netMinor = last ? c.financial.netMinor - assignedNet : safe(BigInt(c.financial.netMinor) * BigInt(row.percentageBps) / bps);
-      const taxMinor = last ? c.financial.taxMinor - assignedTax : safe(BigInt(c.financial.taxMinor) * BigInt(row.percentageBps) / bps);
+      const fixed = row.fixedNetMinor !== undefined;
+      const netMinor = fixed ? row.fixedNetMinor! : last ? c.financial.netMinor - assignedNet : safe(BigInt(c.financial.netMinor) * BigInt(row.percentageBps!) / bps);
+      // Fixed NET installments retain every sourced cent. Cumulative HALF_UP tax
+      // apportions rounding deterministically while preserving the approved total.
+      const taxMinor = last ? c.financial.taxMinor - assignedTax : fixed
+        ? safe((BigInt(assignedNet + netMinor) * BigInt(p.accountingProfile.taxRateBps) + BigInt(5000)) / bps) - assignedTax
+        : safe(BigInt(c.financial.taxMinor) * BigInt(row.percentageBps!) / bps);
       assignedNet += netMinor; assignedTax += taxMinor; return { row, netMinor, taxMinor, amountMinor: sum([netMinor, taxMinor]) };
     }).filter(item => selected.includes(item.row.installmentId));
     const installments = amounts.map(({ row, amountMinor }) => {

@@ -22,8 +22,15 @@ export const commerceTemplateSchema = z.strictObject({ title: commerceText.max(2
   providerMapping: z.strictObject({ provider: z.literal('DOCUSEAL'), templateId: z.number().int().positive().safe(), templateDigest: commerceHash,
     fieldMap: z.record(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/), commerceText.max(100)) }).optional() });
 export const commercePaymentTermsSchema = z.strictObject({ installments: z.array(z.strictObject({ installmentId: commerceUuid,
-  label: commerceText.max(120), percentageBps: z.number().int().positive().max(10_000), dueOffsetDays: z.number().int().min(0).max(3650),
-  anchor: z.enum(['CONTRACT_SIGNED', 'DELIVERY_ACCEPTED']), kind: z.enum(['DEPOSIT', 'MILESTONE', 'BALANCE', 'RECURRING']) })).min(1).max(36) }).refine(value => value.installments.reduce((sum, row) => sum + row.percentageBps, 0) === 10_000 && new Set(value.installments.map(row => row.installmentId)).size === value.installments.length && value.installments.every(row => row.kind === 'DEPOSIT' ? row.anchor === 'CONTRACT_SIGNED' : row.anchor === 'DELIVERY_ACCEPTED'), 'COMMERCE_PAYMENT_TERMS_INVALID');
+  label: commerceText.max(120), percentageBps: z.number().int().positive().max(10_000).optional(), fixedNetMinor: commerceMinor.refine(value => value > 0).optional(), dueOffsetDays: z.number().int().min(0).max(3650),
+  anchor: z.enum(['CONTRACT_SIGNED', 'DELIVERY_ACCEPTED']), kind: z.enum(['DEPOSIT', 'MILESTONE', 'BALANCE', 'RECURRING']) })).min(1).max(36) }).refine(value => {
+    const rows = value.installments, fixed = rows.every(row => row.fixedNetMinor !== undefined && row.percentageBps === undefined);
+    const percentage = rows.every(row => row.percentageBps !== undefined && row.fixedNetMinor === undefined) && rows.reduce((sum, row) => sum + (row.percentageBps ?? 0), 0) === 10_000;
+    return (fixed || percentage) && new Set(rows.map(row => row.installmentId)).size === rows.length && rows.every(row => row.kind === 'DEPOSIT' ? row.anchor === 'CONTRACT_SIGNED' : row.anchor === 'DELIVERY_ACCEPTED');
+  }, 'COMMERCE_PAYMENT_TERMS_INVALID');
+function fixedScheduleMatches(terms: z.infer<typeof commercePaymentTermsSchema>, netMinor: number) {
+  return terms.installments[0]?.fixedNetMinor === undefined || terms.installments.reduce((total, row) => total + BigInt(row.fixedNetMinor ?? 0), BigInt(0)) === BigInt(netMinor);
+}
 export const commerceAccountingProfileSchema = z.strictObject({ issuerLegalName: commerceText.max(200), issuerAddress: commerceText.max(1000), taxIdentifier: commerceText.max(100).nullable(),
   currency: z.literal('EUR'), taxRateBps: z.number().int().min(0).max(100_000), rounding: z.literal('HALF_UP'), sourceReference: commerceSourceReferenceSchema });
 /** A finite sourced obligation; catalog/CARE linkage is checked by the canonical CRM resolver. */
@@ -33,7 +40,8 @@ export const commercePolicySchema = z.strictObject({ title: commerceText.max(200
   standardTermsDigest: commerceHash, signatureAssurance: z.enum(['PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), maxInstallments: z.number().int().min(1).max(36),
   accountingEntityReference: commerceText.max(200), accountingCustomerReference: commerceExternalId.optional(), accountingSourceReference: commerceSourceReferenceSchema, accountingProfile: commerceAccountingProfileSchema,
   offerRef: commerceReferenceSchema, financialSnapshot: commerceFinancialSnapshotSchema, paymentTerms: commercePaymentTermsSchema, contractTerm: commerceContractTermSchema.optional(), validUntil: commerceTime })
-  .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financialSnapshot.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH');
+  .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financialSnapshot.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH')
+  .refine(value => fixedScheduleMatches(value.paymentTerms, value.financialSnapshot.netMinor), 'COMMERCE_FIXED_SCHEDULE_TOTAL_MISMATCH');
 export const commerceOfferSchema = z.strictObject({ offerRef: commerceReferenceSchema, dealId: commerceUuid, status: z.enum(['DRAFT', 'APPROVED', 'QUEUED', 'SENT', 'ACCEPTED', 'REJECTED', 'CANCELLED']),
   recipientEmail: z.email(), recipientDigest: commerceHash, scopeDigest: commerceHash, financial: commerceFinancialSnapshotSchema, approvalReference: commerceUuid.nullable() });
 /** Canonical NET-only choice is available before a sourced tax/payment policy exists. */
@@ -44,7 +52,8 @@ export const commerceContractDraftSchema = z.strictObject({ offerRef: commerceRe
   title: commerceText.max(200), body: legalText, documentSha256: commerceHash, recipientEmail: z.email(), recipientDigest: commerceHash,
   financial: commerceFinancialSnapshotSchema, standardTerms: z.boolean(), status: z.enum(['DRAFT', 'APPROVAL_PENDING', 'APPROVED', 'QUEUED', 'DELIVERED', 'SIGNATURE_PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED']),
   paymentTerms: commercePaymentTermsSchema, contractTerm: commerceContractTermSchema.optional(), signatureSourceEventId: commerceUuid.nullable(), deliverySourceEventId: commerceUuid.nullable() })
-  .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financial.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH');
+  .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financial.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH')
+  .refine(value => fixedScheduleMatches(value.paymentTerms, value.financial.netMinor), 'COMMERCE_FIXED_SCHEDULE_TOTAL_MISMATCH');
 export const commerceApprovalSchema = z.strictObject({ approvalId: commerceUuid, documentRef: commerceReferenceSchema, documentSha256: commerceHash,
   recipientDigest: commerceHash, financialDigest: commerceHash, requiredSteps: z.union([z.literal(1), z.literal(2)]), completedSteps: z.number().int().min(0).max(2),
   status: z.enum(['PENDING', 'APPROVED', 'REVOKED', 'EXPIRED', 'DENIED']), expiresAt: commerceTime,
