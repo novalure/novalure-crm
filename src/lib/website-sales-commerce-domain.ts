@@ -189,7 +189,7 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
     if (!['APPROVED', 'SENT', 'ACCEPTED'].includes(o.status) || !o.approvalReference) return evaluation(null, ['COMMERCE_APPROVED_OFFER_REQUIRED']);
     if (!currentSource(t.legalReviewReference, now) || at(t.validUntil) <= now || commerceContentSha256(t.content) !== t.contentSha256) return evaluation(null, ['COMMERCE_CURRENT_REVIEWED_LEGAL_TEMPLATE_REQUIRED']);
     if (p.paymentTerms.installments.length > p.maxInstallments || new Set(t.allowedVariableKeys).size !== t.allowedVariableKeys.length) return evaluation(null, ['COMMERCE_TEMPLATE_OR_SCHEDULE_INVALID']);
-    const money = (value: number) => `${Math.floor(value / 100)}.${String(value % 100).padStart(2, '0')}`;
+    const de = t.language === 'de', money = (value: number) => `${Math.floor(value / 100)}${de ? ',' : '.'}${String(value % 100).padStart(2, '0')}`;
     const protectedValues: Record<string, string> = { NET_EUR: money(o.financial.netMinor), TAX_EUR: money(o.financial.taxMinor), GROSS_EUR: money(o.financial.grossMinor), CUSTOMER_EMAIL: o.recipientEmail,
       ISSUER_LEGAL_NAME: p.accountingProfile.issuerLegalName, ISSUER_ADDRESS: p.accountingProfile.issuerAddress, TAX_IDENTIFIER: p.accountingProfile.taxIdentifier ?? '',
       ...(p.contractTerm ? { CONTRACT_START_AT: p.contractTerm.startAt, CONTRACT_END_AT: p.contractTerm.endAt, CONTRACT_FULL_NET_EUR: money(p.contractTerm.fullNetMinor) } : {}) };
@@ -203,13 +203,28 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
       return variables[key] ?? '';
     });
     if (missing || /\{\{|\}\}|\u0000/.test(renderedLegal)) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_UNRESOLVED']);
-    const summary = [t.language === 'de' ? 'Kommerzielle Angaben — kanonische Quelldaten' : 'Commercial summary — canonical sourced facts',
-      `Issuer legal name: ${p.accountingProfile.issuerLegalName}`, `Issuer address: ${p.accountingProfile.issuerAddress}`,
-      ...(p.accountingProfile.taxIdentifier ? [`Issuer tax identifier: ${p.accountingProfile.taxIdentifier}`] : []), `Recipient email: ${o.recipientEmail}`,
-      `Currency: ${o.financial.currency}`, `Net: ${money(o.financial.netMinor)}`, `Tax: ${money(o.financial.taxMinor)}`, `Gross: ${money(o.financial.grossMinor)}`,
-      `Canonical offer: ${o.offerRef.id} / revision ${o.offerRef.version} / digest ${o.offerRef.digest}`, `Scope digest: ${o.scopeDigest}`, `Scope:\n${supplied.SCOPE}`,
-      'Payment schedule:', ...p.paymentTerms.installments.map(row => `${row.installmentId} | ${row.label} | ${row.percentageBps} basis points | ${row.kind} | anchor ${row.anchor} | due offset ${row.dueOffsetDays} days`),
-      ...(p.contractTerm ? [`Contract start: ${p.contractTerm.startAt}`, `Contract end: ${p.contractTerm.endAt}`, `Full-term net: ${money(p.contractTerm.fullNetMinor)} ${o.financial.currency}`] : [])].join('\n');
+    const date = (value: string) => {
+      const d = new Date(at(value)), pad = (n: number) => String(n).padStart(2, '0');
+      const day = de ? `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}` : `${pad(d.getUTCDate())} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+      const seconds = d.getUTCSeconds() || d.getUTCMilliseconds() ? `:${pad(d.getUTCSeconds())}${d.getUTCMilliseconds() ? `.${String(d.getUTCMilliseconds()).padStart(3, '0')}` : ''}` : '';
+      return `${day}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}${seconds} UTC`;
+    };
+    const paymentKind = de ? { DEPOSIT: 'Anzahlung', MILESTONE: 'Teilzahlung', BALANCE: 'Restzahlung', RECURRING: 'Wiederkehrende Zahlung' }
+      : { DEPOSIT: 'Deposit', MILESTONE: 'Milestone payment', BALANCE: 'Balance', RECURRING: 'Recurring payment' };
+    const summary = [de ? 'Kommerzielle Übersicht' : 'Commercial summary',
+      `${de ? 'Aussteller' : 'Issuer'}: ${p.accountingProfile.issuerLegalName}`, `${de ? 'Anschrift' : 'Address'}: ${p.accountingProfile.issuerAddress}`,
+      ...(p.accountingProfile.taxIdentifier ? [`${de ? 'Steuerkennung' : 'Tax identifier'}: ${p.accountingProfile.taxIdentifier}`] : []), `${de ? 'Empfänger' : 'Recipient'}: ${o.recipientEmail}`,
+      `${de ? 'Währung' : 'Currency'}: ${o.financial.currency}`, `${de ? 'Nettobetrag' : 'Net amount'}: ${money(o.financial.netMinor)} ${o.financial.currency}`,
+      `${de ? 'Steuerbetrag' : 'Tax amount'}: ${money(o.financial.taxMinor)} ${o.financial.currency}`, `${de ? 'Gesamtbetrag' : 'Total amount'}: ${money(o.financial.grossMinor)} ${o.financial.currency}`,
+      `${de ? 'Angebot Version' : 'Offer version'} ${o.offerRef.version}`, `${de ? 'Leistungsumfang' : 'Scope'}:\n${supplied.SCOPE}`,
+      de ? 'Zahlungsplan:' : 'Payment schedule:', ...p.paymentTerms.installments.map(row => {
+        const anchor = row.anchor === 'CONTRACT_SIGNED' ? de ? 'Unterzeichnung' : 'signing' : de ? 'Kundenabnahme' : 'customer acceptance';
+        const due = de ? row.dueOffsetDays === 0 ? `fällig am Tag der ${anchor}` : `fällig ${row.dueOffsetDays} ${row.dueOffsetDays === 1 ? 'Tag' : 'Tage'} nach ${anchor}`
+          : row.dueOffsetDays === 0 ? `due on the day of ${anchor}` : `due ${row.dueOffsetDays} ${row.dueOffsetDays === 1 ? 'day' : 'days'} after ${anchor}`;
+        return `${row.label} (${paymentKind[row.kind]}): ${money(row.percentageBps)} %; ${due}`;
+      }),
+      ...(p.contractTerm ? [`${de ? 'Beginn der Laufzeit' : 'Contract start'}: ${date(p.contractTerm.startAt)}`, `${de ? 'Ende der Laufzeit' : 'Contract end'}: ${date(p.contractTerm.endAt)}`,
+        `${de ? 'Nettobetrag für die gesamte Laufzeit' : 'Full-term net amount'}: ${money(p.contractTerm.fullNetMinor)} ${o.financial.currency}`] : [])].join('\n');
     const body = `${renderedLegal}\n\n---\n${summary}`;
     const draft = commerceContractDraftSchema.parse({ offerRef: o.offerRef, templateRef: commerceRecordReference(template), policyRef: commerceRecordReference(policy), title: t.title, body,
       documentSha256: commerceContentSha256(body), recipientEmail: o.recipientEmail, recipientDigest: o.recipientDigest, financial: o.financial,
