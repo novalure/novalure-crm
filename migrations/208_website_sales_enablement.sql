@@ -23,6 +23,7 @@ create table crm_website_sales_enablement_records (
  aggregate_version integer not null check(aggregate_version>0),entity_id uuid not null,version integer not null check(version>0),kind text not null,
  workflow_version integer not null check(workflow_version>0),evidence_digest text not null check(evidence_digest ~ '^[a-f0-9]{64}$'),
  payload jsonb not null check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=60000),
+ canonical_bindings jsonb not null default '{}' check(jsonb_typeof(canonical_bindings)='object' and octet_length(canonical_bindings::text)<=8000),
  record_digest text not null check(record_digest ~ '^[a-f0-9]{64}$'),previous_digest text check(previous_digest ~ '^[a-f0-9]{64}$'),
  source_confidence text not null check(source_confidence in('OPERATOR_RECORDED','SERVER_DERIVED')),
  created_by uuid not null,command_id uuid not null,created_at timestamptz not null default clock_timestamp(),valid_until timestamptz not null,

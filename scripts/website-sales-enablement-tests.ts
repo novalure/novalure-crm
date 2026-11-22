@@ -158,7 +158,20 @@ test('Sales enablement uses actual PostgreSQL, existing CRM records and the prot
    await db.admin.query(`insert into crm_website_sales_handoffs(id,workspace_id,project_id,company_id,location_id,workflow_id,customer_acceptance_id,task_id,snapshot,snapshot_digest,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,'{}',$9,$10)`, [randomUUID(), ws, project, company, location, wf.id, acceptance, deliveryTask, 'c'.repeat(64), actor]);
    const basis = await run(command('record_care_basis', { need: 'Operator-recorded ongoing maintenance need', sourceReferences: sources, canonicalDeliveryTaskId: deliveryTask, planKeys: ['MANAGED'], validUntil: future }));
    const candidate = await run(command('propose_care', { planKey: 'MANAGED', basisId: basis.data.recordId, basisDigest: basis.data.recordDigest }));
-   const preparedCommand = command('prepare_care_offer', { careProposalId: candidate.data.recordId, careProposalDigest: candidate.data.recordDigest, expectedDeliveryTaskVersion: 1 }), prepared = await run(preparedCommand);
+   const preparedCommand = command('prepare_care_offer', { careProposalId: candidate.data.recordId, careProposalDigest: candidate.data.recordDigest, expectedDeliveryTaskVersion: 1 });
+   const consentBefore = (await db.admin.query('select consent_label from contacts where id=$1', [contact])).rows[0].consent_label, countBefore = (await db.admin.query('select count(*)::int n from crm_offers')).rows[0].n;
+   const blocker = await db.admin.connect();
+   try {
+    await blocker.query('begin'); await blocker.query('select id from contacts where id=$1 for update', [contact]);
+    const waiting = execute(session, preparedCommand, opts).then(value => ({ value, error: null }), error => ({ value: null, error }));
+    let reached = false; for (let i = 0; i < 200 && !reached; i++) { reached = (await db.admin.query("select exists(select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'select id,name,email from contacts%for update') as ok")).rows[0].ok; if (!reached) await new Promise(resolve => setTimeout(resolve, 10)); }
+    assert.equal(reached, true, 'Actual care command must wait for the contact lock');
+    await blocker.query("update contacts set consent_label='Abgemeldet',version=version+1 where id=$1", [contact]); await blocker.query('commit');
+    const stopped = await waiting; assert.equal(stopped.error?.code, 'OPT_OUT'); assert.equal(stopped.value, null); assert.equal((await db.admin.query('select count(*)::int n from crm_offers')).rows[0].n, countBefore);
+    assert.equal((await reconcile(session, preparedCommand, opts)).status, 'NOT_FOUND');
+   } finally { await blocker.query('rollback'); blocker.release(); }
+   await db.admin.query('update contacts set consent_label=$2,version=version+1 where id=$1', [contact, consentBefore]);
+   const prepared = await run(preparedCommand);
    assert.notEqual(prepared.data.dealId, wf.dealId); assert.notEqual(prepared.data.offerId, wf.offerDraftId);
    assert.deepEqual((await db.admin.query('select id,version,revision,status,approval_id from crm_offers where id=$1', [wf.offerDraftId])).rows[0], beforeOffer);
    const offer = (await db.admin.query('select o.status,o.approval_id,r.total_net_cents,r.content from crm_offers o join crm_offer_revisions r on r.workspace_id=o.workspace_id and r.offer_id=o.id and r.revision=o.revision where o.id=$1', [prepared.data.offerId])).rows[0];
@@ -176,6 +189,29 @@ test('Sales enablement uses actual PostgreSQL, existing CRM records and the prot
    const renewalOffer = await run(command('prepare_care_offer', { careProposalId: renewed.data.recordId, careProposalDigest: renewed.data.recordDigest, expectedDeliveryTaskVersion: 1 }));
    assert.equal(Number((await db.admin.query('select r.total_net_cents from crm_offers o join crm_offer_revisions r on r.workspace_id=o.workspace_id and r.offer_id=o.id and r.revision=o.revision where o.id=$1', [renewalOffer.data.offerId])).rows[0].total_net_cents), 9900);
    assert.equal((await read(session, scope, opts)).acceptedCareOffers[0].offerId, prepared.data.offerId);
+  });
+  await t.test('a closure reason remains historical when the canonical deal result changes without a workflow version change', async () => {
+   const offerVersion = Number((await db.admin.query('select version from crm_offers where id=$1', [wf.offerDraftId])).rows[0].version);
+   const saved = await run(command('record_closure_reason', { reasonCode: 'PRICE', explanation: 'Operator-recorded reason for the current won result', sourceReferences: sources, industryCode: 'GENERAL', offerVersion, validUntil: future }));
+   let viewed = await read(session, scope, opts); assert.equal(viewed.closureReasonBindings.find(row => row.recordId === saved.data.recordId)!.current, true);
+   const before = (await db.admin.query('select version from crm_website_sales_workflows where id=$1', [wf.id])).rows[0].version;
+   await db.admin.query("update crm_offers set status='REJECTED',response_reference='Isolated canonical result correction fixture',version=version+1 where id=$1", [wf.offerDraftId]);
+   await db.admin.query("update deals set stage='Verloren',version=version+1 where id=$1", [wf.dealId]);
+   assert.equal((await db.admin.query('select version from crm_website_sales_workflows where id=$1', [wf.id])).rows[0].version, before);
+   viewed = await read(session, scope, opts); assert.equal(viewed.workflow!.status, 'LOST'); assert.equal(viewed.closureReasonBindings.find(row => row.recordId === saved.data.recordId)!.current, false);
+   const segments = viewed.closureAnalysis.value!.segments as { lost: number; reasonUnknown: number; reasons: Record<string, number> }[];
+   assert.equal(segments.reduce((n, row) => n + row.lost, 0), 1); assert.equal(segments.reduce((n, row) => n + row.reasonUnknown, 0), 1); assert.equal(segments.some(row => row.reasons.PRICE), false);
+   assert.ok(viewed.closureReasons.some(row => row.id === saved.data.recordId));
+  });
+  await t.test('hygiene disposition and readable recorder survive reload and become historical when source versions change', async () => {
+   await db.admin.query("update organizations set name='Canonical Company',version=version+1 where id=$1", [second]);
+   await run(command('scan_hygiene', { organizationIds: [], contactIds: [] }));
+   let viewed = await read(session, scope, opts); const candidate = viewed.hygieneCandidates.find(row => row.kind === 'ORGANIZATION')!; assert.ok(candidate);
+   await run(command('annotate_hygiene', { candidateDigest: candidate.candidateDigest, disposition: 'DISTINCT_RECORDS', rationale: 'Owner reviewed these as distinct legal records', sourceReferences: sources }));
+   viewed = await read(session, scope, opts); const annotation = viewed.hygieneAnnotations.find(row => row.candidateDigest === candidate.candidateDigest)!;
+   assert.equal(annotation.disposition, 'DISTINCT_RECORDS'); assert.equal(annotation.recorderDisplayName, 'Isolated owner'); assert.equal(annotation.current, true);
+   await db.admin.query('update organizations set version=version+1 where id=$1', [second]);
+   assert.equal((await read(session, scope, opts)).hygieneAnnotations.find(row => row.id === annotation.id)!.current, false);
   });
  } finally { await closeLocalTestPool(); for (const key of envKeys) if (beforeEnv[key] === undefined) delete process.env[key]; else process.env[key] = beforeEnv[key]; await db.stop(); }
 });

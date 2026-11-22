@@ -1,4 +1,4 @@
-import type { EnablementIdentity, WebsiteSalesEnablementRead, WebsiteSalesEnablementProjectRead as ProjectRead } from './website-sales-enablement-types';
+import type { EnablementIdentity, EnablementSourceReference, WebsiteSalesEnablementRead, WebsiteSalesEnablementProjectRead as ProjectRead } from './website-sales-enablement-types';
 export const websiteSalesEnablementPath = '/api/crm/website-sales/enablement';
 export type WebsiteSalesEnablementScope = Omit<EnablementIdentity, 'workspaceId'>;
 export type EnablementAlert = { id: string; identity: EnablementIdentity; kind: 'WAITING_DECISION' | 'BLOCKED_OPPORTUNITY' | 'STALE_DRAFT' | 'CLOSE_PLAN_CHANGED'; label: string; canonicalReference: string; version: number; sourceDigest: string };
@@ -7,6 +7,8 @@ export type EnablementClosureAnalysis = { status: string; reasons: string[]; val
 export type WebsiteSalesEnablementResourceRead = WebsiteSalesEnablementRead & { projection: 'RESOURCE'; alerts: EnablementAlert[];
  acceptedCareOffers: { identity: EnablementIdentity; offerId: string; offerVersion: number; status: 'ACCEPTED'; planKey: 'MANAGED' | 'PERFORMANCE' | 'CONVERSION'; sourceConfidence: 'CANONICAL_CRM_STATE' }[];
  hygieneRecords: { kind: 'ORGANIZATION' | 'CONTACT'; id: string; name: string; companyId: string | null; companyName: string | null; version: number; locationLabel: string | null }[];
+ hygieneAnnotations: { id: string; candidateDigest: string; disposition: string; rationale: string; recordedBy: string; recorderDisplayName: string; createdAt: string; recordedAt: string; sourceReferences: EnablementSourceReference[]; current: boolean }[];
+ closureReasonBindings: { recordId: string; recordDigest: string; dealId: string; dealVersion: number; outcome: string; current: boolean }[];
  briefAssessment: EnablementAssessment | null; closePlanAssessment: EnablementAssessment | null; closureAnalysis: EnablementClosureAnalysis;
  coverage: { historyLimitPerKind: number; historyHasMore: boolean; hygiene: { projection: string; hasMore: boolean; current: boolean } } };
 export type WebsiteSalesEnablementProjectRead = ProjectRead & { alerts: EnablementAlert[]; closureAnalysis: EnablementClosureAnalysis; coverage: { tasksPerWorkflow: number; hasMoreTasks: boolean } };

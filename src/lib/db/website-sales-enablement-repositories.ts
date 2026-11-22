@@ -17,8 +17,8 @@ type Json = Record<string, unknown>;
 type State = Awaited<ReturnType<typeof websiteSalesIrelandState>>;
 type Aggregate = { id: string; version: number };
 type Stored = { id: string; entityId: string; kind: string; version: number; aggregateVersion: number; workflowVersion: number; evidenceDigest: string;
- payload: Json; digest: string; recordedBy: string; createdAt: string; validUntil: string };
-const recordColumns = `id,entity_id as "entityId",kind,version,aggregate_version as "aggregateVersion",workflow_version as "workflowVersion",evidence_digest as "evidenceDigest",payload,record_digest as digest,created_by as "recordedBy",created_at as "createdAt",valid_until as "validUntil"`;
+ payload: Json; bindings: Json; digest: string; recordedBy: string; createdAt: string; validUntil: string };
+const recordColumns = `id,entity_id as "entityId",kind,version,aggregate_version as "aggregateVersion",workflow_version as "workflowVersion",evidence_digest as "evidenceDigest",payload,canonical_bindings as bindings,record_digest as digest,created_by as "recordedBy",created_at as "createdAt",valid_until as "validUntil"`;
 const ids = z.strictObject({ projectId: z.uuid(), companyId: z.uuid(), locationId: z.uuid() });
 const sourceKinds = new Set(websiteSalesEnablementOwnerOperations);
 const clock = () => new Date().toISOString();
@@ -69,8 +69,13 @@ async function tasks(tx: TenantTransaction, session: AppSession, scope: Scope, s
  return rows.map(row => ({ taskId: row.id, identity: identity(session, scope), version: Number(row.version), title: row.title.slice(0, 200), status: ({ open: 'OPEN', in_progress: 'IN_PROGRESS', blocked: 'BLOCKED', done: 'DONE', cancelled: 'CANCELLED' } as const)[row.status as 'open'] ?? 'BLOCKED', dueAt: row.dueAt ? iso(row.dueAt) : null, observedAt: iso(row.observedAt), blockedReason: s.current.workflow!.blockedReason }));
 }
 async function canonicalWorkflow(tx: TenantTransaction, session: AppSession, scope: Scope, s: State): Promise<CanonicalEnablementWorkflow> {
- const close = s.row!.dealId ? await tx.queryOne<{ category: string }>(`select ps.category from deals d join projects p on p.workspace_id=d.workspace_id and p.id=d.project_id join crm_pipeline_stages ps on ps.workspace_id=p.workspace_id and ps.project_id=p.id and ps.pipeline_id=p.default_pipeline_id and ps.name=d.stage where d.workspace_id=$1 and d.project_id=$2 and d.id=$3`, [session.workspaceId, scope.projectId, s.row!.dealId]) : null;
+ const close = await dealBinding(tx, session, scope, s);
  return { workflowId: s.row!.id, identity: identity(session, scope), version: s.row!.version, status: close?.category === 'won' ? 'WON' : close?.category === 'lost' ? 'LOST' : s.row!.status, blockedReason: s.current.workflow!.blockedReason, evidenceDigest: s.row!.evidenceDigest, observedAt: clock() };
+}
+async function dealBinding(tx: TenantTransaction, session: AppSession, scope: Scope, s: State, lock = false) {
+ if (!s.row!.dealId) return null;
+ const source = await tx.queryOne<{ dealId: string; version: number; stage: string; category: string; pipelineId: string; stageId: string }>(`select d.id as "dealId",d.version,d.stage,ps.category,ps.pipeline_id as "pipelineId",ps.id as "stageId" from deals d join projects p on p.workspace_id=d.workspace_id and p.id=d.project_id join crm_pipeline_stages ps on ps.workspace_id=p.workspace_id and ps.project_id=p.id and ps.pipeline_id=p.default_pipeline_id and ps.name=d.stage where d.workspace_id=$1 and d.project_id=$2 and d.organization_id=$3 and d.id=$4 ${lock ? 'for share of d' : ''}`, [session.workspaceId, scope.projectId, scope.companyId, s.row!.dealId]);
+ if (!source) return null; const body = { identity: identity(session, scope), ...source, version: Number(source.version) }; return { ...body, sourceDigest: crmPayloadDigest(body) };
 }
 export function parseWebsiteSalesEnablementCommand(raw: unknown): WebsiteSalesEnablementCommand { return websiteSalesEnablementCommandSchema.parse(raw); }
 export function websiteSalesEnablementCommandInput(session: AppSession, raw: WebsiteSalesEnablementCommand) {
@@ -79,15 +84,15 @@ export function websiteSalesEnablementCommandInput(session: AppSession, raw: Web
  return { operation: `website_sales.enablement.${c.operation}`, projectId: c.projectId, resourceId: c.locationId, capability: 'pipeline:write' as const,
   idempotencyKey: c.idempotencyKey, correlationId: c.correlationId, payload: { request: raw, machine } };
 }
-async function persist(tx: TenantTransaction, session: AppSession, c: WebsiteSalesEnablementCommand, s: State, a: Aggregate | null, kind: string, payload: Json, commandId: string, entityId?: string) {
+async function persist(tx: TenantTransaction, session: AppSession, c: WebsiteSalesEnablementCommand, s: State, a: Aggregate | null, kind: string, payload: Json, commandId: string, entityId?: string, bindings: Json = {}) {
  const previous = entityId ? await latest(tx, session, s.row!.id, kind, entityId) : ['BRIEF', 'CLOSE_PLAN', 'DEMO_PROFILE'].includes(kind) ? await latest(tx, session, s.row!.id, kind) : null;
  const id = entityId ?? previous?.entityId ?? randomUUID(), version = (previous?.version ?? 0) + 1, createdAt = clock(), validUntil = String(payload.validUntil ?? new Date(Date.now() + 86400000).toISOString());
  const body = { id, identity: identity(session, c), version, workflowVersion: s.row!.version, recordedBy: session.userId, createdAt, validUntil, payload }, digest = websiteSalesEnablementRecordDigest({ ...body, revokedAt: null }), aggregateVersion = (a?.version ?? 0) + 1;
  const aggregateId = a?.id ?? randomUUID();
  if (a) { if (!await tx.queryOne('update crm_website_sales_enablement set version=$4,last_command_id=$5,updated_at=clock_timestamp() where workspace_id=$1 and id=$2 and version=$3 returning id', [session.workspaceId, a.id, a.version, aggregateVersion, commandId])) fail('ENABLEMENT_VERSION_CONFLICT'); }
  else await tx.execute(`insert into crm_website_sales_enablement(id,workspace_id,project_id,company_id,location_id,workflow_id,version,last_command_id,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [aggregateId, session.workspaceId, c.projectId, c.companyId, c.locationId, s.row!.id, aggregateVersion, commandId, session.userId]);
- await tx.execute(`insert into crm_website_sales_enablement_records(id,workspace_id,project_id,company_id,location_id,workflow_id,enablement_id,aggregate_version,entity_id,version,kind,workflow_version,evidence_digest,payload,record_digest,previous_digest,source_confidence,created_by,command_id,created_at,valid_until)
-  values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21)`, [randomUUID(), session.workspaceId, c.projectId, c.companyId, c.locationId, s.row!.id, aggregateId, aggregateVersion, id, version, kind, s.row!.version, s.row!.evidenceDigest, JSON.stringify(payload), digest, previous?.digest ?? null, sourceKinds.has(c.operation) ? 'OPERATOR_RECORDED' : 'SERVER_DERIVED', session.userId, commandId, createdAt, validUntil]);
+ await tx.execute(`insert into crm_website_sales_enablement_records(id,workspace_id,project_id,company_id,location_id,workflow_id,enablement_id,aggregate_version,entity_id,version,kind,workflow_version,evidence_digest,payload,record_digest,previous_digest,source_confidence,created_by,command_id,created_at,valid_until,canonical_bindings)
+  values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22::jsonb)`, [randomUUID(), session.workspaceId, c.projectId, c.companyId, c.locationId, s.row!.id, aggregateId, aggregateVersion, id, version, kind, s.row!.version, s.row!.evidenceDigest, JSON.stringify(payload), digest, previous?.digest ?? null, sourceKinds.has(c.operation) ? 'OPERATOR_RECORDED' : 'SERVER_DERIVED', session.userId, commandId, createdAt, validUntil, JSON.stringify(bindings)]);
  return { identity: identity(session, c), aggregateVersion, workflowVersion: s.row!.version, recordId: id, recordVersion: version, recordDigest: digest, canContact: false as const };
 }
 
@@ -129,8 +134,10 @@ async function closureAnalysis(tx: TenantTransaction, session: AppSession, proje
  const cohort = [], offers = new Map<string, { offerKey: string; skuCodes: string[]; originalDenominator: number; won: number; lost: number; unresolved: number }>();
  for (const scope of list) {
   const s = await state(tx, session, scope), workflow = await canonicalWorkflow(tx, session, scope, s), reasons = await latest(tx, session, scope.id, 'CLOSURE_REASON'), profile = await latest(tx, session, scope.id, 'DEMO_PROFILE');
-  const usable = reasons && reasons.workflowVersion === workflow.version && current(reasons, s) && (reasons.payload.sourceReferences as Json[]).every(source => Date.parse(String(source.observedAt)) <= Date.now() && Date.parse(String(source.validUntil)) > Date.now()) && ['WON', 'LOST'].includes(workflow.status);
-  const industryCode = profile && current(profile, s) ? profile.payload.industryCode : usable ? reasons!.payload.industryCode : null;
+  const actualDeal = await dealBinding(tx, session, scope, s);
+  const usable = reasons && actualDeal && reasons.bindings.dealSourceDigest === actualDeal.sourceDigest && reasons.workflowVersion === workflow.version && current(reasons, s) && (reasons.payload.sourceReferences as Json[]).every(source => Date.parse(String(source.observedAt)) <= Date.now() && Date.parse(String(source.validUntil)) > Date.now()) && ['WON', 'LOST'].includes(workflow.status);
+  const profileCurrent = profile && current(profile, s) && (profile.payload.sourceReferences as Json[]).every(source => Date.parse(String(source.observedAt)) <= Date.now() && Date.parse(String(source.validUntil)) > Date.now());
+  const industryCode = profileCurrent ? profile!.payload.industryCode : usable ? reasons!.payload.industryCode : null;
   cohort.push({ workflow, cohortAssignmentId: scope.id, industryCode, reason: usable ? record<WebsiteClosureReason>(reasons!, workflow.identity) : null });
   const q = await tx.queryOne<{ quote: { lines: { sku: string }[] }; ruleId: string }>(`select quote,rule_id as "ruleId" from crm_website_sales_ops_quotes where workspace_id=$1 and workflow_id=$2 and status='APPLIED' order by applied_at desc,id desc limit 1`, [session.workspaceId, scope.id]);
   const skuCodes = q ? [...new Set(q.quote.lines.map(line => line.sku))].sort() : [], key = q ? `${q.ruleId}:${skuCodes.join('+')}` : s.row!.offerDraftId ? 'UNCLASSIFIED_CANONICAL_OFFER' : 'NO_CANONICAL_OFFER';
@@ -199,11 +206,20 @@ async function read(tx: TenantTransaction, session: AppSession, scope: Scope): P
   join crm_website_sales_enablement_records r on r.workspace_id=o.workspace_id and r.project_id=o.project_id and r.company_id=o.organization_id and r.kind='CARE_OFFER' and r.payload->>'offerId'=o.id::text
   join crm_website_sales_enablement_records p on p.workspace_id=r.workspace_id and p.workflow_id=r.workflow_id and p.kind='CARE_PROPOSAL' and p.entity_id=(r.payload->>'careProposalId')::uuid and p.record_digest=r.payload->>'careProposalDigest'
   where r.workspace_id=$1 and r.project_id=$2 and r.company_id=$3 and r.location_id=$4 and r.workflow_id=$5 and o.status='ACCEPTED' and p.payload->>'planKey' in('MANAGED','PERFORMANCE','CONVERSION') order by o.id,r.aggregate_version desc limit 25`, [session.workspaceId, scope.projectId, scope.companyId, scope.locationId, s.row.id]);
+ const annotationRows = rows.filter(row => row.kind === 'HYGIENE_ANNOTATION').filter(row => {
+  const candidate = row.payload.candidate as unknown as WebsiteHygieneCandidate;
+  return !verified || candidate.kind === 'ORGANIZATION' ? !verified || candidate.recordIds.every(id => verified.some(r => r.companyId === id)) : candidate.recordIds.every(id => contactRows.some(r => r.contactId === id));
+ }).slice(0, historyLimit);
+ const recorders = await tx.query<{ id: string; name: string }>('select id,name from workspace_users where workspace_id=$1 and id=any($2::uuid[])', [session.workspaceId, annotationRows.map(row => row.recordedBy)]);
+ const actualDeal = await dealBinding(tx, session, scope, s);
  return { contractVersion: websiteSalesEnablementContract, source: 'database', projection: 'RESOURCE', identity: bound, aggregateVersion: a?.version ?? 0, workflowVersion: s.row.version,
   canWrite: !!allowed?.ok && session.permissions.includes('crm:write') && session.productPermissions.includes('pipeline:write'), canApproveFacts: !session.serviceIdentity && !!(await tx.queryOne<{ ok: boolean }>('select crm_sales_ops_owner($1) as ok', [session.workspaceId]))?.ok, canContact: false,
   workflow, contacts: contactRows, tasks: taskRows, brief, closePlan, references, referenceReviews: referenceReviews.filter((review, index) => references.some(ref => ref.id === review.referenceId && ref.version === review.referenceVersion && ref.digest === review.referenceDigest) && !referenceReviews.slice(0, index).some(old => old.referenceId === review.referenceId)), demoProfiles: many<WebsiteDemoProfile>('DEMO_PROFILE'), assets: assetRows,
   closureReasons: many<WebsiteClosureReason>('CLOSURE_REASON'), careBases: many<WebsiteCareBasis>('CARE_BASIS'), careCandidates, dailyPriorities, careOffers, hygieneCandidates,
-  alerts: await alerts(tx, session, scope, s, closeEvaluation), acceptedCareOffers: accepted.map(row => ({ identity: bound, offerId: row.offerId, offerVersion: Number(row.offerVersion), status: 'ACCEPTED', planKey: row.planKey, sourceConfidence: 'CANONICAL_CRM_STATE' })), hygieneRecords, briefAssessment: briefEvaluation ? { status: briefEvaluation.status, reasons: briefEvaluation.reasons } : null, closePlanAssessment: closeEvaluation ? { status: closeEvaluation.status, reasons: closeEvaluation.reasons } : null,
+  alerts: await alerts(tx, session, scope, s, closeEvaluation), acceptedCareOffers: accepted.map(row => ({ identity: bound, offerId: row.offerId, offerVersion: Number(row.offerVersion), status: 'ACCEPTED', planKey: row.planKey, sourceConfidence: 'CANONICAL_CRM_STATE' })), hygieneRecords,
+  hygieneAnnotations: annotationRows.map(row => ({ id: row.entityId, candidateDigest: String(row.payload.candidateDigest), disposition: String(row.payload.disposition), rationale: String(row.payload.rationale), recordedBy: row.recordedBy, recorderDisplayName: recorders.find(actor => actor.id === row.recordedBy)?.name ?? 'Recorded operator', createdAt: iso(row.createdAt), recordedAt: iso(row.createdAt), sourceReferences: row.payload.sourceReferences as unknown as import('../website-sales-enablement-types').EnablementSourceReference[], current: current(row, s) && (row.payload.sourceReferences as Json[]).every(source => Date.parse(String(source.observedAt)) <= Date.now() && Date.parse(String(source.validUntil)) > Date.now()) && hygieneCandidates.some(c => c.candidateDigest === row.payload.candidateDigest) })),
+  closureReasonBindings: rows.filter(row => row.kind === 'CLOSURE_REASON' && row.bindings.dealId).slice(0, historyLimit).map(row => ({ recordId: row.entityId, recordDigest: row.digest, dealId: String(row.bindings.dealId), dealVersion: Number(row.bindings.dealVersion), outcome: String(row.bindings.outcome), current: !!actualDeal && row.bindings.dealSourceDigest === actualDeal.sourceDigest && current(row, s) })),
+  briefAssessment: briefEvaluation ? { status: briefEvaluation.status, reasons: briefEvaluation.reasons } : null, closePlanAssessment: closeEvaluation ? { status: closeEvaluation.status, reasons: closeEvaluation.reasons } : null,
   closureAnalysis: await closureAnalysis(tx, session, scope.projectId), coverage: { historyLimitPerKind: historyLimit, historyHasMore: all.length === 250 || rows.some(row => rows.filter(r => r.kind === row.kind).length > historyLimit), hygiene: { projection: verified ? 'EXPLICIT_VERIFIED_RESOURCES' : 'AUTHORIZED_PROJECT_BOUNDED', hasMore: !!scan?.payload.hasMore || visibleCandidates.length !== originalCandidates.length, current: !!scan && current(scan, s) } } };
 }
 export async function readWebsiteSalesEnablement(session: AppSession, scope: Scope, options: TenantTransactionOptions = {}) {
@@ -266,6 +282,8 @@ async function derive(tx: TenantTransaction, session: AppSession, c: WebsiteSale
   if (result.status !== 'READY' || !result.value) fail(result.reasons[0] ?? 'CARE_FACTS_REQUIRED');
   let taskId: string | undefined;
   if (result.value.renewal) {
+   if (!await tx.queryOne('select id from contacts where workspace_id=$1 and project_id=$2 and organization_id=$3 and id=$4 and archived_at is null for update', [session.workspaceId, c.projectId, c.companyId, s.row!.contactId])) fail('CANONICAL_RECIPIENT_REQUIRED');
+   assertAction(await state(tx, session, c, true));
    await acceptedCareOffer(tx, session, c, s.row!.id, result.value.renewal.canonicalAcceptedCareOfferId);
    const key = crmPayloadDigest({ identity: identity(session, c), careOfferId: result.value.renewal.canonicalAcceptedCareOfferId, reviewAt: result.value.renewal.reviewAt, planKey: result.value.planKey });
    const existing = await tx.queryOne<{ id: string }>(`select id from tasks where workspace_id=$1 and project_id=$2 and metadata->>'websiteSalesWorkflowId'=$3 and metadata->>'careRenewalKey'=$4 order by id limit 1`, [session.workspaceId, c.projectId, s.row!.id, key]);
@@ -309,6 +327,8 @@ async function careOffer(tx: TenantTransaction, session: AppSession, c: WebsiteS
  if (previous) return previous.payload;
  const buyer = await tx.queryOne<{ id: string; name: string; email: string }>('select id,name,email from contacts where workspace_id=$1 and project_id=$2 and organization_id=$3 and id=$4 and archived_at is null for update', [session.workspaceId, c.projectId, c.companyId, s.row!.contactId]);
  if (!buyer?.email) fail('CANONICAL_RECIPIENT_REQUIRED');
+ // A consent change may commit while the contact lock is awaited. Check fresh suppression after that wait.
+ assertAction(await state(tx, session, c, true));
  const stage = await tx.queryOne<{ name: string }>(`select s.name from projects p join crm_pipeline_stages s on s.workspace_id=p.workspace_id and s.project_id=p.id and s.pipeline_id=p.default_pipeline_id where p.workspace_id=$1 and p.id=$2 and s.category not in('won','lost','disqualified') order by s.position,s.id limit 1`, [session.workspaceId, c.projectId]);
  if (!stage) fail('PROJECT_PIPELINE_REQUIRED');
  const schedule = checked.value.schedule, first = schedule[0]!;
@@ -339,7 +359,7 @@ async function execute(session: AppSession, raw: WebsiteSalesEnablementCommand, 
   const result = await executeCrmCommand(fresh, command, async (tx, context): Promise<WebsiteSalesEnablementEffect> => {
    const s = await state(tx, context.session, c, true), a = await aggregate(tx, context.session, s.row.id, true);
    if ((a?.version ?? 0) !== c.expectedVersion) fail('ENABLEMENT_VERSION_CONFLICT'); if (s.row.version !== c.expectedWorkflowVersion) fail('WORKFLOW_VERSION_CONFLICT');
-   let p = object(parseWebsiteSalesEnablementPayload(c.operation, c.payload)), kind = '', entityId: string | undefined, derivedTaskId: string | undefined;
+   let p = object(parseWebsiteSalesEnablementPayload(c.operation, c.payload)), kind = '', entityId: string | undefined, derivedTaskId: string | undefined; let bindings: Json = {};
    if (sourceKinds.has(c.operation)) validSources(p);
    switch (c.operation) {
     case 'record_brief': kind = 'BRIEF'; break;
@@ -366,7 +386,9 @@ async function execute(session: AppSession, raw: WebsiteSalesEnablementCommand, 
      kind = 'DEMO_PROFILE'; break;
     }
     case 'record_closure_reason': {
+     const actualDeal = await dealBinding(tx, context.session, c, s, true); if (!actualDeal) fail('CANONICAL_CLOSED_DEAL_REQUIRED');
      const w = await canonicalWorkflow(tx, context.session, c, s); if (!['WON', 'LOST'].includes(w.status)) fail('CANONICAL_CLOSED_DEAL_REQUIRED');
+     bindings = { dealId: actualDeal.dealId, dealVersion: actualDeal.version, outcome: w.status, dealSourceDigest: actualDeal.sourceDigest };
      if (p.offerVersion !== null) { const offer = await tx.queryOne<{ version: number }>('select version from crm_offers where workspace_id=$1 and project_id=$2 and id=$3', [fresh.workspaceId, c.projectId, s.row.offerDraftId]); if (!offer || Number(offer.version) !== p.offerVersion) fail('OFFER_VERSION_CONFLICT'); }
      kind = 'CLOSURE_REASON'; break;
     }
@@ -378,7 +400,7 @@ async function execute(session: AppSession, raw: WebsiteSalesEnablementCommand, 
      const derived = await derive(tx, context.session, c, s, p); p = derived.payload; kind = derived.kind; entityId = derived.entityId; derivedTaskId = derived.taskId; break;
     }
    }
-   const effect = await persist(tx, context.session, c, s, a, kind, p, context.commandId, entityId);
+   const effect = await persist(tx, context.session, c, s, a, kind, p, context.commandId, entityId, bindings);
    return { ...effect, ...(derivedTaskId ? { taskId: derivedTaskId } : typeof p.taskId === 'string' ? { taskId: p.taskId } : {}), ...(typeof p.assetId === 'string' ? { assetId: p.assetId } : {}), ...(typeof p.dealId === 'string' ? { dealId: p.dealId } : {}), ...(typeof p.offerId === 'string' ? { offerId: p.offerId, offerVersion: Number(p.offerVersion) } : {}) };
   }, options);
   // Callback is skipped for stored replay. Refresh current actor/resource rights and current facts separately.
