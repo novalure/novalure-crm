@@ -133,8 +133,9 @@ async function screenshot(name, viewport) {
 
 const project=fixture.websiteSales.projects[0], companyName=`SYNTHETIC Discovery Café ${randomUUID()}`;
 const address='88 Discovery Street, Dublin, Ireland', email=`discovery-${randomUUID()}@example.invalid`;
-const quote=`${companyName}. ${address}. Public Contact ${email}. shared.example`;
-const candidate={candidateId:randomUUID(),countryCode:'IE',companyName,locationLabel:address,address,domain:'shared.example',contacts:[{name:'Public Contact',email,sourceReferenceId:'source-company'}],sourceReferences:[{sourceId:'source-company',sourceUrl:'https://example.invalid/public-company',contentDigest:createHash('sha256').update(quote).digest('hex'),quote,observedAt:new Date(Date.now()-60000).toISOString(),validUntil:new Date(Date.now()+86400000).toISOString()}]};
+const domain=`discovery-${randomUUID()}.example`;
+const quote=`${companyName}. ${address}. Public Contact ${email}. ${domain}`;
+const candidate={candidateId:randomUUID(),countryCode:'IE',companyName,locationLabel:address,address,domain,contacts:[{name:'Public Contact',email,sourceReferenceId:'source-company'}],sourceReferences:[{sourceId:'source-company',sourceUrl:'https://example.invalid/public-company',contentDigest:createHash('sha256').update(quote).digest('hex'),quote,observedAt:new Date(Date.now()-60000).toISOString(),validUntil:new Date(Date.now()+86400000).toISOString()}]};
 const batch=JSON.stringify({workspaceId:fixture.workspaceId,projectId:project.projectId,candidates:[candidate]});
 const panel=()=>page.locator('[data-website-sales-discovery]');
 async function importFile(){await panel().locator('input[type=file]').setInputFiles({name:'synthetic-research.json',mimeType:'application/json',buffer:Buffer.from(batch)});}
