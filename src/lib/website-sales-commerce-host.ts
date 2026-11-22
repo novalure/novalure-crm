@@ -96,13 +96,29 @@ export function authorizeCommerceWorkerRequest(request: Request, secret = proces
 export async function runConfiguredCommerceWorker(request: Request) {
   authorizeCommerceWorkerRequest(request); if (new URL(request.url).search) throw new CommerceSourceError(400, 'COMMERCE_WORKER_SELECTOR_DENIED');
   if (areQueueWorkersPaused()) return { contractVersion: 'website-sales-commerce-worker-v1', status: 'PAUSED', results: [] };
-  const config = readCommerceHostConfiguration(); if (!config) return unavailable(); const started = Date.now(), results = [];
-  for (const profile of config.profiles) {
-    if (Date.now() - started >= 35_000) break;
-    if (Date.parse(profile.validUntil) <= Date.now()) { results.push({ profileId: profile.id, status: 'SCOPE_EXPIRED' }); continue; }
-    results.push({ profileId: profile.id, result: await runWebsiteSalesCommerceWorker(options(config, profile), config.maxJobsPerRun) });
-  }
+  const config = readCommerceHostConfiguration(); if (!config) return unavailable();
+  const results = await runCommerceProfileSequence(config.profiles.map(profile => ({ id: profile.id, validUntil: profile.validUntil,
+    run: () => runWebsiteSalesCommerceWorker(options(config, profile), config.maxJobsPerRun) })));
   return { contractVersion: 'website-sales-commerce-worker-v1', results };
+}
+
+/** The server constructs every closure from the validated fixed profile. A policy stop
+ * stays with its resource; unexpected technical faults and the global pause still stop the batch.
+ */
+export async function runCommerceProfileSequence(profiles: readonly { id: string; validUntil: string;
+  run: () => Promise<Awaited<ReturnType<typeof runWebsiteSalesCommerceWorker>>> }[]) {
+  if (profiles.length > 50) throw new CommerceSourceError(400, 'COMMERCE_WORKER_LIMIT_INVALID');
+  const started = Date.now(), results = [];
+  for (const profile of profiles) {
+    if (Date.now() - started >= 35_000 || areQueueWorkersPaused()) break;
+    if (Date.parse(profile.validUntil) <= Date.now()) { results.push({ profileId: profile.id, status: 'SCOPE_EXPIRED' }); continue; }
+    try { results.push({ profileId: profile.id, result: await profile.run() }); }
+    catch (error) {
+      if (!(error instanceof CrmCommandError)) throw error;
+      results.push({ profileId: profile.id, status: 'BLOCKED', code: /^[A-Z][A-Z0-9_]{0,99}$/.test(error.code) ? error.code : 'COMMERCE_POLICY_DENIED' });
+    }
+  }
+  return results;
 }
 
 export function configuredCommerceSource(connectionId: string) {

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { readCommerceHostConfiguration, authorizeCommerceWorkerRequest, runConfiguredCommerceWorker } from '../src/lib/website-sales-commerce-host';
+import { readCommerceHostConfiguration, authorizeCommerceWorkerRequest, runConfiguredCommerceWorker, runCommerceProfileSequence } from '../src/lib/website-sales-commerce-host';
+import { CrmCommandError } from '../src/lib/crm-command';
 
 function fixture() {
   const identity = { workspaceId: randomUUID(), projectId: randomUUID(), companyId: randomUUID(), locationId: randomUUID() };
@@ -54,4 +55,13 @@ test('the existing global pause stops authenticated scheduled work before a data
     const result = await runConfiguredCommerceWorker(request); assert.equal(result.status, 'PAUSED'); assert.deepEqual(result.results, []);
     await assert.rejects(runConfiguredCommerceWorker(new Request(request.url)), /UNAUTHORIZED/);
   } finally { for (const key of keys) { if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key]; } }
+});
+
+test('a stopped recipient remains blocked while an unrelated profile proceeds, and technical faults still abort', async () => {
+  const validUntil = new Date(Date.now() + 60000).toISOString(); let unrelatedCalls = 0;
+  const next = { id: randomUUID(), validUntil, run: async () => { unrelatedCalls++; return { results: [], externalEffectsOnlyFromClaimedJobs: true as const }; } };
+  const results = await runCommerceProfileSequence([{ id: randomUUID(), validUntil, run: async () => { throw new CrmCommandError('OPT_OUT', 'Synthetic recipient stopped', 409); } }, next]);
+  assert.equal(results[0]?.status, 'BLOCKED'); assert.equal(results[0]?.code, 'OPT_OUT'); assert.equal(unrelatedCalls, 1);
+  await assert.rejects(runCommerceProfileSequence([{ id: randomUUID(), validUntil, run: async () => { throw Error('Synthetic database unavailable'); } }, next]), /database unavailable/);
+  assert.equal(unrelatedCalls, 1);
 });
