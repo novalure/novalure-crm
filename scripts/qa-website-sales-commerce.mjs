@@ -37,7 +37,7 @@ async function distinctContactProject(state,label){const project={...state.proje
 
 const endpoint = '/api/crm/website-sales/commerce';
 const panel = () => main.getByTestId('website-sales-commerce');
-const scoped = () => endpoint + '?' + new URLSearchParams({ workspaceId: actor.account.workspaceId, ...state.scope });
+const scoped = () => endpoint + '?' + new URLSearchParams({ workspaceId: actor.account.workspaceId, workflowId: state.workflow.id, ...state.scope });
 const form = operation => panel().locator(`[data-commerce-action="${operation}"]`);
 const localDate = value => { const date = new Date(value); return new Date(date.valueOf() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 
@@ -65,7 +65,7 @@ async function prepareOffer() {
   assert.equal(response.status, 200, response.body.code); state.workflow = response.body.data.workflow;
 }
 async function fillTemplate(target, label) {
-  const values = { title: label, jurisdiction: 'SYNTHETIC local QA jurisdiction only', content: 'SYNTHETIC LOCAL QA TEMPLATE. This is fictional test content and is not approved for actual customers.', language: 'en',
+  const values = { title: label, jurisdiction: 'SYNTHETIC local QA jurisdiction only', content: '  SYNTHETIC LOCAL QA TEMPLATE. This is fictional test content and is not approved for actual customers.  ', language: 'en',
     validUntil: localDate(Date.now() + 3600000), 'legal.reference': 'synthetic:local-qa-review-only', 'legal.digest': digest('SYNTHETIC local review evidence only'),
     'legal.observedAt': localDate(Date.now() - 120000), 'legal.validUntil': localDate(Date.now() + 7200000) };
   for (const [name, value] of Object.entries(values)) {
@@ -125,7 +125,7 @@ try {
     await target.locator('button[type="submit"]').click(); const response = await saved; assert.equal(response.status(), 200);
     const receipt = await response.json(); assert.equal(receipt.persisted, true); const value = await current();
     initialTemplate = value.templates.find(row => row.id === receipt.data.recordId); assert(initialTemplate);
-    assert.equal(initialTemplate.createdBy, actor.account.userId); assert.equal(initialTemplate.payload.contentSha256, digest(initialTemplate.payload.content));
+    assert.equal(initialTemplate.createdBy, actor.account.userId); assert(initialTemplate.payload.content.startsWith('  ') && initialTemplate.payload.content.endsWith('  ')); assert.equal(initialTemplate.payload.contentSha256, digest(initialTemplate.payload.content));
     assert.equal(value.contracts.length, 0); assert.equal(value.outbox.length, 0);
   });
   await step('lost committed template acknowledgement survives reload and blocks every Sales writer until exact reconciliation', async () => {

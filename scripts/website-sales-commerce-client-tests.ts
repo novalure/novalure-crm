@@ -124,7 +124,20 @@ test('unavailable durable storage refuses dispatch and a hanging body has a boun
 test('browser commerce reads reject an unrelated workflow before rendering its financial or contract data', async () => {
   const f = fixture(); mock(async () => Response.json({ ...f.read, workflowId: randomUUID() }));
   await assert.rejects(client.readCommerce(f.workspaceId, f.scope, f.workflowId));
-  mock(async () => Response.json(f.read));
+  mock(async request => { const url = new URL(request.url); assert.equal(url.searchParams.get('workflowId'), f.workflowId); assert.equal(url.searchParams.get('projectId'), f.scope.projectId); return Response.json(f.read); });
   const data = await client.readCommerce(f.workspaceId, f.scope, f.workflowId);
   assert.equal(data.workflowId, f.workflowId); assert.equal(data.canWrite, false);
+});
+
+test('a committed reconciliation can safely validate the same bounded large read accepted by GET', async () => {
+  const f = fixture(); mock(async () => { throw Error('lost'); });
+  await assert.rejects(client.writeCommerce(f.workspaceId, f.actorId, f.command)); mark(f);
+  f.read.sourceEvents = Array.from({ length: 50 }, (_, index) => ({ contractVersion: 'website-sales-commerce-source-v1', eventId: randomUUID(), identity: { workspaceId: f.workspaceId, ...f.scope }, workflowId: f.workflowId,
+    source: { system: 'PAYMENT_PROVIDER', provider: 'synthetic-unit', accountReference: 'unit', resourceType: 'payment', resourceId: `unit-${index}`, version: 1, digest: 'a'.repeat(64) },
+    occurredAt: '2026-11-22T10:00:00.000Z', retrievedAt: '2026-11-22T10:00:00.000Z', verificationReceiptReference: 'synthetic-transport-fixture-not-provider-evidence', confidence: 'PROVIDER_VERIFIED', supersedesEventId: null,
+    kind: 'PAYMENT', payload: { currency: 'EUR', amountMinor: 100, status: 'SETTLED', kind: 'PAYMENT', allocations: Array.from({ length: 100 }, () => ({ invoiceSourceEventId: randomUUID(), installmentId: randomUUID(), amountMinor: 1 })) } }));
+  const result = reconcile(f); assert(new TextEncoder().encode(JSON.stringify(result)).byteLength > 524288);
+  mock(async () => Response.json(result));
+  assert.equal(await client.reconcileCommerce(f.workspaceId, f.actorId), 'COMMITTED');
+  assert.equal(client.commercePending(f.workspaceId, f.actorId), undefined);
 });

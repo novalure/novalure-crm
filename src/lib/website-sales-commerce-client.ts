@@ -82,7 +82,7 @@ async function request(url: string, init: RequestInit) {
     const cancel = () => { void reader.cancel().catch(() => undefined); };
     controller.signal.addEventListener('abort', cancel, { once: true });
     try {
-      const chunks: Uint8Array[] = [], limit = init.method === 'GET' ? 4000000 : 524288;
+      const chunks: Uint8Array[] = [], limit = init.method === 'GET' || url.includes('/reconcile') ? 4000000 : 524288;
       let size = 0;
       for (;;) {
         if (controller.signal.aborted) throw Error('COMMERCE_READ_ABORTED');
@@ -112,7 +112,7 @@ function identity(raw: unknown, workspaceId: string, scope: WebsiteSalesCommerce
 }
 
 export async function readCommerce(workspaceId: string, scope: WebsiteSalesCommerceScope, workflowId: string, signal?: AbortSignal) {
-  const query = new URLSearchParams({ workspaceId, projectId: scope.projectId, companyId: scope.companyId, ...(scope.locationId ? { locationId: scope.locationId } : {}) });
+  const query = new URLSearchParams({ workspaceId, workflowId, projectId: scope.projectId, companyId: scope.companyId, ...(scope.locationId ? { locationId: scope.locationId } : {}) });
   const { response, data } = await request(`${websiteSalesCommercePath}?${query}`, { method: 'GET', cache: 'no-store', credentials: 'same-origin', signal });
   if (!response.ok) throw Error('COMMERCE_READ_DENIED');
   return validateWebsiteSalesCommerceRead(data, { workspaceId, ...scope }, workflowId);
