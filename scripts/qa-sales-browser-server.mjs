@@ -15,7 +15,8 @@ let log;
 let readyForStop = false;
 let stopRequested = false;
 let cleanup;
-const websiteSalesOperations = process.argv.includes("--website-sales-operations");
+const websiteSalesCommerce = process.argv.includes("--website-sales-commerce");
+const websiteSalesOperations = websiteSalesCommerce || process.argv.includes("--website-sales-operations");
 const serveBuiltApplication = websiteSalesOperations || process.argv.includes("--built");
 const designCIntegration = websiteSalesOperations || process.argv.includes("--design-c");
 const livelistedIntegration = process.argv.includes("--livelisted");
@@ -97,6 +98,7 @@ try {
   const fixture = await seedSalesBrowser(db);
   if (websiteSalesWorkbench || websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-workbench-browser-fixture.mjs")).seedWebsiteSalesWorkbenchBrowser(db, fixture));
   if (websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-studio-browser-fixture.mjs")).seedWebsiteSalesStudioBrowser(db, fixture, { lifecycle: websiteSalesLifecycle, operations: websiteSalesOperations }));
+  if (websiteSalesCommerce) Object.assign(fixture, await (await import("./lib/website-sales-commerce-browser-fixture.mjs")).seedWebsiteSalesCommerceBrowser(db, fixture));
   const localEncryptionKey = randomBytes(40).toString("hex");
   if (livelistedIntegration) {
     Object.assign(fixture, await (await import("./lib/livelisted-browser-fixture.mjs")).seedLivelistedBrowser(db, fixture, localEncryptionKey));
