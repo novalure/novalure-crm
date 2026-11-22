@@ -169,7 +169,7 @@ export function requiredWebsiteSalesContractApprovalSteps(raw: unknown): 1 | 2 {
   return financial.netMinor >= 500_000 ? 2 : 1;
 }
 function policyCurrent(policy: z.infer<typeof commercePolicySchema>, now: number): boolean {
-  return at(policy.validUntil) > now && [policy.standardTermsReference, policy.accountingSourceReference, policy.accountingProfile.sourceReference, policy.financialSnapshot.taxReference].every(source => currentSource(source, now));
+  return at(policy.validUntil) > now && [policy.standardTermsReference, policy.accountingSourceReference, policy.accountingProfile.sourceReference, policy.financialSnapshot.taxReference, ...(policy.contractTerm ? [policy.contractTerm.sourceReference] : [])].every(source => currentSource(source, now));
 }
 function taxMatches(policy: z.infer<typeof commercePolicySchema>): boolean {
   const f = policy.financialSnapshot;
@@ -185,7 +185,8 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
     if (p.paymentTerms.installments.length > p.maxInstallments || new Set(t.allowedVariableKeys).size !== t.allowedVariableKeys.length) return evaluation(null, ['COMMERCE_TEMPLATE_OR_SCHEDULE_INVALID']);
     const money = (value: number) => `${Math.floor(value / 100)}.${String(value % 100).padStart(2, '0')}`;
     const protectedValues: Record<string, string> = { NET_EUR: money(o.financial.netMinor), TAX_EUR: money(o.financial.taxMinor), GROSS_EUR: money(o.financial.grossMinor), CUSTOMER_EMAIL: o.recipientEmail,
-      ISSUER_LEGAL_NAME: p.accountingProfile.issuerLegalName, ISSUER_ADDRESS: p.accountingProfile.issuerAddress, TAX_IDENTIFIER: p.accountingProfile.taxIdentifier ?? '' };
+      ISSUER_LEGAL_NAME: p.accountingProfile.issuerLegalName, ISSUER_ADDRESS: p.accountingProfile.issuerAddress, TAX_IDENTIFIER: p.accountingProfile.taxIdentifier ?? '',
+      ...(p.contractTerm ? { CONTRACT_START_AT: p.contractTerm.startAt, CONTRACT_END_AT: p.contractTerm.endAt, CONTRACT_FULL_NET_EUR: money(p.contractTerm.fullNetMinor) } : {}) };
     const supplied = z.record(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/), z.string().max(2000)).parse(input.variables);
     if (Object.keys(supplied).some(key => !t.allowedVariableKeys.includes(key) || key in protectedValues && supplied[key] !== protectedValues[key])) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_DENIED']);
     const variables = { ...supplied, ...protectedValues };
@@ -197,7 +198,7 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
     if (missing || /\{\{|\}\}|\u0000/.test(body)) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_UNRESOLVED']);
     const draft = commerceContractDraftSchema.parse({ offerRef: o.offerRef, templateRef: commerceRecordReference(template), policyRef: commerceRecordReference(policy), title: t.title, body,
       documentSha256: commerceContentSha256(body), recipientEmail: o.recipientEmail, recipientDigest: o.recipientDigest, financial: o.financial,
-      standardTerms: o.financial.termsDigest === p.standardTermsDigest, status: 'DRAFT', paymentTerms: p.paymentTerms, signatureSourceEventId: null, deliverySourceEventId: null });
+      standardTerms: o.financial.termsDigest === p.standardTermsDigest, status: 'DRAFT', paymentTerms: p.paymentTerms, ...(p.contractTerm ? { contractTerm: p.contractTerm } : {}), signatureSourceEventId: null, deliverySourceEventId: null });
     return evaluation(draft);
   });
 }
@@ -211,7 +212,7 @@ export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRec
     if (signatureResult.status !== 'READY' || !signatureResult.value) return evaluation(null, signatureResult.reasons, signatureResult.status === 'NEEDS_RECONCILIATION');
     const signature = signatureResult.value;
     if (commerceSourceFactDigest(validEvent(input.signature, ctx, now)) !== commerceSourceFactDigest(signature)) return evaluation(null, ['COMMERCE_SIGNATURE_NOT_CURRENT']);
-    if (!sameRef(c.policyRef, commerceRecordReference(policy)) || !policyCurrent(p, now) || !taxMatches(p) || commerceDigest(c.financial) !== commerceDigest(p.financialSnapshot) || commerceDigest(c.paymentTerms) !== commerceDigest(p.paymentTerms)) return evaluation(null, ['COMMERCE_CONTRACT_POLICY_BINDING_DENIED']);
+    if (!sameRef(c.policyRef, commerceRecordReference(policy)) || !policyCurrent(p, now) || !taxMatches(p) || commerceDigest(c.financial) !== commerceDigest(p.financialSnapshot) || commerceDigest(c.paymentTerms) !== commerceDigest(p.paymentTerms) || commerceDigest(c.contractTerm ?? null) !== commerceDigest(p.contractTerm ?? null)) return evaluation(null, ['COMMERCE_CONTRACT_POLICY_BINDING_DENIED']);
     const rank = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 };
     if (signature.kind !== 'SIGNATURE' || signature.confidence !== 'PROVIDER_VERIFIED' || signature.source.system !== 'SIGNATURE_PROVIDER' || signature.payload.status !== 'SIGNED' || !sameRef(signature.payload.contractRef, ref) || signature.payload.documentSha256 !== c.documentSha256 || !signature.payload.signedAt || at(signature.payload.signedAt) > now || at(signature.payload.signedAt) < at(contract.createdAt) || at(signature.occurredAt) < at(signature.payload.signedAt) || rank[signature.payload.assurance] < rank[p.signatureAssurance]) return evaluation(null, ['COMMERCE_VERIFIED_EXACT_SIGNATURE_REQUIRED']);
     if (['VOIDED', 'DECLINED', 'EXPIRED'].includes(c.status) || commerceContentSha256(c.body) !== c.documentSha256) return evaluation(null, ['COMMERCE_CONTRACT_NOT_ACTIONABLE']);

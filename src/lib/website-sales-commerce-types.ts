@@ -26,10 +26,14 @@ export const commercePaymentTermsSchema = z.strictObject({ installments: z.array
   anchor: z.enum(['CONTRACT_SIGNED', 'DELIVERY_ACCEPTED']), kind: z.enum(['DEPOSIT', 'MILESTONE', 'BALANCE', 'RECURRING']) })).min(1).max(36) }).refine(value => value.installments.reduce((sum, row) => sum + row.percentageBps, 0) === 10_000 && new Set(value.installments.map(row => row.installmentId)).size === value.installments.length && value.installments.every(row => row.kind === 'DEPOSIT' ? row.anchor === 'CONTRACT_SIGNED' : row.anchor === 'DELIVERY_ACCEPTED'), 'COMMERCE_PAYMENT_TERMS_INVALID');
 export const commerceAccountingProfileSchema = z.strictObject({ issuerLegalName: commerceText.max(200), issuerAddress: commerceText.max(1000), taxIdentifier: commerceText.max(100).nullable(),
   currency: z.literal('EUR'), taxRateBps: z.number().int().min(0).max(100_000), rounding: z.literal('HALF_UP'), sourceReference: commerceSourceReferenceSchema });
+/** A finite sourced obligation; catalog/CARE linkage is checked by the canonical CRM resolver. */
+export const commerceContractTermSchema = z.strictObject({ startAt: commerceTime, endAt: commerceTime, fullNetMinor: commerceMinor, sourceReference: commerceSourceReferenceSchema })
+  .refine(value => Number.isFinite(Date.parse(value.startAt)) && Number.isFinite(Date.parse(value.endAt)) && Date.parse(value.endAt) > Date.parse(value.startAt), 'COMMERCE_CONTRACT_TERM_INVALID');
 export const commercePolicySchema = z.strictObject({ title: commerceText.max(200), standardTermsReference: commerceSourceReferenceSchema,
   standardTermsDigest: commerceHash, signatureAssurance: z.enum(['PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), maxInstallments: z.number().int().min(1).max(36),
   accountingEntityReference: commerceText.max(200), accountingSourceReference: commerceSourceReferenceSchema, accountingProfile: commerceAccountingProfileSchema,
-  offerRef: commerceReferenceSchema, financialSnapshot: commerceFinancialSnapshotSchema, paymentTerms: commercePaymentTermsSchema, validUntil: commerceTime });
+  offerRef: commerceReferenceSchema, financialSnapshot: commerceFinancialSnapshotSchema, paymentTerms: commercePaymentTermsSchema, contractTerm: commerceContractTermSchema.optional(), validUntil: commerceTime })
+  .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financialSnapshot.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH');
 export const commerceOfferSchema = z.strictObject({ offerRef: commerceReferenceSchema, dealId: commerceUuid, status: z.enum(['DRAFT', 'APPROVED', 'QUEUED', 'SENT', 'ACCEPTED', 'REJECTED', 'CANCELLED']),
   recipientEmail: z.email(), recipientDigest: commerceHash, scopeDigest: commerceHash, financial: commerceFinancialSnapshotSchema, approvalReference: commerceUuid.nullable() });
 /** Canonical NET-only choice is available before a sourced tax/payment policy exists. */
@@ -39,7 +43,8 @@ export const commerceOfferChoiceSchema = z.strictObject({ identity: commerceIden
 export const commerceContractDraftSchema = z.strictObject({ offerRef: commerceReferenceSchema, templateRef: commerceReferenceSchema, policyRef: commerceReferenceSchema,
   title: commerceText.max(200), body: legalText, documentSha256: commerceHash, recipientEmail: z.email(), recipientDigest: commerceHash,
   financial: commerceFinancialSnapshotSchema, standardTerms: z.boolean(), status: z.enum(['DRAFT', 'APPROVAL_PENDING', 'APPROVED', 'QUEUED', 'DELIVERED', 'SIGNATURE_PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED']),
-  paymentTerms: commercePaymentTermsSchema, signatureSourceEventId: commerceUuid.nullable(), deliverySourceEventId: commerceUuid.nullable() });
+  paymentTerms: commercePaymentTermsSchema, contractTerm: commerceContractTermSchema.optional(), signatureSourceEventId: commerceUuid.nullable(), deliverySourceEventId: commerceUuid.nullable() })
+  .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financial.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH');
 export const commerceApprovalSchema = z.strictObject({ approvalId: commerceUuid, documentRef: commerceReferenceSchema, documentSha256: commerceHash,
   recipientDigest: commerceHash, financialDigest: commerceHash, requiredSteps: z.union([z.literal(1), z.literal(2)]), completedSteps: z.number().int().min(0).max(2),
   status: z.enum(['PENDING', 'APPROVED', 'REVOKED', 'EXPIRED', 'DENIED']), expiresAt: commerceTime,
