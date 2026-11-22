@@ -306,7 +306,7 @@ test('exact177-file current inventory appends202–209 to unchanged169-source ba
   assert.equal(added.checksum, '6c4fce55b90fdbb4579c8a97f4d8891c54cab987c939d47a5d9b3282dae9b0fb');
   assert.equal(added.checksum, registered.sha256);
   assert.equal(actual.forward.at(-1).path, 'migrations/209_website_sales_commerce.sql');
-  assert.equal(actual.forward.at(-1).checksum, '6fc91365f7fa753de858572daf352a3790e56f17ac89901a0f2a2955616fecb0');
+  assert.equal(actual.forward.at(-1).checksum, '6e540bbe55d5514fe933500b225f35a4a103c0e44fea36ea857af0b31140f5cb');
   assert.equal(actual.sourceExtensionSha256, crmCandidateSourceExtensionSha256);
   assert.ok(actual.standard.some(row => row.path === added.path && row.checksum === added.checksum && !row.manual));
   assert.deepEqual(actual.coverage, { sourceInventorySqlFiles: 177, executedOriginalSqlFiles: 174, historicalExecutionsBeforeLedger: 41, expectedCanonicalLedgerRows: 133 });

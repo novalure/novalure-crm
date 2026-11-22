@@ -1,6 +1,7 @@
 -- Website Sales commercial execution evidence. No provider, principal, active grant or accounting authority is seeded.
 begin;
 set local lock_timeout='5s';
+set local createrole_self_grant='';
 set local statement_timeout='2min';
 do $$ begin
  if not exists(select 1 from pg_roles where rolname='novalure_website_sales_commerce_executor') then
@@ -36,7 +37,7 @@ create table crm_website_sales_commerce_jobs(
  payload jsonb not null check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=120000),payload_digest text not null check(payload_digest~'^[a-f0-9]{64}$'),
  idempotency_key uuid not null unique,command_id uuid not null,created_by uuid not null,
  status text not null default 'READY' check(status in('READY','CLAIMED','ACCEPTED','UNKNOWN','REJECTED','CANCELLED')),
- version integer not null default 1 check(version>0),lease_token uuid,lease_expires_at timestamptz,first_attempt_at timestamptz,last_checked_at timestamptz,provider_reference text,provider_receipt_digest text check(provider_receipt_digest~'^[a-f0-9]{64}$'),error_code text,
+ version integer not null default 1 check(version>0),lease_token uuid,lease_expires_at timestamptz,first_attempt_at timestamptz,last_checked_at timestamptz,provider_reference text,execution_authority jsonb check(execution_authority is null or(jsonb_typeof(execution_authority)='object' and octet_length(execution_authority::text)<=1500)),provider_receipt_digest text check(provider_receipt_digest~'^[a-f0-9]{64}$'),error_code text,
  created_at timestamptz not null default clock_timestamp(),updated_at timestamptz not null default clock_timestamp(),
  unique(workspace_id,id),unique(workspace_id,project_id,company_id,location_id,workflow_id,id),
  foreign key(workspace_id,project_id,company_id,location_id,workflow_id,commerce_id) references crm_website_sales_commerce(workspace_id,project_id,company_id,location_id,workflow_id,id),
@@ -47,10 +48,12 @@ create unique index commerce_one_active_document_job on crm_website_sales_commer
 create index commerce_due_jobs on crm_website_sales_commerce_jobs(workspace_id,workflow_id,status,created_at);
 create table crm_website_sales_commerce_sources(
  id uuid primary key,workspace_id uuid not null,project_id uuid not null,company_id uuid not null,location_id uuid not null,workflow_id uuid not null,job_id uuid not null,
+ received_by_actor_id uuid not null,verification_workload_id uuid not null,verification_grant_id uuid not null,verification_authority_reference text not null check(length(verification_authority_reference) between 1 and 200),
  provider text not null,account_reference text not null,event_id text not null,kind text not null,event_digest text not null check(event_digest~'^[a-f0-9]{64}$'),
  entity_id uuid not null,entity_version integer not null check(entity_version>0),document_digest text not null check(document_digest~'^[a-f0-9]{64}$'),
  payload jsonb not null check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=120000),occurred_at timestamptz not null,received_at timestamptz not null default clock_timestamp(),
  unique(provider,account_reference,event_id),unique(workspace_id,id),unique(workspace_id,job_id,kind,event_id),
+ foreign key(workspace_id,received_by_actor_id) references workspace_users(workspace_id,id),foreign key(verification_workload_id,workspace_id) references crm_website_sales_machine_workloads(id,workspace_id),foreign key(verification_grant_id) references crm_website_sales_machine_grants(id),
  foreign key(workspace_id,project_id,company_id,location_id,workflow_id,job_id) references crm_website_sales_commerce_jobs(workspace_id,project_id,company_id,location_id,workflow_id,id)
 );
 create table crm_website_sales_commerce_approvals(
@@ -157,11 +160,15 @@ begin
   if (new.id,new.workspace_id,new.project_id,new.company_id,new.location_id,new.workflow_id,new.created_by,new.created_at) is distinct from (old.id,old.workspace_id,old.project_id,old.company_id,old.location_id,old.workflow_id,old.created_by,old.created_at) or new.version<>old.version+1 then raise exception using errcode='23514',message='Immutable commercial scope and exact version required';end if;
  elsif (new.id,new.workspace_id,new.project_id,new.company_id,new.location_id,new.workflow_id,new.commerce_id,new.kind,new.entity_id,new.entity_version,new.offer_id,new.offer_revision,new.payload,new.payload_digest,new.idempotency_key,new.command_id,new.created_by,new.created_at) is distinct from (old.id,old.workspace_id,old.project_id,old.company_id,old.location_id,old.workflow_id,old.commerce_id,old.kind,old.entity_id,old.entity_version,old.offer_id,old.offer_revision,old.payload,old.payload_digest,old.idempotency_key,old.command_id,old.created_by,old.created_at) or new.version<>old.version+1 then raise exception using errcode='23514',message='Immutable outbox and exact version required';
  elsif not pg_has_role(current_user,'novalure_website_sales_commerce_executor','USAGE') and not(old.status='READY' and new.status='CANCELLED') then raise exception using errcode='42501',message='Verified executor owns outbox outcomes';end if;
+ if tg_table_name='crm_website_sales_commerce_jobs' then
+  if old.execution_authority is not null and new.execution_authority is distinct from old.execution_authority then raise exception using errcode='23514',message='Immutable actual execution authority required';end if;
+  if old.execution_authority is null and new.execution_authority is not null and(not pg_has_role(current_user,'novalure_website_sales_commerce_executor','USAGE') or old.status<>'READY' or new.status<>'CLAIMED') then raise exception using errcode='42501',message='Only the private current executor binds a claim';end if;
+ end if;
  return new;
 end $$;
 create trigger commerce_version_guard before update on crm_website_sales_commerce for each row execute function crm_website_sales_commerce_mutation_guard();
 create trigger commerce_job_guard before update on crm_website_sales_commerce_jobs for each row execute function crm_website_sales_commerce_mutation_guard();
-create policy commerce_job_ready_only on crm_website_sales_commerce_jobs as restrictive for insert to novalure_tenant_app with check(status='READY' and version=1 and lease_token is null and provider_reference is null and first_attempt_at is null and created_by=nullif(current_setting('app.actor_id',true),'')::uuid);
+create policy commerce_job_ready_only on crm_website_sales_commerce_jobs as restrictive for insert to novalure_tenant_app with check(status='READY' and version=1 and execution_authority is null and lease_token is null and provider_reference is null and first_attempt_at is null and created_by=nullif(current_setting('app.actor_id',true),'')::uuid);
 create policy commerce_record_confidence on crm_website_sales_commerce_records as restrictive for insert to novalure_tenant_app with check(
  source_confidence in('OPERATOR_RECORDED','SERVER_DERIVED') and created_by=nullif(current_setting('app.actor_id',true),'')::uuid and
  ((kind in('TEMPLATE','POLICY','DELIVERY_ACCEPTANCE','SUBSCRIPTION_TERMS','CANCELLATION_REQUEST') and source_confidence='OPERATOR_RECORDED' and crm_sales_ops_owner(workspace_id))
@@ -271,11 +278,20 @@ begin
  perform id from workspace_users where workspace_id=j.workspace_id and role='owner' for share;
  return true;
 end $$;
-grant create on schema public to novalure_website_sales_commerce_lock_owner;
-alter function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) owner to novalure_website_sales_commerce_lock_owner;
-revoke create on schema public from novalure_website_sales_commerce_lock_owner;
-revoke all on function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) from public;
-grant execute on function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) to novalure_website_sales_commerce_executor;
+-- Only the exact installer-owned membership row is added temporarily; all preimages survive unchanged.
+do $$declare previous_membership record;had_previous boolean;begin
+ select m.admin_option,m.inherit_option,m.set_option into previous_membership from pg_auth_members m where m.roleid=(select oid from pg_roles where rolname='novalure_website_sales_commerce_lock_owner') and m.member=(select oid from pg_roles where rolname=current_user) and m.grantor=(select oid from pg_roles where rolname=current_user);had_previous:=found;
+ execute format('grant novalure_website_sales_commerce_lock_owner to %I with set true,inherit true',current_user);
+ grant create on schema public to novalure_website_sales_commerce_lock_owner;
+ alter function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) owner to novalure_website_sales_commerce_lock_owner;
+ revoke create on schema public from novalure_website_sales_commerce_lock_owner;
+ revoke all on function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) from public;
+ grant execute on function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) to novalure_website_sales_commerce_executor;
+ if had_previous then
+  execute format('grant novalure_website_sales_commerce_lock_owner to %I with admin %s,inherit %s,set %s',current_user,case when previous_membership.admin_option then 'true' else 'false' end,case when previous_membership.inherit_option then 'true' else 'false' end,case when previous_membership.set_option then 'true' else 'false' end);
+ else execute format('revoke novalure_website_sales_commerce_lock_owner from %I',current_user);end if;
+end $$;
+
 alter table crm_website_sales_machine_grants drop constraint crm_website_sales_machine_grants_scopes_check;
 alter table crm_website_sales_machine_grants add constraint crm_website_sales_machine_grants_scopes_check check(cardinality(scopes)>0 and scopes <@ array['crm.website-sales.read','crm.website-sales.register-location','crm.website-sales.observe','crm.website-sales.qualify','crm.website-sales.prepare-draft','crm.website-sales.stop','crm.website-sales.reconcile','crm.website-sales.studio.read','crm.website-sales.studio.create-diagnosis','crm.website-sales.studio.create-concept','crm.website-sales.studio.accept-concept','crm.website-sales.studio.build-demo','crm.website-sales.lifecycle.read','crm.website-sales.lifecycle.refresh-evidence','crm.website-sales.lifecycle.ingest-reply','crm.website-sales.lifecycle.create-handoff','crm.website-sales.autonomy.read','crm.website-sales.autonomy.plan-portfolio','crm.website-sales.autonomy.claim-allocation','crm.website-sales.autonomy.settle-allocation','crm.website-sales.autonomy.propose-price','crm.website-sales.autonomy.apply-quote','crm.website-sales.autonomy.record-outcome','crm.website-sales.autonomy.propose-improvement','crm.website-sales.autonomy.promote-improvement','crm.website-sales.conversation.read','crm.website-sales.conversation.record-topic','crm.website-sales.conversation.draft-answer','crm.website-sales.conversation.advance-conversation','crm.website-sales.conversation.stop-conversation','crm.website-sales.enablement.read','crm.website-sales.enablement.propose-next-step','crm.website-sales.enablement.propose-care','crm.website-sales.enablement.prepare-care-offer','crm.website-sales.enablement.scan-hygiene','crm.website-sales.commerce.read','crm.website-sales.commerce.reconcile','crm.website-sales.commerce.prepare-contract','crm.website-sales.commerce.queue-offer-delivery','crm.website-sales.commerce.queue-contract-delivery','crm.website-sales.commerce.request-signature','crm.website-sales.commerce.prepare-invoice-request','crm.website-sales.commerce.propose-renewal','crm.website-sales.commerce.ingest-source']::text[]);
 alter table crm_website_sales_machine_events drop constraint crm_website_sales_machine_events_action_check;

@@ -30,13 +30,22 @@ test('care finite obligations use original clamped calendar anniversaries withou
  assert.throws(()=>websiteSalesCommerceTermMonths('2026-01-31T09:30:00.000Z','2026-02-27T09:30:00.000Z','2026-03-31T09:30:00.000Z'),{code:'CARE_FINITE_COMPLETE_MONTH_TERM_REQUIRED'});
 });
 test('commerce schema preserves historical migrations and installs forced scoped RLS without an active executor', { timeout: 120000 }, async t => {
- const db = await startLocalSalesDb();
+ const db = await startLocalSalesDb();let installer:Pool|undefined;
  try {
   await applySalesSchema(db, { maxMigrationNumber: 90 });
   for (const name of ['170_crm_personal_mailbox.sql','202_website_sales_ireland.sql','203_website_sales_machine.sql','204_website_sales_studio.sql','205_website_sales_lifecycle.sql','206_website_sales_operations.sql','207_website_sales_conversations.sql','208_website_sales_enablement.sql']) await db.admin.query(await readFile(`migrations/${name}`, 'utf8'));
+  await db.admin.query('create role neondb_owner login inherit nosuperuser nobypassrls createdb createrole noreplication');
+  await db.admin.query(`do $$declare item record;begin
+   for item in select c.oid,c.relkind,format('%I.%I',n.nspname,c.relname) as qualified from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relowner=(select oid from pg_roles where rolname='qa_admin') and c.relkind in('r','p','v','m','S') order by case when c.relkind='S' then 1 else 0 end loop
+    execute format('alter %s %s owner to neondb_owner',case item.relkind when 'v' then 'view' when 'm' then 'materialized view' when 'S' then 'sequence' else 'table' end,item.qualified);
+   end loop;
+   for item in select p.oid from pg_proc p where p.pronamespace='public'::regnamespace and p.proowner=(select oid from pg_roles where rolname='qa_admin') and p.prokind='f' and not exists(select 1 from pg_depend d where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e') loop execute format('alter function %s owner to neondb_owner',item.oid::regprocedure);end loop;
+  end $$;alter database postgres owner to neondb_owner;`);
+  installer=new Pool({host:'127.0.0.1',port:db.port,user:'neondb_owner',database:'postgres',max:2});
+  const actual=(await installer.query('select current_user,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole from pg_roles where rolname=current_user')).rows[0];assert.deepEqual(actual,{current_user:'neondb_owner',rolsuper:false,rolbypassrls:false,rolcreatedb:true,rolcreaterole:true});
   const sql=await readFile('migrations/209_website_sales_commerce.sql','utf8');
   await t.test('late failure rolls back all tables, private roles, old ACLs, policies and canonical function changes atomically',async()=>{
-   const client=await db.admin.connect();try{
+   const client=await installer!.connect();try{
     const snapshot=async()=> (await client.query(`select
       (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select oid,relname,relacl from pg_class where relnamespace='public'::regnamespace)r) as relations,
       (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select oid,proacl,pg_get_functiondef(oid) as definition from pg_proc where pronamespace='public'::regnamespace and prokind='f')r) as functions,
@@ -51,14 +60,17 @@ test('commerce schema preserves historical migrations and installs forced scoped
     assert.equal((await client.query("select count(*)::int n from pg_roles where rolname in('novalure_website_sales_commerce_executor','novalure_website_sales_commerce_lock_owner')")).rows[0].n,0);
    }finally{client.release();}
   });
-  await db.admin.query(sql);
+  await installer.query('create role novalure_website_sales_commerce_lock_owner nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls');await installer.query('grant novalure_website_sales_commerce_lock_owner to current_user with admin false,inherit false,set false');
+  const preimage=(await installer.query("select r.rolname,m.admin_option,m.inherit_option,m.set_option,u.rolname as member,g.rolname as grantor from pg_auth_members m join pg_roles r on r.oid=m.roleid join pg_roles u on u.oid=m.member join pg_roles g on g.oid=m.grantor where r.rolname='novalure_website_sales_commerce_lock_owner' order by g.rolname")).rows;
+  await installer.query(sql);
   const rows = (await db.admin.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relname like 'crm_website_sales_commerce%' and relkind='r' order by relname")).rows;
   assert.equal(rows.length, 9); assert(rows.every(row => row.relrowsecurity && row.relforcerowsecurity));
   const role = (await db.admin.query("select rolcanlogin,rolsuper,rolbypassrls from pg_roles where rolname='novalure_website_sales_commerce_executor'")).rows[0];
   assert.deepEqual(role, {rolcanlogin:false,rolsuper:false,rolbypassrls:false});
   assert.equal((await db.admin.query("select count(*)::int n from crm_website_sales_commerce_sources")).rows[0].n, 0);
   assert.equal((await db.admin.query("select count(*)::int n from crm_website_sales_machine_grants")).rows[0].n, 0);
- } finally { await db.stop(); }
+  assert.deepEqual((await installer.query("select r.rolname,m.admin_option,m.inherit_option,m.set_option,u.rolname as member,g.rolname as grantor from pg_auth_members m join pg_roles r on r.oid=m.roleid join pg_roles u on u.oid=m.member join pg_roles g on g.oid=m.grantor where r.rolname in('novalure_website_sales_commerce_executor','novalure_website_sales_commerce_lock_owner') order by r.rolname,g.rolname")).rows,[{rolname:'novalure_website_sales_commerce_executor',admin_option:true,inherit_option:false,set_option:false,member:'neondb_owner',grantor:'qa_admin'},...preimage]);
+ } finally { await installer?.end();await db.stop(); }
 });
 
 test('commerce canonical offer, native owner approval, outbox and verified financial facts use actual isolated PostgreSQL', {timeout:240000}, async t => {
@@ -102,10 +114,10 @@ test('commerce canonical offer, native owner approval, outbox and verified finan
   const command=async(operation:Command['operation'],payload:Record<string,unknown>):Promise<Command>=>{const view=await read(owner,scope,options);return{contractVersion:websiteSalesCommerceContract,operation,...scope,expectedVersion:view.version,expectedWorkflowVersion:view.workflowVersion,idempotencyKey:randomUUID(),correlationId:randomUUID(),payload};};
   const run=async(operation:Command['operation'],payload:Record<string,unknown>)=>execute(owner,await command(operation,payload),options);
   let templateRef:{id:string;version:number;digest:string},policyRef:{id:string;version:number;digest:string};
-  const workload=randomUUID(),effectGrant=randomUUID(),ingestGrant=randomUUID(),readGrant=randomUUID(),keyPair=generateKeyPairSync('ed25519');
+  const workload=randomUUID(),effectGrant=randomUUID(),otherEffectGrant=randomUUID(),ingestGrant=randomUUID(),readGrant=randomUUID(),keyPair=generateKeyPairSync('ed25519');
   await db.admin.query(`insert into crm_website_sales_machine_workloads(id,identity_id,workspace_id,actor_user_id,issuer,audience,project_id,owner_id,subject,environment,authority_reference)values($1,'EVELYN_WEBSITE_SALES_INTERNAL_IDENTITY',$2,$3,$4,$5,$6,$7,$8,$9,'SYNTHETIC commerce executor')`,[workload,ws,agent,CRM_MACHINE_ISSUER,CRM_MACHINE_AUDIENCE,CRM_MACHINE_PROJECT_ID,CRM_MACHINE_OWNER_ID,CRM_MACHINE_SUBJECT,CRM_MACHINE_ENVIRONMENT]);
   const effects=['crm.website-sales.commerce.read','crm.website-sales.commerce.reconcile','crm.website-sales.commerce.queue-offer-delivery','crm.website-sales.commerce.queue-contract-delivery','crm.website-sales.commerce.request-signature','crm.website-sales.commerce.prepare-invoice-request','crm.website-sales.commerce.propose-renewal'];
-  for(const[id,scopes]of[[effectGrant,effects],[ingestGrant,['crm.website-sales.commerce.read','crm.website-sales.commerce.ingest-source']],[readGrant,['crm.website-sales.commerce.read']]]as const)await db.admin.query(`insert into crm_website_sales_machine_grants(id,workload_id,workspace_id,actor_user_id,project_id,company_id,location_id,department_id,agent_id,task_id,authority_reference,delegation_public_key,scopes,not_before,expires_at)values($1,$2,$3,$4,$5,$6,$7,'SALES','evelyn.sales.commerce-test',$8,'SYNTHETIC commerce executor',$9,$10,clock_timestamp(),$11)`,[id,workload,ws,agent,project,company,location,randomUUID(),keyPair.publicKey.export({format:'der',type:'spki'}).toString('base64url'),scopes,future]);
+  for(const[id,scopes]of[[effectGrant,effects],[otherEffectGrant,effects],[ingestGrant,['crm.website-sales.commerce.read','crm.website-sales.commerce.ingest-source']],[readGrant,['crm.website-sales.commerce.read']]]as const)await db.admin.query(`insert into crm_website_sales_machine_grants(id,workload_id,workspace_id,actor_user_id,project_id,company_id,location_id,department_id,agent_id,task_id,authority_reference,delegation_public_key,scopes,not_before,expires_at)values($1,$2,$3,$4,$5,$6,$7,'SALES','evelyn.sales.commerce-test',$8,'SYNTHETIC commerce executor',$9,$10,clock_timestamp(),$11)`,[id,workload,ws,agent,project,company,location,randomUUID(),keyPair.publicKey.export({format:'der',type:'spki'}).toString('base64url'),scopes,future]);
   await db.admin.query('create role commerce_private_executor login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls');await db.admin.query('grant novalure_website_sales_commerce_executor to commerce_private_executor');
   executorPool=new Pool({host:'127.0.0.1',port:db.port,user:'commerce_private_executor',database:'postgres',max:4});
   const binding:CommerceExecutionBinding={...scope,workspaceId:ws,actorId:agent,workloadId:workload,grantId:effectGrant,allowedKinds:['OFFER_SEND','CONTRACT_SEND','SIGNATURE_REQUEST','ACCOUNTING_INVOICE_REQUEST','SUBSCRIPTION_CHANGE'],expiresAt:Date.parse(future),authorityReference:'SYNTHETIC commerce executor'};
@@ -135,14 +147,15 @@ test('commerce canonical offer, native owner approval, outbox and verified finan
    const current=(await read(owner,scope,options)).offerChoices.find(o=>o.offerRef.id===offerRef.id)!;assert.equal(current.status,'APPROVED');
    const approvalReference=(await db.admin.query('select approval_id from crm_offers where id=$1',[offerRef.id])).rows[0].approval_id;
    const queued=await run('queue_offer_delivery',{offerRef,approvalReference});offerJobId=queued.data.outboxId!;
-   const claimed=await claimWebsiteSalesCommerceJob(executor,offerJobId);assert(claimed?.leaseToken);assert.equal(claimed.payload.documentRef&&commerceDigest(claimed.payload.documentRef),commerceDigest(offerRef));
+   const claimed=await claimWebsiteSalesCommerceJob(executor,offerJobId);assert(claimed?.leaseToken);assert.deepEqual((await db.admin.query('select execution_authority from crm_website_sales_commerce_jobs where id=$1',[offerJobId])).rows[0].execution_authority,{actorId:agent,workloadId:workload,grantId:effectGrant,authorityReference:binding.authorityReference});assert.equal(claimed.payload.documentRef&&commerceDigest(claimed.payload.documentRef),commerceDigest(offerRef));
+   const otherExecutor=createWebsiteSalesCommerceExecutor({pool:executorPool as unknown as TenantPool,assertCurrent:async()=>({...binding,grantId:otherEffectGrant})});let unauthorizedDispatches=0;await assert.rejects(dispatchWebsiteSalesCommerceJob(otherExecutor,{jobId:offerJobId,leaseToken:claimed.leaseToken,payloadDigest:claimed.payloadDigest},async()=>{unauthorizedDispatches++;return{outcome:'UNKNOWN',errorCode:'SHOULD_NOT_DISPATCH'};}),{code:'COMMERCE_EXECUTION_AUTHORITY_CHANGED'});assert.equal(unauthorizedDispatches,0);
    const native=(await db.admin.query('select version from crm_offers where id=$1',[offerRef.id])).rows[0];
    await assert.rejects(executeOfferCommand(owner,{operation:'record_sent',offerId:offerRef.id,projectId:project,expectedVersion:Number(native.version),idempotencyKey:randomUUID(),correlationId:randomUUID(),payload:{reference:'Attempted manual overwrite',recipientEmail:'commerce-buyer@example.invalid',contentDigest:offerRef.digest,revision:offerRef.version,sentAt:new Date().toISOString()}},options),{code:'COMMERCE_DELIVERY_OUTCOME_UNKNOWN'});
    let signal!:()=>void,release!:()=>void;const admitted=new Promise<void>(resolve=>signal=resolve),gate=new Promise<void>(resolve=>release=resolve);let calls=0;const pending=dispatchWebsiteSalesCommerceJob(executor,{jobId:offerJobId,leaseToken:claimed.leaseToken,payloadDigest:claimed.payloadDigest},async frozen=>{calls++;signal();await gate;assert(Object.isFrozen(frozen.payload));assert(String(frozen.payload.text).includes('6000.00 EUR net'));return{outcome:'ACCEPTED',providerReference:'SYNTHETIC-message-1',receiptDigest:'c'.repeat(64)};});await admitted;let suppressionCommitted=false;const suppression=db.admin.query("update contacts set consent_label='Abgemeldet',version=version+1 where id=$1",[contact]).then(()=>suppressionCommitted=true);await new Promise(resolve=>setTimeout(resolve,50));assert.equal(suppressionCommitted,false);release();const delivered=await pending;await suppression;assert.equal(calls,1);assert.equal(delivered.status,'ACCEPTED');await db.admin.query("update contacts set consent_label='Opt-in',version=version+1 where id=$1",[contact]); // Explicit isolated fixture reset after proving ordered opt-out commit.
    await assert.rejects(ingestVerifiedWebsiteSalesCommerceSource(sourceExecutor,{}as never),{code:'COMMERCE_VERIFIED_SOURCE_REQUIRED'});
    const event=sourceEvent('PROVIDER_DELIVERY',{outboxId:offerJobId,documentKind:'OFFER',documentRef:offerRef,documentSha256:claimed.payload.documentSha256,recipientDigest:claimed.payload.recipientDigest,providerMessageId:'SYNTHETIC-message-1',status:'DELIVERED'},'DELIVERY_PROVIDER');
    await assert.rejects(ingest(event,offerJobId,readExecutor),{code:'COMMERCE_INGEST_SOURCE_SCOPE_REQUIRED'});
-   await ingest(event,offerJobId);assert.equal((await db.admin.query('select status from crm_offers where id=$1',[offerRef.id])).rows[0].status,'SENT');
+   await ingest(event,offerJobId);assert.deepEqual((await db.admin.query('select received_by_actor_id,verification_workload_id,verification_grant_id,verification_authority_reference from crm_website_sales_commerce_sources where id=$1',[event.eventId])).rows[0],{received_by_actor_id:agent,verification_workload_id:workload,verification_grant_id:ingestGrant,verification_authority_reference:binding.authorityReference});assert.equal((await db.admin.query('select status from crm_offers where id=$1',[offerRef.id])).rows[0].status,'SENT');
    const repeated={...event,retrievedAt:new Date().toISOString(),verificationReceiptReference:'SYNTHETIC later read observation'};assert.equal((await ingest(repeated,offerJobId)).status,'DUPLICATE');assert.equal((await db.admin.query('select count(*)::int n from crm_website_sales_commerce_sources')).rows[0].n,1);
    assert.equal((await reconcile(owner,await command('prepare_contract',{offerRef,templateRef,policyRef}),options)).status,'NOT_FOUND');
   });
