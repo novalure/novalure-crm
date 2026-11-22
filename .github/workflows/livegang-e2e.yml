@@ -116,6 +116,9 @@ jobs:
       - name: Website Sales machine, Studio and lifecycle regression
         run: npm run test:website-sales-complete
 
+      - name: Verify guarded Sales contracts delivery and actual-source projections
+        run: npm run test:website-sales-commerce
+
       - name: Final sales contract, approval, route and recovery regression
         run: npm run test:sales:final
 

@@ -3,7 +3,7 @@ import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 
 export const resendDeliveryTypes=['email.sent','email.delivered','email.delivery_delayed','email.bounced','email.complained','email.failed','email.suppressed'] as const;
 export type ResendDeliveryType=typeof resendDeliveryTypes[number];
-export type ProviderDeliveryKind='newsletter'|'newsletter_test'|'automation';
+export type ProviderDeliveryKind='newsletter'|'newsletter_test'|'automation'|'sales_commerce';
 export type VerifiedResendEvent={eventId:string;digest:string;type:ResendDeliveryType;occurredAt:string;emailId:string;to:string;from:string;reference:{kind:ProviderDeliveryKind;id:string}|null;bounceType:string|null};
 export class ResendWebhookError extends Error{constructor(readonly status:400|401|409|413|503,readonly code:string){super(code);}}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29,8 +29,8 @@ export function parseVerifiedResendEvent(raw:string,eventId:string,nowMs=Date.no
  const value=object(parsed);if(!(resendDeliveryTypes as readonly unknown[]).includes(value.type))return null;
  const data=object(value.data),to=Array.isArray(data.to)&&data.to.length===1?email(data.to[0]):'',from=email(data.from,true),created=typeof value.created_at==='string'?Date.parse(value.created_at):NaN;
  if(typeof data.email_id!=='string'||!uuid.test(data.email_id)||!to||!from||!Number.isFinite(created)||created<0||created>nowMs+300000)throw new ResendWebhookError(400,'invalid_payload');
- const tags=object(data.tags);let reference:VerifiedResendEvent['reference']=null;
- if(typeof tags.novalure_delivery==='string'&&uuid.test(tags.novalure_delivery)&&['newsletter','newsletter_test','automation'].includes(String(tags.novalure_kind)))reference={id:tags.novalure_delivery,kind:tags.novalure_kind as ProviderDeliveryKind};
+ const tags=Array.isArray(data.tags)?Object.fromEntries(data.tags.slice(0,20).flatMap(tag=>{const item=object(tag);return typeof item.name==='string'&&typeof item.value==='string'?[[item.name,item.value]]:[];})):object(data.tags);let reference:VerifiedResendEvent['reference']=null;
+ if(typeof tags.novalure_delivery==='string'&&uuid.test(tags.novalure_delivery)&&['newsletter','newsletter_test','automation','sales_commerce'].includes(String(tags.novalure_kind)))reference={id:tags.novalure_delivery,kind:tags.novalure_kind as ProviderDeliveryKind};
  const bounce=object(data.bounce),bounceType=typeof bounce.type==='string'&&['Permanent','Transient','Undetermined'].includes(bounce.type)?bounce.type:null;
  return{eventId,digest:createHash('sha256').update(raw,'utf8').digest('hex'),type:value.type as ResendDeliveryType,occurredAt:new Date(created).toISOString(),emailId:data.email_id.toLowerCase(),to,from,reference,bounceType};
 }
