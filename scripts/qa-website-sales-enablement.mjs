@@ -11,8 +11,9 @@ import { inspectAndSignWebsiteDemo } from './lib/website-sales-rendered-qa.mjs';
 // Actual optimized local application, ordinary password/MFA, synthetic records only.
 // Start qa-sales-browser-server.mjs --website-sales-operations after the integrated enablement build.
 const fixture=JSON.parse(await readFile('.npm-cache/qa/sales-browser-context.json','utf8'));
-const base=new URL(fixture.baseUrl),output=path.resolve('.npm-cache/qa/website-sales-enablement-20261122'),expect=baseExpect.configure({timeout:20000});
+const base=new URL(fixture.baseUrl),output=path.resolve(process.env.CRM_SALES_ENABLEMENT_QA_OUTPUT||'.npm-cache/qa/website-sales-enablement-20261122'),expect=baseExpect.configure({timeout:20000});
 assert(fixture.syntheticOnly&&fixture.websiteSales?.syntheticOnly&&fixture.websiteStudio?.syntheticOnly);
+assert(output.startsWith(path.resolve('.npm-cache/qa')+path.sep),'QA output must remain inside this workspace QA folder');
 assert.equal(base.hostname,'127.0.0.1');assert.equal(fixture.database.host,'127.0.0.1');assert(/^sales_qa_[a-f0-9]+$/.test(fixture.database.user));assert.equal(fixture.database.database,'neondb');assert.equal(fixture.fixtureMode,'design-c-current-application-originals');
 await mkdir(output,{recursive:true});
 const require=createRequire(import.meta.url),admin=new pg.Pool({...fixture.database,user:'qa_admin'}),browser=await chromium.launch({channel:process.env.CRM_QA_BROWSER_CHANNEL||'chrome',headless:true});
@@ -214,7 +215,16 @@ try {
     const names = ['Bedarf', 'Abschluss', 'Demos & Referenzen', 'Heute', 'Abschlussgründe', 'Bestandskunden', 'Datenqualität'];
     const ids = ['brief', 'close-plan', 'demos', 'today', 'closures', 'care', 'hygiene'];
     for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 1000 }, tablet: { width: 834, height: 1112 }, phone: { width: 390, height: 844 } })) {
-      for (let index=0; index<names.length; index++) { await tab(names[index]); await scanUi(main, `${name}-${ids[index]}`, viewport, `website-enablement-${ids[index]}`); }
+      for (let index=0; index<names.length; index++) {
+        await tab(names[index]); await scanUi(main, `${name}-${ids[index]}`, viewport, `website-enablement-${ids[index]}`);
+        if(name==='phone'&&ids[index]==='closures'){
+          const wrappers=main.getByTestId('enablement-closure-table-wrap'); await expect(wrappers).toHaveCount(2);
+          for(const wrapper of await wrappers.all()){
+            const geometry=await wrapper.evaluate(element=>({viewport:element.clientWidth,scroll:element.scrollWidth,table:element.querySelector('table').getBoundingClientRect().width,headers:[...element.querySelectorAll('thead th')].map(cell=>getComputedStyle(cell).whiteSpace)}));
+            assert(geometry.table>=672&&geometry.scroll>geometry.viewport); assert(geometry.headers.every(value=>value==='nowrap')); await wrapper.focus(); await expect(wrapper).toBeFocused();
+          }
+        }
+      }
     }
     await main.emulateMedia({ reducedMotion: 'reduce' }); await tab('Bedarf'); await scanUi(main, 'phone-reduced-motion', { width: 390, height: 844 }, 'website-enablement-brief');
     const tabs = panel().getByRole('tab'); await tabs.nth(0).focus(); await main.keyboard.press('ArrowRight'); await expect(tabs.nth(1)).toBeFocused();
