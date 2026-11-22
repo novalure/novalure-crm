@@ -4,24 +4,28 @@ type Contract = WebsiteSalesCommerceRead['contracts'][number];
 type Subscription = WebsiteSalesCommerceRead['subscriptions'][number];
 type Source = WebsiteSalesCommerceSourceEvent;
 const refKey = (value: { id: string; version: number; digest: string }) => `${value.id}:${value.version}:${value.digest}`;
-const sourceKey = (value: Source) => JSON.stringify([value.source.system, value.source.provider, value.source.accountReference, value.source.resourceType, value.source.resourceId]);
-
-/** Presentation only. Server admission still independently checks every command against fresh canonical sources. */
-function newestSources<T extends Source>(rows: T[]): T[] {
-  const latest = new Map<string, T>();
-  for (const row of rows) {
-    const key = sourceKey(row), old = latest.get(key);
-    if (!old || row.source.version > old.source.version) latest.set(key, row);
-  }
-  return [...latest.values()];
+/** The server resolves crypto-bound supersession and reversals; the browser only presents that assessment. */
+function currentEvents(data: WebsiteSalesCommerceRead) {
+  if (data.sourceAssessment.status !== 'READY' || !data.sourceAssessment.complete) return [];
+  const active = new Set(data.sourceAssessment.activeEventIds);
+  return data.sourceEvents.filter(event => active.has(event.eventId));
 }
 
 export function commerceContractStatus(data: WebsiteSalesCommerceRead, contract: Contract, now: number): string {
-  const sources = data.sourceEvents.filter((event): event is Extract<Source, { kind: 'SIGNATURE' }> => event.kind === 'SIGNATURE' && event.source.system === 'SIGNATURE_PROVIDER' && event.confidence === 'PROVIDER_VERIFIED');
-  const latest = newestSources(sources).filter(event => refKey(event.payload.contractRef) === refKey(contract) && event.payload.documentSha256 === contract.payload.documentSha256);
-  if (latest.length > 1 && new Set(latest.map(event => event.payload.status)).size > 1) return 'UNKNOWN';
+  if (data.sourceAssessment.status !== 'READY' || !data.sourceAssessment.complete) return 'UNKNOWN';
+  const sources = currentEvents(data).filter((event): event is Extract<Source, { kind: 'SIGNATURE' }> => event.kind === 'SIGNATURE' && event.source.system === 'SIGNATURE_PROVIDER' && event.confidence === 'PROVIDER_VERIFIED');
+  const latest = sources.filter(event => refKey(event.payload.contractRef) === refKey(contract) && event.payload.documentSha256 === contract.payload.documentSha256);
+  if (latest.some(event => event.payload.status === 'SOURCE_UNAVAILABLE' || event.payload.providerArchivedAt)) return 'SOURCE_UNAVAILABLE';
+  const negative = latest.find(event => ['VOIDED', 'DECLINED', 'EXPIRED'].includes(event.payload.status));
+  if (negative) return negative.payload.status;
+  const newestTime = latest.length ? Math.max(...latest.map(event => Date.parse(event.occurredAt))) : 0;
+  if (new Set(latest.filter(event => Date.parse(event.occurredAt) === newestTime).map(event => event.payload.status)).size > 1) return 'UNKNOWN';
   const signature = latest.toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0];
-  if (!signature) return contract.payload.status === 'SIGNED' ? 'SIGNATURE_PENDING' : contract.payload.status;
+  if (!signature) {
+    const invalid = new Set(data.sourceAssessment.invalidatedEventIds);
+    if (data.sourceEvents.some(event => invalid.has(event.eventId) && event.kind === 'SIGNATURE' && refKey(event.payload.contractRef) === refKey(contract))) return 'UNKNOWN';
+    return contract.payload.status === 'SIGNED' ? 'SIGNATURE_PENDING' : contract.payload.status;
+  }
   if (signature.payload.status !== 'SIGNED') return signature.payload.status === 'PENDING' ? 'SIGNATURE_PENDING' : signature.payload.status;
   const policy = [...(data.policies ?? []), ...(data.policy ? [data.policy] : [])].find(row => refKey(row) === refKey(contract.payload.policyRef));
   const assurance = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 };
@@ -32,14 +36,14 @@ export function commerceContractStatus(data: WebsiteSalesCommerceRead, contract:
 
 export function commerceSubscriptionSource(data: WebsiteSalesCommerceRead, subscription: Subscription) {
   const terms = subscription.payload;
-  const sources = data.sourceEvents.filter((event): event is Extract<Source, { kind: 'SUBSCRIPTION' }> => event.kind === 'SUBSCRIPTION' && event.confidence === 'PROVIDER_VERIFIED' && ['SERVICE_AUTHORITY', 'ACCOUNTING'].includes(event.source.system));
-  const latest = newestSources(sources).filter(event => refKey(event.payload.contractRef) === refKey(terms.contractRef) && event.payload.termsDigest === terms.termsDigest &&
+  const sources = currentEvents(data).filter((event): event is Extract<Source, { kind: 'SUBSCRIPTION' }> => event.kind === 'SUBSCRIPTION' && event.confidence === 'PROVIDER_VERIFIED' && ['SERVICE_AUTHORITY', 'ACCOUNTING'].includes(event.source.system));
+  const latest = sources.filter(event => refKey(event.payload.contractRef) === refKey(terms.contractRef) && event.payload.termsDigest === terms.termsDigest &&
     event.payload.planKey === terms.planKey && event.payload.originalServiceStartAt === terms.originalServiceStartAt && event.payload.currency === terms.currency);
   if (latest.length > 1 && new Set(latest.map(event => JSON.stringify([event.payload.status, event.payload.periodStartAt, event.payload.periodEndAt, event.payload.cancellationEffectiveAt]))).size > 1) return null;
   return latest.toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0] ?? null;
 }
 
 export function commerceNewestInvoice(data: WebsiteSalesCommerceRead) {
-  return newestSources(data.invoices.filter((event): event is Extract<Source, { kind: 'INVOICE' }> => event.kind === 'INVOICE'))
+  return currentEvents(data).filter((event): event is Extract<Source, { kind: 'INVOICE' }> => event.kind === 'INVOICE')
     .toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0] ?? null;
 }

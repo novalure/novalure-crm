@@ -26,7 +26,7 @@ function fixture() {
     data: { identity: { workspaceId, ...scope }, workflowId, version: 1, workflowVersion: 2, recordId: randomUUID(), recordDigest: 'a'.repeat(64), outboxId: null, canContact: false } };
   const read: WebsiteSalesCommerceRead = { contractVersion: websiteSalesCommerceContract, source: 'database', identity: { workspaceId, ...scope }, workflowId,
     version: 1, workflowVersion: 2, canWrite: false, canApproveFacts: false, canApproveContract: false, canContact: false, actionEligibility: [], eligibleDeliveryTasks: [], sourceConnections: [], offerChoices: [], templates: [], policy: null, offers: [], contracts: [], approvals: [],
-    deliveryAcceptances: [], invoiceRequests: [], invoices: [], payments: [], subscriptions: [], outbox: [], sourceEvents: [], blockers: [] };
+    deliveryAcceptances: [], invoiceRequests: [], invoices: [], payments: [], subscriptions: [], outbox: [], sourceEvents: [], sourceAssessment: { status: 'READY', activeEventIds: [], invalidatedEventIds: [], reasons: [], complete: true }, blockers: [] };
   return { workspaceId, actorId, workflowId, scope, command, receipt, read };
 }
 function mock(run: (request: Request) => Promise<Response>) {
@@ -136,6 +136,7 @@ test('a committed reconciliation can safely validate the same bounded large read
     source: { system: 'PAYMENT_PROVIDER', provider: 'synthetic-unit', accountReference: 'unit', resourceType: 'payment', resourceId: `unit-${index}`, version: 1, digest: 'a'.repeat(64) },
     occurredAt: '2026-11-22T10:00:00.000Z', retrievedAt: '2026-11-22T10:00:00.000Z', verificationReceiptReference: 'synthetic-transport-fixture-not-provider-evidence', confidence: 'PROVIDER_VERIFIED', supersedesEventId: null,
     kind: 'PAYMENT', payload: { currency: 'EUR', amountMinor: 100, status: 'SETTLED', kind: 'PAYMENT', allocations: Array.from({ length: 100 }, () => ({ invoiceSourceEventId: randomUUID(), installmentId: randomUUID(), amountMinor: 1 })) } }));
+  f.read.sourceAssessment.activeEventIds = f.read.sourceEvents.map(event => event.eventId);
   const result = reconcile(f); assert(new TextEncoder().encode(JSON.stringify(result)).byteLength > 524288);
   mock(async () => Response.json(result));
   assert.equal(await client.reconcileCommerce(f.workspaceId, f.actorId), 'COMMITTED');
