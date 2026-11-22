@@ -24,15 +24,28 @@ export async function inspectAndSignWebsiteDemo(options) {
   assert(artifactRecord?.artifact?.kind === "DEMO");
   assert.notEqual(artifactRecord.createdBy, qaActorId, "Builder cannot act as its independent QA actor");
   assert(/^[0-9a-f]{40}$/.test(sourceRevision));
-  const artifact = artifactRecord.artifact;
+  const base = new URL(baseUrl);
+  assert(base.protocol === "https:" || base.protocol === "http:" && ["127.0.0.1", "localhost"].includes(base.hostname));
+  const query = new URLSearchParams({ projectId: scope.projectId, companyId: scope.companyId, locationId: scope.locationId });
+  // A human history projection deliberately omits raster bodies. Obtain the
+  // full immutable artifact through this independently authenticated QA actor
+  // and verify its complete digest before using any metadata for a certificate.
+  const sourcePage = await context.newPage();
+  let artifact;
+  try {
+    const source = await sourcePage.goto(new URL(`/api/crm/website-sales/studio/qa-render/${artifactRecord.id}/artifact?${query}`, base).href, { waitUntil: "domcontentloaded" });
+    assert.equal(source?.status(), 200, "Independent QA must obtain the current full scoped artifact");
+    artifact = await bounded(source.json(), "Full immutable QA artifact");
+  } finally { await sourcePage.close(); }
+  assert.equal(artifact.kind, "DEMO");
+  const { artifactDigest, ...unsigned } = artifact;
+  assert.equal(digest(canonical(unsigned)), artifactDigest, "Full immutable artifact digest must be recomputable");
+  assert.equal(artifactDigest, artifactRecord.artifact.artifactDigest, "History selection and protected QA source must agree");
   assert.equal(artifact.identity.workspaceId, scope.workspaceId);
   for (const name of ["projectId", "companyId", "locationId"]) assert.equal(artifact.identity[name], scope[name]);
   assert.equal(digest(Buffer.from(artifact.content.html, "utf8")), artifact.content.htmlDigest);
   const assets = artifact.content.assets.map(asset => ({ path: asset.path, mediaType: asset.mediaType, sha256: asset.sha256 })).sort((a, b) => a.path.localeCompare(b.path));
   assert.equal(digest(canonical(assets)), artifact.content.assetManifestDigest);
-  const base = new URL(baseUrl);
-  assert(base.protocol === "https:" || base.protocol === "http:" && ["127.0.0.1", "localhost"].includes(base.hostname));
-  const query = new URLSearchParams({ projectId: scope.projectId, companyId: scope.companyId, locationId: scope.locationId });
   const renderUrl = new URL(`/api/crm/website-sales/studio/qa-render/${artifactRecord.id}/render?${query}`, base);
   const directory = path.resolve(outputDirectory);
   await mkdir(directory, { recursive: true });
