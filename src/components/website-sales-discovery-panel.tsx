@@ -57,7 +57,7 @@ export function WebsiteSalesDiscoveryPanel({ workspaceId, actorId, projectId, la
     finally { notifyPending(); setBusy(false); }
   }
   async function recover(retry = false) { setBusy(true); try { const data = await (retry ? retryDiscoveryOriginal(workspaceId, actorId) : registerDiscovery(workspaceId, actorId)); setMessage("saved"); onOpen(data); } catch (error) { if (error instanceof DiscoveryBrowserError && error.code === "DISCOVERY_NOT_FOUND") setMessage("notFound"); else failure("error"); } finally { notifyPending(); setBusy(false); } }
-  return <Surface className="space-y-4" data-website-sales-discovery aria-labelledby={`${id}-title`}>
+  return <Surface className="space-y-4" data-website-sales-discovery role="region" aria-labelledby={`${id}-title`}>
     <div><h3 id={`${id}-title`} className="text-lg font-semibold">{c.title}</h3><p className="mt-2 max-w-prose text-sm text-stone-600">{c.intro}</p></div>
     {message ? <div ref={errorRef} tabIndex={-1}><Notice tone={message === "saved" ? "success" : "danger"} announce={message === "saved" ? "polite" : "assertive"}>{c[message]}</Notice></div> : null}
     {pending ? <Notice tone="warning"><p>{c.pending}</p><Button className="mt-3 min-h-11" disabled={busy || blocked} onClick={() => void recover()}>{c.reconcile}</Button>{message === "notFound" ? <Button className="mt-3 min-h-11" disabled={busy || blocked} onClick={() => void recover(true)}>{c.retry}</Button> : null}</Notice> : null}
