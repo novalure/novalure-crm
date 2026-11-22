@@ -79,7 +79,7 @@ try {
     await form.locator('[name="budget"]').fill('0'); await basis(form, 'SYNTHETIC explicitly known zero customer budget');
     await main.evaluate(() => { const original = window.fetch.bind(window); let once = true; window.fetch = async (input, init) => {
       const request = new Request(input instanceof Request ? input.clone() : new URL(String(input), location.href), init);
-      const lose = once && request.method === 'POST' && new URL(request.url()).pathname === '/api/crm/website-sales/enablement' && (await request.clone().json()).operation === 'record_brief';
+      const lose = once && request.method === 'POST' && new URL(request.url).pathname === '/api/crm/website-sales/enablement' && (await request.clone().json()).operation === 'record_brief';
       const response = await original(input, init); if (lose && response.ok) { once = false; await response.body?.cancel(); throw new TypeError('SYNTHETIC post-commit enablement response loss'); } return response;
     }; });
     await save(form); await expect(panel().getByText('Eine vorherige Speicherung muss zuerst geklärt werden.', { exact: true })).toBeVisible();
@@ -179,6 +179,10 @@ try {
     const form = main.getByTestId(`enablement-hygiene-${candidate.candidateDigest}-form`);
     await form.locator('[name="disposition"]').selectOption('NEEDS_MORE_EVIDENCE'); await form.locator('[name="rationale"]').fill('SYNTHETIC shared-name/domain evidence needs owner review');
     await basis(form); await save(form); await expect.poll(async () => (await current()).aggregateVersion).toBeGreaterThan(read.aggregateVersion);
+    await openStudio(state); await tab('Datenqualität');
+    const decision = (await current()).hygieneAnnotations.find(item => item.candidateDigest===candidate.candidateDigest);
+    assert(decision && decision.disposition==='NEEDS_MORE_EVIDENCE' && decision.current); assert.equal(decision.recordedBy, actor.account.userId);
+    await expect(main.getByTestId('website-enablement-hygiene-decisions').getByText('SYNTHETIC shared-name/domain evidence needs owner review', { exact: true })).toBeVisible();
     assert.equal((await admin.query('select count(*)::int total from organizations where workspace_id=$1 and project_id=$2', [actor.account.workspaceId, state.scope.projectId])).rows[0].total, before);
     assert.equal((await admin.query('select count(*)::int total from organizations where workspace_id=$1 and id=any($2::uuid[])', [actor.account.workspaceId, [duplicate,state.scope.companyId]])).rows[0].total, 2);
   });
@@ -213,6 +217,6 @@ try {
 } finally {
   await writeFile(path.join(output, 'result.json'), JSON.stringify({ syntheticOnly: true, sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     harnessSha256: digest(await readFile(new URL(import.meta.url))), productionAccess: 0, providerCalls: 0, server: 'optimized-next-build', authentication: 'ordinary-password-plus-MFA',
-    automaticAccessibilityOnly: true, results, accessibility, errors, unexpectedNetwork, completed: results.length }, null, 2));
+    automaticAccessibilityOnly: true, results, accessibility, qaAssetDiagnostics, errors, unexpectedNetwork, completed: results.length }, null, 2));
   for (const value of contexts) await value.close(); await browser.close(); await admin.end();
 }

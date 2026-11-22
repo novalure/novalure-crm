@@ -24,7 +24,7 @@ test("Canonical Sales operations reserve shared resources, revise only DRAFT, an
  const db=await startLocalSalesDb();
  try{
   await applySalesSchema(db,{maxMigrationNumber:90});
-  for(const file of ["202_website_sales_ireland.sql","170_crm_personal_mailbox.sql","203_website_sales_machine.sql","204_website_sales_studio.sql","205_website_sales_lifecycle.sql","206_website_sales_operations.sql","207_website_sales_conversations.sql"]){await db.admin.query(await readFile(`migrations/${file}`,"utf8"));}
+  for(const file of ["202_website_sales_ireland.sql","170_crm_personal_mailbox.sql","203_website_sales_machine.sql","204_website_sales_studio.sql","205_website_sales_lifecycle.sql","206_website_sales_operations.sql","207_website_sales_conversations.sql","208_website_sales_enablement.sql"]){await db.admin.query(await readFile(`migrations/${file}`,"utf8"));}
   const ws=CRM_MACHINE_WORKSPACE_ID,actor=randomUUID(),otherWs=randomUUID(),otherActor=randomUUID(),project=randomUUID(),companies:string[]=[randomUUID(),randomUUID()],contacts=[randomUUID(),randomUUID()],pipeline=randomUUID();
   await db.admin.query("insert into workspaces(id,name,operating_model,customer_type)values($1,'Isolated Sales operations','novalure_internal','novalure_internal'),($2,'Other tenant','novalure_internal','novalure_internal') on conflict(id) do nothing",[ws,otherWs]);
   await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role)values($1,$2,'Policy owner','owner@example.invalid','owner','novalure_operator'),($3,$4,'Other owner','other@example.invalid','owner','novalure_operator')",[actor,ws,otherActor,otherWs]);
