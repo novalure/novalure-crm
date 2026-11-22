@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppSession } from "../auth/session";
 import { assertCrmUuid, assertProjectGrant, CrmCommandError, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
-import { websiteSalesActorAuthority } from "../website-sales-machine-authority";
+import { websiteSalesActorAuthority, websiteSalesEnablementSourceAuthority } from "../website-sales-machine-authority";
 import { qualifyWebsiteProspect, type WebsiteInvestmentInput, type WebsiteProspectInput } from "../website-prospect";
 import { buildWebsiteDemo, createWebsiteConcept, createWebsiteDiagnosis, verifyWebsiteStudioArtifact, WebsiteStudioError, type WebsiteStudioArtifact, type WebsiteConceptArtifact, type WebsiteDiagnosisArtifact } from "../website-sales-studio";
 import { assertWebsiteStudioQaActor, verifyWebsiteStudioQaCertificate } from "../website-sales-studio-qa";
@@ -73,6 +73,7 @@ export async function readWebsiteSalesStudio(session:AppSession,scope:StudioScop
  return withCrmRead(session,async(tx,fresh)=>{
   const row=await current(tx,fresh,scope),rows=await artifactRows(tx,fresh.workspaceId,row.id,!!fresh.serviceIdentity),artifacts:StudioArtifactRecord[]=[];
   let total=0;for(const item of rows){total+=Buffer.byteLength(JSON.stringify(item.artifact));if(total>3500000)break;
+   if(fresh.serviceIdentity&&(item.artifact.kind==='CONCEPT'&&item.artifact.content.customerBrief||item.artifact.kind==='DEMO'&&(item.artifact.content.demoProfile||item.artifact.content.concept.content.customerBrief))){try{websiteSalesEnablementSourceAuthority(fresh,scope);}catch(error){if(error instanceof CrmCommandError&&error.code==='ENABLEMENT_READ_SCOPE_REQUIRED')continue;throw error;}}
    const accepted=!!await tx.queryOne("select id from crm_website_studio_acceptances where workspace_id=$1 and artifact_id=$2",[fresh.workspaceId,item.id]);
    let qa:StudioArtifactRecord["qa"]=null;if(item.artifact.kind==="DEMO"&&(!row.blockedReason||row.blockedReason==="REPLY_RECEIVED")){try{const verified=verifyWebsiteStudioArtifact(item.artifact,row.prospect,new Date().toISOString());if(verified.kind!=="DEMO")fail("STUDIO_DEMO_REQUIRED");await assertCurrentDemoParent(tx,fresh,row.id,verified);const q=await qaFor(tx,fresh,item,row.id);qa={certificateId:q.id,expiresAt:q.certificate.payload.expiresAt};}catch{}}
    const artifact = !fresh.serviceIdentity && item.artifact.kind==='DEMO' ? {...item.artifact,content:{...item.artifact.content,assets:item.artifact.content.assets.map(asset=>{if(!('bodyEncoding' in asset))return asset;const {body,...metadata}=asset;void body;return {...metadata,bodyOmitted:true as const};})}} : item.artifact;
