@@ -29,7 +29,7 @@ async function persistObservation(job: FrozenCommerceJob, options: CommerceWorke
     const payload = commerceMailPayloadSchema.parse(job.payload), observed = await retrieveCommerceMail(job.providerReference, options.mail);
     if (!observed || observed.recipientEmail.toLowerCase() !== payload.recipientEmail.toLowerCase() || observed.subject !== payload.subject
       || observed.textSha256 !== payload.documentSha256) return { status: 'UNKNOWN' as const };
-    const now = options.now?.() ?? Date.now(), eventId = stableId([job.id, observed.receiptDigest]);
+    const now = options.now?.() ?? Date.now(), eventId = stableId([job.id, observed.receiptDigest, observed.status]);
     const existing = await readWebsiteSalesCommerceSource(options.sourceExecutor, eventId);
     if (existing) return { status: observed.status, sourceEventId: existing.eventId };
     const payloadData = { outboxId: job.id, documentKind: job.kind === 'OFFER_SEND' ? 'OFFER' as const : 'CONTRACT' as const,

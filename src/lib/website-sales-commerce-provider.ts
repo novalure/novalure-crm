@@ -104,7 +104,7 @@ export async function sendCommerceMail(job: CommerceMailJob, configuration: Comm
 /** Retrieval never sends and only resolves the immutable provider message selected by the outbox. */
 export async function retrieveCommerceMail(providerReference: string, configuration: CommerceMailConfiguration): Promise<{
   providerReference: string; recipientEmail: string; from: string; subject: string; textSha256: string;
-  status: 'ACCEPTED' | 'DELIVERED' | 'FAILED'; receiptDigest: string;
+  status: 'ACCEPTED' | 'DELIVERED' | 'BOUNCED' | 'COMPLAINED' | 'FAILED'; receiptDigest: string;
 } | null> {
   uuid.parse(providerReference);
   if (!configuration.apiKey.trim()) return null;
@@ -120,7 +120,8 @@ export async function retrieveCommerceMail(providerReference: string, configurat
     const event = data.last_event.replace(/^email\./, '');
     // Opens/clicks can come from scanners. They do not replace a delivery receipt.
     const status = event === 'delivered' ? 'DELIVERED' as const
-      : ['bounced', 'complained', 'failed', 'suppressed'].includes(event) ? 'FAILED' as const
+      : event === 'complained' ? 'COMPLAINED' as const : event === 'bounced' ? 'BOUNCED' as const
+        : ['failed', 'suppressed'].includes(event) ? 'FAILED' as const
         : ['sent', 'queued', 'scheduled', 'delivery_delayed'].includes(event) ? 'ACCEPTED' as const : null;
     if (!status) return null;
     return { providerReference, recipientEmail: data.to[0]!, from: plainAddress(data.from), subject: data.subject,
