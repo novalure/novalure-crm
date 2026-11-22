@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, randomUUID, randomBytes } from 'node:crypto';
+import { createHash, randomUUID, randomBytes, generateKeyPairSync, sign } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import sharp from 'sharp';
@@ -17,7 +17,8 @@ import { websiteSalesEnablementContract, type WebsiteSalesEnablementCommand as C
 import { resolveCurrentWebsiteSalesBrief } from '../src/lib/db/website-sales-enablement-source';
 import { executeWebsiteSalesStudioCommand, readWebsiteSalesStudio } from '../src/lib/db/website-sales-studio-repositories';
 import { websiteSalesStudioContract, type WebsiteSalesStudioCommand } from '../src/lib/website-sales-studio-types';
-import { CRM_MACHINE_WORKSPACE_ID } from '../src/lib/crm-machine-auth';
+import { CRM_MACHINE_WORKSPACE_ID, CRM_MACHINE_AUDIENCE, CRM_MACHINE_ISSUER, CRM_MACHINE_SUBJECT, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, CRM_MACHINE_ENVIRONMENT } from '../src/lib/crm-machine-auth';
+import { handleWebsiteSalesMachine, websiteSalesMachineContract, websiteSalesMachinePath, websiteSalesMachineDelegationDomain } from '../src/lib/website-sales-machine';
 import { GET, POST } from '../src/app/api/crm/website-sales/enablement/route';
 
 test('Sales enablement uses actual PostgreSQL, existing CRM records and the protected machine/API boundary', { timeout: 240000 }, async t => {
@@ -251,6 +252,26 @@ test('Sales enablement uses actual PostgreSQL, existing CRM records and the prot
    assert.equal(annotation.disposition, 'DISTINCT_RECORDS'); assert.equal(annotation.recorderDisplayName, 'Isolated owner'); assert.equal(annotation.current, true);
    await db.admin.query('update organizations set version=version+1 where id=$1', [second]);
    assert.equal((await read(session, scope, opts)).hygieneAnnotations.find(row => row.id === annotation.id)!.current, false);
+  });
+  await t.test('an explicitly registered enablement-read-only machine reads without project edit rights and cannot write', async () => {
+   const sourceActor = randomUUID(), reader = randomUUID(), workload = randomUUID(), readGrant = randomUUID(), mixedGrant = randomUUID(), key = generateKeyPairSync('ed25519'), publicKey = key.publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
+   await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role)values($1,$3,'Isolated workload actor',$4,'agent','novalure_operator'),($2,$3,'Isolated read-only delegate',$5,'agent','novalure_sales')", [sourceActor, reader, ws, `${sourceActor}@example.invalid`, `${reader}@example.invalid`]);
+   await db.admin.query('insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals)values($1,$2,$3,true,false)', [ws, project, reader]);
+   await db.admin.query(`insert into crm_website_sales_machine_workloads(id,identity_id,workspace_id,actor_user_id,issuer,audience,project_id,owner_id,subject,environment,authority_reference)values($1,'EVELYN_WEBSITE_SALES_INTERNAL_IDENTITY',$2,$3,$4,$5,$6,$7,$8,$9,'Isolated read-only registration fixture')`, [workload, ws, sourceActor, CRM_MACHINE_ISSUER, CRM_MACHINE_AUDIENCE, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, CRM_MACHINE_SUBJECT, CRM_MACHINE_ENVIRONMENT]);
+   for (const [grantId, capabilities] of [[readGrant, ['crm.website-sales.enablement.read']], [mixedGrant, ['crm.website-sales.enablement.read', 'crm.website-sales.enablement.scan-hygiene']]] as const) await db.admin.query(`insert into crm_website_sales_machine_grants(id,workload_id,workspace_id,actor_user_id,project_id,company_id,location_id,department_id,agent_id,task_id,authority_reference,delegation_public_key,scopes,not_before,expires_at)values($1,$2,$3,$4,$5,$6,$7,'SALES','evelyn.sales.read-fixture',$8,'Isolated read-only registration fixture',$9,$10,clock_timestamp(),$11)`, [grantId, workload, ws, reader, project, company, location, randomUUID(), publicKey, capabilities, future]);
+   assert.equal((await db.admin.query('select id from crm_lock_website_sales_machine_grant($1,$2)', [workload, readGrant])).rows.length, 1);
+   assert.equal((await db.admin.query('select id from crm_lock_website_sales_machine_grant($1,$2)', [workload, mixedGrant])).rows.length, 0);
+   const call = async (body: unknown) => {
+    const seconds = Math.floor(Date.now() / 1000), delegation = Buffer.from(JSON.stringify({ issuedAt: seconds, expiresAt: seconds + 120, nonce: randomUUID(), requestHash: crmPayloadDigest(body) })).toString('base64url');
+    const signature = sign(null, Buffer.from(`${websiteSalesMachineDelegationDomain}.${readGrant}.${delegation}`), key.privateKey).toString('base64url');
+    return handleWebsiteSalesMachine(new Request('https://crm.example.invalid' + websiteSalesMachinePath, { method: 'POST', headers: { authorization: 'Bearer eyJ' + 'a'.repeat(20) + '.' + 'b'.repeat(24) + '.' + 'c'.repeat(24), 'content-type': 'application/json', 'x-evelyn-delegation': `v1.${readGrant}.${delegation}.${signature}` }, body: JSON.stringify(body) }), { ...opts, machineAuth: { env: { CRM_MACHINE_AUTH_ENABLED: '1', VERCEL_ENV: 'production', NODE_ENV: 'production' }, verifier: async () => ({ payload: { aud: CRM_MACHINE_AUDIENCE, iss: CRM_MACHINE_ISSUER, sub: CRM_MACHINE_SUBJECT, project_id: CRM_MACHINE_PROJECT_ID, owner_id: CRM_MACHINE_OWNER_ID, environment: CRM_MACHINE_ENVIRONMENT, iat: seconds - 5, nbf: seconds - 5, exp: seconds + 3600, jti: randomUUID() }, protectedHeader: { alg: 'RS256', typ: 'JWT', kid: 'isolated-synthetic-verifier-not-provider-proof' } }) } });
+   };
+   const result = await call({ contractVersion: websiteSalesMachineContract, target: 'autonomy', operation: 'read', request: { ...scope, view: 'enablement', correlationId: randomUUID() } });
+   assert.equal(result.status, 200, await result.clone().text()); const data = (await result.json()).data; assert.equal(data.canWrite, false); assert.equal(data.canContact, false); assert.equal(data.canApproveFacts, false);
+   const before = (await db.admin.query('select count(*)::int n from crm_website_sales_enablement_records')).rows[0].n;
+   const denied = await call({ contractVersion: websiteSalesMachineContract, target: 'autonomy', operation: 'execute', request: command('scan_hygiene', { organizationIds: [company], contactIds: [contact] }) }); assert.equal(denied.status, 403);
+   assert.equal((await db.admin.query('select count(*)::int n from crm_website_sales_enablement_records')).rows[0].n, before);
+   assert.equal((await db.admin.query('select can_edit_deals from project_pipeline_permissions where workspace_id=$1 and project_id=$2 and user_id=$3', [ws, project, reader])).rows[0].can_edit_deals, false);
   });
  } finally { await closeLocalTestPool(); for (const key of envKeys) if (beforeEnv[key] === undefined) delete process.env[key]; else process.env[key] = beforeEnv[key]; await db.stop(); }
 });

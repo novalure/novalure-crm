@@ -178,4 +178,29 @@ end $$;
 revoke all on function crm_website_studio_preview_access(uuid,text,boolean,text) from public;
 grant execute on function crm_website_studio_preview_access(uuid,text,boolean,text) to novalure_tenant_app;
 
+-- Read-only project admission recognizes this explicitly registered new read scope only.
+-- All workload, actor, role, classification, revocation, kill and write checks remain as in 206.
+create or replace function public.crm_lock_website_sales_machine_grant(p_workload uuid,p_grant uuid)
+returns setof public.crm_website_sales_machine_grants
+language sql volatile security definer set search_path=pg_catalog,public as $function$
+ select g.* from public.crm_website_sales_machine_grants g
+ join public.crm_website_sales_machine_workloads p on p.id=g.workload_id and p.workspace_id=g.workspace_id
+ join public.workspace_users source_actor on source_actor.id=p.actor_user_id and source_actor.workspace_id=p.workspace_id
+ join public.workspace_users actor on actor.id=g.actor_user_id and actor.workspace_id=g.workspace_id
+ join public.workspaces w on w.id=g.workspace_id
+ join public.project_pipeline_permissions project_grant on project_grant.workspace_id=g.workspace_id and project_grant.project_id=g.project_id and project_grant.user_id=g.actor_user_id
+ where g.id=p_grant and p.id=p_workload and not g.disabled and g.revoked_at is null
+  and g.not_before<=clock_timestamp() and(g.expires_at is null or g.expires_at>clock_timestamp())
+  and not p.disabled and not p.kill_switch_active and p.revoked_at is null and p.not_before<=clock_timestamp() and(p.expires_at is null or p.expires_at>clock_timestamp())
+  and source_actor.status='active' and source_actor.role='agent' and source_actor.product_role='novalure_operator'
+  and actor.status='active' and actor.role='agent' and actor.product_role in('novalure_operator','novalure_sales')
+  and w.operating_model='novalure_internal' and project_grant.can_read
+  and(g.scopes <@ array['crm.website-sales.read','crm.website-sales.studio.read','crm.website-sales.lifecycle.read','crm.website-sales.autonomy.read','crm.website-sales.conversation.read','crm.website-sales.enablement.read']::text[] or project_grant.can_edit_deals)
+  and exists(select 1 from public.projects project join public.organizations company on company.workspace_id=project.workspace_id and company.project_id=project.id
+    where project.workspace_id=g.workspace_id and project.id=g.project_id and company.id=g.company_id and project.division='WEB_DESIGN'
+     and project.data_classification='NOVALURE_INTERNAL' and project.data_purpose='crm_sales' and company.data_classification='NOVALURE_INTERNAL' and company.data_purpose='crm_sales')
+  and(g.location_id is null or exists(select 1 from public.crm_company_locations location where location.workspace_id=g.workspace_id and location.project_id=g.project_id and location.company_id=g.company_id and location.id=g.location_id))
+ for share of g,p,source_actor,actor,w,project_grant
+$function$;
+
 commit;
