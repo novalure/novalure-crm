@@ -29,6 +29,6 @@ export async function attachWebsiteSalesInbound(tx: TenantTransaction, session: 
     and not exists(select 1 from crm_website_sales_workflows w where w.workspace_id=l.workspace_id and w.lead_id=l.id) for update of l`,
   [session.workspaceId, scope.projectId, chain.leadId, contactId, chain.leadVersion]);
   if (!lead) fail("STUDIO_INBOUND_CHANGED");
-  await tx.execute("update leads set metadata=metadata || $3::jsonb,updated_at=now() where workspace_id=$1 and id=$2", [session.workspaceId, chain.leadId, provenance]);
-  if (chain.dealId) await tx.execute("update deals set organization_id=$3,metadata=metadata || $4::jsonb,updated_at=now() where workspace_id=$1 and id=$2", [session.workspaceId, chain.dealId, scope.companyId, provenance]);
+  await tx.execute("update leads set metadata=metadata || $3::jsonb,version=version+1,updated_at=now() where workspace_id=$1 and id=$2", [session.workspaceId, chain.leadId, provenance]);
+  if (chain.dealId) await tx.execute("update deals set organization_id=$3,metadata=metadata || $4::jsonb,version=version+1,updated_at=now() where workspace_id=$1 and id=$2", [session.workspaceId, chain.dealId, scope.companyId, provenance]);
 }

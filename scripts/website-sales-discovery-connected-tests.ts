@@ -18,7 +18,7 @@ test("actual Evelyn discovery/client → loopback HTTP → ordinary persisted se
   const source = process.env.EVELYN_WEBSITE_DISCOVERY_SOURCE;
   assert.ok(source && isAbsolute(source) && source.endsWith("website-sales-discovery-client.ts"), "Set the absolute actual Evelyn discovery client source");
   for (const name of ["VERCEL", "VERCEL_ENV", "VERCEL_URL"]) assert.equal(process.env[name], undefined, "Local synthetic acceptance only");
-  const module = await import(pathToFileURL(source).href) as { WebsiteSalesDiscoveryClient: new (options: { origin: string; workspaceId: string; projectId: string; environment: "local"; transport(request: Request): Promise<Response> }) => Client };
+  const externalModule = await import(pathToFileURL(source).href) as { WebsiteSalesDiscoveryClient: new (options: { origin: string; workspaceId: string; projectId: string; environment: "local"; transport(request: Request): Promise<Response> }) => Client };
   const directory = source.slice(0, source.lastIndexOf("/"));
   const discovery = await import(pathToFileURL(directory + "/website-sales-discovery.ts").href);
   const research = await import(pathToFileURL(directory + "/../external-research/service.ts").href);
@@ -59,7 +59,7 @@ test("actual Evelyn discovery/client → loopback HTTP → ordinary persisted se
       if (loseNextResponse && response.ok && operation === "register") { loseNextResponse = false; await response.arrayBuffer(); throw Error("Synthetic lost committed response"); }
       return response;
     };
-    const client = () => new module.WebsiteSalesDiscoveryClient({ origin, workspaceId: actor.workspaceId, projectId, environment: "local", transport });
+    const client = () => new externalModule.WebsiteSalesDiscoveryClient({ origin, workspaceId: actor.workspaceId, projectId, environment: "local", transport });
     const service = new research.ExternalResearchService({ fetcher: { async fetch(url: string) { return { requestedUrl: url, finalUrl: url, status: 200,
       headers: { "content-type": "text/html" }, body: "<p>Synthetic Café Company. 1 Test Street, Dublin, Ireland. Public Contact public@example.invalid. shared.example</p>" }; } } });
     const batch = await discovery.discoverWebsiteSalesCandidates({ workspaceId: actor.workspaceId, projectId, countryCode: "IE", region: "Dublin", industry: "Café", missionId: "synthetic-discovery-connected", seedUrls: ["https://public.example/company"] }, {
@@ -93,7 +93,7 @@ test("actual Evelyn discovery/client → loopback HTTP → ordinary persisted se
     await t.test("ordinary session requires CSRF and rejects a foreign project", async () => {
       const body = JSON.stringify({ contractVersion: "website-sales-discovery-v1", operation: "match", projectId, candidate });
       assert.equal((await fetch(origin + "/api/crm/website-sales/discovery", { method: "POST", headers: { "Content-Type": "application/json", cookie: `novalure_session=${cookie}`, origin }, body })).status, 403);
-      const foreign = new module.WebsiteSalesDiscoveryClient({ origin, workspaceId: actor.workspaceId, projectId: randomUUID(), environment: "local", transport });
+      const foreign = new externalModule.WebsiteSalesDiscoveryClient({ origin, workspaceId: actor.workspaceId, projectId: randomUUID(), environment: "local", transport });
       await assert.rejects(foreign.match(candidate), /DISCOVERY_DENIED_403/);
     });
     t.diagnostic("ACTUAL_COMPANION_DISCOVERY_AND_CLIENT; REAL_LOCAL_HTTP_CSRF_PG; SYNTHETIC_SESSION_AND_PUBLIC_SOURCE; NO_LIVE_PROVIDER_OR_OUTBOUND");

@@ -73,7 +73,8 @@ export async function registerDiscovery(workspaceId: string, actorId: string, in
     const value = await post(workspaceId, { ...command, operation: "register" });
     const data = await validateReceipt(value, workspaceId, command); window.sessionStorage.removeItem(storageKey); window.sessionStorage.removeItem(storageKey+":not-found"); return data;
   } catch (error) {
-    if (error instanceof DiscoveryBrowserError && error.outcome === "DENIED") window.sessionStorage.removeItem(storageKey);
+    if (input && error instanceof DiscoveryBrowserError && error.outcome === "DENIED") window.sessionStorage.removeItem(storageKey);
+    if (!input && error instanceof DiscoveryBrowserError && error.outcome === "DENIED") throw new DiscoveryBrowserError("UNKNOWN", error.code);
     throw error instanceof DiscoveryBrowserError ? error : new DiscoveryBrowserError("UNKNOWN", "DISCOVERY_RESPONSE_UNKNOWN");
   }
 }
@@ -83,5 +84,5 @@ export async function retryDiscoveryOriginal(workspaceId: string, actorId: strin
   const storageKey=key(workspaceId,actorId), original=discoveryPending(workspaceId,actorId);
   if(!original||window.sessionStorage.getItem(storageKey+":not-found")!==JSON.stringify(original))throw new DiscoveryBrowserError("UNKNOWN","DISCOVERY_RECONCILIATION_REQUIRED");
   try { const value=await post(workspaceId,original),data=await validateReceipt(value,workspaceId,original);window.sessionStorage.removeItem(storageKey);window.sessionStorage.removeItem(storageKey+":not-found");return data; }
-  catch(error){if(error instanceof DiscoveryBrowserError&&error.outcome==="DENIED"){window.sessionStorage.removeItem(storageKey);window.sessionStorage.removeItem(storageKey+":not-found");}throw error instanceof DiscoveryBrowserError?error:new DiscoveryBrowserError("UNKNOWN","DISCOVERY_RESPONSE_UNKNOWN");}
+  catch(error){throw error instanceof DiscoveryBrowserError?new DiscoveryBrowserError("UNKNOWN",error.code):new DiscoveryBrowserError("UNKNOWN","DISCOVERY_RESPONSE_UNKNOWN");}
 }

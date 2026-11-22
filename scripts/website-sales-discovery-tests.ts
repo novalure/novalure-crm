@@ -8,6 +8,8 @@ import { getProductRoleCapabilities } from "../src/lib/product-model";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import { matchWebsiteSalesDiscovery, registerWebsiteSalesDiscovery } from "../src/lib/db/website-sales-discovery-repositories";
 import { runWebsiteSalesIrelandCommand } from "../src/lib/db/website-sales-ireland-repositories";
+import { upsertDealRecord } from "../src/lib/db/crm-write-repositories";
+import { withCrmRead } from "../src/lib/crm-command";
 import { websiteSalesDiscoveryContract as contractVersion, type WebsiteSalesDiscoveryCandidate, type WebsiteSalesDiscoveryRegister } from "../src/lib/website-sales-discovery";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 
@@ -96,6 +98,7 @@ test("Discovery reuses canonical CRM companies, branches and contacts without a 
       await db.admin.query("insert into crm_pipeline_stages(pipeline_id,workspace_id,project_id,key,name,position,category) values($1,$2,$3,'qualify','Research intake',0,'work')", [pipeline, workspace, project]);
       await db.admin.query("update projects set default_pipeline_id=$2 where id=$1", [project, pipeline]);
       const found = await match(value); assert.equal(found.contacts[0]!.companyId, null); assert.equal(found.existingLeads[0]!.leadId, lead);
+      const before = (await db.admin.query("select l.version lead_version,d.version deal_version from leads l join deals d on d.lead_id=l.id where l.id=$1", [lead])).rows[0];
       const original = await registration(value); const saved = await run({ ...original, decision: { ...original.decision, contactId: contact, createContact: false } });
       assert.ok("data" in saved); assert.equal(saved.data.contactId, contact); const identity = saved.data.identity;
       const prospect = { identity, country: "IRELAND", identityStatus: "VERIFIED", domain: null, path: "NO_WEBSITE", ownWebsiteSearch: "NONE_FOUND", obstacle: null, platformUrl: null, bookingRoute: "UNKNOWN", need: "EVIDENCED",
@@ -108,6 +111,13 @@ test("Discovery reuses canonical CRM companies, branches and contacts without a 
       assert.equal(qualified.data.workflow!.leadId, lead); assert.equal(qualified.data.workflow!.dealId, deal);
       const state = (await db.admin.query("select l.source,l.metadata->>'originalEnquiry' original,(select count(*)::int from leads where contact_id=$1) leads,(select count(*)::int from deals where contact_id=$1) deals,c.organization_id company from leads l join contacts c on c.id=l.contact_id where l.id=$2", [contact, lead])).rows[0];
       assert.deepEqual(state, { source: "Novalure Studio Form", original: "true", leads: 1, deals: 1, company: identity.companyId });
+      const versions = (await db.admin.query("select l.version lead_version,d.version deal_version from leads l join deals d on d.lead_id=l.id where l.id=$1", [lead])).rows[0];
+      assert.equal(Number(versions.lead_version), Number(before.lead_version) + 1); assert.equal(Number(versions.deal_version), Number(before.deal_version) + 1);
+      const editorId=randomUUID(); await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role) values($1,$2,'Synthetic actual owner editor',$3,'owner','novalureAdmin')",[editorId,workspace,`${editorId}@example.invalid`]);
+      const editor:AppSession={...session,userId:editorId,role:"owner",productRole:"novalureAdmin",permissions:getRolePermissions("owner"),productPermissions:getProductRoleCapabilities("novalureAdmin")};
+      const staleEdit = await withCrmRead(editor, () => upsertDealRecord({ session:editor, deal: { id: deal, version: Number(before.deal_version), name: "Old editor attempts another company", organizationId: canonical.companyId, projectId: project, contactId: contact, value: "2500", ownerUserId: actor } }, options), options);
+      assert.equal(staleEdit.persisted, false); assert.equal(staleEdit.code, "VERSION_CONFLICT", !staleEdit.persisted ? staleEdit.reason : "Unexpected write");
+      assert.equal((await db.admin.query("select organization_id from deals where id=$1", [deal])).rows[0].organization_id, identity.companyId);
     });
   } finally { await db.stop(); }
 });

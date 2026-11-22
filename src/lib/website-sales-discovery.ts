@@ -19,17 +19,28 @@ export const websiteSalesDiscoveryCandidateSchema = z.strictObject({
 }).superRefine((value, ctx) => {
   const ids = new Set(value.sourceReferences.map(source => source.sourceId));
   if (ids.size !== value.sourceReferences.length) ctx.addIssue({ code: "custom", message: "Duplicate source IDs" });
-  if (!value.sourceReferences.some(source => [value.companyName, value.address, value.locationLabel].every(field => source.quote.includes(field))))
+  if (!value.sourceReferences.some(source => [value.companyName, value.address, value.locationLabel].every(field => discoveryQuotedFact(source.quote,field))))
     ctx.addIssue({ code: "custom", message: "Identity facts require one exact source excerpt" });
-  if (value.domain && !value.sourceReferences.some(source => source.quote.toLowerCase().includes(value.domain!)))
+  if (value.domain && !value.sourceReferences.some(source => discoveryQuotedDomain(source.quote,value.domain!)))
     ctx.addIssue({ code: "custom", message: "Domain requires a public source excerpt" });
   for (const contact of value.contacts) {
     const source = value.sourceReferences.find(item => item.sourceId === contact.sourceReferenceId);
-    if (!source || !source.quote.includes(contact.name) || !source.quote.toLowerCase().includes(contact.email) || contact.phone && !source.quote.includes(contact.phone))
+    if (!source || !discoveryQuotedFact(source.quote,contact.name) || !discoveryQuotedEmail(source.quote,contact.email) || contact.phone && !discoveryQuotedFact(source.quote,contact.phone))
       ctx.addIssue({ code: "custom", message: "Contact requires its own public source excerpt" });
   }
 });
 export function normalizeDiscoveryText(value: string): string { return value.normalize("NFKC").toLocaleLowerCase("en-IE").replace(/[^\p{L}\p{N}]+/gu, " ").trim(); }
+/** Compare complete public fact tokens, never house-number, hostname or mailbox substrings. This validates a reviewed quote, not its external provenance. */
+export function discoveryQuotedFact(quote:string,value:string):boolean { const expected=normalizeDiscoveryText(value);return Boolean(expected)&&(` ${normalizeDiscoveryText(quote)} `).includes(` ${expected} `); }
+export function discoveryQuotedDomain(quote:string,domain:string):boolean {
+  // Parse the host of complete URL/bare-host tokens. A domain mentioned only in a URL path/query or mailbox is not the site's host.
+  for(const match of quote.matchAll(/[^\s<>"'()[\]{};,]+/gu)){
+    const token=match[0].replace(/[.!?:]+$/u,"");if(token.includes("@"))continue;
+    try{const url=new URL(/^https?:\/\//i.test(token)?token:`https://${token}`);if(url.hostname.toLowerCase()===domain.toLowerCase()&&!url.username&&!url.password)return true;}catch{ /* Ordinary prose is not a hostname. */ }
+  }
+  return false;
+}
+export function discoveryQuotedEmail(quote:string,email:string):boolean { return [...quote.matchAll(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+/gi)].some(match=>match[0].toLowerCase()===email.toLowerCase()&&!/[\p{L}\p{N}_@-]/u.test(quote[match.index-1]??"")&&!/[\p{L}\p{N}_@-]/u.test(quote[match.index+match[0].length]??"")); }
 export function normalizeDiscoveryAddress(value: string): string { return value.normalize("NFKC").toLocaleLowerCase("en-IE").replace(/\s+/g, " ").trim(); }
 export type WebsiteSalesDiscoveryCandidate = z.infer<typeof websiteSalesDiscoveryCandidateSchema>;
 export type WebsiteSalesDiscoveryIdentity = { workspaceId: string; projectId: string; companyId: string; locationId: string };

@@ -227,10 +227,11 @@ export function WebsiteSalesWorkbench(props: WorkbenchProps) { return <Workbench
 function Workbench({ workspaceId, actorId, language, initialProjectId }: WorkbenchProps) {
   const copy = getWebsiteSalesCopy(language), id = useId().replace(/:/g, "");
   const [pending, setPending] = useState(() => websiteSalesPending(workspaceId, actorId));
+  const [discoveryOriginal] = useState(() => { try { return discoveryPending(workspaceId, actorId); } catch { return null; } });
   const [discoveryRecovery, setDiscoveryRecovery] = useState(() => { try { return Boolean(discoveryPending(workspaceId, actorId)); } catch { return true; } });
   const foreignOriginal = studioPending(workspaceId, actorId)?.command ?? lifecyclePending(workspaceId, actorId)?.command ?? salesOperationsPending("autonomy", workspaceId, actorId)?.command ?? salesOperationsPending("conversation", workspaceId, actorId)?.command ?? enablementPending(workspaceId,actorId)?.command ?? commercePending(workspaceId,actorId)?.command;
   const [, refreshPending] = useState(0), [showResearch, setShowResearch] = useState(false);
-  const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? foreignOriginal?.projectId ?? initialProjectId ?? "");
+  const [projectId, setProjectId] = useState(() => pending?.command.projectId ?? foreignOriginal?.projectId ?? discoveryOriginal?.projectId ?? initialProjectId ?? "");
   const [companyId, setCompanyId] = useState(() => pending?.command.companyId ?? foreignOriginal?.companyId ?? "");
   const [locationId, setLocationId] = useState(() => pending?.command.locationId ?? foreignOriginal?.locationId ?? "");
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState<"saved" | "denied" | null>(null);
@@ -314,7 +315,7 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
     {failed ? <Notice tone="danger" announce="polite"><p>{copy.loadError}</p><Button className="mt-3" variant="secondary" disabled={busy} onClick={refresh}>{copy.refresh}</Button></Notice> : null}
     {projectId ? <WebsiteSalesDiscoveryPanel key={`discovery:${workspaceId}:${projectId}`} workspaceId={workspaceId} actorId={actorId} projectId={projectId} language={language}
       blocked={busy||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)||Boolean(enablementRecovery)||Boolean(commerceRecovery)}
-      canWrite={Boolean(project?.canWrite)} onPending={setDiscoveryRecovery} onOpen={data=>{generation.current++;setCompanyId(data.identity.companyId);setLocationId(data.identity.locationId);setShowResearch(false);setNotice(null);refresh();}} /> : null}
+      canWrite={Boolean(project?.canWrite)} onPending={setDiscoveryRecovery} onOpen={data=>{generation.current++;setProjectId(data.identity.projectId);setCompanyId(data.identity.companyId);setLocationId(data.identity.locationId);setShowResearch(false);setNotice(null);refresh();}} /> : null}
     {projectId&&!companyId?<WebsiteSalesDailyPanel key={`${workspaceId}:${projectId}`} workspaceId={workspaceId} projectId={projectId} language={language} blocked={locked} onOpen={selected=>{if(locked)return;generation.current++;setCompanyId(selected.companyId);setLocationId(selected.locationId);setShowResearch(false);setNotice(null);}}/>:null}
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(250px,320px)_minmax(0,1fr)]">
       <aside className="min-w-0 space-y-4" aria-label={copy.project}>
