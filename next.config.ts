@@ -71,7 +71,16 @@ const websiteStudioHeaders = [
 
 const nextConfig: NextConfig = {
   // The canonical Node ESM domain module retains its .js import in both repositories.
-  turbopack: { resolveAlias: { "./website-prospect.js": "./src/lib/website-prospect.ts", "./website-sales-studio.js": "./src/lib/website-sales-studio.ts", "./website-sales-operations-contracts.js": "./src/lib/website-sales-operations-contracts.ts", "./website-sales-operations-outcomes.js": "./src/lib/website-sales-operations-outcomes.ts" } },
+  turbopack: { resolveAlias: {
+    "./website-prospect.js": "./src/lib/website-prospect.ts",
+    "./website-sales-studio.js": "./src/lib/website-sales-studio.ts",
+    "./website-sales-studio-brand.js": "./src/lib/website-sales-studio-brand.ts",
+    "./website-sales-studio-error.js": "./src/lib/website-sales-studio-error.ts",
+    "./website-sales-enablement.js": "./src/lib/website-sales-enablement.ts",
+    "./website-sales-enablement-types.js": "./src/lib/website-sales-enablement-types.ts",
+    "./website-sales-operations-contracts.js": "./src/lib/website-sales-operations-contracts.ts",
+    "./website-sales-operations-outcomes.js": "./src/lib/website-sales-operations-outcomes.ts",
+  } },
   deploymentId: deploymentIdentity,
   env: {
     NOVALURE_APPLICATION_VERSION: applicationVersion,
