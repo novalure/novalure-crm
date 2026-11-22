@@ -13,6 +13,7 @@ import { websiteSalesLifecycleContract, type WebsiteSalesLifecycleCommand, type 
   type WebsiteSalesLifecycleEffect, type WebsiteSalesLifecycleRead, type WebsiteSalesCustomerAcceptance,
   type WebsiteSalesReplyClassification } from "../website-sales-lifecycle-types";
 import { runWebsiteSalesIrelandCommand, websiteSalesIrelandContract, websiteSalesIrelandState } from "./website-sales-ireland-repositories";
+import { assertWebsiteSalesStudioSourceBindings } from './website-sales-studio-source-bindings';
 
 const uuid = z.uuid(), text = z.string().trim().min(1).max(2000), strings = z.array(text).min(1).max(20);
 const payloads = {
@@ -68,8 +69,10 @@ async function read(tx: TenantTransaction, session: AppSession, scope: WebsiteSa
     from crm_website_sales_handoffs h join crm_website_sales_customer_acceptances a on a.workspace_id=h.workspace_id and a.id=h.customer_acceptance_id
     where h.workspace_id=$1 and h.workflow_id=$2 order by h.created_at desc,h.id desc limit 25`, [session.workspaceId, row.id, row.evidenceDigest]);
   const allowed = await tx.queryOne<{ allowed: boolean }>("select crm_project_access($1,$2,true) as allowed", [session.workspaceId, scope.projectId]);
+  const bindingCurrent=new Map<string,boolean>();
+  for(const acceptance of saved){if(!acceptance.current)continue;try{const artifacts=await tx.query<{artifact:WebsiteStudioArtifact}>('select artifact from crm_website_studio_artifacts where workspace_id=$1 and workflow_id=$2 and id=any($3::uuid[])',[session.workspaceId,row.id,[acceptance.conceptArtifactId,acceptance.demoArtifactId]]);if(artifacts.length!==2)throw Error('ARTIFACTS_UNAVAILABLE');for(const item of artifacts)await assertWebsiteSalesStudioSourceBindings(tx,session,item.artifact);bindingCurrent.set(acceptance.id,true);}catch{bindingCurrent.set(acceptance.id,false);}}
   return { contractVersion: websiteSalesLifecycleContract, source: "database", workspaceId: session.workspaceId, ...scope,
-    workflow: current, inboundCandidates, responses, customerAcceptances: saved.map(({ scope: acceptedScope,priceRecord, ...acceptance }) => ({ ...acceptance,current:acceptance.current&&salesAcceptancePriceMatches(priceRecord,price), ...acceptedScope, attestationKind: "OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE" })), handoffs:handoffs.map(({priceRecord,...h})=>({...h,current:h.current&&salesAcceptancePriceMatches(priceRecord,price)})),
+    workflow: current, inboundCandidates, responses, customerAcceptances: saved.map(({ scope: acceptedScope,priceRecord, ...acceptance }) => ({ ...acceptance,current:acceptance.current&&bindingCurrent.get(acceptance.id)===true&&salesAcceptancePriceMatches(priceRecord,price), ...acceptedScope, attestationKind: "OPERATOR_RECORDED_CUSTOMER_ACCEPTANCE" })), handoffs:handoffs.map(({priceRecord,...h})=>({...h,current:h.current&&bindingCurrent.get(h.customerAcceptanceId)===true&&salesAcceptancePriceMatches(priceRecord,price)})),
     canWrite: !!allowed?.allowed && session.permissions.includes("crm:write") && session.productPermissions.includes("pipeline:write"), canContact: false };
 }
 export async function readWebsiteSalesLifecycle(session: AppSession, scope: WebsiteSalesLifecycleScope, options: TenantTransactionOptions = {}) {
@@ -94,6 +97,7 @@ async function acceptedArtifacts(tx: TenantTransaction, session: AppSession, row
   const concept = verifyWebsiteStudioArtifact(conceptRow.artifact, qualifyWebsiteProspect(row.prospect, new Date().toISOString()).input, new Date().toISOString());
   const demo = verifyWebsiteStudioArtifact(demoRow.artifact, qualifyWebsiteProspect(row.prospect, new Date().toISOString()).input, new Date().toISOString());
   if (concept.kind !== "CONCEPT" || demo.kind !== "DEMO" || demo.parentArtifactDigest !== concept.artifactDigest) fail("CURRENT_ACCEPTED_DEMO_REQUIRED");
+  await assertWebsiteSalesStudioSourceBindings(tx,session,concept);await assertWebsiteSalesStudioSourceBindings(tx,session,demo);
   if (await tx.queryOne(`select id from crm_website_studio_artifacts where workspace_id=$1 and workflow_id=$2
     and ((kind='CONCEPT' and version>$3) or(kind='DEMO' and version>$4) or(kind='DIAGNOSIS' and artifact_digest<>$5)) limit 1`,
   [session.workspaceId, row.id, concept.version, demo.version, concept.parentArtifactDigest])) {

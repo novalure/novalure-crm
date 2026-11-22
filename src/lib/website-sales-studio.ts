@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { decideWebsiteInvestment, qualifyWebsiteProspect, websiteProspectIdentitySchema,
   type WebsiteInvestmentInput, type WebsiteProspectIdentity, type WebsiteProspectInput } from './website-prospect.js';
+import { demoProfileBindingSchema } from './website-sales-enablement-types.js';
+import { WebsiteStudioError } from './website-sales-studio-error.js';
+export { WebsiteStudioError } from './website-sales-studio-error.js';
+import { parseStudioCustomerBrief, parseStudioDemoProfileSnapshot, renderWebsiteSalesBrandedDemo, studioCustomerBriefSchema, studioCustomerBriefValidUntil, studioDemoProfileSnapshotSchema, studioDemoProfileValidUntil,
+  studioProfileRasterAssets, studioRasterAssetSchema, type StudioCustomerBrief, type StudioResolvedDemoProfile } from './website-sales-studio-brand.js';
 
 export const websiteStudioContract = 'website-sales-studio-v1' as const;
 const sha = z.hash('sha256');
@@ -25,6 +30,7 @@ const diagnosisContent = z.strictObject({ companyName: text, locationLabel: text
   recommendations: z.array(claim).min(1).max(12), scope, assetPolicy: assetPolicySchema, investmentPlan: z.unknown(), investmentDecision: decision });
 const conceptContent = z.strictObject({ companyName: text, locationLabel: text, objective: text, hero: claim,
   sections: z.array(z.strictObject({ title: text, body: claim })).min(1).max(6), scope,
+  customerBrief: studioCustomerBriefSchema.optional(),
   visualDirection: z.enum(['STUDIO_BLUE', 'BOTANICAL_GREEN', 'CRAFT_OCHRE']), assetPolicy: assetPolicySchema, investmentPlan: z.unknown(), investmentDecision: decision });
 export const websiteDiagnosisArtifactSchema = z.strictObject({ ...base, kind: z.literal('DIAGNOSIS'), content: diagnosisContent });
 export const websiteConceptArtifactSchema = z.strictObject({ ...base, kind: z.literal('CONCEPT'), content: conceptContent });
@@ -32,7 +38,8 @@ const assetSchema = z.strictObject({ path: z.enum(['studio.css', 'placeholder.sv
   body: z.string().min(1).max(20_000), sha256: sha,
   rights: z.strictObject({ basis: z.enum(['ORIGINAL_NOVALURE', 'PLACEHOLDER']), reference: text }) });
 const demoContent = z.strictObject({ concept: websiteConceptArtifactSchema, acceptanceId: z.uuid(), acceptedAt: at,
-  html: z.string().min(1).max(100_000), htmlDigest: sha, assets: z.array(assetSchema).length(2), assetManifestDigest: sha,
+  html: z.string().min(1).max(100_000), htmlDigest: sha, assets: z.array(z.union([assetSchema, studioRasterAssetSchema])).min(2).max(3), assetManifestDigest: sha,
+  demoProfile: studioDemoProfileSnapshotSchema.optional(),
   investmentPlan: z.unknown(), investmentDecision: decision,
   interactions: z.literal('INERT_SIMULATIONS_ONLY'), indexable: z.literal(false), externallyAccessible: z.literal(false) });
 export const websiteDemoArtifactSchema = z.strictObject({ ...base, kind: z.literal('DEMO'), content: demoContent });
@@ -45,8 +52,7 @@ export type WebsiteStudioArtifact = z.infer<typeof websiteStudioArtifactSchema>;
 export type WebsiteStudioClaim = z.infer<typeof claim>;
 export type WebsiteStudioScope = z.infer<typeof scope>;
 export type WebsiteStudioRevision = z.infer<typeof revision>;
-export type WebsiteStudioAsset = z.infer<typeof assetSchema>;
-export class WebsiteStudioError extends Error { constructor(readonly code: string) { super(code); this.name = 'WebsiteStudioError'; } }
+export type WebsiteStudioAsset = z.infer<typeof assetSchema> | z.infer<typeof studioRasterAssetSchema>;
 function fail(code: string): never { throw new WebsiteStudioError(code); }
 function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
@@ -111,19 +117,26 @@ export interface CreateWebsiteConceptInput {
   prospect: WebsiteProspectInput; diagnosis: WebsiteDiagnosisArtifact; objective: string; hero: WebsiteStudioClaim;
   sections: readonly { title: string; body: WebsiteStudioClaim }[]; visualDirection: z.infer<typeof conceptContent>['visualDirection'];
   scope: WebsiteStudioScope; investmentPlan: WebsiteInvestmentInput; revision: WebsiteStudioRevision;
+  customerBrief?: StudioCustomerBrief;
 }
 export function createWebsiteConcept(input: CreateWebsiteConceptInput, now: string): WebsiteConceptArtifact {
   const diagnosis = verifyWebsiteStudioArtifact(input.diagnosis, input.prospect, now);
   if (diagnosis.kind !== 'DIAGNOSIS') fail('STUDIO_DIAGNOSIS_REQUIRED');
   facts([input.hero, ...input.sections.map(section => section.body)], input.prospect);
+  const customerBrief = input.customerBrief ? parseStudioCustomerBrief(input.customerBrief, diagnosis.identity, now) : null;
   const content = conceptContent.parse({ companyName: diagnosis.content.companyName, locationLabel: diagnosis.content.locationLabel,
     objective: input.objective, hero: input.hero, sections: input.sections, visualDirection: input.visualDirection, scope: input.scope, assetPolicy,
+    ...(customerBrief ? { customerBrief } : {}),
     ...plan(input.investmentPlan, input.prospect, now, 'CONCEPT', diagnosis) });
-  return seal({ ...envelope(input.prospect, input.revision, now, diagnosis.artifactDigest), kind: 'CONCEPT', content }) as WebsiteConceptArtifact;
+  const base = envelope(input.prospect, input.revision, now, diagnosis.artifactDigest);
+  return seal({ ...base, ...(customerBrief ? { validUntil: studioCustomerBriefValidUntil(customerBrief, base.validUntil) } : {}), kind: 'CONCEPT', content }) as WebsiteConceptArtifact;
 }
 export interface AcceptedWebsiteConcept { identity: WebsiteProspectIdentity; artifactDigest: string; acceptanceId: string; acceptedAt: string }
 /** Must be composed by the authenticated host from current authoritative CRM rows, never from request JSON. */
-export interface WebsiteStudioAcceptancePort { resolveAcceptedConcept(identity: WebsiteProspectIdentity, artifactDigest: string): Promise<AcceptedWebsiteConcept | null> }
+export interface WebsiteStudioAcceptancePort {
+  resolveAcceptedConcept(identity: WebsiteProspectIdentity, artifactDigest: string): Promise<AcceptedWebsiteConcept | null>;
+  resolveDemoProfile?(identity: WebsiteProspectIdentity, binding: z.infer<typeof demoProfileBindingSchema>): Promise<StudioResolvedDemoProfile | null>;
+}
 const accepted = z.strictObject({ identity: websiteProspectIdentitySchema, artifactDigest: sha, acceptanceId: z.uuid(), acceptedAt: at });
 function escapeHtml(value: string): string { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!)); }
 const palettes = { STUDIO_BLUE: ['#102f50', '#1760a5', '#eaf2f8'], BOTANICAL_GREEN: ['#183e36', '#286b56', '#ecf4ee'], CRAFT_OCHRE: ['#412d18', '#775016', '#f6f0e4'] } as const;
@@ -136,28 +149,39 @@ function render(concept: WebsiteConceptArtifact): { html: string; assets: Websit
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; connect-src 'none'; script-src 'none'"><title>${e(c.companyName)} — concept preview</title><link rel="stylesheet" href="./assets/studio.css"></head><body><a class="skip" href="#main">Skip to content</a><div class="notice">Private concept preview. Proposed structure only; no booking, message, payment or customer action is available.</div><header><span class="brand">${e(c.companyName)}</span><nav aria-label="Concept navigation"><a href="#proposal">Proposal</a><a href="#scope">Scope</a></nav></header><main id="main"><section class="hero" aria-labelledby="title"><div><p class="meta">Proposed website direction for ${e(c.locationLabel)}</p><h1 id="title">${e(c.companyName)}</h1><p class="measure">${e(c.hero.text)}</p><p class="meta">Sourced observation shown for concept context; this is not a customer testimonial.</p><a href="#proposal">Explore the proposed structure</a></div><figure><img src="./assets/placeholder.svg" width="800" height="680" alt="Original geometric placeholder illustration for the proposed website"><figcaption>Explicit placeholder. Company photography and branding require verified usage rights.</figcaption></figure></section><section id="proposal" aria-labelledby="proposal-title"><h2 id="proposal-title">Proposed direction</h2><p class="measure">${e(c.objective)}</p><div class="sections">${c.sections.map(section => `<article class="section"><h3>${e(section.title)}</h3><p>${e(section.body.text)}</p><p class="meta">Research basis; final wording subject to review.</p></article>`).join('')}</div></section><section id="scope" class="scope" aria-labelledby="scope-title"><h2 id="scope-title">Proposed scope</h2><ul>${c.scope.included.map(item => `<li>${e(item)}</li>`).join('')}</ul><details><summary>Exclusions and assumptions</summary><ul>${c.scope.excluded.map(item => `<li>${e(item)}</li>`).join('')}</ul></details></section><section aria-labelledby="simulation-title"><h2 id="simulation-title">Interaction preview</h2><p class="measure">Contact, chat, booking and payment are intentionally represented by this explanation. No details are collected and no external action can run.</p></section></main><footer>Concept version ${concept.version}. Internal review artifact. Access, acceptance and publication are controlled separately.</footer></body></html>`;
   return { html, assets };
 }
-export interface BuildWebsiteDemoInput { prospect: WebsiteProspectInput; concept: WebsiteConceptArtifact; investmentPlan: WebsiteInvestmentInput; revision: WebsiteStudioRevision }
+export interface BuildWebsiteDemoInput { prospect: WebsiteProspectInput; concept: WebsiteConceptArtifact; investmentPlan: WebsiteInvestmentInput; revision: WebsiteStudioRevision; profileBinding?: z.infer<typeof demoProfileBindingSchema> }
 export async function buildWebsiteDemo(input: BuildWebsiteDemoInput, authority: WebsiteStudioAcceptancePort, now: string): Promise<WebsiteDemoArtifact> {
   const concept = verifyWebsiteStudioArtifact(input.concept, input.prospect, now);
   if (concept.kind !== 'CONCEPT') fail('STUDIO_CONCEPT_REQUIRED');
   const row = accepted.parse(await authority.resolveAcceptedConcept(concept.identity, concept.artifactDigest));
   if (canonicalWebsiteStudioDigest(row.identity) !== concept.identityKey || row.artifactDigest !== concept.artifactDigest
     || Date.parse(row.acceptedAt) < Date.parse(concept.createdAt) || Date.parse(row.acceptedAt) > Date.parse(now)) fail('STUDIO_CURRENT_ACCEPTANCE_REQUIRED');
-  const rendered = render(concept);
-  const content = { concept, acceptanceId: row.acceptanceId, acceptedAt: row.acceptedAt, ...rendered,
+  const resolved = input.profileBinding ? await authority.resolveDemoProfile?.(concept.identity, demoProfileBindingSchema.parse(input.profileBinding)) : null;
+  if (input.profileBinding && !resolved) fail('STUDIO_CURRENT_DEMO_PROFILE_REQUIRED');
+  const profile = resolved ? parseStudioDemoProfileSnapshot({ profile: resolved.profile, references: resolved.references, assets: resolved.assets }, concept.identity, now) : null;
+  if (profile && (profile.profile.id !== input.profileBinding?.profileId || profile.profile.version !== input.profileBinding.version || profile.profile.digest !== input.profileBinding.digest)) fail('STUDIO_DEMO_PROFILE_BINDING_CHANGED');
+  const rendered = profile && resolved ? renderWebsiteSalesBrandedDemo(concept, profile, studioProfileRasterAssets(profile, resolved.rasterBodies)) : render(concept);
+  const content = { concept, acceptanceId: row.acceptanceId, acceptedAt: row.acceptedAt, ...rendered, ...(profile ? { demoProfile: profile } : {}),
     htmlDigest: websiteStudioTextDigest(rendered.html), assetManifestDigest: websiteStudioAssetManifestDigest(rendered.assets),
     ...plan(input.investmentPlan, input.prospect, now, 'DEMO', concept), interactions: 'INERT_SIMULATIONS_ONLY' as const, indexable: false as const, externallyAccessible: false as const };
-  return seal({ ...envelope(input.prospect, input.revision, now, concept.artifactDigest), kind: 'DEMO', content }) as WebsiteDemoArtifact;
+  const base = envelope(input.prospect, input.revision, now, concept.artifactDigest);
+  const inheritedValidity = new Date(Math.min(Date.parse(base.validUntil), Date.parse(concept.validUntil))).toISOString();
+  return seal({ ...base, validUntil: profile ? studioDemoProfileValidUntil(profile, inheritedValidity) : inheritedValidity, kind: 'DEMO', content }) as WebsiteDemoArtifact;
 }
 /** Content integrity/currentness only; server separately enforces authenticated actor, immutable version chain and current persisted acceptance. */
 export function verifyWebsiteStudioArtifact(raw: unknown, prospect: WebsiteProspectInput, now: string): WebsiteStudioArtifact {
   at.parse(now);
-  if (Buffer.byteLength(JSON.stringify(raw), 'utf8') > 200_000) fail('STUDIO_ARTIFACT_TOO_LARGE');
+  if (Buffer.byteLength(JSON.stringify(raw), 'utf8') > 1_500_000) fail('STUDIO_ARTIFACT_TOO_LARGE');
   const artifact = websiteStudioArtifactSchema.parse(raw), { artifactDigest, ...unsigned } = artifact;
   revision.parse({ version: artifact.version, previousArtifactDigest: artifact.previousArtifactDigest });
   const current = qualifyWebsiteProspect(prospect, now);
+  const profile = artifact.kind === 'DEMO' && artifact.content.demoProfile ? parseStudioDemoProfileSnapshot(artifact.content.demoProfile, current.identity, now) : null;
+  const brief = artifact.kind === 'CONCEPT' && artifact.content.customerBrief ? parseStudioCustomerBrief(artifact.content.customerBrief, current.identity, now) : null;
+  const inheritedValidity = artifact.kind === 'DEMO' ? new Date(Math.min(Date.parse(current.validUntil), Date.parse(artifact.content.concept.validUntil))).toISOString() : current.validUntil;
+  const expectedValidUntil = profile ? studioDemoProfileValidUntil(profile, inheritedValidity) : brief ? studioCustomerBriefValidUntil(brief, inheritedValidity) : inheritedValidity;
+  if (!profile && Buffer.byteLength(JSON.stringify(raw), 'utf8') > 200_000) fail('STUDIO_ARTIFACT_TOO_LARGE');
   if (current.status !== 'READY' || artifact.identityKey !== current.identityKey || artifact.evidenceDigest !== current.evidenceDigest
-    || canonicalWebsiteStudioDigest(artifact.identity) !== current.identityKey || artifact.validUntil !== current.validUntil
+    || canonicalWebsiteStudioDigest(artifact.identity) !== current.identityKey || artifact.validUntil !== expectedValidUntil
     || Date.parse(artifact.createdAt) > Date.parse(now) || Date.parse(artifact.createdAt) < Math.max(...current.input.evidence.map(item => Date.parse(item.observedAt)))
     || Date.parse(artifact.validUntil) <= Date.parse(now)) fail('STUDIO_CURRENT_EVIDENCE_REQUIRED');
   if (canonicalWebsiteStudioDigest(unsigned) !== artifactDigest) fail('STUDIO_ARTIFACT_DIGEST_MISMATCH');
@@ -176,7 +200,8 @@ export function verifyWebsiteStudioArtifact(raw: unknown, prospect: WebsiteProsp
   if (artifact.kind === 'DEMO') {
     const concept = verifyWebsiteStudioArtifact(artifact.content.concept, current.input, now);
     if (concept.kind !== 'CONCEPT' || concept.artifactDigest !== artifact.parentArtifactDigest) fail('STUDIO_PARENT_MISMATCH');
-    const rendered = render(concept);
+    const rasters = artifact.content.assets.filter(asset => 'bodyEncoding' in asset);
+    const rendered = profile ? renderWebsiteSalesBrandedDemo(concept, profile, studioProfileRasterAssets(profile, rasters.map(asset => ({ assetId: asset.assetId, base64: asset.body })))) : render(concept);
     if (artifact.content.html !== rendered.html || canonicalWebsiteStudioDigest(artifact.content.assets) !== canonicalWebsiteStudioDigest(rendered.assets)
       || artifact.content.htmlDigest !== websiteStudioTextDigest(rendered.html) || artifact.content.assetManifestDigest !== websiteStudioAssetManifestDigest(rendered.assets)
       || Date.parse(artifact.content.acceptedAt) < Date.parse(concept.createdAt) || Date.parse(artifact.content.acceptedAt) > Date.parse(artifact.createdAt)) fail('STUDIO_RENDER_MISMATCH');

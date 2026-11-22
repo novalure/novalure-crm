@@ -9,13 +9,18 @@ import { buildWebsiteDemo, createWebsiteConcept, createWebsiteDiagnosis, verifyW
 import { assertWebsiteStudioQaActor, verifyWebsiteStudioQaCertificate } from "../website-sales-studio-qa";
 import { websiteSalesStudioContract, type StudioScope, type WebsiteSalesStudioCommand, type WebsiteSalesStudioRead, type StudioArtifactRecord, type WebsiteStudioQaCertificate } from "../website-sales-studio-types";
 import { queryAuthenticationRows } from "./tenant-client";
+import { demoProfileBindingSchema } from '../website-sales-enablement-types';
+import { resolveCurrentEnablementDemoProfile } from './website-sales-enablement-repositories';
+import { resolveCurrentWebsiteSalesBrief } from './website-sales-enablement-source';
+import { assertWebsiteSalesStudioSourceBindings } from './website-sales-studio-source-bindings';
+const briefBinding=z.strictObject({briefId:z.uuid(),version:z.number().int().positive().safe(),digest:z.hash('sha256')});
 const uuid=z.uuid(),sha=z.hash("sha256"),short=z.string().trim().min(1).max(1000),claim=z.strictObject({text:short,evidenceIds:z.array(z.string().trim().min(1).max(100)).min(1).max(20)}),scopeSchema=z.strictObject({included:z.array(short).min(1).max(12),excluded:z.array(short).min(1).max(12)});
 const investment=z.strictObject({estimatedCostMinor:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),availableBudgetMinor:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),expectedNetPriceMinor:z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),estimatedDeliveryCostMinor:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),minimumMarginBasisPoints:z.number().int().min(0).max(10000),requiredCapacityMinutes:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),availableCapacityMinutes:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),rightsVerified:z.boolean(),budgetReference:short.nullable()});
 const revision={version:z.number().int().positive().max(100000),previousArtifactDigest:sha.nullable()};
 const payloadSchemas={
  create_diagnosis:z.strictObject({...revision,recommendations:z.array(claim).min(1).max(12),scope:scopeSchema,investmentPlan:investment}),
- create_concept:z.strictObject({...revision,diagnosisDigest:sha,objective:short,hero:claim,sections:z.array(z.strictObject({title:short,body:claim})).min(1).max(6),visualDirection:z.enum(["STUDIO_BLUE","BOTANICAL_GREEN","CRAFT_OCHRE"]),scope:scopeSchema,investmentPlan:investment}),
- accept_concept:z.strictObject({artifactId:uuid}),build_demo:z.strictObject({...revision,conceptDigest:sha,investmentPlan:investment}),
+ create_concept:z.strictObject({...revision,diagnosisDigest:sha,objective:short,hero:claim,sections:z.array(z.strictObject({title:short,body:claim})).min(1).max(6),visualDirection:z.enum(["STUDIO_BLUE","BOTANICAL_GREEN","CRAFT_OCHRE"]),scope:scopeSchema,investmentPlan:investment,briefBinding:briefBinding.optional()}),
+ accept_concept:z.strictObject({artifactId:uuid}),build_demo:z.strictObject({...revision,conceptDigest:sha,investmentPlan:investment,profileBinding:demoProfileBindingSchema.optional()}),
  submit_qa:z.strictObject({artifactId:uuid,certificate:z.unknown()}),create_preview:z.strictObject({artifactId:uuid,contactId:uuid,expiresAt:z.iso.datetime({offset:true})}),revoke_preview:z.strictObject({grantId:uuid,expectedVersion:z.number().int().positive()}),
 };
 const commandSchema=z.strictObject({contractVersion:z.literal(websiteSalesStudioContract),operation:z.enum(["create_diagnosis","create_concept","accept_concept","build_demo","submit_qa","create_preview","revoke_preview"]),projectId:uuid,companyId:uuid,locationId:uuid,workflowId:uuid,expectedWorkflowVersion:z.number().int().positive(),expectedEvidenceDigest:sha,idempotencyKey:z.uuidv4(),correlationId:uuid,allocationProof:salesAllocationProofSchema.optional(),payload:z.record(z.string(),z.unknown())});
@@ -54,7 +59,7 @@ async function current(tx:TenantTransaction,session:AppSession,scope:StudioScope
  return row;
 }
 type ArtifactRow={id:string;createdBy:string;artifact:WebsiteStudioArtifact};
-async function artifactRows(tx:TenantTransaction,workspaceId:string,workflowId:string){return tx.query<ArtifactRow>(`select id,created_by as "createdBy",artifact from crm_website_studio_artifacts where workspace_id=$1 and workflow_id=$2 order by created_at desc,id desc limit 25`,[workspaceId,workflowId]);}
+async function artifactRows(tx:TenantTransaction,workspaceId:string,workflowId:string,latestOnly=false){return tx.query<ArtifactRow>(`select id,created_by as "createdBy",artifact from (select id,created_by,artifact,created_at,row_number() over(partition by kind order by version desc) as kind_rank from crm_website_studio_artifacts where workspace_id=$1 and workflow_id=$2) ranked ${latestOnly?"where kind_rank=1":""} order by (kind_rank=1) desc,created_at desc,id desc limit 25`,[workspaceId,workflowId]);}
 async function artifactBy(tx:TenantTransaction,workspaceId:string,workflowId:string,value:string,byDigest=false):Promise<ArtifactRow>{const row=await tx.queryOne<ArtifactRow>(`select id,created_by as "createdBy",artifact from crm_website_studio_artifacts where workspace_id=$1 and workflow_id=$2 and ${byDigest?"artifact_digest":"id"}=$3`,[workspaceId,workflowId,value]);if(!row)fail("STUDIO_ARTIFACT_NOT_FOUND",404);return row;}
 async function latest(tx:TenantTransaction,workspaceId:string,workflowId:string,kind:string){return tx.queryOne<{version:number;digest:string}>(`select version,artifact_digest as digest from crm_website_studio_artifacts where workspace_id=$1 and workflow_id=$2 and kind=$3 order by version desc limit 1`,[workspaceId,workflowId,kind]);}
 async function qaFor(tx:TenantTransaction,session:AppSession,row:ArtifactRow,workflowId:string){
@@ -66,11 +71,12 @@ async function qaFor(tx:TenantTransaction,session:AppSession,row:ArtifactRow,wor
 export async function readWebsiteSalesStudio(session:AppSession,scope:StudioScope,options:TenantTransactionOptions={}):Promise<WebsiteSalesStudioRead>{
  websiteSalesActorAuthority(session,scope,"read","studio");Object.values(scope).forEach(id=>assertCrmUuid(id));
  return withCrmRead(session,async(tx,fresh)=>{
-  const row=await current(tx,fresh,scope),rows=await artifactRows(tx,fresh.workspaceId,row.id),artifacts:StudioArtifactRecord[]=[];
-  let total=0;for(const item of rows){total+=Buffer.byteLength(JSON.stringify(item.artifact));if(total>1500000)break;
+  const row=await current(tx,fresh,scope),rows=await artifactRows(tx,fresh.workspaceId,row.id,!!fresh.serviceIdentity),artifacts:StudioArtifactRecord[]=[];
+  let total=0;for(const item of rows){total+=Buffer.byteLength(JSON.stringify(item.artifact));if(total>3500000)break;
    const accepted=!!await tx.queryOne("select id from crm_website_studio_acceptances where workspace_id=$1 and artifact_id=$2",[fresh.workspaceId,item.id]);
-   let qa:StudioArtifactRecord["qa"]=null;if(item.artifact.kind==="DEMO"&&(!row.blockedReason||row.blockedReason==="REPLY_RECEIVED")){try{const verified=verifyWebsiteStudioArtifact(item.artifact,row.prospect,new Date().toISOString());if(verified.kind!=="DEMO")fail("STUDIO_DEMO_REQUIRED");await assertCurrentDemoParent(tx,fresh.workspaceId,row.id,verified);const q=await qaFor(tx,fresh,item,row.id);qa={certificateId:q.id,expiresAt:q.certificate.payload.expiresAt};}catch{}}
-   artifacts.push({...item,accepted,qa});
+   let qa:StudioArtifactRecord["qa"]=null;if(item.artifact.kind==="DEMO"&&(!row.blockedReason||row.blockedReason==="REPLY_RECEIVED")){try{const verified=verifyWebsiteStudioArtifact(item.artifact,row.prospect,new Date().toISOString());if(verified.kind!=="DEMO")fail("STUDIO_DEMO_REQUIRED");await assertCurrentDemoParent(tx,fresh,row.id,verified);const q=await qaFor(tx,fresh,item,row.id);qa={certificateId:q.id,expiresAt:q.certificate.payload.expiresAt};}catch{}}
+   const artifact = !fresh.serviceIdentity && item.artifact.kind==='DEMO' ? {...item.artifact,content:{...item.artifact.content,assets:item.artifact.content.assets.map(asset=>{if(!('bodyEncoding' in asset))return asset;const {body,...metadata}=asset;void body;return {...metadata,bodyOmitted:true as const};})}} : item.artifact;
+   artifacts.push({...item,artifact,accepted,qa});
   }
   const previews=await tx.query<{id:string;artifactId:string;contactId:string;expiresAt:string;revokedAt:string|null;version:number}>(`select id,artifact_id as "artifactId",contact_id as "contactId",expires_at::text as "expiresAt",revoked_at::text as "revokedAt",version from crm_website_studio_preview_grants where workspace_id=$1 and workflow_id=$2 order by created_at desc,id desc limit 25`,[fresh.workspaceId,row.id]);
   const canWrite=!!(await tx.queryOne<{allowed:boolean}>("select crm_project_access($1,$2,true) as allowed",[fresh.workspaceId,scope.projectId]))?.allowed&&fresh.permissions.includes("crm:write")&&fresh.productPermissions.includes("pipeline:write");
@@ -100,11 +106,12 @@ async function executeWebsiteSalesStudioCommandImpl(session:AppSession,raw:Websi
    const top=await latest(tx,context.workspaceId,row.id,artifact.kind);if(top?.digest!==artifact.artifactDigest)fail("STUDIO_LATEST_ARTIFACT_REQUIRED");
    if(input.operation==="accept_concept"){
     if(artifact.kind!=="CONCEPT")fail("STUDIO_CONCEPT_REQUIRED");
+    await assertWebsiteSalesStudioSourceBindings(tx,context.session,artifact);
     const parent=await latest(tx,context.workspaceId,row.id,"DIAGNOSIS");if(parent?.digest!==artifact.parentArtifactDigest)fail("STUDIO_PARENT_CHANGED");
     const id=randomUUID();await tx.execute("insert into crm_website_studio_acceptances(id,workspace_id,project_id,company_id,location_id,workflow_id,artifact_id,accepted_by) values($1,$2,$3,$4,$5,$6,$7,$8)",[id,context.workspaceId,input.projectId,input.companyId,input.locationId,row.id,record.id,context.actorId]);return {artifactId:record.id,acceptanceId:id,canContact:false};
    }
    if(artifact.kind!=="DEMO")fail("STUDIO_DEMO_REQUIRED");
-   await assertCurrentDemoParent(tx,context.workspaceId,row.id,artifact);
+   await assertCurrentDemoParent(tx,context.session,row.id,artifact);
    if(input.operation==="submit_qa"){
     const cert=verifyWebsiteStudioQaCertificate(p.certificate,artifact,row.id,record.createdBy);
     const qaActor=await tx.queryOne("select id from workspace_users where workspace_id=$1 and id=$2 and status='active'",[context.workspaceId,cert.payload.qaActorId]);if(!qaActor)fail("QA_ACTOR_UNAVAILABLE",403);
@@ -126,25 +133,31 @@ async function executeWebsiteSalesStudioCommandImpl(session:AppSession,raw:Websi
   else {
    const digest=(kind==="CONCEPT"?p.diagnosisDigest:p.conceptDigest) as string,parentRecord=await artifactBy(tx,context.workspaceId,row.id,digest,true),parent=verifyWebsiteStudioArtifact(parentRecord.artifact,row.prospect,now);
    if((await latest(tx,context.workspaceId,row.id,parent.kind))?.digest!==digest||parent.kind!==(kind==="CONCEPT"?"DIAGNOSIS":"CONCEPT"))fail("STUDIO_CURRENT_PARENT_REQUIRED");
-   if(kind==="CONCEPT")artifact=createWebsiteConcept({prospect:row.prospect,diagnosis:parent as WebsiteDiagnosisArtifact,objective:p.objective as string,hero:p.hero as z.infer<typeof claim>,sections:p.sections as {title:string;body:z.infer<typeof claim>}[],visualDirection:p.visualDirection as "STUDIO_BLUE",scope:p.scope as z.infer<typeof scopeSchema>,investmentPlan:plan,revision},now);
-   else artifact=await buildWebsiteDemo({prospect:row.prospect,concept:parent as WebsiteConceptArtifact,investmentPlan:plan,revision},{resolveAcceptedConcept:async()=>{
+   await assertWebsiteSalesStudioSourceBindings(tx,context.session,parent);
+   if(kind==="CONCEPT"){
+    const customerBrief=p.briefBinding?await resolveCurrentWebsiteSalesBrief(tx,context.session,input,p.briefBinding as z.infer<typeof briefBinding>):undefined;
+    artifact=createWebsiteConcept({prospect:row.prospect,diagnosis:parent as WebsiteDiagnosisArtifact,objective:p.objective as string,hero:p.hero as z.infer<typeof claim>,sections:p.sections as {title:string;body:z.infer<typeof claim>}[],visualDirection:p.visualDirection as "STUDIO_BLUE",scope:p.scope as z.infer<typeof scopeSchema>,investmentPlan:plan,revision,...(customerBrief?{customerBrief}:{})},now);
+   }
+   else artifact=await buildWebsiteDemo({prospect:row.prospect,concept:parent as WebsiteConceptArtifact,investmentPlan:plan,revision,...(p.profileBinding?{profileBinding:p.profileBinding as z.infer<typeof demoProfileBindingSchema>}:{})},{resolveDemoProfile:(_identity,binding)=>resolveCurrentEnablementDemoProfile(tx,context.session,input,binding),resolveAcceptedConcept:async()=>{
     if((await latest(tx,context.workspaceId,row.id,"DIAGNOSIS"))?.digest!==parent.parentArtifactDigest)fail("STUDIO_PARENT_CHANGED");
     const a=await tx.queryOne<{id:string;acceptedAt:string}>("select id,accepted_at::text as \"acceptedAt\" from crm_website_studio_acceptances where workspace_id=$1 and artifact_id=$2",[context.workspaceId,parentRecord.id]);if(!a)fail("STUDIO_CONCEPT_ACCEPTANCE_REQUIRED");return {identity:parent.identity,artifactDigest:parent.artifactDigest,acceptanceId:a.id,acceptedAt:new Date(a.acceptedAt).toISOString()};
    }},now);
   }
-  verifyWebsiteStudioArtifact(artifact,row.prospect,now);if(Buffer.byteLength(JSON.stringify(artifact))>120000)fail("STUDIO_ARTIFACT_TOO_LARGE",413);
+  verifyWebsiteStudioArtifact(artifact,row.prospect,now);const bound=artifact.kind==='CONCEPT'&&artifact.content.customerBrief||artifact.kind==='DEMO'&&(artifact.content.demoProfile||artifact.content.concept.content.customerBrief);if(Buffer.byteLength(JSON.stringify(artifact))>(bound?1500000:120000))fail("STUDIO_ARTIFACT_TOO_LARGE",413);
   const id=randomUUID();await tx.execute(`insert into crm_website_studio_artifacts(id,workspace_id,project_id,company_id,location_id,workflow_id,kind,version,artifact_digest,evidence_digest,artifact,created_by,created_at,valid_until) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)`,[id,context.workspaceId,input.projectId,input.companyId,input.locationId,row.id,artifact.kind,artifact.version,artifact.artifactDigest,artifact.evidenceDigest,JSON.stringify(artifact),context.actorId,artifact.createdAt,artifact.validUntil]);return {artifactId:id,artifactDigest:artifact.artifactDigest,kind,version:artifact.version,canContact:false};
  },options).catch(error=>{if(error instanceof WebsiteStudioError)throw new CrmCommandError(error.code,error.code,409);if(error instanceof z.ZodError)throw new CrmCommandError("INVALID_STUDIO_CONTENT","Invalid studio content",400);throw error;});
  // The one-time invitation is deliberately absent from the persisted receipt and audit.
  return {...result,contractVersion:websiteSalesStudioContract,persisted:true as const,correlationId:input.correlationId,...(issuedSecret?{invitation:{grantId:result.data.grantId,token:issuedSecret}}:{})};
 }
-async function assertCurrentDemoParent(tx:TenantTransaction,workspaceId:string,workflowId:string,artifact:Extract<WebsiteStudioArtifact,{kind:"DEMO"}>) {
+async function assertCurrentDemoParent(tx:TenantTransaction,session:AppSession,workflowId:string,artifact:Extract<WebsiteStudioArtifact,{kind:"DEMO"}>) {
+ const workspaceId=session.workspaceId;
+ await assertWebsiteSalesStudioSourceBindings(tx,session,artifact);
  if((await latest(tx,workspaceId,workflowId,"CONCEPT"))?.digest!==artifact.parentArtifactDigest||(await latest(tx,workspaceId,workflowId,"DIAGNOSIS"))?.digest!==artifact.content.concept.parentArtifactDigest)fail("STUDIO_PARENT_CHANGED");
  const accepted=await tx.queryOne("select id from crm_website_studio_acceptances where workspace_id=$1 and id=$2",[workspaceId,artifact.content.acceptanceId]);if(!accepted)fail("STUDIO_ACCEPTANCE_REQUIRED");
 }
 export async function websiteStudioQaRender(session:AppSession,scope:StudioScope|null,artifactId:string,options:TenantTransactionOptions={}){
  if(session.serviceIdentity)fail("STUDIO_STAFF_REQUIRED",403);
- return withCrmRead(session,async(tx,fresh)=>{const resolved=scope??await tx.queryOne<StudioScope>('select project_id as "projectId",company_id as "companyId",location_id as "locationId" from crm_website_studio_artifacts where workspace_id=$1 and id=$2',[fresh.workspaceId,assertCrmUuid(artifactId)]);if(!resolved)fail("STUDIO_ARTIFACT_NOT_FOUND",404);assertWebsiteStudioQaActor(fresh.workspaceId,resolved.projectId,fresh.userId);const row=await current(tx,fresh,resolved);if(row.blockedReason)fail(row.blockedReason);const stored=await artifactBy(tx,fresh.workspaceId,row.id,assertCrmUuid(artifactId));const artifact=verifyWebsiteStudioArtifact(stored.artifact,row.prospect,new Date().toISOString());if(artifact.kind!=="DEMO"||stored.createdBy===fresh.userId)fail("INDEPENDENT_QA_REQUIRED",403);await assertCurrentDemoParent(tx,fresh.workspaceId,row.id,artifact);return artifact;},options);
+ return withCrmRead(session,async(tx,fresh)=>{const resolved=scope??await tx.queryOne<StudioScope>('select project_id as "projectId",company_id as "companyId",location_id as "locationId" from crm_website_studio_artifacts where workspace_id=$1 and id=$2',[fresh.workspaceId,assertCrmUuid(artifactId)]);if(!resolved)fail("STUDIO_ARTIFACT_NOT_FOUND",404);assertWebsiteStudioQaActor(fresh.workspaceId,resolved.projectId,fresh.userId);const row=await current(tx,fresh,resolved);if(row.blockedReason)fail(row.blockedReason);const stored=await artifactBy(tx,fresh.workspaceId,row.id,assertCrmUuid(artifactId));const artifact=verifyWebsiteStudioArtifact(stored.artifact,row.prospect,new Date().toISOString());if(artifact.kind!=="DEMO"||stored.createdBy===fresh.userId)fail("INDEPENDENT_QA_REQUIRED",403);await assertCurrentDemoParent(tx,fresh,row.id,artifact);return artifact;},options);
 }
 export function secretHash(value:string){return createHash("sha256").update(value).digest("hex");}
 export function websiteStudioCookieName(grantId:string){return `novalure_studio_${grantId.replaceAll("-","")}`;}

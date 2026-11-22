@@ -1,6 +1,7 @@
 import { CrmCommandError } from "./crm-command";
 import type { WebsiteDemoArtifact } from "./website-sales-studio";
 import { isWebExposeOriginAllowed } from "./web-expose-http";
+import { studioRasterBytes } from './website-sales-studio-brand';
 /** The external configured origin remains authoritative behind Next's proxy URL. */
 export function websiteStudioExchangeOrigin(request: Request, configuredOrigin: string): URL | null {
  try { const origin = new URL(configuredOrigin); return isWebExposeOriginAllowed(request, origin.origin) ? origin : null; }
@@ -19,6 +20,6 @@ export function websiteStudioNotFound(){return new Response("Preview unavailable
 export function websiteStudioRenderedResponse(artifact:WebsiteDemoArtifact,path?:string){
  const headers=new Headers(websiteStudioPrivateHeaders);
  headers.set("Content-Security-Policy","default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-same-origin");
- if(path){const asset=artifact.content.assets.find(a=>a.path===path);if(!asset)return websiteStudioNotFound();headers.set("Content-Type",asset.mediaType+"; charset=utf-8");return new Response(asset.body,{headers});}
+ if(path){const asset=artifact.content.assets.find(a=>a.path===path);if(!asset)return websiteStudioNotFound();if('bodyEncoding' in asset){headers.set('Content-Type',asset.mediaType);return new Response(Buffer.from(studioRasterBytes(asset)),{headers});}headers.set("Content-Type",asset.mediaType+"; charset=utf-8");return new Response(asset.body,{headers});}
  headers.set("Content-Type","text/html; charset=utf-8");return new Response(artifact.content.html,{headers});
 }
