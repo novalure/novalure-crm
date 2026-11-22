@@ -118,7 +118,8 @@ export async function retrieveCommerceMail(providerReference: string, configurat
       last_event: z.string() }).parse(await readCommerceProviderJson(response, controller.signal, 1_000_000));
     if (data.id !== providerReference || plainAddress(data.from) !== plainAddress(configuration.from)) return null;
     const event = data.last_event.replace(/^email\./, '');
-    const status = event === 'delivered' || event === 'opened' || event === 'clicked' ? 'DELIVERED' as const
+    // Opens/clicks can come from scanners. They do not replace a delivery receipt.
+    const status = event === 'delivered' ? 'DELIVERED' as const
       : ['bounced', 'complained', 'failed', 'suppressed'].includes(event) ? 'FAILED' as const
         : ['sent', 'queued', 'scheduled', 'delivery_delayed'].includes(event) ? 'ACCEPTED' as const : null;
     if (!status) return null;

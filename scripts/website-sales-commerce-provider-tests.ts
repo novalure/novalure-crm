@@ -69,6 +69,10 @@ test('provider retrieval binds sender recipient and actual sent content without 
   const result = await retrieveCommerceMail(providerId, { apiKey: 'synthetic', from: 'hello@novalure.eu', transport });
   assert(result); assert.equal(result.status, 'DELIVERED'); assert.equal(result.textSha256, job.payload.documentSha256);
   assert.equal(captured[0]!.method, 'GET');
+  for (const last_event of ['opened', 'clicked']) {
+    set(200, { id: providerId, to: [job.payload.recipientEmail], from: 'hello@novalure.eu', subject: job.payload.subject, text: job.payload.text, last_event });
+    assert.equal(await retrieveCommerceMail(providerId, { apiKey: 'synthetic', from: 'hello@novalure.eu', transport }), null);
+  }
   set(200, { id: providerId, to: [job.payload.recipientEmail], from: 'other@example.invalid', subject: job.payload.subject, text: job.payload.text, last_event: 'delivered' });
   assert.equal(await retrieveCommerceMail(providerId, { apiKey: 'synthetic', from: 'hello@novalure.eu', transport }), null);
 }));
