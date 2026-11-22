@@ -302,7 +302,6 @@ language sql volatile security definer set search_path=pg_catalog,public as $fun
   and(g.location_id is null or exists(select 1 from public.crm_company_locations location where location.workspace_id=g.workspace_id and location.project_id=g.project_id and location.company_id=g.company_id and location.id=g.location_id))
  for share of g,p,source_actor,actor,w,project_grant
 $function$;
-commit;
 
 -- Reserve immutable schedule slots independently of command UUIDs; a new command cannot invoice twice.
 create table crm_website_sales_commerce_invoice_slots(
@@ -354,3 +353,5 @@ end $$;
 
 grant select on crm_website_sales_enablement_records to novalure_website_sales_commerce_executor;
 create policy commerce_executor_read on crm_website_sales_enablement_records for select to novalure_website_sales_commerce_executor using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales');
+
+commit;

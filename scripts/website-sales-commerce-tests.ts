@@ -29,11 +29,29 @@ test('care finite obligations use original clamped calendar anniversaries withou
  assert.deepEqual(websiteSalesCommerceTermMonths('2025-01-31T09:30:00.000Z','2026-01-31T09:30:00.000Z','2026-02-28T09:30:00.000Z'),{firstServiceMonth:13,months:1});
  assert.throws(()=>websiteSalesCommerceTermMonths('2026-01-31T09:30:00.000Z','2026-02-27T09:30:00.000Z','2026-03-31T09:30:00.000Z'),{code:'CARE_FINITE_COMPLETE_MONTH_TERM_REQUIRED'});
 });
-test('commerce schema preserves historical migrations and installs forced scoped RLS without an active executor', { timeout: 120000 }, async () => {
+test('commerce schema preserves historical migrations and installs forced scoped RLS without an active executor', { timeout: 120000 }, async t => {
  const db = await startLocalSalesDb();
  try {
   await applySalesSchema(db, { maxMigrationNumber: 90 });
-  for (const name of ['170_crm_personal_mailbox.sql','202_website_sales_ireland.sql','203_website_sales_machine.sql','204_website_sales_studio.sql','205_website_sales_lifecycle.sql','206_website_sales_operations.sql','207_website_sales_conversations.sql','208_website_sales_enablement.sql','209_website_sales_commerce.sql']) await db.admin.query(await readFile(`migrations/${name}`, 'utf8'));
+  for (const name of ['170_crm_personal_mailbox.sql','202_website_sales_ireland.sql','203_website_sales_machine.sql','204_website_sales_studio.sql','205_website_sales_lifecycle.sql','206_website_sales_operations.sql','207_website_sales_conversations.sql','208_website_sales_enablement.sql']) await db.admin.query(await readFile(`migrations/${name}`, 'utf8'));
+  const sql=await readFile('migrations/209_website_sales_commerce.sql','utf8');
+  await t.test('late failure rolls back all tables, private roles, old ACLs, policies and canonical function changes atomically',async()=>{
+   const client=await db.admin.connect();try{
+    const snapshot=async()=> (await client.query(`select
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select oid,relname,relacl from pg_class where relnamespace='public'::regnamespace)r) as relations,
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select oid,proacl,pg_get_functiondef(oid) as definition from pg_proc where pronamespace='public'::regnamespace and prokind='f')r) as functions,
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select oid,pg_get_constraintdef(oid) as definition from pg_constraint where connamespace='public'::regnamespace)r) as constraints,
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select * from pg_policy)r) as policies,
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.oid),'[]')::text) from(select oid,rolname,rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolinherit from pg_roles)r) as roles,
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.roleid,r.member),'[]')::text) from(select roleid,member,grantor,admin_option from pg_auth_members)r) as memberships,
+      (select md5(coalesce(jsonb_agg(to_jsonb(r) order by r.table_name,r.column_name,r.grantee,r.privilege_type),'[]')::text) from information_schema.role_column_grants r) as column_grants`)).rows[0];
+    const before=await snapshot();assert.equal((sql.match(/^commit;$/gm)||[]).length,1);assert.match(sql,/commit;\s*$/);
+    await assert.rejects(client.query(sql.replace(/commit;\s*$/,'select 1/0;\ncommit;')),{code:'22012'});await client.query('rollback');
+    assert.deepEqual(await snapshot(),before);assert.equal((await client.query("select count(*)::int n from pg_class where relnamespace='public'::regnamespace and relname like 'crm_website_sales_commerce%'")).rows[0].n,0);
+    assert.equal((await client.query("select count(*)::int n from pg_roles where rolname in('novalure_website_sales_commerce_executor','novalure_website_sales_commerce_lock_owner')")).rows[0].n,0);
+   }finally{client.release();}
+  });
+  await db.admin.query(sql);
   const rows = (await db.admin.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relname like 'crm_website_sales_commerce%' and relkind='r' order by relname")).rows;
   assert.equal(rows.length, 9); assert(rows.every(row => row.relrowsecurity && row.relforcerowsecurity));
   const role = (await db.admin.query("select rolcanlogin,rolsuper,rolbypassrls from pg_roles where rolname='novalure_website_sales_commerce_executor'")).rows[0];
