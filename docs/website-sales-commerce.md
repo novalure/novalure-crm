@@ -61,6 +61,19 @@ source resolution considers corrections and complete bounded history, rather
 than falling back to an old positive record. The UI uses the server assessment;
 unknown and unallocated amounts are not displayed as paid or zero.
 
+An independently verified provider complaint also creates a central contact stop
+for that workspace and recipient. The private source function derives the address
+from the original frozen mail job, checks current source authority and serializes
+against dispatch; another contact or Sales workflow cannot bypass the stop. Exact
+duplicate observations remain idempotent. A stopped recipient holds its own
+worker profile while unrelated profiles continue; unexpected failures and the
+global pause still stop the batch. Provider polling retains the actual complaint
+or bounce status instead of reducing either to a generic failure.
+
+The five optional commerce environment groups are classified as server-only,
+production-only metadata. This classification supplies neither credentials nor
+remote-value parity or production acceptance.
+
 Operational configuration, machine capabilities, source boundaries and release
 gates are specified in the companion Evelyn runbook
 `docs/runbooks/website-sales-commerce.md`. Local provider fixtures, disposable
