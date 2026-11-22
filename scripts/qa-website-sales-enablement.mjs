@@ -65,6 +65,16 @@ try {
     await openStudio(state); await expect(panel()).toBeVisible(); await expect(panel().getByRole('tab')).toHaveCount(7);
     const read = await current(); assert.equal(read.canContact, false); assert.equal(read.identity.companyId, state.scope.companyId);
   });
+  await step('project daily work names the actual company and location before company selection and opens that opportunity', async () => {
+    await main.locator('[data-website-sales-workbench]').getByLabel('Unternehmen', { exact: true }).selectOption('');
+    const daily=main.getByTestId('website-sales-daily'); await expect(daily).toBeVisible();
+    const projection=await api(main,endpoint+'?'+new URLSearchParams({workspaceId:actor.account.workspaceId,projectId:state.scope.projectId,view:'project',limit:'25'}));
+    assert.equal(projection.status,200,projection.body.code); const resource=projection.body.resources.find(row=>row.identity.companyId===state.scope.companyId&&row.identity.locationId===state.scope.locationId);
+    assert(resource&&resource.companyName&&resource.locationLabel); await expect(daily.getByText(`${resource.companyName} · ${resource.locationLabel}`,{exact:true}).first()).toBeVisible();
+    await daily.locator('li').filter({hasText:resource.locationLabel}).first().getByRole('button',{name:'Chance öffnen',exact:true}).click();
+    await expect(main.locator('[data-website-sales-workbench]').getByLabel('Unternehmen',{exact:true})).toHaveValue(state.scope.companyId);
+    await expect(panel()).toBeVisible();
+  });
   await step('the labelled brief form preserves unknown customer budget and records source-backed open questions', async () => {
     await tab('Bedarf'); const form = main.getByTestId('enablement-brief-form');
     for (const [name, value] of Object.entries({ goals: 'PRIVATE_SYNTHETIC_BUDGET_STRATEGY', audience: 'Local test audience', services: 'Information pages', openQuestions: 'Who signs the final scope?' })) await form.locator(`[name="${name}"]`).fill(value);
