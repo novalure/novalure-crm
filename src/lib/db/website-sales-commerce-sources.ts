@@ -19,7 +19,7 @@ export async function ingestVerifiedWebsiteSalesCommerceSource(cap: WebsiteSales
   const history = (await tx.query<{ payload: Event }>(`select payload from crm_website_sales_commerce_sources where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5 order by received_at,id limit 1001`, params(b, b))).map(r => r.payload);
   if (history.length > 1000) fail('COMMERCE_FINANCIAL_HISTORY_LIMITED');
   const existing = history.find(p => p.eventId === e.eventId || p.source.system === e.source.system && p.source.provider === e.source.provider && p.source.accountReference === e.source.accountReference && p.source.resourceType === e.source.resourceType && p.source.resourceId === e.source.resourceId && p.source.version === e.source.version);
-  if (existing) { if (semantic(existing) !== semantic(e)) fail('COMMERCE_SOURCE_EVENT_CONFLICT');if(existing.kind==='SIGNATURE')await projectVerifiedWebsiteSalesClosing(tx,b,job,existing,history); return { status: 'DUPLICATE' as const, sourceEventId: existing.eventId }; }
+  if (existing) { if (semantic(existing) !== semantic(e)) fail('COMMERCE_SOURCE_EVENT_CONFLICT');if(existing.kind==='PROVIDER_DELIVERY'&&existing.payload.status==='COMPLAINED')await tx.query('select crm_website_sales_commerce_suppress_complaint($1,$2,$3)',[existing.eventId,b.workloadId,b.grantId]);if(existing.kind==='SIGNATURE')await projectVerifiedWebsiteSalesClosing(tx,b,job,existing,history); return { status: 'DUPLICATE' as const, sourceEventId: existing.eventId }; }
   if(['PROVIDER_DELIVERY','SIGNATURE'].includes(e.kind)&&!job.firstAttemptAt)fail('COMMERCE_SOURCE_NO_AUTHORIZED_ATTEMPT',403);
   const ref = job.payload.documentRef as { id: string; version: number; digest: string };
   const rows = await commerceRows(tx, b, b);
@@ -76,6 +76,7 @@ export async function ingestVerifiedWebsiteSalesCommerceSource(cap: WebsiteSales
   }
   const entityRef = e.kind === 'PROVIDER_DELIVERY' ? e.payload.documentRef : e.kind === 'SIGNATURE' || e.kind === 'DELIVERY_ACCEPTANCE' || e.kind === 'INVOICE' || e.kind === 'SUBSCRIPTION' ? e.payload.contractRef : ref;
   await tx.execute(`insert into crm_website_sales_commerce_sources(id,workspace_id,project_id,company_id,location_id,workflow_id,job_id,provider,account_reference,event_id,kind,event_digest,entity_id,entity_version,document_digest,payload,occurred_at,received_by_actor_id,verification_workload_id,verification_grant_id,verification_authority_reference)values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,$21)`, [e.eventId, ...params(b, b), job.id, e.source.provider, e.source.accountReference, e.eventId, e.kind, semantic(e), entityRef.id, entityRef.version, entityRef.digest, JSON.stringify(e), e.occurredAt,b.actorId,b.workloadId,b.grantId,b.authorityReference]);
+  if(e.kind==='PROVIDER_DELIVERY'&&e.payload.status==='COMPLAINED')await tx.query('select crm_website_sales_commerce_suppress_complaint($1,$2,$3)',[e.eventId,b.workloadId,b.grantId]);
   // Provider acceptance and delivery remain separate facts. Exact late proof can resolve UNKNOWN.
   if (e.kind === 'PROVIDER_DELIVERY' || e.kind === 'SIGNATURE' || e.kind === 'INVOICE') {
    const reference = e.kind === 'PROVIDER_DELIVERY' ? e.payload.providerMessageId : e.kind === 'SIGNATURE' ? e.payload.envelopeId : e.source.resourceId;

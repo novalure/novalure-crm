@@ -266,6 +266,7 @@ begin
  select * into g from crm_lock_website_sales_machine_grant(p_workload,p_grant);
  select * into j from crm_website_sales_commerce_jobs where id=p_job and workspace_id=g.workspace_id;
  if g.id is null or j.id is null or g.actor_user_id is distinct from nullif(current_setting('app.actor_id',true),'')::uuid or(g.workspace_id,g.project_id,g.company_id,g.location_id) is distinct from(j.workspace_id,j.project_id,j.company_id,j.location_id) then raise exception using errcode='42501',message='Exact commercial resource authority required';end if;
+ if j.payload->>'recipientEmail' is not null then perform pg_advisory_xact_lock(hashtextextended('website-sales-commerce-email:'||j.workspace_id::text||':'||lower(j.payload->>'recipientEmail'),0));end if;
  perform id from crm_company_locations where workspace_id=j.workspace_id and project_id=j.project_id and company_id=j.company_id and id=j.location_id for share;
  select contact_id,offer_draft_id into contact,offer from crm_website_sales_workflows where workspace_id=j.workspace_id and project_id=j.project_id and company_id=j.company_id and location_id=j.location_id and id=j.workflow_id for share;
  if not found then raise exception using errcode='42501',message='Exact commercial workflow required';end if;
@@ -278,15 +279,41 @@ begin
  perform id from workspace_users where workspace_id=j.workspace_id and role='owner' for share;
  return true;
 end $$;
+-- A verified complaint is a tenant-wide stop for the immutable original recipient.
+-- The runtime receives EXECUTE only; it never gains generic suppression writes.
+grant select on crm_website_sales_commerce_sources to novalure_website_sales_commerce_lock_owner;
+create policy commerce_lock_owner_read on crm_website_sales_commerce_sources for select to novalure_website_sales_commerce_lock_owner using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales');
+grant insert on newsletter_suppressions to novalure_website_sales_commerce_lock_owner;
+grant select(workspace_id,email) on newsletter_suppressions to novalure_website_sales_commerce_lock_owner;
+create policy commerce_complaint_conflict_read on newsletter_suppressions for select to novalure_website_sales_commerce_lock_owner using(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales');
+create policy commerce_verified_complaint on newsletter_suppressions for insert to novalure_website_sales_commerce_lock_owner with check(workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid and reason='complaint' and source='Website Sales verified provider complaint' and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales');
+create function crm_website_sales_commerce_suppress_complaint(p_source uuid,p_workload uuid,p_grant uuid) returns boolean language plpgsql security definer set search_path=pg_catalog,public,pg_temp as $$
+declare g public.crm_website_sales_machine_grants;fact public.crm_website_sales_commerce_sources;delivery public.crm_website_sales_commerce_jobs;
+begin
+ select * into g from crm_lock_website_sales_machine_grant(p_workload,p_grant);
+ if g.id is null or g.actor_user_id is distinct from nullif(current_setting('app.actor_id',true),'')::uuid or not('crm.website-sales.commerce.ingest-source'=any(g.scopes)) then raise exception using errcode='42501',message='Current commercial source authority required';end if;
+ select * into fact from crm_website_sales_commerce_sources where id=p_source and workspace_id=g.workspace_id and project_id=g.project_id and company_id=g.company_id and location_id=g.location_id and kind='PROVIDER_DELIVERY' and payload->>'confidence'='PROVIDER_VERIFIED' and payload->'source'->>'system'='DELIVERY_PROVIDER' and payload->'payload'->>'status'='COMPLAINED';
+ if not found then raise exception using errcode='42501',message='Stored verified complaint required';end if;
+ select * into delivery from crm_website_sales_commerce_jobs where id=fact.job_id and workspace_id=fact.workspace_id and project_id=fact.project_id and company_id=fact.company_id and location_id=fact.location_id and workflow_id=fact.workflow_id and kind in('OFFER_SEND','CONTRACT_SEND') and first_attempt_at is not null;
+ if not found or fact.payload->'payload'->'documentRef' is distinct from delivery.payload->'documentRef' or fact.payload->'payload'->>'documentSha256' is distinct from delivery.payload->>'documentSha256' or fact.payload->'payload'->>'recipientDigest' is distinct from delivery.payload->>'recipientDigest' or(delivery.provider_reference is not null and delivery.provider_reference is distinct from fact.payload->'payload'->>'providerMessageId') or length(delivery.payload->>'recipientEmail') not between 3 and 320 then raise exception using errcode='42501',message='Exact original complaint recipient required';end if;
+ perform pg_advisory_xact_lock(hashtextextended('website-sales-commerce-email:'||delivery.workspace_id::text||':'||lower(delivery.payload->>'recipientEmail'),0));
+ insert into newsletter_suppressions(workspace_id,email,reason,source,metadata,data_classification,data_purpose)
+ values(fact.workspace_id,lower(delivery.payload->>'recipientEmail'),'complaint','Website Sales verified provider complaint',jsonb_build_object('commerceSourceEventId',fact.id,'commerceJobId',delivery.id,'provider',fact.provider,'providerMessageId',fact.payload->'payload'->>'providerMessageId'),'NOVALURE_INTERNAL','crm_sales')
+ on conflict(workspace_id,lower(email)) do nothing;
+ return true;
+end $$;
 -- Only the exact installer-owned membership row is added temporarily; all preimages survive unchanged.
 do $$declare previous_membership record;had_previous boolean;begin
  select m.admin_option,m.inherit_option,m.set_option into previous_membership from pg_auth_members m where m.roleid=(select oid from pg_roles where rolname='novalure_website_sales_commerce_lock_owner') and m.member=(select oid from pg_roles where rolname=current_user) and m.grantor=(select oid from pg_roles where rolname=current_user);had_previous:=found;
  execute format('grant novalure_website_sales_commerce_lock_owner to %I with set true,inherit true',current_user);
  grant create on schema public to novalure_website_sales_commerce_lock_owner;
  alter function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) owner to novalure_website_sales_commerce_lock_owner;
+ alter function crm_website_sales_commerce_suppress_complaint(uuid,uuid,uuid) owner to novalure_website_sales_commerce_lock_owner;
  revoke create on schema public from novalure_website_sales_commerce_lock_owner;
  revoke all on function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) from public;
+ revoke all on function crm_website_sales_commerce_suppress_complaint(uuid,uuid,uuid) from public;
  grant execute on function crm_website_sales_commerce_lock_job(uuid,uuid,uuid) to novalure_website_sales_commerce_executor;
+ grant execute on function crm_website_sales_commerce_suppress_complaint(uuid,uuid,uuid) to novalure_website_sales_commerce_executor;
  if had_previous then
   execute format('grant novalure_website_sales_commerce_lock_owner to %I with admin %s,inherit %s,set %s',current_user,case when previous_membership.admin_option then 'true' else 'false' end,case when previous_membership.inherit_option then 'true' else 'false' end,case when previous_membership.set_option then 'true' else 'false' end);
  else execute format('revoke novalure_website_sales_commerce_lock_owner from %I',current_user);end if;

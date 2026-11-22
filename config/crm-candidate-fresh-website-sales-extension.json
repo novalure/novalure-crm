@@ -41,7 +41,7 @@
     },
     {
       "path": "migrations/209_website_sales_commerce.sql",
-      "sha256": "6e540bbe55d5514fe933500b225f35a4a103c0e44fea36ea857af0b31140f5cb",
+      "sha256": "3b8c8dd003bdbc335f3a9ddc482e8253029dda8e522b91320b90211e82e95aa7",
       "manual": false
     }
   ]
