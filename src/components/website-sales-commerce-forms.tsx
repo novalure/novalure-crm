@@ -136,7 +136,7 @@ export function ContractActions(props: CommerceFormProps) {
 }
 
 export function DeliveryActions(props: CommerceFormProps) {
-  const { data, language } = props, de = language === 'de', signed = data.contracts.filter(row => recordCurrent(row, props.now) && commerceContractStatus(data, row) === 'SIGNED');
+  const { data, language } = props, de = language === 'de', signed = data.contracts.filter(row => recordCurrent(row, props.now) && commerceContractStatus(data, row, props.now) === 'SIGNED');
   return <ActionForm {...props} operation="record_delivery_acceptance" title={de ? 'Kundenabnahme der gelieferten Leistung dokumentieren' : 'Record customer acceptance of the delivered work'} label={de ? 'Abnahme mit Beleg dokumentieren' : 'Record acceptance with evidence'} build={form => {
     const contract = choose(signed, text(form, 'contract'), row => commerceRefKey(commerceRef(row))), task = choose(data.eligibleDeliveryTasks, text(form, 'task'), row => commerceRefKey(row.taskRef));
     const offer = data.offers.find(row => commerceRefKey(row.payload.offerRef) === commerceRefKey(contract.payload.offerRef)); if (!offer) throw Error();
@@ -147,7 +147,7 @@ export function DeliveryActions(props: CommerceFormProps) {
 }
 
 export function InvoiceActions(props: CommerceFormProps) {
-  const { data, language } = props, de = language === 'de', contracts = data.contracts.filter(row => recordCurrent(row, props.now) && commerceContractStatus(data, row) === 'SIGNED');
+  const { data, language } = props, de = language === 'de', contracts = data.contracts.filter(row => recordCurrent(row, props.now) && commerceContractStatus(data, row, props.now) === 'SIGNED');
   const [selected, setSelected] = useState(''), [stage, setStage] = useState('DEPOSIT'), invoiceSelectionId=useId();
   const contract = contracts.find(row => commerceRefKey(commerceRef(row)) === selected), policies = data.policies ?? (data.policy ? [data.policy] : []);
   return <div className="space-y-4"><Field htmlFor={invoiceSelectionId} label={de ? 'Unterzeichneter Vertrag für die Rechnung' : 'Signed contract for the invoice'}><Select id={invoiceSelectionId} value={selected} onChange={event => setSelected(event.target.value)} disabled={props.locked} className={control}><option value="">{de ? 'Bitte auswählen' : 'Choose an item'}</option>{contracts.map(row => <option key={commerceRefKey(commerceRef(row))} value={commerceRefKey(commerceRef(row))}>{row.payload.title} · {row.version}</option>)}</Select></Field>
@@ -166,7 +166,7 @@ export function InvoiceActions(props: CommerceFormProps) {
 }
 
 export function SubscriptionActions(props: CommerceFormProps) {
-  const { data, language } = props, de = language === 'de', signed = data.contracts.filter(row => recordCurrent(row, props.now) && commerceContractStatus(data, row) === 'SIGNED');
+  const { data, language } = props, de = language === 'de', signed = data.contracts.filter(row => recordCurrent(row, props.now) && commerceContractStatus(data, row, props.now) === 'SIGNED');
   const subscriptions = data.subscriptions.filter(row => recordCurrent(row, props.now));
   return <div className="space-y-7"><ActionForm {...props} operation="record_subscription_terms" title={de ? 'Vereinbarte Betreuung dokumentieren' : 'Record the agreed service terms'} label={de ? 'Betreuungsgrundlage dokumentieren' : 'Record the service basis'} build={form => {
     const contract = choose(signed, text(form, 'contract'), row => commerceRefKey(commerceRef(row)));

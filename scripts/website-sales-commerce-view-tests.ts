@@ -24,21 +24,22 @@ function fixture() {
 
 test('immutable draft status is presented as signed only with matching provider document, audit and assurance proof', () => {
   const f = fixture(); f.data.sourceEvents = [f.signature('SIGNED')];
-  assert.equal(commerceContractStatus(f.data, f.contract), 'SIGNED');
+  assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNED');
   assert.equal(f.contract.payload.status, 'DRAFT');
+  const immutableAudit = f.signature('SIGNED'); if (immutableAudit.kind !== 'SIGNATURE') throw Error(); delete immutableAudit.payload.auditProofReferences; immutableAudit.payload.providerAuditProofDigests = [hash]; f.data.sourceEvents = [immutableAudit]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNED');
   const wrongDocument = f.signature('SIGNED'); assert.equal(wrongDocument.kind, 'SIGNATURE'); if (wrongDocument.kind !== 'SIGNATURE') throw Error();
-  wrongDocument.payload.documentSha256 = hash; f.data.sourceEvents = [wrongDocument]; assert.equal(commerceContractStatus(f.data, f.contract), 'DRAFT');
-  const manual = f.signature('SIGNED'); manual.confidence = 'OPERATOR_RECORDED'; f.data.sourceEvents = [manual]; assert.equal(commerceContractStatus(f.data, f.contract), 'DRAFT');
-  f.data.sourceEvents = [f.signature('SIGNED')]; f.policy.payload.signatureAssurance = 'ADVANCED'; assert.equal(commerceContractStatus(f.data, f.contract), 'SIGNATURE_PENDING');
+  wrongDocument.payload.documentSha256 = hash; f.data.sourceEvents = [wrongDocument]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'DRAFT');
+  const manual = f.signature('SIGNED'); manual.confidence = 'OPERATOR_RECORDED'; f.data.sourceEvents = [manual]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'DRAFT');
+  f.data.sourceEvents = [f.signature('SIGNED')]; f.policy.payload.signatureAssurance = 'ADVANCED'; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNATURE_PENDING');
 });
 
 test('a newer voided or pending signature never falls back to the older signed event', () => {
   const f = fixture(); f.data.sourceEvents = [f.signature('SIGNED', 1), f.signature('VOIDED', 2)];
-  assert.equal(commerceContractStatus(f.data, f.contract), 'VOIDED');
-  f.data.sourceEvents.reverse(); assert.equal(commerceContractStatus(f.data, f.contract), 'VOIDED');
-  f.data.sourceEvents = [f.signature('SIGNED', 1), f.signature('PENDING', 2)]; assert.equal(commerceContractStatus(f.data, f.contract), 'SIGNATURE_PENDING');
-  const rebound = f.signature('SIGNED', 3); if (rebound.kind !== 'SIGNATURE') throw Error(); rebound.payload.documentSha256 = hash; f.data.sourceEvents = [f.signature('SIGNED', 1), rebound]; assert.equal(commerceContractStatus(f.data, f.contract), 'DRAFT');
-  f.data.sourceEvents = []; f.contract.payload.status = 'SIGNED'; assert.equal(commerceContractStatus(f.data, f.contract), 'SIGNATURE_PENDING');
+  assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'VOIDED');
+  f.data.sourceEvents.reverse(); assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'VOIDED');
+  f.data.sourceEvents = [f.signature('SIGNED', 1), f.signature('PENDING', 2)]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNATURE_PENDING');
+  const rebound = f.signature('SIGNED', 3); if (rebound.kind !== 'SIGNATURE') throw Error(); rebound.payload.documentSha256 = hash; f.data.sourceEvents = [f.signature('SIGNED', 1), rebound]; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'DRAFT');
+  f.data.sourceEvents = []; f.contract.payload.status = 'SIGNED'; assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'SIGNATURE_PENDING');
 });
 
 test('subscription presentation retains original start and uses the latest authoritative period instead of manual proposed status', () => {

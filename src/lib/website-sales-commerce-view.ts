@@ -16,7 +16,7 @@ function newestSources<T extends Source>(rows: T[]): T[] {
   return [...latest.values()];
 }
 
-export function commerceContractStatus(data: WebsiteSalesCommerceRead, contract: Contract): string {
+export function commerceContractStatus(data: WebsiteSalesCommerceRead, contract: Contract, now: number): string {
   const sources = data.sourceEvents.filter((event): event is Extract<Source, { kind: 'SIGNATURE' }> => event.kind === 'SIGNATURE' && event.confidence === 'PROVIDER_VERIFIED');
   const latest = newestSources(sources).filter(event => refKey(event.payload.contractRef) === refKey(contract) && event.payload.documentSha256 === contract.payload.documentSha256);
   if (latest.length > 1 && new Set(latest.map(event => event.payload.status)).size > 1) return 'UNKNOWN';
@@ -26,7 +26,7 @@ export function commerceContractStatus(data: WebsiteSalesCommerceRead, contract:
   const policy = [...(data.policies ?? []), ...(data.policy ? [data.policy] : [])].find(row => refKey(row) === refKey(contract.payload.policyRef));
   const assurance = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 };
   if (!policy || assurance[signature.payload.assurance] < assurance[policy.payload.signatureAssurance] ||
-    !signature.payload.providerSignedDocumentDigests?.length || !signature.payload.auditProofReferences?.length) return 'SIGNATURE_PENDING';
+    !signature.payload.providerSignedDocumentDigests?.length || !(signature.payload.providerAuditProofDigests?.length || signature.payload.auditProofReferences?.some(proof => Date.parse(proof.observedAt) <= now && Date.parse(proof.validUntil) > now)) || !signature.payload.signedAt || Date.parse(signature.payload.signedAt) > now || Date.parse(signature.payload.signedAt) < Date.parse(contract.createdAt)) return 'SIGNATURE_PENDING';
   return 'SIGNED';
 }
 
