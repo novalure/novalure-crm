@@ -26,7 +26,7 @@ export type WebsiteStudioQaPublicKey = {
 type DemoAsset = WebsiteDemoArtifact['content']['assets'][number];
 export type WebsiteStudioReadArtifact = Exclude<WebsiteStudioArtifact, {kind:'DEMO'}> | (Omit<WebsiteDemoArtifact,'content'> & { content: Omit<WebsiteDemoArtifact['content'],'assets'> & { assets: (DemoAsset | (Omit<Extract<DemoAsset,{bodyEncoding:'BASE64'}>,'body'> & {bodyOmitted:true}))[] } });
 /** Omitted raster bodies are an explicit human projection, never a full verifiable artifact. */
-export type StudioArtifactRecord = { id: string; createdBy: string; artifact: WebsiteStudioReadArtifact; accepted: boolean; qa: { certificateId: string; expiresAt: string } | null };
+export type StudioArtifactRecord = { id: string; createdBy: string; artifact: WebsiteStudioReadArtifact; sourceBindingsCurrent?: boolean; accepted: boolean; qa: { certificateId: string; expiresAt: string } | null };
 export type StudioPreviewRecord = { id: string; artifactId: string; contactId: string; expiresAt: string; revokedAt: string | null; version: number };
 export type WebsiteSalesStudioRead = StudioScope & {
   contractVersion: typeof websiteSalesStudioContract; workspaceId: string; workflowId: string;
