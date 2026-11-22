@@ -377,7 +377,7 @@ export async function completeCrmCandidateFreshSchema({ client, manifest, earlyR
   const sourceInventorySqlFiles = manifest.forward.length, forwardSqlFiles = manifest.selected.length;
   await journal({ event: 'COMPLETE_SCHEMA_VERIFIED', ledger, sourceInventorySqlFiles, forwardSqlFiles,
     sourceExtensionSha256: manifest.sourceExtensionSha256, executionVariant: manifest.executionVariant, excluded: manifest.excluded, staged087: stages });
-  return { status: 'PASS_NEW_NATIVE_STANDALONE_SCHEMA_207', ledger, sourceInventorySqlFiles, forwardSqlFiles,
+  return { status: 'PASS_NEW_NATIVE_STANDALONE_SCHEMA_208', ledger, sourceInventorySqlFiles, forwardSqlFiles,
     sourceExtensionSha256: manifest.sourceExtensionSha256, executionVariant: manifest.executionVariant, excluded: manifest.excluded,
     historicalExecutions: manifest.coverage.historicalExecutionsBeforeLedger, staged087: stages,
     applicationAcceptance: 'PENDING_EXISTING_MANUAL_QA', productionReadiness: false };

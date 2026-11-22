@@ -8,6 +8,7 @@ export type WebsiteSalesMachineAuthority = Readonly<{
   workspaceId: string; actorId: string; identityId: string; grantId: string; workloadId: string;
   departmentId: "SALES"; agentId: string; taskId: string; scope: Scope;
   operation: string; mode: "execute" | "read" | "reconcile"; target: "workflow" | "studio" | "lifecycle" | "autonomy";
+  scopes?: readonly string[];
   resources?: readonly Readonly<{companyId:string;locationId:string;grantId:string;digest:string}>[];
 }>;
 const authority = new AsyncLocalStorage<WebsiteSalesMachineAuthority>();
@@ -15,7 +16,7 @@ const authority = new AsyncLocalStorage<WebsiteSalesMachineAuthority>();
 /** Server composition only: installed after OIDC, saved grant and delegation verification.
  * No request field or generic service session can create this context. */
 export function withWebsiteSalesMachineAuthority<T>(value: WebsiteSalesMachineAuthority, callback: () => Promise<T>) {
-  return authority.run(Object.freeze({ ...value, scope: Object.freeze({ ...value.scope }) }), callback);
+  return authority.run(Object.freeze({ ...value, ...(value.scopes ? { scopes: Object.freeze([...value.scopes]) } : {}), scope: Object.freeze({ ...value.scope }) }), callback);
 }
 
 export function websiteSalesActorAuthority(session: AppSession, scope: Scope, operation: string, target: "workflow" | "studio" | "lifecycle" | "autonomy" = "workflow") {
@@ -40,6 +41,17 @@ export function websiteSalesResourceAuthority(session:AppSession,scope:Scope){
  if(!bound||bound.workspaceId!==session.workspaceId||bound.actorId!==session.userId||bound.identityId!==session.serviceIdentity.identityId||bound.scope.projectId!==scope.projectId||
   !(bound.scope.companyId===scope.companyId&&bound.scope.locationId===scope.locationId)&&!bound.resources?.some(r=>r.companyId===scope.companyId&&r.locationId===scope.locationId))
   throw new CrmCommandError("SALES_RESOURCE_DENIED","A current exact resource grant is required",403);
+}
+
+/** Capability metadata comes only from the verified saved grant and is revalidated by its receiver. */
+export function websiteSalesMachineHasScope(session: AppSession, scope: Scope, required: string) {
+ if (!session.serviceIdentity) return true;
+ websiteSalesResourceAuthority(session, scope);
+ return authority.getStore()?.scopes?.includes(required) === true;
+}
+/** New source bindings are opt-in even when a legacy Studio operation is otherwise permitted. */
+export function websiteSalesEnablementSourceAuthority(session: AppSession, scope: Scope) {
+ if (!websiteSalesMachineHasScope(session, scope, 'crm.website-sales.enablement.read')) throw new CrmCommandError('ENABLEMENT_READ_SCOPE_REQUIRED', 'Explicit enablement source access is required', 403);
 }
 
 /** Metadata-only listing filter from the verified server context, never from request JSON. */
