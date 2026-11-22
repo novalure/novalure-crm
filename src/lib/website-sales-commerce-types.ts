@@ -126,6 +126,19 @@ export const commerceSourceAssessmentSchema = z.strictObject({ status: z.enum(['
   invalidatedEventIds: z.array(commerceUuid).max(500), reasons: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/)).max(100), complete: z.boolean() })
   .refine(value => value.status === 'READY' ? value.complete && value.reasons.length === 0 : !value.complete && value.reasons.length > 0, 'COMMERCE_SOURCE_ASSESSMENT_INVALID');
 export type CommerceSourceAssessment = z.infer<typeof commerceSourceAssessmentSchema>;
+export const commerceInvoicePositionSchema = z.strictObject({ invoiceSourceEventId: commerceUuid, currency: commerceCurrency, grossMinor: commerceMinor, creditMinor: commerceMinor, paidMinor: commerceMinor,
+  refundedMinor: commerceMinor, outstandingMinor: commerceMinor, creditAllocationKnown: z.boolean(), installments: z.array(z.strictObject({ installmentId: commerceUuid, amountMinor: commerceMinor,
+    paidMinor: commerceMinor, refundedMinor: commerceMinor, outstandingMinor: commerceMinor.nullable() })).min(1).max(36) })
+  .refine(value => value.creditAllocationKnown === (value.creditMinor === 0) && value.installments.every(row => value.creditAllocationKnown ? row.outstandingMinor !== null : row.outstandingMinor === null), 'COMMERCE_CREDIT_ALLOCATION_UNKNOWN');
+export const commerceFinancialProjectionSchema = z.strictObject({ complete: z.boolean(), accountingLedger: z.literal(false), forecast: z.null(), invoices: z.array(commerceInvoicePositionSchema).max(1000),
+  currencies: z.array(z.strictObject({ currency: commerceCurrency, invoicedMinor: commerceMinor, creditedMinor: commerceMinor, settledPaymentMinor: commerceMinor, settledRefundMinor: commerceMinor,
+    unallocatedAdvanceMinor: commerceMinor, outstandingMinor: commerceMinor })).max(3), excludedOperatorEventIds: z.array(commerceUuid).max(1000), activeSourceEventIds: z.array(commerceUuid).max(1000) });
+export type CommerceInvoicePosition = z.infer<typeof commerceInvoicePositionSchema>;
+export type CommerceFinancialProjection = z.infer<typeof commerceFinancialProjectionSchema>;
+export const commerceFinancialAssessmentSchema = z.strictObject({ status: z.enum(['READY', 'BLOCKED', 'NEEDS_RECONCILIATION']), reasons: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/)).max(100),
+  value: commerceFinancialProjectionSchema.nullable(), externalEffectAllowed: z.literal(false), requiresServerAuthorization: z.literal(true) })
+  .refine(value => value.status === 'READY' ? value.reasons.length === 0 && value.value?.complete === true : value.reasons.length > 0 && (value.value === null || !value.value.complete), 'COMMERCE_FINANCIAL_ASSESSMENT_INVALID');
+export type CommerceFinancialAssessment = z.infer<typeof commerceFinancialAssessmentSchema>;
 export const websiteSalesCommerceReadSchema = z.strictObject({ contractVersion: z.literal(websiteSalesCommerceContract), source: z.literal('database'), identity: commerceIdentitySchema,
   workflowId: commerceUuid, version: z.number().int().nonnegative().safe(), workflowVersion: z.number().int().positive().safe(), canWrite: z.boolean(), canApproveFacts: z.boolean(), canApproveContract: z.boolean(), canContact: z.literal(false),
   actionEligibility: z.array(z.strictObject({ operation: z.enum(operations), eligible: z.boolean(), blockers: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/)).max(30) })).max(30),
@@ -138,6 +151,7 @@ export const websiteSalesCommerceReadSchema = z.strictObject({ contractVersion: 
   deliveryAcceptances: z.array(commerceRecordSchema(commerceDeliveryAcceptanceSchema)).max(25), invoiceRequests: z.array(commerceRecordSchema(commerceInvoiceRequestSchema)).max(25),
   invoices: z.array(websiteSalesCommerceSourceEventSchema).max(100), payments: z.array(websiteSalesCommerceSourceEventSchema).max(200),
   subscriptions: z.array(commerceRecordSchema(commerceSubscriptionTermsSchema)).max(25), outbox: z.array(commerceOutboxSchema).max(100), sourceEvents: z.array(websiteSalesCommerceSourceEventSchema).max(500), sourceAssessment: commerceSourceAssessmentSchema,
+  financialAssessment: commerceFinancialAssessmentSchema.optional(),
   blockers: z.array(z.strictObject({ code: z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/), reference: commerceText.max(500).nullable() })).max(100) });
 export type WebsiteSalesCommerceRead = z.infer<typeof websiteSalesCommerceReadSchema>;
 export const websiteSalesCommerceEffectSchema = z.strictObject({ identity: commerceIdentitySchema, workflowId: commerceUuid, version: z.number().int().positive().safe(), workflowVersion: z.number().int().positive().safe(),

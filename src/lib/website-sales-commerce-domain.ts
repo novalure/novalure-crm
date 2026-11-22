@@ -5,6 +5,7 @@ import {
   commerceInvoiceRequestSchema, commerceOfferSchema, commercePolicySchema, commerceRecordSchema, commerceReferenceSchema, commerceSubscriptionTermsSchema,
   commerceTemplateSchema, commerceTime, commerceSourceAssessmentSchema, websiteSalesCommerceSourceEventSchema,
   type CommerceIdentity, type CommerceRecord, type CommerceReference, type CommerceSourceAssessment, type WebsiteSalesCommerceSourceEvent,
+  type CommerceInvoicePosition as InvoicePosition, type CommerceFinancialProjection as FinancialProjection,
 } from './website-sales-commerce-types';
 
 export type CommerceEvaluation<T> = { status: 'READY' | 'BLOCKED' | 'NEEDS_RECONCILIATION'; reasons: string[]; value: T | null; externalEffectAllowed: false; requiresServerAuthorization: true };
@@ -271,8 +272,8 @@ export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRec
   });
 }
 
-export interface CommerceInvoicePosition { invoiceSourceEventId: string; currency: string; grossMinor: number; creditMinor: number; paidMinor: number; refundedMinor: number; outstandingMinor: number; creditAllocationKnown: boolean; installments: { installmentId: string; amountMinor: number; paidMinor: number; refundedMinor: number; outstandingMinor: number | null }[] }
-export interface CommerceFinancialProjection { complete: boolean; accountingLedger: false; forecast: null; invoices: CommerceInvoicePosition[]; currencies: { currency: string; invoicedMinor: number; creditedMinor: number; settledPaymentMinor: number; settledRefundMinor: number; unallocatedAdvanceMinor: number; outstandingMinor: number }[]; excludedOperatorEventIds: string[]; activeSourceEventIds: string[] }
+export type CommerceInvoicePosition = InvoicePosition;
+export type CommerceFinancialProjection = FinancialProjection;
 /** Pure projection of authenticated source snapshots. It never verifies a provider or issues a ledger entry. */
 export function reconcileWebsiteSalesCommerceSources(input: { identity: CommerceIdentity; workflowId: string; events: SourceEvent[]; historyComplete?: boolean }, nowISO: string): CommerceEvaluation<CommerceFinancialProjection> {
   return attempt<CommerceFinancialProjection>(() => {
@@ -343,8 +344,8 @@ export function reconcileWebsiteSalesCommerceSources(input: { identity: Commerce
     }
     const invoicePosition = (id: string) => { const original = resolve(id); return original ? positions.get(resolveId(id)) ?? positions.get(latest.find(row => sourceKey(row) === sourceKey(original))?.eventId ?? '') : undefined; };
     const payments = new Map<string, Extract<SourceEvent, { kind: 'PAYMENT' }>>(), paidAllocations = new Map<string, number>(), refundedAllocations = new Map<string, number>(), refundsByPayment = new Map<string, number>(), unallocatedRefundByPayment = new Map<string, number>();
-    const totals = new Map<string, { currency: string; invoicedMinor: number; creditedMinor: number; settledPaymentMinor: number; settledRefundMinor: number; unallocatedAdvanceMinor: number; outstandingMinor: number }>();
-    const total = (currency: string) => { let row = totals.get(currency); if (!row) { row = { currency, invoicedMinor: 0, creditedMinor: 0, settledPaymentMinor: 0, settledRefundMinor: 0, unallocatedAdvanceMinor: 0, outstandingMinor: 0 }; totals.set(currency, row); } return row; };
+    const totals = new Map<string, CommerceFinancialProjection['currencies'][number]>();
+    const total = (currency: CommerceFinancialProjection['currencies'][number]['currency']) => { let row = totals.get(currency); if (!row) { row = { currency, invoicedMinor: 0, creditedMinor: 0, settledPaymentMinor: 0, settledRefundMinor: 0, unallocatedAdvanceMinor: 0, outstandingMinor: 0 }; totals.set(currency, row); } return row; };
     function allocationKey(paymentId: string, invoiceId: string, installmentId: string) { return `${paymentId}:${invoiceId}:${installmentId}`; }
     for (const event of trusted) if (event.kind === 'PAYMENT' && event.payload.status === 'SETTLED') {
       if (!['ACCOUNTING', 'PAYMENT_PROVIDER'].includes(event.source.system)) throw new Error('COMMERCE_PAYMENT_AUTHORITY_REQUIRED');

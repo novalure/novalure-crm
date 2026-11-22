@@ -26,6 +26,16 @@ export function validateWebsiteSalesCommerceRead(raw: unknown, identity: Commerc
   for (const payment of data.payments) if (!['PAYMENT', 'REFUND', 'REVERSAL'].includes(payment.kind)) throw new Error('COMMERCE_PAYMENT_PROJECTION_INVALID');
   const visibleSources = new Set(data.sourceEvents.map(event => event.eventId)), assessmentIds = [...data.sourceAssessment.activeEventIds, ...data.sourceAssessment.invalidatedEventIds];
   if (new Set(assessmentIds).size !== assessmentIds.length || assessmentIds.some(id => !visibleSources.has(id))) throw new Error('COMMERCE_SOURCE_ASSESSMENT_COVERAGE_DENIED');
+  const financial = data.financialAssessment?.value;
+  if (financial) {
+    if ([...financial.activeSourceEventIds, ...financial.excludedOperatorEventIds].some(id => !visibleSources.has(id))) throw new Error('COMMERCE_FINANCIAL_ASSESSMENT_COVERAGE_DENIED');
+    for (const position of financial.invoices) {
+      const source = data.sourceEvents.find(event => event.eventId === position.invoiceSourceEventId);
+      if (!source || source.kind !== 'INVOICE' || source.payload.financial.currency !== position.currency || source.payload.financial.grossMinor !== position.grossMinor || position.installments.some(row => !source.payload.installments.some(original => original.installmentId === row.installmentId && original.amountMinor === row.amountMinor))) throw new Error('COMMERCE_FINANCIAL_INVOICE_BINDING_DENIED');
+    }
+    if (new Set(financial.invoices.map(position => position.invoiceSourceEventId)).size !== financial.invoices.length || new Set(financial.currencies.map(row => row.currency)).size !== financial.currencies.length
+      || new Set(financial.activeSourceEventIds).size !== financial.activeSourceEventIds.length || new Set(financial.excludedOperatorEventIds).size !== financial.excludedOperatorEventIds.length) throw new Error('COMMERCE_FINANCIAL_ASSESSMENT_DUPLICATE');
+  }
   const unique = (rows: { id: string; version: number }[]) => new Set(rows.map(row => `${row.id}:${row.version}`)).size === rows.length;
   for (const list of [data.templates, data.offers, data.contracts, data.approvals.map(row => ({ id: row.approvalId, version: 1 })), data.outbox]) if (!unique(list)) throw new Error('COMMERCE_RESPONSE_DUPLICATE');
   return data;
