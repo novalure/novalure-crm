@@ -23,6 +23,10 @@ export function validateWebsiteSalesCommerceRead(raw: unknown, identity: Commerc
   for (const invoice of data.invoiceRequests) if (!has(data.contracts, invoice.payload.contractRef) || invoice.payload.deliveryAcceptanceRef && !has(data.deliveryAcceptances, invoice.payload.deliveryAcceptanceRef)) throw new Error('COMMERCE_INVOICE_BINDING_DENIED');
   for (const subscription of data.subscriptions) if (!has(data.contracts, subscription.payload.contractRef)) throw new Error('COMMERCE_SUBSCRIPTION_BINDING_DENIED');
   for (const invoice of data.invoices) if (invoice.kind !== 'INVOICE' && invoice.kind !== 'CREDIT_NOTE') throw new Error('COMMERCE_INVOICE_PROJECTION_INVALID');
+  for (const event of data.sourceEvents) if (event.kind === 'INVOICE') {
+    const request = data.invoiceRequests.find(row => row.id === event.payload.invoiceRequestId);
+    if (request && request.payload.customerReference !== event.payload.customerReference) throw new Error('COMMERCE_ACCOUNTING_CUSTOMER_BINDING_DENIED');
+  }
   for (const payment of data.payments) if (!['PAYMENT', 'REFUND', 'REVERSAL'].includes(payment.kind)) throw new Error('COMMERCE_PAYMENT_PROJECTION_INVALID');
   const visibleSources = new Set(data.sourceEvents.map(event => event.eventId)), assessmentIds = [...data.sourceAssessment.activeEventIds, ...data.sourceAssessment.invalidatedEventIds];
   if (new Set(assessmentIds).size !== assessmentIds.length || assessmentIds.some(id => !visibleSources.has(id))) throw new Error('COMMERCE_SOURCE_ASSESSMENT_COVERAGE_DENIED');

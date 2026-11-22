@@ -233,17 +233,25 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
     return evaluation(draft);
   });
 }
-export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRecord<CommerceContractDraft>; policy: CommerceRecord<z.infer<typeof commercePolicySchema>>; signature: SignatureEvent; sourceEvents: SourceEvent[]; historyComplete?: boolean;
+export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRecord<CommerceContractDraft>; policy: CommerceRecord<z.infer<typeof commercePolicySchema>>; signedPolicy?: CommerceRecord<z.infer<typeof commercePolicySchema>>; signature: SignatureEvent; sourceEvents: SourceEvent[]; historyComplete?: boolean;
   deliveryAcceptance: CommerceRecord<z.infer<typeof commerceDeliveryAcceptanceSchema>> | null; stage: CommerceInvoiceRequest['stage']; installmentIds: string[] }, ctx: CommerceContext, nowISO: string): CommerceEvaluation<CommerceInvoiceRequest> {
   return attempt<CommerceInvoiceRequest>(() => {
     const now = at(nowISO), contract = record(input.contract, commerceContractDraftSchema, ctx, now), policy = record(input.policy, commercePolicySchema, ctx, now);
     const c = contract.payload, p = policy.payload, ref = commerceRecordReference(contract);
+    if (!p.accountingCustomerReference) return evaluation(null, ['COMMERCE_ACCOUNTING_CUSTOMER_REFERENCE_REQUIRED']);
+    let samePolicy = sameRef(c.policyRef, commerceRecordReference(policy));
+    if (!samePolicy && input.signedPolicy) {
+      const signed = record(input.signedPolicy, commercePolicySchema, ctx, now);
+      const { accountingCustomerReference: previousCustomer, ...signedTerms } = signed.payload, { accountingCustomerReference: currentCustomer, ...currentTerms } = p;
+      if (previousCustomer && previousCustomer !== currentCustomer) return evaluation(null, ['COMMERCE_ACCOUNTING_CUSTOMER_MAPPING_CHANGED']);
+      samePolicy = sameRef(c.policyRef, commerceRecordReference(signed)) && policy.id === signed.id && policy.version > signed.version && commerceDigest(signedTerms) === commerceDigest(currentTerms);
+    }
     const signatureResult = resolveWebsiteSalesCommerceSignature({ identity: ctx.identity, workflowId: ctx.workflowId, events: input.sourceEvents,
       ...(input.historyComplete === undefined ? {} : { historyComplete: input.historyComplete }), contractRef: ref, documentSha256: c.documentSha256, requiredAssurance: p.signatureAssurance }, nowISO);
     if (signatureResult.status !== 'READY' || !signatureResult.value) return evaluation(null, signatureResult.reasons, signatureResult.status === 'NEEDS_RECONCILIATION');
     const signature = signatureResult.value;
     if (commerceSourceFactDigest(validEvent(input.signature, ctx, now)) !== commerceSourceFactDigest(signature)) return evaluation(null, ['COMMERCE_SIGNATURE_NOT_CURRENT']);
-    if (!sameRef(c.policyRef, commerceRecordReference(policy)) || !policyCurrent(p, now) || !taxMatches(p) || commerceDigest(c.financial) !== commerceDigest(p.financialSnapshot) || commerceDigest(c.paymentTerms) !== commerceDigest(p.paymentTerms) || commerceDigest(c.contractTerm ?? null) !== commerceDigest(p.contractTerm ?? null)) return evaluation(null, ['COMMERCE_CONTRACT_POLICY_BINDING_DENIED']);
+    if (!samePolicy || !policyCurrent(p, now) || !taxMatches(p) || commerceDigest(c.financial) !== commerceDigest(p.financialSnapshot) || commerceDigest(c.paymentTerms) !== commerceDigest(p.paymentTerms) || commerceDigest(c.contractTerm ?? null) !== commerceDigest(p.contractTerm ?? null)) return evaluation(null, ['COMMERCE_CONTRACT_POLICY_BINDING_DENIED']);
     const rank = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 };
     if (signature.kind !== 'SIGNATURE' || signature.confidence !== 'PROVIDER_VERIFIED' || signature.source.system !== 'SIGNATURE_PROVIDER' || signature.payload.status !== 'SIGNED' || !sameRef(signature.payload.contractRef, ref) || signature.payload.documentSha256 !== c.documentSha256 || !signature.payload.signedAt || at(signature.payload.signedAt) > now || at(signature.payload.signedAt) < at(contract.createdAt) || at(signature.occurredAt) < at(signature.payload.signedAt) || rank[signature.payload.assurance] < rank[p.signatureAssurance]) return evaluation(null, ['COMMERCE_VERIFIED_EXACT_SIGNATURE_REQUIRED']);
     if (['VOIDED', 'DECLINED', 'EXPIRED'].includes(c.status) || commerceContentSha256(c.body) !== c.documentSha256) return evaluation(null, ['COMMERCE_CONTRACT_NOT_ACTIONABLE']);
@@ -266,7 +274,7 @@ export function prepareWebsiteSalesInvoiceRequest(input: { contract: CommerceRec
       return { installmentId: row.installmentId, label: row.label, kind: row.kind, amountMinor, dueAt: new Date(at(anchor) + row.dueOffsetDays * 86_400_000).toISOString() };
     });
     return evaluation(commerceInvoiceRequestSchema.parse({ contractRef: ref, deliveryAcceptanceRef: input.stage === 'DEPOSIT' ? null : acceptance ? commerceRecordReference(acceptance) : null,
-      stage: input.stage, paymentScheduleDigest: commerceDigest(c.paymentTerms), accountingEntityReference: p.accountingEntityReference,
+      stage: input.stage, paymentScheduleDigest: commerceDigest(c.paymentTerms), accountingEntityReference: p.accountingEntityReference, customerReference: p.accountingCustomerReference,
       financial: { ...c.financial, netMinor: sum(amounts.map(row => row.netMinor)), taxMinor: sum(amounts.map(row => row.taxMinor)), grossMinor: sum(amounts.map(row => row.amountMinor)) },
       installments, status: 'DRAFT_REQUEST', accountingInvoiceSourceEventId: null }));
   });

@@ -31,7 +31,7 @@ export const commerceContractTermSchema = z.strictObject({ startAt: commerceTime
   .refine(value => Number.isFinite(Date.parse(value.startAt)) && Number.isFinite(Date.parse(value.endAt)) && Date.parse(value.endAt) > Date.parse(value.startAt), 'COMMERCE_CONTRACT_TERM_INVALID');
 export const commercePolicySchema = z.strictObject({ title: commerceText.max(200), standardTermsReference: commerceSourceReferenceSchema,
   standardTermsDigest: commerceHash, signatureAssurance: z.enum(['PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), maxInstallments: z.number().int().min(1).max(36),
-  accountingEntityReference: commerceText.max(200), accountingSourceReference: commerceSourceReferenceSchema, accountingProfile: commerceAccountingProfileSchema,
+  accountingEntityReference: commerceText.max(200), accountingCustomerReference: commerceExternalId.optional(), accountingSourceReference: commerceSourceReferenceSchema, accountingProfile: commerceAccountingProfileSchema,
   offerRef: commerceReferenceSchema, financialSnapshot: commerceFinancialSnapshotSchema, paymentTerms: commercePaymentTermsSchema, contractTerm: commerceContractTermSchema.optional(), validUntil: commerceTime })
   .refine(value => !value.contractTerm || value.contractTerm.fullNetMinor === value.financialSnapshot.netMinor, 'COMMERCE_FULL_TERM_FINANCIAL_MISMATCH');
 export const commerceOfferSchema = z.strictObject({ offerRef: commerceReferenceSchema, dealId: commerceUuid, status: z.enum(['DRAFT', 'APPROVED', 'QUEUED', 'SENT', 'ACCEPTED', 'REJECTED', 'CANCELLED']),
@@ -52,7 +52,7 @@ export const commerceApprovalSchema = z.strictObject({ approvalId: commerceUuid,
 export const commerceInstallmentSchema = z.strictObject({ installmentId: commerceUuid, label: commerceText.max(120), amountMinor: commerceMinor, dueAt: commerceTime, kind: z.enum(['DEPOSIT', 'MILESTONE', 'BALANCE', 'RECURRING']) });
 export const commerceInvoiceRequestSchema = z.strictObject({ contractRef: commerceReferenceSchema, deliveryAcceptanceRef: commerceReferenceSchema.nullable(),
   stage: z.enum(['DEPOSIT', 'MILESTONE', 'BALANCE', 'RECURRING']), paymentScheduleDigest: commerceHash,
-  accountingEntityReference: commerceText.max(200), financial: commerceFinancialSnapshotSchema, installments: z.array(commerceInstallmentSchema).min(1).max(36),
+  accountingEntityReference: commerceText.max(200), customerReference: commerceExternalId, financial: commerceFinancialSnapshotSchema, installments: z.array(commerceInstallmentSchema).min(1).max(36),
   status: z.enum(['DRAFT_REQUEST', 'REQUESTED', 'ISSUED', 'REJECTED', 'UNKNOWN']), accountingInvoiceSourceEventId: commerceUuid.nullable() });
 export const commerceDeliveryAcceptanceSchema = z.strictObject({ contractRef: commerceReferenceSchema, canonicalDeliveryTaskId: commerceUuid, expectedDeliveryTaskVersion: z.number().int().positive().safe(),
   scopeDigest: commerceHash, sourceReference: commerceSourceReferenceSchema, acceptedAt: commerceTime });
@@ -79,7 +79,7 @@ export const websiteSalesCommerceSourceEventSchema = z.discriminatedUnion('kind'
     providerSignedDocumentDigests: z.array(commerceHash).min(1).max(20).optional(), providerAuditProofDigests: z.array(commerceHash).min(1).max(20).optional(),
     auditProofReferences: z.array(commerceSourceReferenceSchema).min(1).max(20).optional() }) }),
   z.strictObject({ ...sourceBase, kind: z.literal('DELIVERY_ACCEPTANCE'), payload: commerceDeliveryAcceptanceSchema }),
-  z.strictObject({ ...sourceBase, kind: z.literal('INVOICE'), payload: z.strictObject({ invoiceRequestId: commerceUuid, contractRef: commerceReferenceSchema, financial: commerceFinancialSnapshotSchema,
+  z.strictObject({ ...sourceBase, kind: z.literal('INVOICE'), payload: z.strictObject({ invoiceRequestId: commerceUuid, contractRef: commerceReferenceSchema, customerReference: commerceExternalId, financial: commerceFinancialSnapshotSchema,
     installments: z.array(commerceInstallmentSchema).min(1).max(36), status: z.enum(['ISSUED', 'VOIDED']), invoiceNumber: commerceText.max(100) }) }),
   z.strictObject({ ...sourceBase, kind: z.literal('PAYMENT'), payload: z.strictObject({ currency: commerceCurrency, amountMinor: commerceMinor, status: z.enum(['PENDING', 'SETTLED', 'FAILED']),
     kind: z.enum(['PAYMENT', 'DEPOSIT', 'ADVANCE']), allocations: z.array(allocation).max(100) }) }),
