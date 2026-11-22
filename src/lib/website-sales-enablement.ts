@@ -5,7 +5,7 @@ import {
   canonicalEnablementTaskSchema, canonicalEnablementWorkflowSchema, careBasisSchema, carePlanKeySchema, closePlanSchema,
   closureReasonSchema, customerBriefSchema, demoProfileSchema, enablementAssetMetadataSchema,
   enablementIdentitySchema, enablementScopeSchema, enablementSourceReferenceSchema, enablementText, enablementTime,
-  enablementUuid, industryCodeSchema, referenceCaseSchema, referenceReviewSchema,
+  enablementUuid, industryCodeSchema, referenceCaseSchema, referenceReviewSchema, websiteSalesCareProposalSchema,
   type CanonicalEnablementRecord, type EnablementEvaluation, type EnablementIdentity, type EnablementSourceReference,
   type WebsiteCareProposal, type WebsiteDailyPriority, type WebsiteHygieneCandidate,
 } from './website-sales-enablement-types';
@@ -168,6 +168,17 @@ export function analyzeWebsiteSalesClosures(raw: unknown, now: string) {
 }
 
 export const websiteSalesCareInputSchema = z.strictObject({ planKey: carePlanKeySchema, basis: canonicalEnablementRecordSchema(careBasisSchema) });
+/** Calendar months from the owner-recorded service start, evaluated at the planned review, in UTC. */
+function serviceMonth(startAt: string, reviewAt: string): number {
+  const start = new Date(startAt), review = new Date(reviewAt);
+  let months = (review.getUTCFullYear() - start.getUTCFullYear()) * 12 + review.getUTCMonth() - start.getUTCMonth();
+  const anniversary = new Date(start);
+  anniversary.setUTCDate(1); anniversary.setUTCMonth(start.getUTCMonth() + months);
+  const lastDay = new Date(anniversary); lastDay.setUTCMonth(lastDay.getUTCMonth() + 1, 0);
+  anniversary.setUTCDate(Math.min(start.getUTCDate(), lastDay.getUTCDate()));
+  if (review.valueOf() < anniversary.valueOf()) months--;
+  return months + 1;
+}
 export function proposeWebsiteSalesCare(raw: unknown, rawContext: unknown, now: string): EnablementEvaluation<WebsiteCareProposal> {
   const ctx = context(rawContext, now), input = websiteSalesCareInputSchema.parse(raw);
   const basis = verifyWebsiteSalesEnablementRecord(input.basis, careBasisSchema, ctx, now), reasons = sourceReasons(basis.payload.sourceReferences, now);
@@ -175,10 +186,20 @@ export function proposeWebsiteSalesCare(raw: unknown, rawContext: unknown, now: 
   if (!delivery || delivery.status !== 'DONE') reasons.push('CANONICAL_COMPLETED_DELIVERY_REQUIRED');
   if (ctx.workflow.status !== 'WON') reasons.push('CANONICAL_WON_WEBSITE_WORKFLOW_REQUIRED');
   if (!basis.payload.planKeys.includes(input.planKey) || Date.parse(basis.payload.validUntil) <= Date.parse(now)) reasons.push('CURRENT_RECORDED_CARE_NEED_REQUIRED');
+  const renewal = basis.payload.renewal;
+  if (renewal) {
+    reasons.push(...sourceReasons(renewal.sourceReferences, now));
+    if (Date.parse(renewal.reviewAt) < Date.parse(renewal.serviceStartAt)) reasons.push('CARE_REVIEW_PRECEDES_SERVICE_START');
+  }
   if (reasons.length || !delivery) return result<WebsiteCareProposal>(null, reasons, 'BLOCKED');
-  return result({ planKey: input.planKey, basisId: basis.id, basisDigest: basis.digest, deliveryTaskId: delivery.taskId, deliveryTaskVersion: delivery.version,
-    catalogDigest: CANONICAL_WEBSITE_SALES_CATALOG.sourceDigest, currency: 'EUR', schedule: structuredClone([...CANONICAL_WEBSITE_SALES_CATALOG.care[input.planKey]]),
-    finalOfferApprovalRequired: true, autoRenewalAllowed: false, invoiceAllowed: false, contractExecutionAllowed: false }, []);
+  const month = renewal ? serviceMonth(renewal.serviceStartAt, renewal.reviewAt) : 1;
+  const schedule = CANONICAL_WEBSITE_SALES_CATALOG.care[input.planKey].filter(row => row.throughMonth === null || row.throughMonth >= month)
+    .map(row => ({ ...row, fromMonth: Math.max(row.fromMonth, month) }));
+  return result(websiteSalesCareProposalSchema.parse({ planKey: input.planKey, basisId: basis.id, basisDigest: basis.digest, deliveryTaskId: delivery.taskId, deliveryTaskVersion: delivery.version,
+    catalogDigest: CANONICAL_WEBSITE_SALES_CATALOG.sourceDigest, currency: 'EUR', schedule,
+    renewal: renewal ? { canonicalAcceptedCareOfferId: renewal.canonicalAcceptedCareOfferId, serviceStartAt: renewal.serviceStartAt,
+      reviewAt: renewal.reviewAt, serviceMonth: month, sourceConfidence: 'OPERATOR_RECORDED' } : null,
+    finalOfferApprovalRequired: true, autoRenewalAllowed: false, invoiceAllowed: false, contractExecutionAllowed: false }), []);
 }
 
 export const websiteSalesDayInputSchema = z.strictObject({ scope: enablementScopeSchema, resources: z.array(enablementIdentitySchema).min(1).max(50),

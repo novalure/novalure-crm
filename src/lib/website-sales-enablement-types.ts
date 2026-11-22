@@ -43,8 +43,11 @@ export const demoProfileBindingSchema = z.strictObject({ profileId: enablementUu
 export const closureReasonSchema = z.strictObject({ reasonCode: z.enum(['PRICE', 'TIMING', 'SCOPE', 'COMPETITOR', 'NO_BUDGET', 'NO_NEED', 'NO_DECISION', 'CUSTOMER_CANCELLED', 'UNKNOWN']),
   explanation: enablementText, sourceReferences: sources, industryCode: industryCodeSchema.nullable(), offerVersion: z.number().int().positive().safe().nullable(), validUntil: enablementTime });
 export const carePlanKeySchema = z.enum(['MANAGED', 'PERFORMANCE', 'CONVERSION']);
+export const careRenewalBasisSchema = z.strictObject({ canonicalAcceptedCareOfferId: enablementUuid,
+  serviceStartAt: enablementTime, reviewAt: enablementTime, sourceReferences: sources });
 export const careBasisSchema = z.strictObject({ need: enablementText, sourceReferences: sources,
-  canonicalDeliveryTaskId: enablementUuid, planKeys: z.array(carePlanKeySchema).min(1).max(3), validUntil: enablementTime });
+  canonicalDeliveryTaskId: enablementUuid, planKeys: z.array(carePlanKeySchema).min(1).max(3), validUntil: enablementTime,
+  renewal: careRenewalBasisSchema.optional() });
 export const uploadEnablementAssetSchema = z.strictObject({ role: z.enum(['LOGO', 'HERO']), title: short, alt: enablementText,
   rightsReference: enablementText.max(500), validUntil: enablementTime, originalSha256: enablementHash,
   originalSizeBytes: z.number().int().min(1).max(4_194_304), originalMime: z.enum(['image/png', 'image/jpeg', 'image/webp']) });
@@ -122,9 +125,14 @@ export type CanonicalEnablementRecord<T> = { id: string; identity: EnablementIde
   digest: string; recordedBy: string; createdAt: string; validUntil: string; revokedAt: string | null; payload: T };
 export type EnablementEvaluation<T> = { status: 'READY' | 'NEEDS_CLARIFICATION' | 'BLOCKED'; reasons: string[]; value: T | null;
   digest: string; externalEffectAllowed: false; requiresServerAuthorization: true };
-export interface WebsiteCareProposal { planKey: WebsiteCarePlanKey; basisId: string; basisDigest: string; deliveryTaskId: string; deliveryTaskVersion: number;
-  catalogDigest: string; currency: 'EUR'; schedule: { fromMonth: number; throughMonth: number | null; netMonthlyMinor: number }[];
-  finalOfferApprovalRequired: true; autoRenewalAllowed: false; invoiceAllowed: false; contractExecutionAllowed: false }
+export const websiteSalesCareProposalSchema = z.strictObject({ planKey: carePlanKeySchema, basisId: enablementUuid, basisDigest: enablementHash,
+  deliveryTaskId: enablementUuid, deliveryTaskVersion: z.number().int().positive().safe(), catalogDigest: enablementHash, currency: z.literal('EUR'),
+  schedule: z.array(z.strictObject({ fromMonth: z.number().int().positive().safe(), throughMonth: z.number().int().positive().safe().nullable(),
+    netMonthlyMinor: z.number().int().nonnegative().safe() })).min(1).max(3),
+  renewal: z.strictObject({ canonicalAcceptedCareOfferId: enablementUuid, serviceStartAt: enablementTime, reviewAt: enablementTime,
+    serviceMonth: z.number().int().positive().safe(), sourceConfidence: z.literal('OPERATOR_RECORDED') }).nullable(),
+  finalOfferApprovalRequired: z.literal(true), autoRenewalAllowed: z.literal(false), invoiceAllowed: z.literal(false), contractExecutionAllowed: z.literal(false) });
+export type WebsiteCareProposal = z.infer<typeof websiteSalesCareProposalSchema>;
 export interface WebsiteDailyPriority { taskId: string; taskVersion: number; identity: EnablementIdentity; title: string; dueAt: string | null;
   status: CanonicalEnablementTask['status']; priority: 'OVERDUE' | 'DUE_TODAY' | 'BLOCKED' | 'UPCOMING' | 'UNSCHEDULED'; reasons: string[] }
 export interface WebsiteHygieneCandidate { kind: 'ORGANIZATION' | 'CONTACT'; recordIds: string[]; recordVersions: number[];
