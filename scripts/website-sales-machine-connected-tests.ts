@@ -61,7 +61,7 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
   const db = await startLocalSalesDb();
   let server: Server | undefined, executionPool: Pool | undefined;
   const ids = { actor: randomUUID(), project: randomUUID(), company: randomUUID(), contact: randomUUID(),
-    pipeline: randomUUID(), workload: randomUUID(), grant: randomUUID(), enablementGrant: randomUUID(), readGrant: randomUUID(), task: randomUUID() };
+    pipeline: randomUUID(), workload: randomUUID(), grant: randomUUID(), enablementGrant: randomUUID(), readGrant: randomUUID(), legacyReadGrant: randomUUID(), otherCompany: randomUUID(), task: randomUUID() };
   const pair = generateKeyPairSync("ed25519"), commandKey = randomBytes(32), deploymentId = randomUUID();
   const options = { pool: db.pool as unknown as TenantPool };
   const agentId = "evelyn.sales.website-1"; // The actual registered CRM identifier contract is text, not UUID-only.
@@ -96,6 +96,10 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
     const registered = await runWebsiteSalesIrelandCommand(session, { contractVersion: websiteSalesIrelandContract, operation: "register_location", projectId: ids.project, companyId: ids.company,
       idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { countryCode: "IE", address: "1 Synthetic Street, Dublin, Ireland", sourceUrl: "https://example.invalid/company", sourceReference: "Synthetic connected registration only" } }, options);
     const locationId = registered.data.location.id;
+    await db.admin.query("insert into organizations(id,workspace_id,project_id,name,type,division) values($1,$2,$3,'Synthetic second scoped company','Unternehmen','WEB_DESIGN')", [ids.otherCompany, CRM_MACHINE_WORKSPACE_ID, ids.project]);
+    const otherRegistered = await runWebsiteSalesIrelandCommand(session, { contractVersion: websiteSalesIrelandContract, operation: "register_location", projectId: ids.project, companyId: ids.otherCompany,
+      idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { countryCode: "IE", address: "2 Synthetic Street, Dublin, Ireland", sourceUrl: "https://example.invalid/other-company", sourceReference: "Synthetic second scoped registration only" } }, options);
+    const otherLocationId = otherRegistered.data.location.id;
     // A protected, non-superuser/non-BYPASS owner provisions only this exact existing resource.
     await db.admin.query("create role connected_sales_registrar nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
     for (const table of ["crm_website_sales_machine_workloads", "crm_website_sales_machine_grants"]) {
@@ -117,6 +121,10 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
         departmentId: "SALES", agentId, taskId: ids.task,
         scopes: ["crm.website-sales.enablement.read", "crm.website-sales.reconcile", ...(grantId === ids.enablementGrant ? ["crm.website-sales.enablement.propose-next-step" as const] : [])],
         publicKey: pair.publicKey.export({ format: "der", type: "spki" }).toString("base64url"), authorityReference: "SYNTHETIC connected contract acceptance", expiresAt: null });
+      await registerWebsiteSalesMachineAccess(registrar, { workloadId: ids.workload, workloadActorId: ids.actor, grantId: ids.legacyReadGrant, actorId: ids.actor,
+        projectId: ids.project, companyId: ids.otherCompany, locationId: otherLocationId, departmentId: "SALES", agentId, taskId: ids.task,
+        scopes: ["crm.website-sales.autonomy.read"], publicKey: pair.publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
+        authorityReference: "SYNTHETIC connected contract acceptance", expiresAt: null });
     } finally { try { await registrar.query("rollback"); await registrar.query("reset role"); } finally { registrar.release(); } }
 
     // Install the actual independent Evelyn foundation and Sales ledger unchanged in this disposable cluster.
@@ -268,6 +276,8 @@ test("real Evelyn runtime and encrypted PostgreSQL store → signed loopback HTT
       for (const key of ["projectId", "companyId", "locationId"]) {
         await assert.rejects(freshMachine(enablementIdentity).invoke("autonomy", "read", { ...enablementScope, [key]: randomUUID(), view: "enablement", correlationId: randomUUID() }), /SALES_HTTP_403/);
       }
+      await assert.rejects(freshMachine(enablementIdentity).invoke("autonomy", "read", { ...enablementScope, view: "enablement", correlationId: randomUUID(),
+        resourceGrants: [{ companyId: ids.otherCompany, locationId: otherLocationId, grantId: ids.legacyReadGrant }] }), /SALES_HTTP_403/);
       const owner = operationsOwner!, sourceReference = { reference: "operator-recorded:SYNTHETIC paired customer notes", digest: "a".repeat(64), basis: "OPERATOR_ATTESTATION",
         observedAt: new Date(Date.now() - 60000).toISOString(), validUntil: new Date(Date.now() + 3600000).toISOString() }, sourceReferences = [sourceReference];
       await executeWebsiteSalesEnablementCommand(owner, enablementCommand(view, "record_brief", { goals: ["SYNTHETIC source-bound customer goal"], audience: ["SYNTHETIC local buyers"],
