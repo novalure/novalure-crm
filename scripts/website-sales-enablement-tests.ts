@@ -105,28 +105,38 @@ test('Sales enablement uses actual PostgreSQL, existing CRM records and the prot
    const demo=await executeWebsiteSalesStudioCommand(session,studioCommand('build_demo',{...revision,conceptDigest:concept.data.artifactDigest,investmentPlan,profileBinding:{profileId,version:1,digest:profileDigest}}),opts);
    const beforeRevocation=await readWebsiteSalesStudio(session,scope,opts),savedDemo=beforeRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!;
    assert.equal(savedDemo.sourceBindingsCurrent,true);assert.equal(savedDemo.qa,null,'Current sources do not imply independent rendered QA');assert.equal(beforeRevocation.artifacts.find(row=>row.id===concept.data.artifactId)!.sourceBindingsCurrent,true);assert.equal(beforeRevocation.artifacts.find(row=>row.id===diagnosis.data.artifactId)!.sourceBindingsCurrent,true);
+   const metadata = JSON.stringify(await read(session, scope, opts)); assert.equal(metadata.includes(bytes.toString('base64')), false); assert.equal(metadata.includes('bytes_bytea'), false);
+   await run(command('revoke_asset', { assetId, reason: 'Recorded rights withdrawn' }));
+   const afterRevocation=await readWebsiteSalesStudio(session,scope,opts);
+   assert.equal(afterRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!.sourceBindingsCurrent,false,'Real persisted asset revocation marks the full bound demo stale');assert.equal(afterRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!.qa,null);assert.equal(afterRevocation.artifacts.find(row=>row.id===concept.data.artifactId)!.sourceBindingsCurrent,true,'Unchanged current brief remains independent of a revoked demo image');assert.equal(afterRevocation.artifacts.find(row=>row.id===diagnosis.data.artifactId)!.sourceBindingsCurrent,true);
+   assert.equal((await db.admin.query('select crm_website_sales_demo_profile_current($1::jsonb) as ok', [JSON.stringify(previewSnapshot)])).rows[0].ok, false);
+   await assert.rejects(withCrmRead(session, tx => resolveCurrentEnablementDemoProfile(tx, session, scope, { profileId, version: 1, digest: profileDigest }), opts), { code: 'ENABLEMENT_ASSET_NOT_APPROVED' });
+   // The independent daily metadata fixtures get fresh rights after the genuine
+   // Studio read proof above; malformed QA stubs must not contaminate that read.
+   const dailyUpload = command('upload_asset', { ...upload.payload, title: 'Independent daily metadata fixture' });
+   const dailyUploaded = await executeWebsiteSalesAssetUpload(session, dailyUpload, { bytes, mime: 'image/webp', width: 10, height: 10, byteSha256: sha, originalSha256: sha }, opts); version = dailyUploaded.data.aggregateVersion;
+   const dailyAssetId = dailyUploaded.data.assetId!;
+   const dailyProfile = await run(command('record_demo_profile', { industryCode: 'GENERAL', brandPalette: { primary: '#123456', background: '#ffffff', text: '#111111', accent: '#336699' }, referenceCaseIds: [refId], assetIds: [dailyAssetId], sourceReferences: sources, validUntil: future }));
+   const dailyResolved = await withCrmRead(session, tx => resolveCurrentEnablementDemoProfile(tx, session, scope, { profileId: dailyProfile.data.recordId, version: dailyProfile.data.recordVersion, digest: dailyProfile.data.recordDigest }), opts);
+   const dailyPreviewSnapshot = { identity, content: { demoProfile: { profile: dailyResolved.profile, references: dailyResolved.references, assets: dailyResolved.assets } } };
    // Real scoped database rows test daily source currentness; they are not rendered-QA or publication evidence.
    const studioIds = { current: randomUUID(), older: randomUUID(), expired: randomUUID(), changed: randomUUID() }, expiredAt = new Date(Date.now() - 86400000).toISOString(), createdAt = new Date(Date.now() - 2 * 86400000).toISOString();
    const specs = [[studioIds.current, 'DEMO', 99, future, wf.evidenceDigest], [studioIds.older, 'DEMO', 98, expiredAt, wf.evidenceDigest], [studioIds.expired, 'CONCEPT', 99, expiredAt, wf.evidenceDigest], [studioIds.changed, 'DIAGNOSIS', 99, future, 'e'.repeat(64)]] as const;
    const studioDigests = new Map<string, string>();
    for (const [id, kind, revision, validUntil, evidenceDigest] of specs) {
-    const body = { ...previewSnapshot, kind, version: revision, validUntil, evidenceDigest }, artifactDigest = crmPayloadDigest(body); studioDigests.set(id, artifactDigest);
+    const body = { ...dailyPreviewSnapshot, kind, version: revision, validUntil, evidenceDigest }, artifactDigest = crmPayloadDigest(body); studioDigests.set(id, artifactDigest);
     await db.admin.query(`insert into crm_website_studio_artifacts(id,workspace_id,project_id,company_id,location_id,workflow_id,kind,version,artifact_digest,evidence_digest,artifact,created_by,created_at,valid_until) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)`, [id, ws, project, company, location, wf.id, kind, revision, artifactDigest, evidenceDigest, JSON.stringify({ ...body, artifactDigest }), actor, createdAt, validUntil]);
    }
    let selected = await read(session, scope, opts), stale = selected.alerts.filter(row => row.canonicalReference.startsWith('crm:studio-artifact:'));
    assert.deepEqual(new Set(stale.map(row => row.canonicalReference)), new Set([`crm:studio-artifact:${studioIds.expired}`, `crm:studio-artifact:${studioIds.changed}`]));
    assert.ok(stale.every(row => row.kind === 'STALE_DRAFT' && !Object.hasOwn(row, 'taskId') && !Object.hasOwn(row, 'payload')));
-   const metadata = JSON.stringify(await read(session, scope, opts)); assert.equal(metadata.includes(bytes.toString('base64')), false); assert.equal(metadata.includes('bytes_bytea'), false);
-   await run(command('revoke_asset', { assetId, reason: 'Recorded rights withdrawn' }));
-   const afterRevocation=await readWebsiteSalesStudio(session,scope,opts);
-   assert.equal(afterRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!.sourceBindingsCurrent,false,'Real persisted asset revocation marks the full bound demo stale');assert.equal(afterRevocation.artifacts.find(row=>row.id===demo.data.artifactId)!.qa,null);assert.equal(afterRevocation.artifacts.find(row=>row.id===concept.data.artifactId)!.sourceBindingsCurrent,true,'Unchanged current brief remains independent of a revoked demo image');assert.equal(afterRevocation.artifacts.find(row=>row.id===diagnosis.data.artifactId)!.sourceBindingsCurrent,true);
+   await run(command('revoke_asset', { assetId: dailyAssetId, reason: 'Independent daily metadata rights withdrawn' }));
    selected = await read(session, scope, opts); stale = selected.alerts.filter(row => row.canonicalReference.startsWith('crm:studio-artifact:'));
    const revoked = stale.find(row => row.canonicalReference === `crm:studio-artifact:${studioIds.current}`)!; assert.ok(revoked); assert.equal(revoked.version, 99); assert.equal(revoked.sourceDigest, studioDigests.get(studioIds.current)); assert.equal(stale.length, 3);
    assert.equal(stale.some(row => row.canonicalReference === `crm:studio-artifact:${studioIds.older}`), false);
    const projectView = await readWebsiteSalesEnablementProject(session, project, null, 1, opts); assert.deepEqual(projectView.resources, [{ identity, companyName: 'Canonical Company', locationLabel: '1 Isolated Street, Dublin, Ireland' }]);
    assert.ok(projectView.alerts.some(row => row.canonicalReference === revoked.canonicalReference)); assert.equal(JSON.stringify(projectView).includes(bytes.toString('base64')), false); assert.equal(JSON.stringify(projectView.alerts).includes('demoProfile'), false);
-   assert.equal((await db.admin.query('select crm_website_sales_demo_profile_current($1::jsonb) as ok', [JSON.stringify(previewSnapshot)])).rows[0].ok, false);
-   await assert.rejects(withCrmRead(session, tx => resolveCurrentEnablementDemoProfile(tx, session, scope, { profileId, version: 1, digest: profileDigest }), opts), { code: 'ENABLEMENT_ASSET_NOT_APPROVED' });
+
   });
   await t.test('closure cannot be asserted from a payload and hygiene never edits canonical contacts or organizations', async () => {
    await assert.rejects(execute(session, command('record_closure_reason', { reasonCode: 'PRICE', explanation: 'Recorded operator reason', sourceReferences: sources, industryCode: 'GENERAL', offerVersion: null, validUntil: future }), opts), { code: 'CANONICAL_CLOSED_DEAL_REQUIRED' });

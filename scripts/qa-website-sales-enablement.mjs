@@ -72,7 +72,8 @@ try {
     await basis(form); await save(form);
     await expect.poll(async () => (await current()).brief?.payload.goals[0]).toBe('PRIVATE_SYNTHETIC_BUDGET_STRATEGY');
     const read = await current(); assert.deepEqual(read.brief.payload.customerBudget, { status: 'UNKNOWN', amountMinor: null, currency: 'EUR' });
-    assert(read.briefAssessment.reasons.includes('CUSTOMER_BUDGET_UNKNOWN')); initialBriefId = read.brief.id;
+    assert(read.briefAssessment.reasons.includes('CUSTOMER_BUDGET_UNKNOWN')); assert(read.briefAssessment.questions.includes('Welcher kundenseitige Budgetrahmen ist bekannt?'));
+    await expect(main.getByTestId('enablement-clarification-questions').getByText('Welcher kundenseitige Budgetrahmen ist bekannt?', { exact: true })).toBeVisible(); initialBriefId = read.brief.id;
   });
   await step('a lost committed brief response survives reload and blocks every Sales write until exact reconciliation', async () => {
     const form = main.getByTestId('enablement-brief-form'); await form.locator('[name="budgetStatus"]').selectOption('KNOWN');
@@ -92,6 +93,7 @@ try {
     await expect(main.locator('[data-website-sales-workbench]').getByLabel('Unternehmen', { exact: true })).toBeEnabled();
     const read = await current(); assert.deepEqual(read.brief.payload.customerBudget, { status: 'KNOWN', amountMinor: 0, currency: 'EUR' });
     assert(read.briefAssessment.reasons.includes('CUSTOMER_BUDGET_KNOWN_ZERO')); assert.equal(read.brief.id, initialBriefId);
+    await expect(main.getByTestId('enablement-clarification-questions').getByText('Ist der dokumentierte Budgetrahmen von 0 Euro weiterhin aktuell?', { exact: true })).toBeVisible();
   });
   await step('a failed refresh retains edited form fields and keeps stale writes disabled until a fresh read succeeds', async () => {
     await tab('Bedarf'); const form = main.getByTestId('enablement-brief-form');
@@ -164,6 +166,8 @@ try {
     assert.equal(revoked.status, 200, revoked.body.code); assert.equal((await admin.query('select crm_website_sales_demo_profile_current($1::jsonb) as current', [JSON.stringify(stored)])).rows[0].current, false);
     for (const resource of ['render', ...stored.content.assets.map(asset => 'assets/'+asset.path)]) assert.equal(await browserStatus(recipient, new URL(`/sales-preview/${grant.grantId}/${resource}`,base).href), 404);
     assert.equal(await browserStatus(qa.context, new URL(`/api/crm/website-sales/studio/qa-render/${demo.id}/artifact?`+new URLSearchParams(state.scope), base).href), 404);
+    const staleHistory = await readStudio(state); assert.equal(staleHistory.artifacts.find(row => row.id===demo.id).sourceBindingsCurrent, false);
+    assert((await current()).alerts.some(alert => alert.kind==='STALE_DRAFT' && alert.canonicalReference.includes(demo.id)));
     await refresh();
   });
   await step('project-wide duplicate suggestions and their recorded review never merge or delete canonical companies', async () => {
