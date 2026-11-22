@@ -163,7 +163,7 @@ try {
       expectedWorkflowVersion: live.workflowVersion, idempotencyKey: randomUUID(), correlationId: randomUUID(), payload: { assetId: enabled.assets[0].assetId, reason: 'SYNTHETIC permission withdrawal after genuine local rendered QA' } });
     assert.equal(revoked.status, 200, revoked.body.code); assert.equal((await admin.query('select crm_website_sales_demo_profile_current($1::jsonb) as current', [JSON.stringify(stored)])).rows[0].current, false);
     for (const resource of ['render', ...stored.content.assets.map(asset => 'assets/'+asset.path)]) assert.equal(await browserStatus(recipient, new URL(`/sales-preview/${grant.grantId}/${resource}`,base).href), 404);
-    assert.equal((await api(qa.page, `/api/crm/website-sales/studio/qa-render/${demo.id}/artifact?`+new URLSearchParams(state.scope))).status, 404);
+    assert.equal(await browserStatus(qa.context, new URL(`/api/crm/website-sales/studio/qa-render/${demo.id}/artifact?`+new URLSearchParams(state.scope), base).href), 404);
     await refresh();
   });
   await step('project-wide duplicate suggestions and their recorded review never merge or delete canonical companies', async () => {

@@ -67,8 +67,11 @@ export function assessWebsiteSalesCustomerBrief(raw: unknown, rawContext: unknow
   if (brief.openQuestions.length) reasons.push('OPEN_CUSTOMER_QUESTIONS');
   const questions = [!brief.goals.length ? 'Welches konkrete Ziel soll die Website erfüllen?' : null,
     !brief.audience.length ? 'Für welche Zielgruppe wird die Website benötigt?' : null,
+    !brief.services.length ? 'Welche Leistungen werden für die Website gewünscht?' : null,
     brief.customerBudget.status === 'UNKNOWN' ? 'Welcher kundenseitige Budgetrahmen ist bekannt?' : null,
+    brief.customerBudget.status === 'KNOWN' && brief.customerBudget.amountMinor === 0 ? 'Ist der dokumentierte Budgetrahmen von 0 Euro weiterhin aktuell?' : null,
     brief.timeframe.status === 'UNKNOWN' ? 'Welcher Zeitrahmen ist bekannt?' : null,
+    brief.timeframe.status === 'KNOWN' && Date.parse(brief.timeframe.targetDate!) <= Date.parse(now) ? 'Welcher neue Wunschtermin soll bestätigt werden?' : null,
     ...brief.openQuestions].filter((value): value is string => value !== null);
   return result({ brief, questions, budgetUse: 'CUSTOMER_REPORTED_NOT_INTERNAL_SPENDING_AUTHORITY' as const }, reasons);
 }

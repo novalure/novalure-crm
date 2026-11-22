@@ -334,10 +334,10 @@ function Workbench({ workspaceId, actorId, language, initialProjectId }: Workben
       </Surface>
     </div>
     {workflow && locationId ? <>
+      <WebsiteSalesEnablementPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy||current.loading||current.failed||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)} onStateChanged={refresh}/>
       <WebsiteSalesStudio sourceRevision={sourceRevision} key={`studio:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(lifecycleRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)} />
       <WebsiteSalesLifecyclePanel key={`lifecycle:${workflow.id}:${workflow.version}`} workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(operationsRecovery)||Boolean(enablementRecovery)} onRefreshEvidence={workflow.status === "QUALIFIED" || workflow.status === "OFFER_DRAFT" ? () => { setShowResearch(true); } : undefined} />
       <WebsiteSalesOperationsPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy || current.loading || current.failed || Boolean(pending) || Boolean(studioRecovery) || Boolean(lifecycleRecovery)||Boolean(enablementRecovery)} onStateChanged={refresh} />
-      <WebsiteSalesEnablementPanel workspaceId={workspaceId} actorId={actorId} language={language} {...scope} blocked={busy||current.loading||current.failed||Boolean(pending)||Boolean(studioRecovery)||Boolean(lifecycleRecovery)||Boolean(operationsRecovery)} onStateChanged={refresh}/>
     </> : null}
   </section>;
 }

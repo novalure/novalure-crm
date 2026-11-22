@@ -9,7 +9,7 @@ export type WebsiteSalesEnablementResourceRead = WebsiteSalesEnablementRead & { 
  hygieneRecords: { kind: 'ORGANIZATION' | 'CONTACT'; id: string; name: string; companyId: string | null; companyName: string | null; version: number; locationLabel: string | null }[];
  hygieneAnnotations: { id: string; candidateDigest: string; disposition: string; rationale: string; recordedBy: string; recorderDisplayName: string; createdAt: string; recordedAt: string; sourceReferences: EnablementSourceReference[]; current: boolean }[];
  closureReasonBindings: { recordId: string; recordDigest: string; dealId: string; dealVersion: number; outcome: string; current: boolean }[];
- briefAssessment: EnablementAssessment | null; closePlanAssessment: EnablementAssessment | null; closureAnalysis: EnablementClosureAnalysis;
+ briefAssessment: (EnablementAssessment & { questions: string[] }) | null; closePlanAssessment: EnablementAssessment | null; closureAnalysis: EnablementClosureAnalysis;
  coverage: { historyLimitPerKind: number; historyHasMore: boolean; hygiene: { projection: string; hasMore: boolean; current: boolean } } };
 export type WebsiteSalesEnablementProjectRead = ProjectRead & { alerts: EnablementAlert[]; closureAnalysis: EnablementClosureAnalysis; coverage: { tasksPerWorkflow: number; hasMoreTasks: boolean } };
 export type WebsiteSalesEnablementEffect = { identity: EnablementIdentity; aggregateVersion: number; workflowVersion: number;
