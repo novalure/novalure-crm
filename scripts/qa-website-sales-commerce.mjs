@@ -241,7 +241,7 @@ try {
   if (main) await main.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }).catch(() => undefined);
   throw new Error(scrub(error.message));
 } finally {
-  await writeFile(path.join(output, 'result.json'), JSON.stringify({ syntheticOnly: true, sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), harnessSha256: digest(await readFile(new URL(import.meta.url))),
+  await writeFile(path.join(output, 'result.json'), JSON.stringify({ syntheticOnly: true, sourceRevision: fixture.websiteStudio.signer.sourceRevision, harnessSourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), harnessSha256: digest(await readFile(new URL(import.meta.url))),
     productionAccess: 0, realProviderCalls: 0, providerAcceptance: 'NOT_ATTESTED', server: 'optimized-next-build', authentication: 'ordinary-password-plus-MFA', automaticAccessibilityOnly: true,
     results, accessibility, expectedFaults, errors, unexpectedNetwork, completed: results.length }, null, 2));
   for (const value of contexts) await value.close(); await browser.close(); await admin.end();
