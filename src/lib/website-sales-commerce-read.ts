@@ -24,6 +24,8 @@ export function validateWebsiteSalesCommerceRead(raw: unknown, identity: Commerc
   for (const subscription of data.subscriptions) if (!has(data.contracts, subscription.payload.contractRef)) throw new Error('COMMERCE_SUBSCRIPTION_BINDING_DENIED');
   for (const invoice of data.invoices) if (invoice.kind !== 'INVOICE' && invoice.kind !== 'CREDIT_NOTE') throw new Error('COMMERCE_INVOICE_PROJECTION_INVALID');
   for (const payment of data.payments) if (!['PAYMENT', 'REFUND', 'REVERSAL'].includes(payment.kind)) throw new Error('COMMERCE_PAYMENT_PROJECTION_INVALID');
+  const visibleSources = new Set(data.sourceEvents.map(event => event.eventId)), assessmentIds = [...data.sourceAssessment.activeEventIds, ...data.sourceAssessment.invalidatedEventIds];
+  if (new Set(assessmentIds).size !== assessmentIds.length || assessmentIds.some(id => !visibleSources.has(id))) throw new Error('COMMERCE_SOURCE_ASSESSMENT_COVERAGE_DENIED');
   const unique = (rows: { id: string; version: number }[]) => new Set(rows.map(row => `${row.id}:${row.version}`)).size === rows.length;
   for (const list of [data.templates, data.offers, data.contracts, data.approvals.map(row => ({ id: row.approvalId, version: 1 })), data.outbox]) if (!unique(list)) throw new Error('COMMERCE_RESPONSE_DUPLICATE');
   return data;

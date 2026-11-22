@@ -75,7 +75,7 @@ export const websiteSalesCommerceSourceEventSchema = z.discriminatedUnion('kind'
   z.strictObject({ ...sourceBase, kind: z.literal('PROVIDER_DELIVERY'), payload: z.strictObject({ outboxId: commerceUuid, documentKind: z.enum(['OFFER', 'CONTRACT', 'INVOICE_REQUEST']), documentRef: commerceReferenceSchema,
     documentSha256: commerceHash, recipientDigest: commerceHash, providerMessageId: commerceExternalId, status: z.enum(['ACCEPTED', 'DELIVERED', 'BOUNCED', 'COMPLAINED', 'FAILED']) }) }),
   z.strictObject({ ...sourceBase, kind: z.literal('SIGNATURE'), payload: z.strictObject({ contractRef: commerceReferenceSchema, documentSha256: commerceHash, envelopeId: commerceExternalId,
-    status: z.enum(['PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED']), assurance: z.enum(['EMAIL_ACCESS', 'PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), signatoryReference: commerceText.max(200), signedAt: commerceTime.nullable(),
+    status: z.enum(['PENDING', 'SIGNED', 'DECLINED', 'EXPIRED', 'VOIDED', 'SOURCE_UNAVAILABLE']), assurance: z.enum(['EMAIL_ACCESS', 'PROVIDER_ATTESTED', 'ADVANCED', 'QUALIFIED']), signatoryReference: commerceText.max(200), signedAt: commerceTime.nullable(), providerArchivedAt: commerceTime.nullable().optional(),
     providerSignedDocumentDigests: z.array(commerceHash).min(1).max(20).optional(), providerAuditProofDigests: z.array(commerceHash).min(1).max(20).optional(),
     auditProofReferences: z.array(commerceSourceReferenceSchema).min(1).max(20).optional() }) }),
   z.strictObject({ ...sourceBase, kind: z.literal('DELIVERY_ACCEPTANCE'), payload: commerceDeliveryAcceptanceSchema }),
@@ -122,6 +122,10 @@ export type CommerceRecord<T> = { id: string; identity: CommerceIdentity; workfl
 export const commerceOutboxSchema = z.strictObject({ id: commerceUuid, identity: commerceIdentitySchema, workflowId: commerceUuid, version: z.number().int().positive().safe(),
   kind: z.enum(['OFFER_SEND', 'CONTRACT_SEND', 'SIGNATURE_REQUEST', 'ACCOUNTING_INVOICE_REQUEST', 'REFUND_REQUEST', 'SUBSCRIPTION_CHANGE']), documentRef: commerceReferenceSchema,
   payloadDigest: commerceHash, status: z.enum(['READY', 'CLAIMED', 'ACCEPTED', 'UNKNOWN', 'REJECTED', 'CANCELLED']), providerReference: commerceExternalId.nullable(), updatedAt: commerceTime });
+export const commerceSourceAssessmentSchema = z.strictObject({ status: z.enum(['READY', 'BLOCKED', 'NEEDS_RECONCILIATION']), activeEventIds: z.array(commerceUuid).max(500),
+  invalidatedEventIds: z.array(commerceUuid).max(500), reasons: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/)).max(100), complete: z.boolean() })
+  .refine(value => value.status === 'READY' ? value.complete && value.reasons.length === 0 : !value.complete && value.reasons.length > 0, 'COMMERCE_SOURCE_ASSESSMENT_INVALID');
+export type CommerceSourceAssessment = z.infer<typeof commerceSourceAssessmentSchema>;
 export const websiteSalesCommerceReadSchema = z.strictObject({ contractVersion: z.literal(websiteSalesCommerceContract), source: z.literal('database'), identity: commerceIdentitySchema,
   workflowId: commerceUuid, version: z.number().int().nonnegative().safe(), workflowVersion: z.number().int().positive().safe(), canWrite: z.boolean(), canApproveFacts: z.boolean(), canApproveContract: z.boolean(), canContact: z.literal(false),
   actionEligibility: z.array(z.strictObject({ operation: z.enum(operations), eligible: z.boolean(), blockers: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/)).max(30) })).max(30),
@@ -133,7 +137,7 @@ export const websiteSalesCommerceReadSchema = z.strictObject({ contractVersion: 
   offers: z.array(commerceRecordSchema(commerceOfferSchema)).max(25), contracts: z.array(commerceRecordSchema(commerceContractDraftSchema)).max(25), approvals: z.array(commerceApprovalSchema).max(50),
   deliveryAcceptances: z.array(commerceRecordSchema(commerceDeliveryAcceptanceSchema)).max(25), invoiceRequests: z.array(commerceRecordSchema(commerceInvoiceRequestSchema)).max(25),
   invoices: z.array(websiteSalesCommerceSourceEventSchema).max(100), payments: z.array(websiteSalesCommerceSourceEventSchema).max(200),
-  subscriptions: z.array(commerceRecordSchema(commerceSubscriptionTermsSchema)).max(25), outbox: z.array(commerceOutboxSchema).max(100), sourceEvents: z.array(websiteSalesCommerceSourceEventSchema).max(500),
+  subscriptions: z.array(commerceRecordSchema(commerceSubscriptionTermsSchema)).max(25), outbox: z.array(commerceOutboxSchema).max(100), sourceEvents: z.array(websiteSalesCommerceSourceEventSchema).max(500), sourceAssessment: commerceSourceAssessmentSchema,
   blockers: z.array(z.strictObject({ code: z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/), reference: commerceText.max(500).nullable() })).max(100) });
 export type WebsiteSalesCommerceRead = z.infer<typeof websiteSalesCommerceReadSchema>;
 export const websiteSalesCommerceEffectSchema = z.strictObject({ identity: commerceIdentitySchema, workflowId: commerceUuid, version: z.number().int().positive().safe(), workflowVersion: z.number().int().positive().safe(),

@@ -3,8 +3,8 @@ import { z } from 'zod';
 import {
   commerceContractDraftSchema, commerceDeliveryAcceptanceSchema, commerceFinancialSnapshotSchema, commerceIdentitySchema,
   commerceInvoiceRequestSchema, commerceOfferSchema, commercePolicySchema, commerceRecordSchema, commerceReferenceSchema, commerceSubscriptionTermsSchema,
-  commerceTemplateSchema, commerceTime, websiteSalesCommerceSourceEventSchema,
-  type CommerceIdentity, type CommerceRecord, type CommerceReference, type WebsiteSalesCommerceSourceEvent,
+  commerceTemplateSchema, commerceTime, commerceSourceAssessmentSchema, websiteSalesCommerceSourceEventSchema,
+  type CommerceIdentity, type CommerceRecord, type CommerceReference, type CommerceSourceAssessment, type WebsiteSalesCommerceSourceEvent,
 } from './website-sales-commerce-types';
 
 export type CommerceEvaluation<T> = { status: 'READY' | 'BLOCKED' | 'NEEDS_RECONCILIATION'; reasons: string[]; value: T | null; externalEffectAllowed: false; requiresServerAuthorization: true };
@@ -117,6 +117,11 @@ export function resolveCurrentWebsiteSalesCommerceSources(input: CommerceSources
     return evaluation({ events: current, invalidatedEventIds: [...invalidated], complete: reasons.length === 0 }, reasons, true);
   });
 }
+export function assessWebsiteSalesCommerceSources(input: CommerceSourcesInput, nowISO: string): CommerceSourceAssessment {
+  const result = resolveCurrentWebsiteSalesCommerceSources(input, nowISO);
+  return commerceSourceAssessmentSchema.parse({ status: result.status, activeEventIds: result.value?.events.map(event => event.eventId) ?? [],
+    invalidatedEventIds: result.value?.invalidatedEventIds ?? [], reasons: result.reasons, complete: result.status === 'READY' && result.value?.complete === true });
+}
 function effectiveSource<K extends SourceEvent['kind']>(input: CommerceSourcesInput, kind: K, matches: (event: Extract<SourceEvent, { kind: K }>) => boolean, nowISO: string): CommerceEvaluation<Extract<SourceEvent, { kind: K }>> {
   const resolved = resolveCurrentWebsiteSalesCommerceSources(input, nowISO);
   if (resolved.status !== 'READY' || !resolved.value) return evaluation(null, resolved.reasons, true);
@@ -135,6 +140,7 @@ export function resolveWebsiteSalesCommerceSignature(input: CommerceSourcesInput
     const matches = (event: SignatureEvent) => event.source.system === 'SIGNATURE_PROVIDER' && sameRef(event.payload.contractRef, input.contractRef) && event.payload.documentSha256 === input.documentSha256;
     const selected = effectiveSource(input, 'SIGNATURE', matches, nowISO); if (!selected.value || selected.status !== 'READY') return selected;
     const current = resolveCurrentWebsiteSalesCommerceSources(input, nowISO).value!.events.filter((event): event is SignatureEvent => event.kind === 'SIGNATURE' && event.confidence === 'PROVIDER_VERIFIED' && matches(event));
+    if (current.some(event => event.payload.status === 'SOURCE_UNAVAILABLE' || event.payload.providerArchivedAt)) return evaluation(null, ['COMMERCE_SIGNATURE_SOURCE_UNAVAILABLE']);
     if (current.some(event => ['VOIDED', 'DECLINED', 'EXPIRED'].includes(event.payload.status))) return evaluation(null, ['COMMERCE_SIGNATURE_NOT_CURRENT']);
     const rank = { EMAIL_ACCESS: 0, PROVIDER_ATTESTED: 1, ADVANCED: 2, QUALIFIED: 3 }, event = selected.value;
     const auditProof = !!event.payload.providerAuditProofDigests?.length || !!event.payload.auditProofReferences?.some(reference => currentSource(reference, at(nowISO)));
@@ -187,15 +193,24 @@ export function prepareWebsiteSalesContract(input: { offer: CommerceRecord<z.inf
     const protectedValues: Record<string, string> = { NET_EUR: money(o.financial.netMinor), TAX_EUR: money(o.financial.taxMinor), GROSS_EUR: money(o.financial.grossMinor), CUSTOMER_EMAIL: o.recipientEmail,
       ISSUER_LEGAL_NAME: p.accountingProfile.issuerLegalName, ISSUER_ADDRESS: p.accountingProfile.issuerAddress, TAX_IDENTIFIER: p.accountingProfile.taxIdentifier ?? '',
       ...(p.contractTerm ? { CONTRACT_START_AT: p.contractTerm.startAt, CONTRACT_END_AT: p.contractTerm.endAt, CONTRACT_FULL_NET_EUR: money(p.contractTerm.fullNetMinor) } : {}) };
-    const supplied = z.record(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/), z.string().max(2000)).parse(input.variables);
-    if (Object.keys(supplied).some(key => !t.allowedVariableKeys.includes(key) || key in protectedValues && supplied[key] !== protectedValues[key])) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_DENIED']);
+    const supplied = z.record(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/), z.string().max(20000)).parse(input.variables);
+    if (!supplied.SCOPE?.trim() || commerceDigest(supplied.SCOPE) !== o.scopeDigest) return evaluation(null, ['COMMERCE_CANONICAL_SCOPE_REQUIRED']);
+    if (Object.keys(supplied).some(key => key !== 'SCOPE' && (!t.allowedVariableKeys.includes(key) || supplied[key]!.length > 2000) || key in protectedValues && supplied[key] !== protectedValues[key])) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_DENIED']);
     const variables = { ...supplied, ...protectedValues };
     let missing = false;
-    const body = t.content.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (_token, key: string) => {
+    const renderedLegal = t.content.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (_token, key: string) => {
       if (!t.allowedVariableKeys.includes(key) || !Object.prototype.hasOwnProperty.call(variables, key)) { missing = true; return ''; }
       return variables[key] ?? '';
     });
-    if (missing || /\{\{|\}\}|\u0000/.test(body)) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_UNRESOLVED']);
+    if (missing || /\{\{|\}\}|\u0000/.test(renderedLegal)) return evaluation(null, ['COMMERCE_TEMPLATE_VARIABLE_UNRESOLVED']);
+    const summary = [t.language === 'de' ? 'Kommerzielle Angaben — kanonische Quelldaten' : 'Commercial summary — canonical sourced facts',
+      `Issuer legal name: ${p.accountingProfile.issuerLegalName}`, `Issuer address: ${p.accountingProfile.issuerAddress}`,
+      ...(p.accountingProfile.taxIdentifier ? [`Issuer tax identifier: ${p.accountingProfile.taxIdentifier}`] : []), `Recipient email: ${o.recipientEmail}`,
+      `Currency: ${o.financial.currency}`, `Net: ${money(o.financial.netMinor)}`, `Tax: ${money(o.financial.taxMinor)}`, `Gross: ${money(o.financial.grossMinor)}`,
+      `Canonical offer: ${o.offerRef.id} / revision ${o.offerRef.version} / digest ${o.offerRef.digest}`, `Scope digest: ${o.scopeDigest}`, `Scope:\n${supplied.SCOPE}`,
+      'Payment schedule:', ...p.paymentTerms.installments.map(row => `${row.installmentId} | ${row.label} | ${row.percentageBps} basis points | ${row.kind} | anchor ${row.anchor} | due offset ${row.dueOffsetDays} days`),
+      ...(p.contractTerm ? [`Contract start: ${p.contractTerm.startAt}`, `Contract end: ${p.contractTerm.endAt}`, `Full-term net: ${money(p.contractTerm.fullNetMinor)} ${o.financial.currency}`] : [])].join('\n');
+    const body = `${renderedLegal}\n\n---\n${summary}`;
     const draft = commerceContractDraftSchema.parse({ offerRef: o.offerRef, templateRef: commerceRecordReference(template), policyRef: commerceRecordReference(policy), title: t.title, body,
       documentSha256: commerceContentSha256(body), recipientEmail: o.recipientEmail, recipientDigest: o.recipientDigest, financial: o.financial,
       standardTerms: o.financial.termsDigest === p.standardTermsDigest, status: 'DRAFT', paymentTerms: p.paymentTerms, ...(p.contractTerm ? { contractTerm: p.contractTerm } : {}), signatureSourceEventId: null, deliverySourceEventId: null });
