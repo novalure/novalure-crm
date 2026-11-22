@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { assessWebsiteSalesCommerceSources, commerceSourceFactDigest } from '../src/lib/website-sales-commerce-domain';
-import { commerceContractStatus, commerceNewestInvoice, commerceSubscriptionSource } from '../src/lib/website-sales-commerce-view';
+import { commerceContractStatus, commerceNewestInvoice, commerceSubscriptionSource, commercePaymentSummary } from '../src/lib/website-sales-commerce-view';
 import { websiteSalesCommerceSourceEventSchema, type WebsiteSalesCommerceRead, type WebsiteSalesCommerceSourceEvent } from '../src/lib/website-sales-commerce-types';
 
 // These are presentation unit fixtures, not authenticated provider acceptance evidence.
@@ -66,7 +66,7 @@ test('subscription presentation retains original start and uses the latest autho
 
 test('the invoice overview displays a later void without choosing the old issued version', () => {
   const f = fixture(), base = f.signature('PENDING'), invoiceId = randomUUID();
-  const invoice = (status: 'ISSUED' | 'VOIDED', version: number): WebsiteSalesCommerceSourceEvent => websiteSalesCommerceSourceEventSchema.parse({ ...base, eventId: randomUUID(), kind: 'INVOICE', source: { ...base.source, system: 'ACCOUNTING', resourceType: 'invoice', resourceId: invoiceId, version }, payload: { invoiceRequestId: randomUUID(), contractRef: f.contractRef, financial: f.contract.payload.financial, installments: [{ installmentId: randomUUID(), label: 'Balance', amountMinor: 10000, dueAt: time, kind: 'BALANCE' }], status, invoiceNumber: 'UNIT-ONLY-1' } });
+  const invoice = (status: 'ISSUED' | 'VOIDED', version: number): WebsiteSalesCommerceSourceEvent => websiteSalesCommerceSourceEventSchema.parse({ ...base, eventId: randomUUID(), kind: 'INVOICE', source: { ...base.source, system: 'ACCOUNTING', resourceType: 'invoice', resourceId: invoiceId, version }, payload: { invoiceRequestId: randomUUID(), contractRef: f.contractRef, customerReference: 'synthetic-customer', financial: f.contract.payload.financial, installments: [{ installmentId: randomUUID(), label: 'Balance', amountMinor: 10000, dueAt: time, kind: 'BALANCE' }], status, invoiceNumber: 'UNIT-ONLY-1' } });
   f.data.invoices = [invoice('ISSUED', 1), invoice('VOIDED', 2)];
   assert.equal(viewInvoice(f)?.payload.status, 'VOIDED');
   f.data.invoices.reverse(); assert.equal(viewInvoice(f)?.payload.status, 'VOIDED');
@@ -78,7 +78,7 @@ test('server-assessed reversals remove positive invoice and signature presentati
     source: { ...target.source, resourceType: 'reversal', resourceId: randomUUID() }, payload: { reversesEventId: target.eventId, reversedEventDigest: commerceSourceFactDigest(target), reason: 'Synthetic source reversal' } });
   f.data.sourceEvents = [signed, reversal(signed)]; assert.equal(contractStatus(f), 'UNKNOWN');
   assert(f.data.sourceAssessment.invalidatedEventIds.includes(signed.eventId));
-  const issued = websiteSalesCommerceSourceEventSchema.parse({ ...signed, eventId: randomUUID(), kind: 'INVOICE', source: { ...signed.source, system: 'ACCOUNTING', resourceType: 'invoice' }, payload: { invoiceRequestId: randomUUID(), contractRef: f.contractRef, financial: f.contract.payload.financial, installments: [{ installmentId: randomUUID(), label: 'Balance', amountMinor: 10000, dueAt: time, kind: 'BALANCE' }], status: 'ISSUED', invoiceNumber: 'SYNTHETIC-REVERSED' } });
+  const issued = websiteSalesCommerceSourceEventSchema.parse({ ...signed, eventId: randomUUID(), kind: 'INVOICE', source: { ...signed.source, system: 'ACCOUNTING', resourceType: 'invoice' }, payload: { invoiceRequestId: randomUUID(), contractRef: f.contractRef, customerReference: 'synthetic-customer', financial: f.contract.payload.financial, installments: [{ installmentId: randomUUID(), label: 'Balance', amountMinor: 10000, dueAt: time, kind: 'BALANCE' }], status: 'ISSUED', invoiceNumber: 'SYNTHETIC-REVERSED' } });
   f.data.invoices = [issued]; assert.equal(viewInvoice(f, [reversal(issued)]), null);
 });
 
@@ -90,4 +90,19 @@ test('an archived or unavailable signature source is not shown as legally void o
   f.data.sourceEvents = [f.signature('SIGNED')]; assess(f);
   f.data.sourceAssessment = { ...f.data.sourceAssessment, status: 'NEEDS_RECONCILIATION', complete: false, reasons: ['COMMERCE_FINANCIAL_HISTORY_LIMITED'] };
   assert.equal(commerceContractStatus(f.data, f.contract, Date.parse(time)), 'UNKNOWN');
+});
+
+
+test('missing or incomplete payment data never becomes a confirmed zero balance or an earned advance', () => {
+  const f = fixture(); assert.equal(commercePaymentSummary(f.data), 'UNKNOWN');
+  const projection = { complete: true, accountingLedger: false as const, forecast: null, invoices: [], currencies: [{ currency: 'EUR' as const, invoicedMinor: 0, creditedMinor: 0, settledPaymentMinor: 500, settledRefundMinor: 0, unallocatedAdvanceMinor: 500, outstandingMinor: 0 }], excludedOperatorEventIds: [], activeSourceEventIds: [] };
+  f.data.financialAssessment = { status: 'READY', reasons: [], value: projection, externalEffectAllowed: false, requiresServerAuthorization: true };
+  assert.equal(commercePaymentSummary(f.data), 'NO_ISSUED_INVOICES');
+  f.data.financialAssessment = { ...f.data.financialAssessment, status: 'NEEDS_RECONCILIATION', reasons: ['COMMERCE_FINANCIAL_HISTORY_LIMITED'], value: { ...projection, complete: false } };
+  assert.equal(commercePaymentSummary(f.data), 'UNKNOWN');
+  const position = { invoiceSourceEventId: randomUUID(), currency: 'EUR' as const, grossMinor: 10000, creditMinor: 0, paidMinor: 10000, refundedMinor: 0, outstandingMinor: 0, creditAllocationKnown: true, installments: [{ installmentId: randomUUID(), amountMinor: 10000, paidMinor: 10000, refundedMinor: 0, outstandingMinor: 0 }] };
+  f.data.financialAssessment = { status: 'READY', reasons: [], value: { ...projection, invoices: [position] }, externalEffectAllowed: false, requiresServerAuthorization: true };
+  assert.equal(commercePaymentSummary(f.data), 'BALANCED');
+  position.refundedMinor = 100; position.outstandingMinor = 100;
+  assert.equal(commercePaymentSummary(f.data), 'OUTSTANDING');
 });

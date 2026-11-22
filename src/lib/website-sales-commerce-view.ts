@@ -47,3 +47,11 @@ export function commerceNewestInvoice(data: WebsiteSalesCommerceRead) {
   return currentEvents(data).filter((event): event is Extract<Source, { kind: 'INVOICE' }> => event.kind === 'INVOICE')
     .toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0] ?? null;
 }
+
+/** A zero balance is meaningful only after complete source reconciliation, and covers issued invoices only. */
+export function commercePaymentSummary(data: WebsiteSalesCommerceRead): 'UNKNOWN' | 'NO_ISSUED_INVOICES' | 'OUTSTANDING' | 'BALANCED' {
+  const assessment = data.financialAssessment;
+  if (!assessment || assessment.status !== 'READY' || !assessment.value?.complete) return 'UNKNOWN';
+  if (!assessment.value.invoices.length) return 'NO_ISSUED_INVOICES';
+  return assessment.value.invoices.every(invoice => invoice.outstandingMinor === 0) ? 'BALANCED' : 'OUTSTANDING';
+}
