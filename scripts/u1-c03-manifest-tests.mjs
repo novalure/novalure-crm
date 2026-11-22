@@ -92,7 +92,7 @@ test("commerce host configuration and credentials remain server-only conditional
   assert.deepEqual(groups.flatMap(({ names }) => names).sort(), [...expected.keys()].sort());
   for (const group of groups) {
     assert.equal(group.serverOnly, true);
-    assert.deepEqual(group.targets, ["preview", "production"]);
+    assert.deepEqual(group.targets, ["production"]);
     assert.equal(Object.hasOwn(group, "value"), false);
     for (const name of group.names) {
       assert.equal(group.kind, expected.get(name));
