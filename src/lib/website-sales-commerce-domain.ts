@@ -285,6 +285,26 @@ export type CommerceFinancialProjection = FinancialProjection;
 /** Pure projection of authenticated source snapshots. It never verifies a provider or issues a ledger entry. */
 export function reconcileWebsiteSalesCommerceSources(input: { identity: CommerceIdentity; workflowId: string; events: SourceEvent[]; historyComplete?: boolean }, nowISO: string): CommerceEvaluation<CommerceFinancialProjection> {
   return attempt<CommerceFinancialProjection>(() => {
+    const events = z.array(websiteSalesCommerceSourceEventSchema).max(1000).parse(input.events), normalized = { ...input, events };
+    const current = resolveCurrentWebsiteSalesCommerceSources(normalized, nowISO);
+    if (current.status === 'BLOCKED' || !current.value) return evaluation(null, current.reasons);
+    const byId = new Map(events.map(event => [event.eventId, event]));
+    const financiallyRelated = (event: SourceEvent, visited = new Set<string>()): boolean => {
+      if (['INVOICE', 'PAYMENT', 'REFUND', 'CREDIT_NOTE'].includes(event.kind)) return true;
+      if (event.kind !== 'REVERSAL' || visited.has(event.eventId)) return false;
+      const target = byId.get(event.payload.reversesEventId);
+      return target ? financiallyRelated(target, new Set(visited).add(event.eventId)) : false;
+    };
+    // The global graph validates every source and reversal first. Non-financial proof
+    // withdrawals must not be mistaken for accounting/payment-provider authority.
+    const financial = reconcileFinancialSourceGraph({ ...normalized, events: events.filter(event => financiallyRelated(event)) }, nowISO);
+    if (financial.status === 'BLOCKED' || !financial.value) return financial;
+    const reasons = [...current.reasons, ...financial.reasons];
+    return evaluation({ ...financial.value, complete: reasons.length === 0 }, reasons, true);
+  });
+}
+function reconcileFinancialSourceGraph(input: CommerceSourcesInput, nowISO: string): CommerceEvaluation<CommerceFinancialProjection> {
+  return attempt<CommerceFinancialProjection>(() => {
     const now = at(nowISO), reasons: string[] = [], events = z.array(websiteSalesCommerceSourceEventSchema).max(1000).parse(input.events).map(event => validEvent(event, input, now));
     if (input.historyComplete === false) reasons.push('COMMERCE_FINANCIAL_HISTORY_LIMITED');
     if (!events.some(event => ['INVOICE', 'PAYMENT', 'REFUND', 'CREDIT_NOTE'].includes(event.kind))) reasons.push('COMMERCE_FINANCIAL_SOURCE_REQUIRED');
