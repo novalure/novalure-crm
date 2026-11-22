@@ -30,7 +30,7 @@ function identity(raw:unknown,workspaceId:string,scope:WebsiteSalesEnablementSco
 function validateRead(raw:unknown,workspaceId:string,scope:WebsiteSalesEnablementScope):WebsiteSalesEnablementResourceRead{
  const data=object(raw);identity(data.identity,workspaceId,scope);
  if(data.contractVersion!==websiteSalesEnablementContract||data.source!=='database'||data.projection!=='RESOURCE'||data.canContact!==false||typeof data.canWrite!=='boolean'||typeof data.canApproveFacts!=='boolean'||!Number.isSafeInteger(data.aggregateVersion)||Number(data.aggregateVersion)<0||!Number.isSafeInteger(data.workflowVersion)||Number(data.workflowVersion)<1)throw Error('INVALID_ENABLEMENT_READ');
- for(const field of ['contacts','tasks','references','referenceReviews','demoProfiles','assets','closureReasons','careBases','careCandidates','dailyPriorities','hygieneCandidates','careOffers'])if(!Array.isArray(data[field])||(data[field] as unknown[]).length>500)throw Error('INVALID_ENABLEMENT_READ');
+ for(const field of ['contacts','tasks','references','referenceReviews','demoProfiles','assets','closureReasons','careBases','careCandidates','dailyPriorities','hygieneCandidates','careOffers','hygieneAnnotations','closureReasonBindings'])if(!Array.isArray(data[field])||(data[field] as unknown[]).length>500)throw Error('INVALID_ENABLEMENT_READ');
  for(const rawAsset of data.assets as unknown[]){const asset=object(rawAsset);identity(asset.identity,workspaceId,scope);if('body' in asset||'bytes' in asset||'base64' in asset||!uuid.test(String(asset.assetId))||!sha.test(String(asset.sha256)))throw Error('INVALID_ENABLEMENT_ASSET');}
  return data as unknown as WebsiteSalesEnablementResourceRead;
 }
