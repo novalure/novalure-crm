@@ -289,13 +289,13 @@ test('historical061 module imports and renders independently without any new CRM
   // Own test output is intentionally retained; no tracked source was renamed or removed.
 });
 
-test('exact176-file current inventory appends202–208 to unchanged169-source baseline; standalone173-execution/132-ledger and83 early originals', () => {
+test('exact177-file current inventory appends202–209 to unchanged169-source baseline; standalone174-execution/133-ledger and83 early originals', () => {
   const actual = loadCrmCandidateCommittedManifest(headCommit);
   assert.equal(actual.sha256, manifest.sha256);
-  assert.equal(actual.forward.length, 176); assert.equal(actual.early.length, 83);
-  assert.equal(actual.forward.filter(row => row.number >= 41).length, 135);
-  assert.equal(actual.selected.length, 173);
-  assert.equal(actual.selected.filter(row => row.number >= 41).length, 132);
+  assert.equal(actual.forward.length, 177); assert.equal(actual.early.length, 83);
+  assert.equal(actual.forward.filter(row => row.number >= 41).length, 136);
+  assert.equal(actual.selected.length, 174);
+  assert.equal(actual.selected.filter(row => row.number >= 41).length, 133);
   assert.deepEqual(actual.forward.slice(0, 169).map(row => ({ path: row.path, sha256: row.checksum, manual: row.manual })), crmCandidateOriginalSources.forward);
   assert.equal(sha256(readFileSync('config/crm-candidate-fresh-migrations.json', 'utf8').replace(/\r\n/g, '\n')), crmCandidateSourceManifestSha256);
   assert.equal(sha256(readFileSync('config/crm-candidate-fresh-execution-variant.json', 'utf8').replace(/\r\n/g, '\n')), crmCandidateExecutionVariantSha256);
@@ -305,12 +305,12 @@ test('exact176-file current inventory appends202–208 to unchanged169-source ba
   assert.equal(added.path, 'migrations/202_website_sales_ireland.sql');
   assert.equal(added.checksum, '6c4fce55b90fdbb4579c8a97f4d8891c54cab987c939d47a5d9b3282dae9b0fb');
   assert.equal(added.checksum, registered.sha256);
-  assert.equal(actual.forward.at(-1).path, 'migrations/208_website_sales_enablement.sql');
-  assert.equal(actual.forward.at(-1).checksum, '3612653e537b521d0a930dcac9e9cdb228338c7a5c31755b2e18a1b1d1e9fd46');
+  assert.equal(actual.forward.at(-1).path, 'migrations/209_website_sales_commerce.sql');
+  assert.equal(actual.forward.at(-1).checksum, 'a249ec40adb029a19d2eef4e313afa5b212c35c4757c5460a047485a36de7170');
   assert.equal(actual.sourceExtensionSha256, crmCandidateSourceExtensionSha256);
   assert.ok(actual.standard.some(row => row.path === added.path && row.checksum === added.checksum && !row.manual));
-  assert.deepEqual(actual.coverage, { sourceInventorySqlFiles: 176, executedOriginalSqlFiles: 173, historicalExecutionsBeforeLedger: 41, expectedCanonicalLedgerRows: 132 });
-  assert.deepEqual(actual.forward.slice(-3).map(row => row.path), ['migrations/206_website_sales_operations.sql', 'migrations/207_website_sales_conversations.sql', 'migrations/208_website_sales_enablement.sql']);
+  assert.deepEqual(actual.coverage, { sourceInventorySqlFiles: 177, executedOriginalSqlFiles: 174, historicalExecutionsBeforeLedger: 41, expectedCanonicalLedgerRows: 133 });
+  assert.deepEqual(actual.forward.slice(-4).map(row => row.path), ['migrations/206_website_sales_operations.sql', 'migrations/207_website_sales_conversations.sql', 'migrations/208_website_sales_enablement.sql', 'migrations/209_website_sales_commerce.sql']);
   assert.deepEqual(actual.excluded.map(row => row.path), ['migrations/097_studio_sales_calendar_bridge.sql',
     'migrations/098_studio_enquiry_handoff.sql', 'migrations/099_studio_enquiry_public_launch.sql']);
   assert.ok(actual.excluded.every(row => row.execution === 'NOT_EXECUTED_INCOMPATIBLE_PREVIEW_VARIANT'));

@@ -226,8 +226,7 @@ test('Sales enablement uses actual PostgreSQL, existing CRM records and the prot
    const renewed = await run(command('propose_care', { planKey: 'MANAGED', basisId: renewalBasis.data.recordId, basisDigest: renewalBasis.data.recordDigest })); assert.ok(renewed.data.taskId);
    const repeat = await run(command('propose_care', { planKey: 'MANAGED', basisId: renewalBasis.data.recordId, basisDigest: renewalBasis.data.recordDigest })); assert.equal(repeat.data.taskId, renewed.data.taskId);
    const selected = (await read(session, scope, opts)).careCandidates.find(row => row.id === renewed.data.recordId)!; assert.equal(selected.payload.schedule[0].netMonthlyMinor, 9900); assert.equal(selected.payload.autoRenewalAllowed, false);
-   const renewalOffer = await run(command('prepare_care_offer', { careProposalId: renewed.data.recordId, careProposalDigest: renewed.data.recordDigest, expectedDeliveryTaskVersion: 1 }));
-   assert.equal(Number((await db.admin.query('select r.total_net_cents from crm_offers o join crm_offer_revisions r on r.workspace_id=o.workspace_id and r.offer_id=o.id and r.revision=o.revision where o.id=$1', [renewalOffer.data.offerId])).rows[0].total_net_cents), 9900);
+   await assert.rejects(run(command('prepare_care_offer', { careProposalId: renewed.data.recordId, careProposalDigest: renewed.data.recordDigest, expectedDeliveryTaskVersion: 1 })),{code:'CARE_RENEWAL_REVIEW_ONLY'}); // Operator calendar review is preserved; an actual renewal offer requires a separately verified service source.
    assert.equal((await read(session, scope, opts)).acceptedCareOffers[0].offerId, prepared.data.offerId);
   });
   await t.test('a closure reason remains historical when the canonical deal result changes without a workflow version change', async () => {

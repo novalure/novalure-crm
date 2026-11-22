@@ -1,3 +1,5 @@
+import {websiteSalesCommerceContract,type WebsiteSalesCommerceCommand} from './website-sales-commerce-types';
+import {executeWebsiteSalesCommerceCommand,readWebsiteSalesCommerce,reconcileWebsiteSalesCommerceCommand,parseWebsiteSalesCommerceCommand,websiteSalesCommerceCommandInput} from './db/website-sales-commerce-repositories';
 import {WebsiteSalesOperationsError} from "./website-sales-operations-contracts";
 import {executeWebsiteSalesConversationCommand,readWebsiteSalesConversation,reconcileWebsiteSalesConversationCommand,websiteSalesConversationCommandInput,parseWebsiteSalesConversationCommand} from "./db/website-sales-conversation-repositories";
 import { compactWebsiteSalesOperationsReceipt } from "./website-sales-operations-receipt";
@@ -39,13 +41,13 @@ export const websiteSalesMachineScopes = ["crm.website-sales.read", "crm.website
   "crm.website-sales.lifecycle.refresh-evidence", "crm.website-sales.lifecycle.ingest-reply", "crm.website-sales.lifecycle.create-handoff",
  "crm.website-sales.autonomy.read","crm.website-sales.autonomy.plan-portfolio","crm.website-sales.autonomy.claim-allocation","crm.website-sales.autonomy.settle-allocation","crm.website-sales.autonomy.propose-price","crm.website-sales.autonomy.apply-quote","crm.website-sales.autonomy.record-outcome","crm.website-sales.autonomy.propose-improvement","crm.website-sales.autonomy.promote-improvement",
  "crm.website-sales.conversation.read","crm.website-sales.conversation.record-topic","crm.website-sales.conversation.draft-answer","crm.website-sales.conversation.advance-conversation","crm.website-sales.conversation.stop-conversation",
- "crm.website-sales.enablement.read","crm.website-sales.enablement.propose-next-step","crm.website-sales.enablement.propose-care","crm.website-sales.enablement.prepare-care-offer","crm.website-sales.enablement.scan-hygiene"] as const;
+ "crm.website-sales.enablement.read","crm.website-sales.enablement.propose-next-step","crm.website-sales.enablement.propose-care","crm.website-sales.enablement.prepare-care-offer","crm.website-sales.enablement.scan-hygiene","crm.website-sales.commerce.read","crm.website-sales.commerce.reconcile","crm.website-sales.commerce.prepare-contract","crm.website-sales.commerce.queue-offer-delivery","crm.website-sales.commerce.queue-contract-delivery","crm.website-sales.commerce.request-signature","crm.website-sales.commerce.prepare-invoice-request","crm.website-sales.commerce.propose-renewal","crm.website-sales.commerce.ingest-source"] as const;
 export type WebsiteSalesMachineScope = typeof websiteSalesMachineScopes[number];
 export type WebsiteSalesDelegationPayload = { issuedAt: number; expiresAt: number; nonce: string; requestHash: string };
-export type WebsiteSalesMachineRead = { projectId: string; companyId: string; locationId: string; correlationId: string;view?:"operations"|"conversation"|"resource"|"enablement";resourceGrants?:SalesResourceGrant[] };
+export type WebsiteSalesMachineRead = { projectId: string; companyId: string; locationId: string; correlationId: string;workflowId?:string;view?:"operations"|"conversation"|"resource"|"enablement"|"commerce";resourceGrants?:SalesResourceGrant[] };
 export type WebsiteSalesMachineRequest = { contractVersion: typeof websiteSalesMachineContract; target?: "workflow" | "studio" | "lifecycle" | "autonomy" } & (
-  { operation: "execute"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand | WebsiteSalesLifecycleCommand | SalesOperationsCommand | SalesConversationCommand | WebsiteSalesEnablementCommand } |
-  { operation: "reconcile"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand | WebsiteSalesLifecycleCommand | SalesOperationsCommand | SalesConversationCommand | WebsiteSalesEnablementCommand } |
+  { operation: "execute"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand | WebsiteSalesLifecycleCommand | SalesOperationsCommand | SalesConversationCommand | WebsiteSalesEnablementCommand | WebsiteSalesCommerceCommand } |
+  { operation: "reconcile"; request: WebsiteSalesIrelandCommand | WebsiteSalesStudioCommand | WebsiteSalesLifecycleCommand | SalesOperationsCommand | SalesConversationCommand | WebsiteSalesEnablementCommand | WebsiteSalesCommerceCommand } |
   { operation: "read"; request: WebsiteSalesMachineRead });
 export type WebsiteSalesMachineOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions };
 type Grant = { id: string; workload_id: string; workspace_id: string; actor_user_id: string; project_id: string;
@@ -67,10 +69,11 @@ function parseRequest(value: unknown): WebsiteSalesMachineRequest {
   if (body.target !== undefined && !["workflow", "studio", "lifecycle", "autonomy"].includes(String(body.target))) denied("INVALID_REQUEST", 400);
   const request = object(body.request);
   if (body.operation === "read") {
-    assertCrmFields(request, ["projectId", "companyId", "locationId", "correlationId", ...(body.target==="autonomy"?["resourceGrants","view"]:[])]);
+    assertCrmFields(request, ["projectId", "companyId", "locationId", "correlationId", ...(body.target==="autonomy"?["resourceGrants","view","workflowId"]:[])]);
     for (const name of ["projectId", "companyId", "locationId", "correlationId"]) assertCrmUuid(request[name], name);
+    if(body.target==="autonomy"&&request.view==="commerce")assertCrmUuid(request.workflowId,"workflowId");else if(request.workflowId!==undefined)denied("INVALID_REQUEST",400);
   } else {
-    if (request.contractVersion !== (body.target === "autonomy" ? (request.contractVersion===websiteSalesEnablementContract?websiteSalesEnablementContract:request.contractVersion===websiteSalesConversationContract?websiteSalesConversationContract:websiteSalesOperationsContract) : body.target === "studio" ? websiteSalesStudioContract : body.target === "lifecycle" ? websiteSalesLifecycleContract : websiteSalesIrelandContract)
+    if (request.contractVersion !== (body.target === "autonomy" ? (request.contractVersion===websiteSalesCommerceContract?websiteSalesCommerceContract:request.contractVersion===websiteSalesEnablementContract?websiteSalesEnablementContract:request.contractVersion===websiteSalesConversationContract?websiteSalesConversationContract:websiteSalesOperationsContract) : body.target === "studio" ? websiteSalesStudioContract : body.target === "lifecycle" ? websiteSalesLifecycleContract : websiteSalesIrelandContract)
       || !uuidV4.test(String(request.idempotencyKey))) denied("INVALID_REQUEST", 400);
     assertCrmUuid(request.correlationId, "correlationId");
     if (body.target === "studio") {
@@ -81,11 +84,11 @@ function parseRequest(value: unknown): WebsiteSalesMachineRequest {
       if (["authorize_reply_classification", "record_customer_acceptance"].includes(String(request.operation))) denied("HUMAN_ATTESTATION_REQUIRED");
       parseWebsiteSalesLifecycleCommand(request);
     }
-    if(body.target==="autonomy"){if(request.contractVersion===websiteSalesEnablementContract)parseWebsiteSalesEnablementCommand(request);else if(request.contractVersion===websiteSalesConversationContract)parseWebsiteSalesConversationCommand(request);else parseSalesOperationsCommand(request);}
+    if(body.target==="autonomy"){if(request.contractVersion===websiteSalesCommerceContract)parseWebsiteSalesCommerceCommand(request);else if(request.contractVersion===websiteSalesEnablementContract)parseWebsiteSalesEnablementCommand(request);else if(request.contractVersion===websiteSalesConversationContract)parseWebsiteSalesConversationCommand(request);else parseSalesOperationsCommand(request);}
     // The canonical repository validates the exact operation-specific command before transaction entry.
   }
   if(body.target==="autonomy"){
-   if(body.operation==="read"&&request.view!==undefined&&!["operations","conversation","resource","enablement"].includes(String(request.view)))denied("INVALID_READ_VIEW",400);
+   if(body.operation==="read"&&request.view!==undefined&&!["operations","conversation","resource","enablement","commerce"].includes(String(request.view)))denied("INVALID_READ_VIEW",400);
    const refs=body.operation==="read"?request.resourceGrants:object(request.payload).resourceGrants;
    if(refs!==undefined){if(!Array.isArray(refs)||refs.length>49)denied("INVALID_RESOURCE_GRANTS",400);const seen=new Set<string>();for(const item of refs){const ref=object(item);assertCrmFields(ref,["companyId","locationId","grantId"]);for(const key of ["companyId","locationId","grantId"])assertCrmUuid(ref[key],key);const key=`${ref.companyId}:${ref.locationId}`;if(seen.has(key))denied("DUPLICATE_RESOURCE_GRANT",400);seen.add(key);}}
   }
@@ -120,9 +123,10 @@ function grantDigest(grant: Grant) { return crmPayloadDigest({ id: grant.id, wor
   locationId: grant.location_id, departmentId: grant.department_id, agentId: grant.agent_id, taskId: grant.task_id,
   scopes: grant.scopes, publicKey: grant.delegation_public_key }); }
 function action(body: WebsiteSalesMachineRequest): WebsiteSalesMachineScope {
-  if (body.operation === "read") return body.target === "autonomy" ? (body.request.view==="enablement"?"crm.website-sales.enablement.read":body.request.view==="conversation"?"crm.website-sales.conversation.read":"crm.website-sales.autonomy.read") : body.target === "studio" ? "crm.website-sales.studio.read" : body.target === "lifecycle" ? "crm.website-sales.lifecycle.read" : "crm.website-sales.read";
-  if (body.operation === "reconcile") return "crm.website-sales.reconcile";
+  if (body.operation === "read") return body.target === "autonomy" ? (body.request.view==="commerce"?"crm.website-sales.commerce.read":body.request.view==="enablement"?"crm.website-sales.enablement.read":body.request.view==="conversation"?"crm.website-sales.conversation.read":"crm.website-sales.autonomy.read") : body.target === "studio" ? "crm.website-sales.studio.read" : body.target === "lifecycle" ? "crm.website-sales.lifecycle.read" : "crm.website-sales.read";
+  if (body.operation === "reconcile") return body.target==="autonomy"&&body.request.contractVersion===websiteSalesCommerceContract?"crm.website-sales.commerce.reconcile":"crm.website-sales.reconcile";
   if(body.target==="autonomy"){
+   if(body.request.contractVersion===websiteSalesCommerceContract){const mapping={prepare_contract:'crm.website-sales.commerce.prepare-contract',queue_offer_delivery:'crm.website-sales.commerce.queue-offer-delivery',queue_contract_delivery:'crm.website-sales.commerce.queue-contract-delivery',request_signature:'crm.website-sales.commerce.request-signature',prepare_invoice_request:'crm.website-sales.commerce.prepare-invoice-request',propose_renewal:'crm.website-sales.commerce.propose-renewal'} as const;return mapping[body.request.operation as keyof typeof mapping]??denied('COMMERCE_OWNER_REQUIRED');}
    if(body.request.contractVersion===websiteSalesEnablementContract){const mapping={propose_next_step:'crm.website-sales.enablement.propose-next-step',propose_care:'crm.website-sales.enablement.propose-care',prepare_care_offer:'crm.website-sales.enablement.prepare-care-offer',scan_hygiene:'crm.website-sales.enablement.scan-hygiene'} as const;return mapping[body.request.operation as keyof typeof mapping]??denied('ENABLEMENT_OWNER_REQUIRED');}
    if(body.request.contractVersion===websiteSalesConversationContract){const mapping={record_topic:"crm.website-sales.conversation.record-topic",draft_answer:"crm.website-sales.conversation.draft-answer",advance_conversation:"crm.website-sales.conversation.advance-conversation",stop_conversation:"crm.website-sales.conversation.stop-conversation"} as const;return mapping[body.request.operation as keyof typeof mapping]??denied("HUMAN_POLICY_AUTHORITY_REQUIRED");}
    const mapping={plan_portfolio:"crm.website-sales.autonomy.plan-portfolio",claim_allocation:"crm.website-sales.autonomy.claim-allocation",settle_allocation:"crm.website-sales.autonomy.settle-allocation",propose_price:"crm.website-sales.autonomy.propose-price",apply_quote:"crm.website-sales.autonomy.apply-quote",record_outcome:"crm.website-sales.autonomy.record-outcome",propose_improvement:"crm.website-sales.autonomy.propose-improvement",promote_improvement:"crm.website-sales.autonomy.promote-improvement"} as const;
@@ -151,6 +155,7 @@ function bind(grant: Grant, body: WebsiteSalesMachineRequest) {
   if (!grant.scopes.includes(required)) denied("SALES_SCOPE_DENIED");
   // A reconciliation lookup still needs the original effect scope; it cannot reveal another grant's receipt.
   if (body.operation === "reconcile" && !grant.scopes.includes(action({ ...body, operation: "execute" }))) denied("SALES_SCOPE_DENIED");
+  if(body.operation==='reconcile'&&body.target==='autonomy'&&body.request.contractVersion===websiteSalesCommerceContract&&!grant.scopes.includes('crm.website-sales.commerce.read'))denied('COMMERCE_READ_SCOPE_REQUIRED');
   if (body.operation === 'reconcile' && body.target === 'autonomy' && body.request.contractVersion === websiteSalesEnablementContract && !grant.scopes.includes('crm.website-sales.enablement.read')) denied('ENABLEMENT_READ_SCOPE_REQUIRED');
 }
 
@@ -196,7 +201,7 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
         ...(grant.location_id === null ? {} : { locationId: grant.location_id }) }, mode: body.operation, target: body.target ?? "workflow",
       operation: body.operation === "read" ? "read" : body.request.operation, scopes: grant.scopes,...(body.target==="autonomy"?{resources:resources.map(g=>({companyId:g.company_id,locationId:g.location_id!,grantId:g.id,digest:grantDigest(g)}))}: {}) };
     return await withWebsiteSalesMachineAuthority(authority, async () => {
-      const command = body.operation === "read" ? null : body.target === "autonomy" ? (body.request.contractVersion===websiteSalesEnablementContract?websiteSalesEnablementCommandInput(session,body.request as WebsiteSalesEnablementCommand):body.request.contractVersion===websiteSalesConversationContract?websiteSalesConversationCommandInput(session,body.request as SalesConversationCommand):salesOperationsCommandInput(session,body.request as SalesOperationsCommand)) : body.target === "studio"
+      const command = body.operation === "read" ? null : body.target === "autonomy" ? (body.request.contractVersion===websiteSalesCommerceContract?websiteSalesCommerceCommandInput(session,body.request as WebsiteSalesCommerceCommand):body.request.contractVersion===websiteSalesEnablementContract?websiteSalesEnablementCommandInput(session,body.request as WebsiteSalesEnablementCommand):body.request.contractVersion===websiteSalesConversationContract?websiteSalesConversationCommandInput(session,body.request as SalesConversationCommand):salesOperationsCommandInput(session,body.request as SalesOperationsCommand)) : body.target === "studio"
         ? websiteSalesStudioCommandInput(session, body.request as WebsiteSalesStudioCommand)
         : body.target === "lifecycle" ? websiteSalesLifecycleCommandInput(session, body.request as WebsiteSalesLifecycleCommand)
         : websiteSalesIrelandCommandInput(session, body.request as WebsiteSalesIrelandCommand);
@@ -215,14 +220,14 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
         if (await tx.queryOne("select nonce from crm_website_sales_machine_events where grant_id=$1 and nonce=$2", [grant.id, nonce])) denied("NONCE_REPLAY", 409);
         let result: Record<string, unknown>;
         if (body.operation === "execute") {
-          result = body.target === "autonomy" ? (body.request.contractVersion===websiteSalesEnablementContract?compactWebsiteSalesOperationsReceipt(await executeWebsiteSalesEnablementCommand(fresh,body.request as WebsiteSalesEnablementCommand,options)):body.request.contractVersion===websiteSalesConversationContract?{...await executeWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options),contractVersion:websiteSalesConversationContract,persisted:true}:compactWebsiteSalesOperationsReceipt(await executeSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options))) : body.target === "studio"
+          result = body.target === "autonomy" ? (body.request.contractVersion===websiteSalesCommerceContract?await executeWebsiteSalesCommerceCommand(fresh,body.request as WebsiteSalesCommerceCommand,options):body.request.contractVersion===websiteSalesEnablementContract?compactWebsiteSalesOperationsReceipt(await executeWebsiteSalesEnablementCommand(fresh,body.request as WebsiteSalesEnablementCommand,options)):body.request.contractVersion===websiteSalesConversationContract?{...await executeWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options),contractVersion:websiteSalesConversationContract,persisted:true}:compactWebsiteSalesOperationsReceipt(await executeSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options))) : body.target === "studio"
             ? { ...await executeWebsiteSalesStudioCommand(fresh, body.request as WebsiteSalesStudioCommand, options) }
             : body.target === "lifecycle" ? { ...await executeWebsiteSalesLifecycleCommand(fresh, body.request as WebsiteSalesLifecycleCommand, options), contractVersion: websiteSalesLifecycleContract, persisted: true }
             : { ...await runWebsiteSalesIrelandCommand(fresh, body.request as WebsiteSalesIrelandCommand, options), contractVersion: websiteSalesIrelandContract, persisted: true };
         } else if (body.operation === "reconcile") {
           if(body.target==="autonomy") {
-            const reconciled = body.request.contractVersion===websiteSalesEnablementContract?await reconcileWebsiteSalesEnablementCommand(fresh,body.request as WebsiteSalesEnablementCommand,options):body.request.contractVersion===websiteSalesConversationContract?await reconcileWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options):await reconcileSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options);
-            result={...(body.request.contractVersion!==websiteSalesConversationContract && reconciled.status==="COMMITTED" ? compactWebsiteSalesOperationsReceipt(reconciled, true) : reconciled),contractVersion:websiteSalesMachineContract};
+            const reconciled = body.request.contractVersion===websiteSalesCommerceContract?await reconcileWebsiteSalesCommerceCommand(fresh,body.request as WebsiteSalesCommerceCommand,options):body.request.contractVersion===websiteSalesEnablementContract?await reconcileWebsiteSalesEnablementCommand(fresh,body.request as WebsiteSalesEnablementCommand,options):body.request.contractVersion===websiteSalesConversationContract?await reconcileWebsiteSalesConversationCommand(fresh,body.request as SalesConversationCommand,options):await reconcileSalesOperationsCommand(fresh,body.request as SalesOperationsCommand,options);
+            result={...(body.request.contractVersion!==websiteSalesConversationContract && body.request.contractVersion!==websiteSalesCommerceContract && reconciled.status==="COMMITTED" && "data" in reconciled ? compactWebsiteSalesOperationsReceipt(reconciled, true) : reconciled),contractVersion:websiteSalesMachineContract};
           }
           else if (body.target === "studio") {
             const receipt = await reconcileWebsiteSalesStudioCommand(fresh, body.request as WebsiteSalesStudioCommand, options);
@@ -234,7 +239,7 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
           else result = { ...await reconcileWebsiteSalesIrelandCommand(fresh, body.request as WebsiteSalesIrelandCommand, options), contractVersion: websiteSalesMachineContract };
         } else {
           const scope = { projectId: body.request.projectId, companyId: body.request.companyId, locationId: body.request.locationId };
-          result = body.target === "autonomy" ? (body.request.view==="enablement"?{contractVersion:websiteSalesEnablementContract,data:await readWebsiteSalesEnablement(fresh,scope,options)}:body.request.view==="conversation"?{contractVersion:websiteSalesConversationContract,data:await readWebsiteSalesConversation(fresh,scope,options)}:{contractVersion:websiteSalesOperationsContract,data:await readSalesOperations(fresh,scope,options,body.request.view==="resource")}) : body.target === "studio" ? { contractVersion: websiteSalesStudioContract, data: await readWebsiteSalesStudio(fresh, scope, options) }
+          result = body.target === "autonomy" ? (body.request.view==="commerce"?{contractVersion:websiteSalesCommerceContract,data:await readWebsiteSalesCommerce(fresh,{...scope,workflowId:body.request.workflowId!},options)}:body.request.view==="enablement"?{contractVersion:websiteSalesEnablementContract,data:await readWebsiteSalesEnablement(fresh,scope,options)}:body.request.view==="conversation"?{contractVersion:websiteSalesConversationContract,data:await readWebsiteSalesConversation(fresh,scope,options)}:{contractVersion:websiteSalesOperationsContract,data:await readSalesOperations(fresh,scope,options,body.request.view==="resource")}) : body.target === "studio" ? { contractVersion: websiteSalesStudioContract, data: await readWebsiteSalesStudio(fresh, scope, options) }
             : body.target === "lifecycle" ? { contractVersion: websiteSalesLifecycleContract, data: await readWebsiteSalesLifecycle(fresh, scope, options) }
             : { contractVersion: websiteSalesIrelandContract, data: await getWebsiteSalesIrelandWorkflow(fresh, scope, options) };
         }

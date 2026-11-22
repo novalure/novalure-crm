@@ -1,3 +1,4 @@
+import { currentAuthoritativeWebsiteSalesCare } from './website-sales-commerce-care';
 import 'server-only';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -354,7 +355,7 @@ async function careOffer(tx: TenantTransaction, session: AppSession, c: WebsiteS
  const p = proposal.payload as unknown as WebsiteCareProposal, basis = await latest(tx, session, s.row!.id, 'CARE_BASIS', p.basisId);
  if (!basis || basis.digest !== p.basisDigest || !current(basis, s)) fail('CURRENT_CARE_BASIS_REQUIRED'); validSources(basis.payload);
  const completed = await delivery(tx, session, c, s.row!.id, p.deliveryTaskId);
- if (p.renewal) await acceptedCareOffer(tx, session, c, s.row!.id, p.renewal.canonicalAcceptedCareOfferId);
+ if(p.renewal){await acceptedCareOffer(tx,session,c,s.row!.id,p.renewal.canonicalAcceptedCareOfferId);const source=await currentAuthoritativeWebsiteSalesCare(tx,session,{projectId:c.projectId,companyId:c.companyId,locationId:c.locationId!,workflowId:s.row!.id},p.renewal.canonicalAcceptedCareOfferId);if(source.payload.originalServiceStartAt!==p.renewal.serviceStartAt)fail('CARE_ORIGINAL_SERVICE_START_CHANGED');}
  if (completed.version !== p.deliveryTaskVersion || completed.version !== payload.expectedDeliveryTaskVersion) fail('DELIVERY_TASK_VERSION_CONFLICT');
  if (!object(basis.payload).planKeys || !(basis.payload.planKeys as string[]).includes(p.planKey) || p.catalogDigest !== CANONICAL_WEBSITE_SALES_CATALOG.sourceDigest) fail('CARE_CATALOG_OR_BASIS_CHANGED');
  const checked = proposeWebsiteSalesCare({ planKey: p.planKey, basis: record<WebsiteCareBasis>(basis, identity(session, c)) }, await context(tx, session, c, s), clock()); if (checked.status !== 'READY' || !checked.value || crmPayloadDigest(checked.value) !== crmPayloadDigest(p)) fail('CURRENT_CARE_PROPOSAL_REQUIRED');

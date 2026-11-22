@@ -5,6 +5,7 @@ import { assertCrmUuid, assertExpectedVersion, assertProjectGrant, CrmCommandErr
 import { assertFreshOfferSession, assertOfferApproval, nextOfferStatus, offerApprovalPayload, offerDate, offerText, offerTotal, parseOfferContent, OfferValidationError, type OfferAction, type OfferContent, type OfferStatus } from "@/lib/offer-workflow";
 import { evaluateOutboundConsent } from "@/lib/db/consent-policy";
 import { assertWebsiteSalesOfferEvidence, websiteSalesOfferInvalidated } from "./website-sales-offer-evidence";
+import {lockWebsiteSalesCommerceOffer} from "./website-sales-commerce-offer-guard";
 
 type OfferRow = { id: string; workspaceId: string; projectId: string; division: string; dealId: string; contactId: string; leadId: string; organizationId: string; status: OfferStatus; revision: number; version: number; approvalId: string | null; followUpStatus: string; followUpAt: string | null; responseReference: string | null; content: OfferContent; contentDigest: string; totalNetCents: string | number };
 type ApprovalRow = { id: string; revision: number; digest: string; actorId: string; expiresAt: string; decision: string };
@@ -75,6 +76,7 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
     if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) error("INVALID_OFFER_PAYLOAD", 400);
     const expectedVersion = assertExpectedVersion(input.expectedVersion);
     return await withCrmCommandPreflight(session, offerCommandInput(input), async (outer, fresh) => {
+    await lockWebsiteSalesCommerceOffer(outer,fresh,input.offerId,input.operation);
     const result = await executeCrmCommand(fresh, offerCommandInput(input), async (tx, context) => {
       const session = context.session;
       if (input.operation === "create") {
@@ -166,7 +168,7 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
         if (Date.parse(offer.content.validUntil) <= Date.now()) error("OFFER_EXPIRED");
         const reference = offerText(payload.reference, "RESPONSE_REFERENCE", 2000);
         const reason = input.operation === "reject" ? offerText(payload.reason, "REJECTION_REASON", 2000) : "Offer accepted";
-        const receipt = await tx.queryOne(`select id from crm_offer_deliveries where workspace_id=$1::uuid and offer_id=$2::uuid and revision=$3 and content_digest=$4 and status='MANUALLY_ATTESTED'`, [session.workspaceId, offer.id, offer.revision, offer.contentDigest]);
+        const receipt = await tx.queryOne(`select id from crm_offer_deliveries where workspace_id=$1::uuid and offer_id=$2::uuid and revision=$3 and content_digest=$4 and status in('MANUALLY_ATTESTED','PROVIDER_DELIVERED')`, [session.workspaceId, offer.id, offer.revision, offer.contentDigest]);
         if (!receipt) error("SENT_OFFER_REQUIRED");
         const deal = await tx.queryOne<{ stage: string }>(`select stage from deals where workspace_id=$1::uuid and id=$2::uuid for update`, [session.workspaceId, offer.dealId]);
         if (!deal) error("DEAL_NOT_FOUND", 404);

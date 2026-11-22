@@ -11,7 +11,7 @@ export async function seedWebsiteSalesWorkbenchBrowser(db, account) {
   assert(path.resolve(db.directory).startsWith(path.resolve(".npm-cache/qa") + path.sep));
   assert(/^sales_qa_[a-f0-9]+$/.test(db.role));
   const extension = JSON.parse(await readFile("config/crm-candidate-fresh-website-sales-extension.json", "utf8"));
-  const reviewedLengths = { WEBSITE_SALES_IRELAND_202: 1, WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205: 4, WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207: 6, WEBSITE_SALES_ENABLEMENT_208: 7 };
+  const reviewedLengths = { WEBSITE_SALES_IRELAND_202: 1, WEBSITE_SALES_RUNTIME_STUDIO_LIFECYCLE_205: 4, WEBSITE_SALES_OPERATIONS_CONVERSATIONS_207: 6, WEBSITE_SALES_ENABLEMENT_208: 7, WEBSITE_SALES_COMMERCE_209: 8 };
   assert(Object.hasOwn(reviewedLengths, extension.id));
   assert.equal(extension.forward.length, reviewedLengths[extension.id]);
   const entry = extension.forward.find(item => item.path === "migrations/202_website_sales_ireland.sql");
