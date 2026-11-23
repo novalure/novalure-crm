@@ -61,6 +61,15 @@ test('source revocation during a model call discards its output while preserving
   const f = fixture(); f.current(n => n < 3); const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
   assert.equal(out.status, 'STALE'); assert.equal(out.text, null); assert(out.chargedCredits! > 0); assert.equal(f.settled[0].status, 'succeeded');
 });
+test('expiry while the independent credit reservation commits prevents provider dispatch and releases unused credits', async () => {
+  const f = fixture(); let now = Date.parse('2026-11-23T07:00:00Z');
+  f.profile.validUntil = new Date(now + 1000).toISOString(); f.ports.now = () => now;
+  const reserve = f.ports.reserve!;
+  f.ports.reserve = async (...args) => { const held = await reserve(...args); now += 2000; return held; };
+  const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
+  assert.equal(out.status, 'STALE'); assert.equal(f.counts().generated, 0);
+  assert.deepEqual(f.settled.map(s => [s.actualCredits, s.status]), [[0, 'failed']]);
+});
 test('a transcript assertion must quote an actual exact segment before it can become a review candidate', async () => {
   const f = fixture(), id = randomUUID(); f.input.kind = 'TRANSCRIPT_ANALYSIS';
   f.input.segments = [{ id, speaker: 'CUSTOMER', startMs: 0, endMs: 1000, text: 'Our preferred launch is in February.' }];

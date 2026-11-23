@@ -4,6 +4,7 @@ import test from 'node:test';
 import type { AppSession } from '../src/lib/auth/session';
 import { createWebsiteSalesBuyerHttp, type WebsiteSalesBuyerHttpPorts } from '../src/lib/website-sales-buyer-http';
 import { advisoryBuyerCommandSchema } from '../src/lib/website-sales-advisory-types';
+import { advisoryBuyerActorBindingHash } from '../src/lib/website-sales-advisory-domain';
 
 function fixture() {
   const token = randomBytes(32).toString('base64url'), origin = 'https://crm.example.invalid';
@@ -11,15 +12,16 @@ function fixture() {
     name: 'Synthetic buyer', role: 'agent', permissions: [], productRole: 'customer_owner', productPermissions: [], source: 'cookie', authSessionId: randomUUID(), authIdentityId: randomUUID() };
   let actor: AppSession | null = session, lost = false, badReceipt = false, badProjection = false, badAsset = false, writes = 0, reads = 0, csrf = 0;
   const packetRef = { id: randomUUID(), version: 1, digest: 'a'.repeat(64) }, grantId = randomUUID(), stepId = randomUUID();
+  const actorBindingHash = advisoryBuyerActorBindingHash({ principalUserId: session.userId, authIdentityId: session.authIdentityId!, workspaceId: session.workspaceId, grantId, packetRef });
   const command = advisoryBuyerCommandSchema.parse({ contractVersion: 'website-sales-advisory-buyer-v1', grantId, expectedGrantVersion: 1, packetRef,
-    stepId, expectedStepVersion: 1, disposition: 'CONFIRMED', comment: null, idempotencyKey: randomUUID(), correlationId: randomUUID() });
+    actorBindingHash, stepId, expectedStepVersion: 1, disposition: 'CONFIRMED', comment: null, idempotencyKey: randomUUID(), correlationId: randomUUID() });
   const projection = () => ({ contractVersion: 'website-sales-advisory-buyer-v1', grantId, grantVersion: 1, expiresAt: '2027-01-01T00:00:00Z', actorUserId: actor?.userId ?? null,
-    authAssurance: actor ? 'AUTHENTICATED_ACCOUNT' : 'READ_ONLY_LINK', canWrite: actor !== null, blockers: [], packetRef, title: 'Synthetic approved packet', summary: 'Only approved customer information.',
+    authAssurance: actor ? 'AUTHENTICATED_ACCOUNT' : 'READ_ONLY_LINK', actorBindingHash: actor ? actorBindingHash : null, canWrite: actor !== null, blockers: [], packetRef, title: 'Synthetic approved packet', summary: 'Only approved customer information.',
     decisionCriteria: ['Accessible booking'], options: [{ label: 'Approved option', benefits: ['Clear booking'], limits: ['Scope stays as approved'] }],
     steps: [{ id: stepId, version: writes + 1, label: 'Discuss the next step', responsible: 'BUYER', dueAt: null, status: writes ? 'CONFIRMED' : 'PROPOSED' }], questions: [], demo: null, video: null,
     ...(badProjection ? { internalMargin: 'Must never be disclosed' } : {}) });
   const receipt = (replayed: boolean) => ({ contractVersion: 'website-sales-advisory-buyer-v1', persisted: true, commandId: randomUUID(), auditReference: randomUUID(),
-    correlationId: command.correlationId, replayed, data: { grantId, grantVersion: 1, packetRef, actorUserId: badReceipt ? randomUUID() : session.userId,
+    correlationId: command.correlationId, replayed, data: { grantId, grantVersion: 1, packetRef, actorBindingHash, actorUserId: badReceipt ? randomUUID() : session.userId,
       stepId, stepVersion: 2, questionId: null } });
   const bytes = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
   const ports: WebsiteSalesBuyerHttpPorts = {

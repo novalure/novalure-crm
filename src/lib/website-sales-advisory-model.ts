@@ -48,14 +48,14 @@ function configuredProfile(): unknown {
 /** Selects approved excerpts or exact transcript quotes. It has no tools or commercial write authority. */
 export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: AdvisoryModelInput, ports: AdvisoryModelPorts,
   options: TenantTransactionOptions = {}): Promise<AdvisoryModelResult> {
-  const input = inputSchema.parse(raw), now = ports.now?.() ?? Date.now(), profile = profileSchema.safeParse(ports.profile ?? configuredProfile());
+  const input = inputSchema.parse(raw), clock = () => ports.now?.() ?? Date.now(), profile = profileSchema.safeParse(ports.profile ?? configuredProfile());
   const humanActor = !session.serviceIdentity && ['cookie', 'database'].includes(session.source) && session.authSessionId && session.authIdentityId;
   const delegatedActor = session.source === 'database' && ports.actorAuthority?.kind === 'BOUND_SALES_ADVISORY_EXECUTOR'
     && await ports.actorAuthority.isCurrentActor(session);
   if (!session.authenticated || session.workspaceId !== input.identity.workspaceId || (!humanActor && !delegatedActor))
     return result(input, 'UNAVAILABLE', 'AUTHENTICATED_MODEL_ACTOR_REQUIRED');
   if (!profile.success || !profile.data.targets.some(t => t.workspaceId === input.identity.workspaceId && t.projectId === input.identity.projectId)
-    || Date.parse(profile.data.validUntil) <= now) return result(input, 'UNAVAILABLE', 'MODEL_SCOPE_NOT_ACTIVATED');
+    || Date.parse(profile.data.validUntil) <= clock()) return result(input, 'UNAVAILABLE', 'MODEL_SCOPE_NOT_ACTIVATED');
   if (!await ports.isCurrent(input)) return result(input, 'STALE', 'CURRENT_SOURCE_AUTHORITY_REQUIRED');
   if (input.kind === 'ADVICE' && !input.sources.length || input.kind === 'TRANSCRIPT_ANALYSIS' && !input.segments.length
     || input.kind === 'ROLEPLAY' && (!input.scenario || !input.sources.length)) return result(input, 'UNANSWERABLE', 'SOURCE_REQUIRED');
@@ -85,14 +85,21 @@ export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: Adv
     if (held.replayed) return result(input, 'UNKNOWN', 'EXISTING_RESERVATION_NO_MODEL_RETRY', { model });
   } catch { return result(input, 'UNAVAILABLE', 'MODEL_CREDIT_AUTHORITY_REQUIRED', { model }); }
   // Authority may have changed while the independent durable credit reservation committed.
-  if (!await ports.isCurrent(input)) {
+  if (!await ports.isCurrent(input) || Date.parse(profile.data.validUntil) <= clock()) {
     try { await settle(session, { requestId: input.requestId, actualCredits: 0, status: 'failed' }, options); } catch { /* held for billing reconciliation */ }
-    return result(input, 'STALE', 'SOURCE_CHANGED_BEFORE_MODEL', { model });
+    return result(input, 'STALE', 'SOURCE_OR_COST_PROFILE_CHANGED_BEFORE_MODEL', { model });
+  }
+  const remainingProfileMs = Date.parse(profile.data.validUntil) - clock();
+  if (remainingProfileMs <= 0) {
+    try { await settle(session, { requestId: input.requestId, actualCredits: 0, status: 'failed' }, options); } catch { /* held for billing reconciliation */ }
+    return result(input, 'STALE', 'COST_PROFILE_EXPIRED_AT_MODEL_DISPATCH', { model });
   }
   let generated: Awaited<ReturnType<typeof generateText>>;
   try {
     generated = await generateText({ model: ports.model ?? createGateway({ apiKey })(model), output: Output.object({ schema: selectionSchema }),
-      maxOutputTokens: reservation.maxOutputTokens, maxRetries: 0, timeout: AI_PROVIDER_TIMEOUT_MS, reasoning: 'none', system, prompt });
+      maxOutputTokens: reservation.maxOutputTokens, maxRetries: 0, timeout: AI_PROVIDER_TIMEOUT_MS,
+      abortSignal: AbortSignal.timeout(Math.min(AI_PROVIDER_TIMEOUT_MS, remainingProfileMs)),
+      reasoning: 'none', system, prompt });
   } catch (error) {
     if (APICallError.isInstance(error) && error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 408) {
       try { await settle(session, { requestId: input.requestId, actualCredits: 0, status: 'failed' }, options); } catch { /* held for reconciliation */ }
@@ -107,7 +114,7 @@ export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: Adv
   const chargedCredits = aiCreditsForTokens(model, usage.inputTokens!, usage.outputTokens!);
   try { await settle(session, { requestId: input.requestId, actualCredits: chargedCredits, status: 'succeeded' }, options); }
   catch { return result(input, 'UNKNOWN', 'MODEL_SETTLEMENT_PENDING_REVIEW', { model }); }
-  if (!await ports.isCurrent(input)) return result(input, 'STALE', 'SOURCE_CHANGED_DURING_MODEL', { model, chargedCredits });
+  if (!await ports.isCurrent(input) || Date.parse(profile.data.validUntil) <= clock()) return result(input, 'STALE', 'SOURCE_OR_COST_PROFILE_CHANGED_DURING_MODEL', { model, chargedCredits });
   const parsed = selectionSchema.safeParse(generated.output);
   if (!parsed.success) return result(input, 'UNANSWERABLE', 'MODEL_OUTPUT_REQUIRES_REVIEW', { model, chargedCredits });
   const out = parsed.data;

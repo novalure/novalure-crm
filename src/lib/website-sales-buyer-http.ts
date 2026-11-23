@@ -9,6 +9,7 @@ import { CrmCommandError, crmRequestMetadata } from './crm-command';
 import { readKnowledgeJson } from './knowledge-center/http';
 import { KnowledgeCenterError } from './knowledge-center/policy';
 import { advisoryBuyerCommandSchema, advisoryBuyerProjectionSchema, advisoryBuyerReceiptSchema, advisoryBuyerReconcileSchema } from './website-sales-advisory-types';
+import { advisoryBuyerActorBindingHash } from './website-sales-advisory-domain';
 
 type BuyerCommand = z.infer<typeof advisoryBuyerCommandSchema>;
 export interface WebsiteSalesBuyerHttpPorts {
@@ -40,7 +41,9 @@ async function currentSession(request: Request, ports: WebsiteSalesBuyerHttpPort
 function safeRead(value: unknown, session: AppSession | null) {
   const parsed = advisoryBuyerProjectionSchema.safeParse(value); if (!parsed.success) throw Error('Buyer projection unconfirmed');
   const data = parsed.data;
-  if (data.canWrite && (!session || data.actorUserId !== session.userId || data.authAssurance !== 'AUTHENTICATED_ACCOUNT')) denied();
+  if (data.canWrite && (!session || data.actorUserId !== session.userId || data.authAssurance !== 'AUTHENTICATED_ACCOUNT'
+    || data.actorBindingHash !== advisoryBuyerActorBindingHash({ principalUserId: session.userId, authIdentityId: session.authIdentityId!,
+      workspaceId: session.workspaceId, grantId: data.grantId, packetRef: data.packetRef }))) denied();
   return data;
 }
 function failure(error: unknown): Response {
@@ -58,14 +61,14 @@ function safeReceipt(value: unknown, command: BuyerCommand, session: AppSession)
   const parsed = advisoryBuyerReceiptSchema.safeParse(value); if (!parsed.success) throw Error('Buyer receipt unconfirmed');
   const data = parsed.data;
   if (data.correlationId !== command.correlationId || data.data.grantId !== command.grantId || data.data.actorUserId !== session.userId
-    || JSON.stringify(data.data.packetRef) !== JSON.stringify(command.packetRef) || data.data.stepId !== command.stepId
+    || JSON.stringify(data.data.packetRef) !== JSON.stringify(command.packetRef) || data.data.stepId !== command.stepId || data.data.actorBindingHash !== command.actorBindingHash
     || data.data.grantVersion < command.expectedGrantVersion || command.disposition === 'QUESTION' && !data.data.questionId
     || command.disposition !== 'QUESTION' && (data.data.stepVersion === null || data.data.stepVersion <= command.expectedStepVersion!))
     throw Error('Buyer result unconfirmed');
   return data;
 }
 async function commandBody(request: Request): Promise<BuyerCommand> {
-  const raw = await readKnowledgeJson(request, ['contractVersion', 'grantId', 'expectedGrantVersion', 'packetRef', 'stepId', 'expectedStepVersion', 'disposition', 'comment', 'idempotencyKey', 'correlationId'], 32768);
+  const raw = await readKnowledgeJson(request, ['contractVersion', 'grantId', 'expectedGrantVersion', 'packetRef', 'actorBindingHash', 'stepId', 'expectedStepVersion', 'disposition', 'comment', 'idempotencyKey', 'correlationId'], 32768);
   const metadata = crmRequestMetadata(request, raw);
   if (raw.idempotencyKey !== metadata.idempotencyKey || raw.correlationId !== metadata.correlationId) denied(400);
   return advisoryBuyerCommandSchema.parse(raw);
