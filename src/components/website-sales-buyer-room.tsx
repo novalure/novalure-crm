@@ -35,22 +35,23 @@ function BuyerVideo({ token, video, language }: { token: string; video: NonNulla
   </Surface>;
 }
 export function WebsiteSalesBuyerRoom() {
-  const prefix = useId(), root = useRef<HTMLElement>(null), generation = useRef(0), loadingRef = useRef<string | null>(null), busyRef = useRef(false);
+  const prefix = useId(), root = useRef<HTMLElement>(null), generation = useRef(0), tokenEpoch = useRef(0), currentToken = useRef<string | null>(null), mounted = useRef(false), loadingRef = useRef<string | null>(null), busyRef = useRef(false);
   const [token, setToken] = useState<string | null>(null), [initialized, setInitialized] = useState(false), [language, setLanguage] = useState('de');
   const [data, setData] = useState<WebsiteSalesAdvisoryBuyerRead | null>(null), [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [unavailable, setUnavailable] = useState(false);
-  const [notice, setNotice] = useState<'saved' | 'denied' | 'notFound' | null>(null), [, render] = useState(0);
+  const [notice, setNotice] = useState<'saved' | 'denied' | 'notFound' | null>(null), [, render] = useState(0), [refreshAttempt, requestRefresh] = useState(0);
   const de = language === 'de', pending = data ? buyerPending(data.grantId) : undefined, locked = loading || busy || Boolean(pending);
   useEffect(() => {
-    const update = () => { generation.current++; setData(null); setUnavailable(false); setNotice(null); setToken(fragmentToken()); setInitialized(true); };
-    update(); window.addEventListener('hashchange', update); return () => window.removeEventListener('hashchange', update);
+    mounted.current = true;
+    const update = () => { generation.current++; tokenEpoch.current++; currentToken.current = fragmentToken(); setData(null); setLoading(false); setUnavailable(false); setNotice(null); setToken(currentToken.current); setInitialized(true); };
+    update(); window.addEventListener('hashchange', update); return () => { mounted.current = false; window.removeEventListener('hashchange', update); };
   }, []);
   useEffect(() => subscribeBuyerPending(() => render(value => value + 1)), []);
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    if (!token || loadingRef.current === token || busyRef.current) return;
+    if (!token || token !== currentToken.current || !mounted.current || loadingRef.current === token || busyRef.current) return;
     loadingRef.current = token; setLoading(true); const ticket = ++generation.current;
-    try { const value = await readBuyer(token, signal); if (!signal?.aborted && ticket === generation.current) { setData(value); setUnavailable(false); } }
-    catch { if (!signal?.aborted && ticket === generation.current) { setData(null); setUnavailable(true); } }
-    finally { if (loadingRef.current === token) loadingRef.current = null; if (!signal?.aborted && ticket === generation.current) setLoading(false); }
+    try { const value = await readBuyer(token, signal); if (mounted.current && !signal?.aborted && ticket === generation.current) { setData(value); setUnavailable(false); } }
+    catch { if (mounted.current && !signal?.aborted && ticket === generation.current) { setData(null); setUnavailable(true); } }
+    finally { if (loadingRef.current === token) loadingRef.current = null; if (mounted.current && !signal?.aborted && ticket === generation.current) setLoading(false); }
   }, [token]);
   useEffect(() => {
     if (!token) return;
@@ -59,7 +60,7 @@ export function WebsiteSalesBuyerRoom() {
     window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus);
     const poll = setInterval(onFocus, 15000);
     return () => { abort.abort(); clearTimeout(initial); clearInterval(poll); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
-  }, [token, refresh]);
+  }, [token, refresh, refreshAttempt]);
   useEffect(() => {
     if (!data) return;
     const expiry = setTimeout(() => { generation.current++; setData(null); setUnavailable(true); }, Math.max(0, Math.min(2147483647, Date.parse(data.expiresAt) - Date.now())));
@@ -71,17 +72,19 @@ export function WebsiteSalesBuyerRoom() {
   }, [data]);
   async function execute(value: Record<string, unknown>) {
     if (!token || !data || locked || !data.canWrite) return false;
+    const epoch = tokenEpoch.current;
     busyRef.current = true; setBusy(true); setNotice(null); generation.current++;
-    try { await writeBuyer(token, data, advisoryBuyerCommandSchema.parse(value)); setNotice('saved'); return true; }
-    catch (error) { if (!(error instanceof BuyerBrowserError && error.outcome === 'UNKNOWN')) setNotice('denied'); return false; }
-    finally { busyRef.current = false; setBusy(false); void refresh(); }
+    try { await writeBuyer(token, data, advisoryBuyerCommandSchema.parse(value)); if (mounted.current && epoch === tokenEpoch.current) setNotice('saved'); return epoch === tokenEpoch.current; }
+    catch (error) { if (mounted.current && epoch === tokenEpoch.current && !(error instanceof BuyerBrowserError && error.outcome === 'UNKNOWN')) setNotice('denied'); return false; }
+    finally { busyRef.current = false; if (mounted.current) { setBusy(false); requestRefresh(attempt => attempt + 1); } }
   }
   async function recover(retry: boolean) {
     if (!token || !data || !pending || busy || loading) return;
+    const epoch = tokenEpoch.current;
     busyRef.current = true; setBusy(true); setNotice(null);
-    try { const result = retry ? (await writeBuyer(token, data, pending.command, true), 'COMMITTED') : await reconcileBuyer(token, data); setNotice(result === 'NOT_FOUND' ? 'notFound' : 'saved'); }
-    catch { setNotice('denied'); }
-    finally { busyRef.current = false; setBusy(false); void refresh(); }
+    try { const result = retry ? (await writeBuyer(token, data, pending.command, true), 'COMMITTED') : await reconcileBuyer(token, data); if (mounted.current && epoch === tokenEpoch.current) setNotice(result === 'NOT_FOUND' ? 'notFound' : 'saved'); }
+    catch { if (mounted.current && epoch === tokenEpoch.current) setNotice('denied'); }
+    finally { busyRef.current = false; if (mounted.current) { setBusy(false); requestRefresh(attempt => attempt + 1); } }
   }
   function command(fields: Pick<BuyerCommand, 'stepId' | 'expectedStepVersion' | 'disposition' | 'comment'>) {
     if (!data) throw Error();
