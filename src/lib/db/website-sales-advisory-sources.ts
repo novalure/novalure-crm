@@ -7,7 +7,7 @@ import { assertWebsiteSalesStudioSourceBindings } from './website-sales-studio-s
 import { verifyWebsiteStudioArtifact, type WebsiteStudioArtifact } from '../website-sales-studio';
 import { verifyWebsiteStudioQaCertificate } from '../website-sales-studio-qa';
 import { websiteProspectInputSchema } from '../website-prospect';
-import { advisoryReferenceSchema, type AdvisoryReference, type AdvisorySource } from '../website-sales-advisory-types';
+import { advisoryReferenceSchema, advisoryCohortMemberSchema, type AdvisoryReference, type AdvisorySource } from '../website-sales-advisory-types';
 import { advisoryFail as fail, advisoryIdentity as identity, advisoryParams as params, advisoryIso as iso, advisoryState, type AdvisoryScope as Scope, type AdvisoryJson as Json } from './website-sales-advisory-storage';
 
 export type AdvisoryCanonicalParent = { reference: AdvisoryReference; identity: ReturnType<typeof identity>; workflowId: string; workflowVersion: number;
@@ -99,4 +99,27 @@ export async function assertAdvisoryPublication(tx:TenantTransaction,s:AppSessio
   const packet=await tx.queryOne<{payload:Json}>(`select payload from crm_website_sales_advisory_records r where workspace_id=$1 and project_id=$2 and company_id=$3 and location_id=$4 and workflow_id=$5 and entity_id=$6 and version=$7 and record_digest=$8 and kind='BUYER_PACKET' and exists(select 1 from crm_website_sales_advisory_records a join workspace_users u on u.workspace_id=a.workspace_id and u.id=a.created_by and u.status='active' and u.role='owner' where a.workspace_id=r.workspace_id and a.workflow_id=r.workflow_id and a.kind='BUYER_PACKET_APPROVAL' and a.payload->'recordRef'=$9::jsonb and a.valid_until>clock_timestamp())`,[...params(s,b),packetRef.id,packetRef.version,packetRef.digest,JSON.stringify(packetRef)]);
   if(!packet||!(packet.payload.value as Json).demoRefs||!((packet.payload.value as Json).demoRefs as AdvisoryReference[]).some(d=>d.digest===String((value.demoRef as Json).digest)))fail('ADVISORY_APPROVED_PACKET_DEMO_REQUIRED');
  }
+}
+
+/** Shared experiment metadata is visible only after every frozen resource and the anchor are admitted. */
+export async function advisoryExperimentPlans(tx:TenantTransaction,s:AppSession,b:Scope){
+ const state=await advisoryState(tx,s,b),allowed=websiteSalesResourceReadScopes(s,b.projectId);
+ const scopeWhere=allowed?`and exists(select 1 from jsonb_array_elements($6::jsonb) a where a->>'companyId'=r.company_id::text and a->>'locationId'=r.location_id::text) and not exists(select 1 from jsonb_array_elements(r.payload->'cohort') member where not exists(select 1 from jsonb_array_elements($6::jsonb) a where a->>'companyId'=member#>>'{identity,companyId}' and a->>'locationId'=member#>>'{identity,locationId}'))`:'';
+ const selected=`r.workspace_id=$1 and r.project_id=$2 and r.kind='EXPERIMENT_PLAN' and exists(select 1 from jsonb_array_elements(r.payload->'cohort') member where member#>>'{identity,workspaceId}'=$1::text and member#>>'{identity,projectId}'=$2::text and member#>>'{identity,companyId}'=$3::text and member#>>'{identity,locationId}'=$4::text and member->>'workflowId'=$5::text)`;
+ const values=[...params(s,b),...(allowed?[JSON.stringify(allowed)]:[])];
+ const rows=await tx.query<{rowId:string;id:string;version:number;digest:string;companyId:string;locationId:string;workflowId:string;payload:Json}>(`select r.id as "rowId",r.entity_id as id,r.version,r.record_digest as digest,r.company_id as "companyId",r.location_id as "locationId",r.workflow_id as "workflowId",r.payload from crm_website_sales_advisory_records r where ${selected} ${scopeWhere} and r.valid_until>clock_timestamp() and (r.payload->>'enrollmentEndsAt')::timestamptz>clock_timestamp() and not exists(select 1 from crm_website_sales_advisory_records n where n.workspace_id=r.workspace_id and n.workflow_id=r.workflow_id and n.entity_id=r.entity_id and n.version>r.version) and not exists(select 1 from crm_website_sales_advisory_records stop where stop.workspace_id=r.workspace_id and stop.project_id=r.project_id and stop.kind='EXPERIMENT_STOP' and stop.payload#>>'{experimentRef,id}'=r.entity_id::text) and not exists(select 1 from crm_website_sales_advisory_assignments a where a.workspace_id=r.workspace_id and a.experiment_record_id=r.id and a.company_id=$3::uuid) order by r.created_at desc,r.id limit 51`,values);
+ let partial=rows.length>50;
+ if(allowed){const denied=await tx.queryOne(`select r.id from crm_website_sales_advisory_records r where ${selected} and not(${scopeWhere.slice(4)}) limit 1`,values);partial ||=!!denied;}
+ const plans:Array<{label:string;reference:AdvisoryReference;identity:ReturnType<typeof identity>;workflowId:string;cohort:import('zod').infer<typeof advisoryCohortMemberSchema>[]}> = [];
+ for(const r of rows.slice(0,50)){
+  try{
+   const anchor={projectId:b.projectId,companyId:r.companyId,locationId:r.locationId,workflowId:r.workflowId};await advisoryState(tx,s,anchor);
+   const cohort=advisoryCohortMemberSchema.array().parse(r.payload.cohort);
+   for(const m of cohort){if(m.identity.workspaceId!==s.workspaceId||m.identity.projectId!==b.projectId)fail('ADVISORY_COHORT_SCOPE_DENIED',403);await advisoryState(tx,s,{projectId:b.projectId,companyId:m.identity.companyId,locationId:m.identity.locationId,workflowId:m.workflowId});}
+   const own=cohort.find(m=>m.workflowId===b.workflowId&&m.identity.companyId===b.companyId&&m.identity.locationId===b.locationId);if(!own||own.workflowVersion!==state.row.version||own.sourceDigest!==state.row.evidenceDigest)continue;
+   if(!(await tx.queryOne<{ok:boolean}>('select crm_website_sales_advisory_current_for_actor($1,$2,$3,$4,$5,$6) as ok',[...params(s,anchor),r.rowId]))?.ok)continue;
+   plans.push({label:String(r.payload.title).slice(0,200),reference:{id:r.id,version:Number(r.version),digest:r.digest},identity:identity(s,anchor),workflowId:r.workflowId,cohort});
+  }catch(error){if(error&&typeof error==='object'&&'status'in error&&Number(error.status)>=400&&Number(error.status)<500){partial=true;continue;}throw error;}
+ }
+ return {plans,partial};
 }
