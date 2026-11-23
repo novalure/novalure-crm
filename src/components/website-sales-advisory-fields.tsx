@@ -35,6 +35,7 @@ export function AdvisoryForm({ action, title, submitLabel, language, allowed, lo
   const summary = useRef<HTMLDivElement>(null), inFlight = useRef(false);
   const [submitting, setSubmitting] = useState(false), [errors, setErrors] = useState<Record<string, string>>({});
   const id = (name: string) => `${prefix}-${name.replaceAll('.', '-')}`;
+  const headingId = `${prefix}-form-heading`;
   const context: AdvisoryFormContext = { id, errors, input: name => ({ id: id(name), name, 'aria-invalid': errors[name] ? true : undefined, 'aria-describedby': errors[name] ? `${id(name)}-error` : undefined }) };
   useEffect(() => { if (Object.keys(errors).length) summary.current?.focus(); }, [errors]);
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -64,8 +65,8 @@ export function AdvisoryForm({ action, title, submitLabel, language, allowed, lo
     } finally { inFlight.current = false; setSubmitting(false); }
   }
   return <form data-advisory-action={action} noValidate onSubmit={event => void save(event)} onInputCapture={event => { event.currentTarget.dataset.advisoryDirty = 'true'; }} className="space-y-4">
-    <h4 id={id('title')} tabIndex={-1} className="font-semibold text-slate-950">{title}</h4>
-    {Object.keys(errors).length > 0 && <div ref={summary} role="alert" tabIndex={-1} className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-950"><p className="font-semibold">{de ? 'Bitte prüfen Sie die Angaben' : 'Check these details'}</p><ul className="mt-2 list-disc space-y-1 pl-5">{Object.entries(errors).map(([name, message]) => <li key={name}><a className="underline underline-offset-4" href={`#${name === '_form' ? id('title') : id(name)}`}>{message}</a></li>)}</ul></div>}
+    <h4 id={headingId} tabIndex={-1} className="font-semibold text-slate-950">{title}</h4>
+    {Object.keys(errors).length > 0 && <div ref={summary} role="alert" tabIndex={-1} className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-950"><p className="font-semibold">{de ? 'Bitte prüfen Sie die Angaben' : 'Check these details'}</p><ul className="mt-2 list-disc space-y-1 pl-5">{Object.entries(errors).map(([name, message]) => <li key={name}><a className="underline underline-offset-4" href={`#${name === '_form' ? headingId : id(name)}`}>{message}</a></li>)}</ul></div>}
     {!allowed && <Notice>{de ? 'Dieser Schritt ist für Ihren Zugang oder den aktuellen Stand noch nicht verfügbar. Die Übersicht zeigt die fehlenden Voraussetzungen.' : 'This step is not available for your access or the current record. The overview lists missing requirements.'}</Notice>}
     <fieldset disabled={locked || !allowed || submitting} className="min-w-0 space-y-4">{children(context)}<Button type="submit" className="min-h-11">{submitting ? de ? 'Wird gespeichert …' : 'Saving…' : submitLabel}</Button></fieldset>
   </form>;
