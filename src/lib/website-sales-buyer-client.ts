@@ -43,8 +43,8 @@ export function buyerPending(grantId: string): BuyerPending | undefined {
 }
 function clear(item: BuyerPending) { window.sessionStorage.removeItem(key(item.grantId, item.actorUserId)); pending.delete(key(item.grantId, item.actorUserId)); notify(); }
 function identity(data: WebsiteSalesAdvisoryBuyerRead, item?: BuyerPending) {
-  if (!data.canWrite || !data.actorUserId || data.authAssurance !== 'AUTHENTICATED_ACCOUNT' || Date.parse(data.expiresAt) <= Date.now()) throw Error('BUYER_AUTHENTICATED_ACCOUNT_REQUIRED');
-  if (item && (item.damaged || item.actorUserId !== data.actorUserId || item.grantId !== data.grantId || ref(item.command.packetRef) !== ref(data.packetRef) || data.grantVersion < item.command.expectedGrantVersion)) throw Error('BUYER_ORIGINAL_ACCOUNT_REQUIRED');
+  if (!data.canWrite || !data.actorUserId || !data.actorBindingHash || data.authAssurance !== 'AUTHENTICATED_ACCOUNT' || Date.parse(data.expiresAt) <= Date.now()) throw Error('BUYER_AUTHENTICATED_ACCOUNT_REQUIRED');
+  if (item && (item.damaged || item.actorUserId !== data.actorUserId || item.command.actorBindingHash !== data.actorBindingHash || item.grantId !== data.grantId || ref(item.command.packetRef) !== ref(data.packetRef) || data.grantVersion < item.command.expectedGrantVersion)) throw Error('BUYER_ORIGINAL_ACCOUNT_REQUIRED');
 }
 function remember(token: string, data: WebsiteSalesAdvisoryBuyerRead) {
   tokenGrant.set(token, data.grantId); latest.set(data.grantId, data);
@@ -84,7 +84,7 @@ export async function readBuyer(token: string, signal?: AbortSignal) {
 }
 function receipt(raw: unknown, item: BuyerPending) {
   const value = advisoryBuyerReceiptSchema.parse(raw), effect = value.data, command = item.command;
-  if (value.correlationId !== command.correlationId || effect.grantId !== item.grantId || effect.actorUserId !== item.actorUserId || ref(effect.packetRef) !== ref(command.packetRef) || effect.grantVersion < command.expectedGrantVersion || effect.stepId !== command.stepId || command.disposition === 'QUESTION' && effect.questionId === null ||
+  if (value.correlationId !== command.correlationId || effect.grantId !== item.grantId || effect.actorUserId !== item.actorUserId || effect.actorBindingHash !== command.actorBindingHash || ref(effect.packetRef) !== ref(command.packetRef) || effect.grantVersion < command.expectedGrantVersion || effect.stepId !== command.stepId || command.disposition === 'QUESTION' && effect.questionId === null ||
     (command.stepId === null ? effect.stepVersion !== null || effect.questionId === null : effect.stepVersion === null || effect.stepVersion < command.expectedStepVersion!)) throw Error('BUYER_RECEIPT_BINDING_DENIED');
   return value;
 }
@@ -97,7 +97,7 @@ export async function writeBuyer(token: string, data: WebsiteSalesAdvisoryBuyerR
     item = old;
   } else {
     advisoryBuyerCommandSchema.parse(command);
-    if (command.grantId !== data.grantId || ref(command.packetRef) !== ref(data.packetRef) || command.expectedGrantVersion !== data.grantVersion || command.stepId !== null && !data.steps.some(step => step.id === command.stepId && step.version === command.expectedStepVersion)) throw new BuyerBrowserError('DENIED', 'BUYER_CURRENT_SELECTION_REQUIRED');
+    if (command.grantId !== data.grantId || command.actorBindingHash !== data.actorBindingHash || ref(command.packetRef) !== ref(data.packetRef) || command.expectedGrantVersion !== data.grantVersion || command.stepId !== null && !data.steps.some(step => step.id === command.stepId && step.version === command.expectedStepVersion)) throw new BuyerBrowserError('DENIED', 'BUYER_CURRENT_SELECTION_REQUIRED');
     const body = JSON.stringify(command); if (bytes(body) > 32768) throw new BuyerBrowserError('DENIED', 'BUYER_COMMAND_TOO_LARGE');
     item = { actorUserId: data.actorUserId!, grantId: data.grantId, command, body, state: 'IN_FLIGHT', currentRead: false, retryAllowed: false };
   }

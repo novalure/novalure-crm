@@ -20,7 +20,7 @@ const selectedRef = (form: FormData, name: string, choices: { ref: ReturnType<ty
 const optionalRef = (form: FormData, name: string, choices: { ref: ReturnType<typeof advisoryRef>; label: string }[]) => advisoryText(form, name) ? selectedRef(form, name, choices) : null;
 export function AdvisoryPacketForms(props: AdvisoryFormProps) {
   const de = props.language === 'de', [options, setOptions] = useState([0]), [steps, setSteps] = useState<number[]>([]);
-  const facts = props.data.groundedFacts.filter(fact => fact.visibility === 'APPROVED_CUSTOMER' && fact.approvalRef && Date.parse(fact.sourceReference.validUntil) > props.now);
+  const facts = props.data.groundedFacts.filter(fact => fact.category !== 'INTERNAL_CUSTOMER_FACT' && (fact.category !== 'APPROVED_REFERENCE' || fact.approvalRef) && Date.parse(fact.sourceReference.validUntil) > props.now);
   const valueCases = resultChoices(props, 'VALUE_CASE');
   return <div className="space-y-5">
     <Notice>{de ? 'Die Kundenmappe enthält ausschließlich gezielt freigegebene Informationen. Interne Notizen, Margen und Arbeitskosten werden nicht übernommen. Nutzenrechnungen sind Szenarien und erscheinen für Kunden nur mit aktuell freigegebenem Angebotsstand.' : 'The buyer packet contains only specifically approved information. Internal notes, margins and labour costs are excluded. Value calculations are scenarios and appear to customers only with the currently approved offer version.'}</Notice>

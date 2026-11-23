@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/status';
-import { advisoryKnowledgeSchema, advisoryTranscriptSchema } from '@/lib/website-sales-advisory-types';
+import { advisoryKnowledgeSchema, advisoryTranscriptSchema, advisoryRecordPayloadSchemas } from '@/lib/website-sales-advisory-types';
 import { AdvisoryChoices, AdvisoryFields, advisoryIso, advisoryText } from './website-sales-advisory-fields';
 import { AdvisoryAction, AdvisoryAddRow, AdvisoryRefChoice, AdvisorySources, advisoryLines, advisoryRecords, advisoryRef, advisoryRefKey, advisorySelected, readAdvisorySingleSource, readAdvisorySources, type AdvisoryFormProps } from './website-sales-advisory-form-context';
 
@@ -39,6 +39,7 @@ export function AdvisoryKnowledgeForms(props: AdvisoryFormProps) {
   const de = props.language === 'de', [criteria, setCriteria] = useState<number[]>([]), [scenarios, setScenarios] = useState<number[]>([]);
   const knowledge = advisoryRecords(props.data, 'KNOWLEDGE', advisoryKnowledgeSchema, props.now);
   const transcripts = advisoryRecords(props.data, 'TRANSCRIPT', advisoryTranscriptSchema, props.now);
+  const roleplays = advisoryRecords(props.data, 'ROLEPLAY', advisoryRecordPayloadSchemas.ROLEPLAY, props.now).filter(row => row.payload.status === 'READY' && row.payload.value);
   const choices = knowledge.map(row => ({ ref: advisoryRef(row), label: row.payload.title }));
   const pick = (form: FormData, name: string) => advisoryRef(advisorySelected(knowledge, advisoryText(form, name), row => advisoryRefKey(advisoryRef(row))));
   return <div className="space-y-5">
@@ -66,5 +67,6 @@ export function AdvisoryKnowledgeForms(props: AdvisoryFormProps) {
       const selected = advisorySelected(knowledge.flatMap(row => row.payload.scenarios.map(scenario => ({ knowledgeRef: advisoryRef(row), scenarioId: scenario.id, key: `${advisoryRefKey(advisoryRef(row))}:${scenario.id}` }))), advisoryText(form, 'scenario'), row => row.key);
       return { knowledgeRef: selected.knowledgeRef, scenarioId: selected.scenarioId };
     }}>{context => <AdvisoryChoices context={context} name="scenario" label={de ? 'Gespeicherte Übungssituation' : 'Stored practice scenario'} language={props.language} choices={knowledge.flatMap(row => row.payload.scenarios.map(scenario => ({ value: `${advisoryRefKey(advisoryRef(row))}:${scenario.id}`, label: `${row.payload.title} · ${scenario.situation}` })))}/>}</AdvisoryAction>
+    {roleplays.map(row => <AdvisoryAction key={advisoryRefKey(advisoryRef(row))} {...props} operation="prepare_roleplay" title={`${de ? 'Antwort in der Simulation üben' : 'Practise a reply in the simulation'} · ${new Date(row.createdAt).toLocaleString(de ? 'de-AT' : 'en-IE')}`} submitLabel={de ? 'Simulierte Kundenantwort vorbereiten' : 'Prepare simulated customer response'} build={form => ({ knowledgeRef: row.payload.value!.knowledgeRef, scenarioId: row.payload.value!.scenarioId, previousRoleplayRef: advisoryRef(row), sellerReply: advisoryText(form, 'sellerReply') })}>{context => <><blockquote className="border-l-2 border-blue-200 pl-4 text-sm">{row.payload.value!.customerReply ?? row.payload.value!.customerOpening}</blockquote><AdvisoryFields context={context} fields={[{ name: 'sellerReply', label: de ? 'Ihre Übungsantwort, ohne echte Kundendaten' : 'Your practice reply, without real customer data', multiline: true, maxLength: 2000 }]}/><p className="text-sm text-stone-600">{de ? 'Die nächste Antwort ist eine Simulation. Sie wird nicht an Kunden versandt.' : 'The next response is simulated and is not sent to customers.'}</p></>}</AdvisoryAction>)}
   </div>;
 }
