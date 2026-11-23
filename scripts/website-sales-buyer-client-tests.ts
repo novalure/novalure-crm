@@ -13,7 +13,7 @@ after(() => { globalThis.fetch = originalFetch; if (originalWindow) Object.defin
 function fixture() {
   const grantId = randomUUID(), actorUserId = randomUUID(), packetRef = { id: randomUUID(), version: 1, digest: 'a'.repeat(64) }, stepId = randomUUID();
   const data: WebsiteSalesAdvisoryBuyerRead = { contractVersion: 'website-sales-advisory-buyer-v1', grantId, grantVersion: 1, expiresAt: new Date(Date.now() + 3600000).toISOString(), actorUserId, authAssurance: 'AUTHENTICATED_ACCOUNT', canWrite: true, blockers: [], packetRef,
-    title: 'Synthetic decision packet', summary: 'Synthetic shared content', decisionCriteria: [], options: [], questions: [], demo: null, video: null, steps: [{ id: stepId, version: 1, label: 'Synthetic next step', responsible: 'BUYER', dueAt: null, status: 'PROPOSED' }] };
+    title: 'Synthetic decision packet', summary: 'Synthetic shared content', decisionCriteria: [], options: [], questions: [], demo: null, video: null, valueCase: null, steps: [{ id: stepId, version: 1, label: 'Synthetic next step', responsible: 'BUYER', dueAt: null, status: 'PROPOSED' }] };
   const command: client.BuyerCommand = { contractVersion: 'website-sales-advisory-buyer-v1', grantId, expectedGrantVersion: 1, packetRef, stepId, expectedStepVersion: 1, disposition: 'CONFIRMED', comment: null, idempotencyKey: randomUUID(), correlationId: randomUUID() };
   const receipt = { contractVersion: 'website-sales-advisory-buyer-v1', persisted: true, commandId: randomUUID(), auditReference: randomUUID(), correlationId: command.correlationId, replayed: false,
     data: { grantId, packetRef: { ...packetRef }, actorUserId, grantVersion: 1, stepId: stepId as string | null, stepVersion: 2 as number | null, questionId: null as string | null } };

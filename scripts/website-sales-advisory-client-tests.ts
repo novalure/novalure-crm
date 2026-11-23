@@ -25,7 +25,7 @@ function fixture() {
   const receipt = { contractVersion: websiteSalesAdvisoryContract, persisted: true, commandId: randomUUID(), auditReference: randomUUID(), correlationId: command.correlationId, replayed: false,
     data: { identity: { workspaceId, ...scope }, workflowId, version: 1, workflowVersion: 2, recordId: randomUUID(), recordDigest: 'a'.repeat(64), jobId: null, canContact: false } };
   const read: WebsiteSalesAdvisoryRead = { contractVersion: websiteSalesAdvisoryContract, source: 'database', identity: { workspaceId, ...scope }, workflowId,
-    version: 1, workflowVersion: 2, canWrite: false, canApproveFacts: false, canContact: false, actionEligibility: [], blockers: [], records: [], jobs: [], buyerGrants: [],
+    version: 1, workflowVersion: 2, canWrite: false, canApproveFacts: false, canContact: false, actionEligibility: [], blockers: [], records: [], jobs: [], buyerGrants: [], groundedFacts: [], recordStates: [], coverage: { historyComplete: true, recordsLimit: 200, hasMore: false }, buyerQuestions: [],
     choices: { briefs: [], closePlans: [], demos: [], offers: [], contacts: [], principals: [], tasks: [], sources: [], cohortCandidates: [] } };
   return { workspaceId, actorId, workflowId, scope, command, receipt, read };
 }

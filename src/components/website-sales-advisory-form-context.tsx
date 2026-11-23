@@ -17,7 +17,7 @@ export function advisorySelected<T>(rows: readonly T[], value: string, key: (row
 }
 export const advisoryLines = (form: FormData, field: string) => advisoryText(form, field).split(/\r?\n/).map(value => value.trim()).filter(Boolean);
 export function advisoryRecords<T>(data: WebsiteSalesAdvisoryRead, kind: AdvisoryRecord['kind'], schema: z.ZodType<T>, now: number): AdvisoryRecord<T>[] {
-  return data.records.filter(row => row.kind === kind && !row.revokedAt && (!row.validUntil || Date.parse(row.validUntil) > now)).flatMap(row => {
+  return data.records.filter(row => row.kind === kind && !row.revokedAt && (!row.validUntil || Date.parse(row.validUntil) > now) && data.recordStates.some(state => state.current && advisoryRefKey(state.recordRef) === advisoryRefKey(advisoryRef(row)))).flatMap(row => {
     const parsed = schema.safeParse(row.payload); return parsed.success ? [{ ...row, payload: parsed.data }] : [];
   });
 }
@@ -26,7 +26,7 @@ export function AdvisoryAction(props: AdvisoryFormProps & { operation: AdvisoryO
   const eligibility = props.data.actionEligibility.find(row => row.operation === props.operation), owner = (websiteSalesAdvisoryOwnerOperations as readonly string[]).includes(props.operation);
   return <AdvisoryForm action={props.operation} title={props.title} submitLabel={props.submitLabel} language={props.language} locked={props.locked}
     allowed={eligibility?.eligible === true && (owner ? props.data.canApproveFacts : props.data.canWrite)} build={props.build} afterSaved={props.afterSaved}
-    validate={value => { const parsed = advisoryPayloadSchemas[props.operation].safeParse(value); return parsed.success ? [] : parsed.error.issues; }} submit={value => props.call(props.operation, value)}>{props.children}</AdvisoryForm>;
+    validate={value => { const { resourceGrants: ignored, ...payload } = value as Record<string, unknown>; void ignored; const parsed = advisoryPayloadSchemas[props.operation].safeParse(payload); return parsed.success ? [] : parsed.error.issues; }} submit={value => props.call(props.operation, value)}>{props.children}</AdvisoryForm>;
 }
 export function AdvisoryRefChoice({ context, name, label, choices, language, required = true }: { context: AdvisoryFormContext; name: string; label: string; choices: readonly { ref: AdvisoryReference; label: string }[]; language: string; required?: boolean }) {
   return <AdvisoryChoices context={context} name={name} label={label} language={language} required={required} choices={choices.map(row => ({ value: advisoryRefKey(row.ref), label: row.label }))}/>;
