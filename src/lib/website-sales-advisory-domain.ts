@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { advisoryIdentitySchema, advisoryRecordSchema, advisoryValueBasisSchema, advisoryDiscoveryAnswerSchema, advisoryCanonicalParentSchema, advisoryGroundedFactSchema, advisoryBuyerPacketInputSchema, advisoryAdviceInputSchema, advisoryAdviceDraftSchema, advisoryTranscriptSchema, advisoryAssertionSchema, advisoryTranscriptReviewSchema, advisoryTranscriptAssertionsValueSchema, advisoryEvaluationSchema, advisoryKnowledgeSchema, advisoryApprovalInputSchema, advisoryVideoInputSchema,
+import { advisoryIdentitySchema, advisoryUuid, advisoryReferenceSchema, advisoryRecordSchema, advisoryValueBasisSchema, advisoryDiscoveryAnswerSchema, advisoryCanonicalParentSchema, advisoryGroundedFactSchema, advisoryBuyerPacketInputSchema, advisoryAdviceInputSchema, advisoryAdviceDraftSchema, advisoryTranscriptSchema, advisoryAssertionSchema, advisoryTranscriptReviewSchema, advisoryTranscriptAssertionsValueSchema, advisoryEvaluationSchema, advisoryKnowledgeSchema, advisoryApprovalInputSchema, advisoryVideoInputSchema,
   type AdvisoryIdentity, type AdvisoryRecord, type AdvisoryReference, type AdvisorySource, type AdvisoryCanonicalParent, type AdvisoryGroundedFact } from './website-sales-advisory-types';
 
 export interface AdvisoryContext { identity: AdvisoryIdentity; workflowId: string; workflowVersion: number; authorizedResources?: readonly { identity: AdvisoryIdentity; workflowId: string; workflowVersion: number }[] }
@@ -14,6 +14,11 @@ function canonical(value: unknown): string {
 }
 export function advisoryDigest(value: unknown): string { return createHash('sha256').update(canonical(value)).digest('hex'); }
 export function advisoryContentSha256(text: string): string { return createHash('sha256').update(text, 'utf8').digest('hex'); }
+/** Binding only: the server must independently verify the fresh native account and grant. */
+export function advisoryBuyerActorBindingHash(raw: { principalUserId: string; authIdentityId: string; workspaceId: string; grantId: string; packetRef: AdvisoryReference }): string {
+  const value = z.strictObject({ principalUserId: advisoryUuid, authIdentityId: advisoryUuid, workspaceId: advisoryUuid, grantId: advisoryUuid, packetRef: advisoryReferenceSchema }).parse(raw);
+  return advisoryDigest({ domain: 'website-sales-advisory-buyer-actor-v1', ...value });
+}
 export function advisoryRecordDigest(raw: Omit<AdvisoryRecord<unknown>, 'digest'> | AdvisoryRecord<unknown>): string { const { digest: ignored, revokedAt: revocation, ...body } = raw as AdvisoryRecord<unknown>; void ignored; void revocation; return advisoryDigest(body); }
 export function advisoryReference(record: Pick<AdvisoryRecord, 'id' | 'version' | 'digest'>): AdvisoryReference { return { id: record.id, version: record.version, digest: record.digest }; }
 export function verifyAdvisoryRecord(raw: unknown, ctx: AdvisoryContext, nowISO: string): AdvisoryRecord {
