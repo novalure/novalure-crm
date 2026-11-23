@@ -16,7 +16,7 @@ test('buyer grant secrets have 32 fresh random bytes and a hash of the exact can
   assert(first.token !== second.token, 'Each grant must use fresh cryptographic entropy');
 });
 test('buyer video uses a fixed same-origin path, a private header and a hash-confirmed temporary URL', async () => {
-  let created = 0; URL.createObjectURL = value => { assert.equal(value.size, 3); created++; return 'blob:synthetic-transport'; };
+  let created = 0; URL.createObjectURL = value => { assert(value instanceof Blob); assert.equal(value.size, 3); created++; return 'blob:synthetic-transport'; };
   const reference = asset();
   globalThis.fetch = (async (input, init) => {
     assert.equal(input, reference.mediaPath); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store'); assert.equal(init?.referrerPolicy, 'no-referrer');
