@@ -84,3 +84,34 @@ database instances were closed after acceptance.
 CRM base PR132, required exact-target repository/review gates, migration/grant
 acceptance, model funding/configuration and applicable production gates remain
 activation dependencies. Teams and A1 are outside this work.
+
+## Integrated CI focus correction
+
+The first native CI at head `68b8755e34148188b83c77fad411614fac66bb10`
+used merge checkout `b3038e79eeebe5359e70c2a0c2ff0fc4ab3a195f`, whose
+complete tree exactly matched that head. New Advisory66, sealed video13,
+Commerce50 and the production build passed. The final integrated Knowledge
+browser step failed: the source name contained both name and content, while its
+content field remained empty and no valid draft was saved. The failure and its
+original dump are retained.
+
+Actual targeted reproduction confirmed a delayed `requestAnimationFrame`
+autofocus could move input back to the name after the user selected content.
+The new deterministic browser regression failed on the old build. The bounded
+three-line correction remembers the opening focus and respects an element the
+user has subsequently chosen. No server, permission, migration, Sales, video or
+model-worker behavior changed; assertions were not weakened.
+
+The optimized build at `3506dd14a00daf6ff772ceaa5625af346046df2f`
+exited0. The same delayed-frame counterexample then retained separate field
+values and produced an actual `POST201` with the correct persisted draft. The
+complete affected Knowledge browser acceptance completed13/13 cases with no
+page error, including normal opening focus, upload, publication, assignment,
+revocation and OCR-state boundaries. The scoped independent non-author review
+reported0 Critical/High/Medium findings. Its local QA app/database were closed.
+
+Evidence remains under
+`.npm-cache/qa/website-sales-advisory-release-20261123/knowledge-focus-3506dd1/`,
+separate from the earlier failed native CI and red regression. Later exact-head
+provider checks determine final release acceptance; this record does not claim
+an unexecuted success for a subsequently documented head.
