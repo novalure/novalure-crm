@@ -66,7 +66,10 @@ export function AdvisoryForm({ action, title, submitLabel, language, allowed, lo
   }
   return <form data-advisory-action={action} noValidate onSubmit={event => void save(event)} onInputCapture={event => { event.currentTarget.dataset.advisoryDirty = 'true'; }} className="space-y-4">
     <h4 id={headingId} tabIndex={-1} className="font-semibold text-slate-950">{title}</h4>
-    {Object.keys(errors).length > 0 && <div ref={summary} role="alert" tabIndex={-1} className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-950"><p className="font-semibold">{de ? 'Bitte prüfen Sie die Angaben' : 'Check these details'}</p><ul className="mt-2 list-disc space-y-1 pl-5">{Object.entries(errors).map(([name, message]) => <li key={name}><a className="underline underline-offset-4" href={`#${name === '_form' ? headingId : id(name)}`}>{message}</a></li>)}</ul></div>}
+    {Object.keys(errors).length > 0 && <div ref={summary} role="alert" tabIndex={-1} className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-950"><p className="font-semibold">{de ? 'Bitte prüfen Sie die Angaben' : 'Check these details'}</p><ul className="mt-2 list-disc space-y-1 pl-5">{Object.entries(errors).map(([name, message]) => {
+      const targetId = name === '_form' ? headingId : id(name);
+      return <li key={name}><a className="underline underline-offset-4" href={`#${targetId}`} onClick={event => { event.preventDefault(); const target = document.getElementById(targetId); target?.focus(); target?.scrollIntoView({ block: 'center' }); }}>{message}</a></li>;
+    })}</ul></div>}
     {!allowed && <Notice>{de ? 'Dieser Schritt ist für Ihren Zugang oder den aktuellen Stand noch nicht verfügbar. Die Übersicht zeigt die fehlenden Voraussetzungen.' : 'This step is not available for your access or the current record. The overview lists missing requirements.'}</Notice>}
     <fieldset disabled={locked || !allowed || submitting} className="min-w-0 space-y-4">{children(context)}<Button type="submit" className="min-h-11">{submitting ? de ? 'Wird gespeichert …' : 'Saving…' : submitLabel}</Button></fieldset>
   </form>;

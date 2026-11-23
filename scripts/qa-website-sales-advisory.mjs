@@ -102,7 +102,7 @@ async function semanticAcceptance() {
     await stage('practice'); const target = form('register_knowledge'); await target.locator('button[type=submit]').click();
     const alert = target.getByRole('alert'); await expect(alert).toBeFocused(); const link = alert.getByRole('link').first(), href = await link.getAttribute('href'); assert(href);
     assert.equal(await target.evaluate((form, href) => [...document.querySelectorAll('[id]')].filter(node => '#' + node.id === href).length, href), 1);
-    await link.click(); await expect(target.locator('[name=title]')).toBeFocused();
+    const originalUrl = main.url(); await link.click(); await expect(target.locator('[name=title]')).toBeFocused(); assert.equal(main.url(), originalUrl);
     const select = panel().getByLabel('Nächster Beratungsschritt', { exact: true }); await stage('discovery'); await select.focus(); await main.keyboard.press('ArrowDown'); await expect(select).toBeFocused(); await expect(select).toHaveValue('value');
   });
   await step('a minimal native packet supplies real labelled groups and buyer response controls', async () => {
@@ -117,7 +117,7 @@ async function semanticAcceptance() {
     const link = await main.evaluate(() => navigator.clipboard.readText()); buyerToken = new URLSearchParams(new URL(link).hash.slice(1)).get('grant'); assert(/^[A-Za-z0-9_-]{43}$/.test(buyerToken)); secretValues.add(buyerToken); grantId = (await current()).buyerGrants[0].id;
     const guest = await context(); publicPage = await guest.newPage(); authenticatedBuyer = await actor.context.newPage();
     for (const page of [publicPage, authenticatedBuyer]) { await page.goto(new URL('/sales-review#grant=' + buyerToken, base).href); await expect(page.getByRole('heading', { name: 'SYNTHETIC semantic decision packet', exact: true })).toBeVisible(); }
-    await expect(publicPage.getByTestId('sales-buyer-room').locator('form')).toHaveCount(0); await expect(authenticatedBuyer.getByTestId('sales-buyer-room').locator('[data-advisory-action=buyer_question]')).toBeVisible();
+    await expect(publicPage.getByTestId('sales-buyer-room').locator('form')).toHaveCount(0); const buyerForm = authenticatedBuyer.getByTestId('sales-buyer-room').locator('[data-advisory-action=buyer_question]'); await expect(buyerForm).toBeVisible(); await buyerForm.locator('button[type=submit]').click(); await expect(buyerForm.getByRole('alert')).toBeFocused(); const originalUrl = authenticatedBuyer.url(); await buyerForm.getByRole('alert').getByRole('link').first().click(); await expect(buyerForm.locator('[name=question]')).toBeFocused(); assert.equal(authenticatedBuyer.url(), originalUrl);
   });
   await step('all eight advisory sections and both buyer assurances pass thirty semantic viewport scans', async () => {
     const viewports = { desktop: { width: 1440, height: 1000 }, tablet: { width: 834, height: 1112 }, phone: { width: 390, height: 844 } };
