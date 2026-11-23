@@ -1,6 +1,6 @@
 "use client";
-type Area = "workflow" | "studio" | "lifecycle" | "autonomy" | "conversation" | "enablement" | "commerce";
-const prefixes = { workflow: "novalure.website-sales.pending.v1", studio: "novalure.website-studio.pending.v1", lifecycle: "novalure.website-sales-lifecycle.pending.v1", autonomy: "novalure.website-sales-operations.pending.v1", conversation: "novalure.website-sales-conversation.pending.v1", enablement:'novalure.website-sales-enablement.pending.v1', commerce:'novalure.website-sales-commerce.pending.v1' } as const;
+type Area = "workflow" | "studio" | "lifecycle" | "autonomy" | "conversation" | "enablement" | "commerce" | "advisory";
+const prefixes = { workflow: "novalure.website-sales.pending.v1", studio: "novalure.website-studio.pending.v1", lifecycle: "novalure.website-sales-lifecycle.pending.v1", autonomy: "novalure.website-sales-operations.pending.v1", conversation: "novalure.website-sales-conversation.pending.v1", enablement:'novalure.website-sales-enablement.pending.v1', commerce:'novalure.website-sales-commerce.pending.v1', advisory:'novalure.website-sales-advisory.pending.v1' } as const;
 /** One unresolved Sales write blocks new writes in the other Sales areas. */
 export function assertSalesWriteBarrier(area: Area, workspaceId: string, actorId: string): void {
   if (typeof window === "undefined") throw Error("SALES_RECOVERY_STORAGE_UNAVAILABLE");
