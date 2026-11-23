@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/status';
+import { websiteSalesAdvisoryReason } from '@/lib/website-sales-advisory-copy';
 import { advisoryPayloadSchemas, websiteSalesAdvisoryOwnerOperations, type AdvisoryRecord, type AdvisoryReference, type AdvisorySource, type WebsiteSalesAdvisoryCommand, type WebsiteSalesAdvisoryRead } from '@/lib/website-sales-advisory-types';
 import { AdvisoryChoices, AdvisoryFields, AdvisoryForm, advisoryIso, advisoryText, type AdvisoryFormContext } from './website-sales-advisory-fields';
 
@@ -26,7 +27,7 @@ export function AdvisoryAction(props: AdvisoryFormProps & { operation: AdvisoryO
   const eligibility = props.data.actionEligibility.find(row => row.operation === props.operation), owner = (websiteSalesAdvisoryOwnerOperations as readonly string[]).includes(props.operation);
   return <AdvisoryForm action={props.operation} title={props.title} submitLabel={props.submitLabel} language={props.language} locked={props.locked}
     allowed={eligibility?.eligible === true && (owner ? props.data.canApproveFacts : props.data.canWrite)} build={props.build} afterSaved={props.afterSaved}
-    validate={value => { const { resourceGrants: ignored, ...payload } = value as Record<string, unknown>; void ignored; const parsed = advisoryPayloadSchemas[props.operation].safeParse(payload); return parsed.success ? [] : parsed.error.issues; }} submit={value => props.call(props.operation, value)}>{props.children}</AdvisoryForm>;
+    validate={value => { const { resourceGrants: ignored, ...payload } = value as Record<string, unknown>; void ignored; const parsed = advisoryPayloadSchemas[props.operation].safeParse(payload); return parsed.success ? [] : parsed.error.issues; }} submit={value => props.call(props.operation, value)}>{context => <>{eligibility && !eligibility.eligible && eligibility.blockers.length > 0 && <Notice tone="warning"><ul className="list-disc space-y-2 pl-5 text-sm">{[...new Set(eligibility.blockers.map(code => websiteSalesAdvisoryReason(code, props.language)))].map(reason => <li key={reason}>{reason}</li>)}</ul></Notice>}{props.children(context)}</>}</AdvisoryForm>;
 }
 export function AdvisoryRefChoice({ context, name, label, choices, language, required = true }: { context: AdvisoryFormContext; name: string; label: string; choices: readonly { ref: AdvisoryReference; label: string }[]; language: string; required?: boolean }) {
   return <AdvisoryChoices context={context} name={name} label={label} language={language} required={required} choices={choices.map(row => ({ value: advisoryRefKey(row.ref), label: row.label }))}/>;

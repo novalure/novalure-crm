@@ -9,13 +9,12 @@ import { AdvisoryAction, AdvisoryChecks, AdvisoryRefChoice, AdvisorySources, adv
 function cohortKey(row: AdvisoryFormProps['data']['choices']['cohortCandidates'][number]) { return `${row.member.identity.companyId}:${row.member.identity.locationId}:${row.member.workflowId}:${row.member.workflowVersion}:${row.member.sourceDigest}`; }
 function cohortFields(form: FormData, props: AdvisoryFormProps) {
   const selected = form.getAll('cohort').map(String).map(key => advisorySelected(props.data.choices.cohortCandidates, key, cohortKey));
-  const other = selected.filter(row => row.member.identity.companyId !== props.data.identity.companyId || row.member.identity.locationId !== props.data.identity.locationId);
-  if (other.some(row => !row.grantId)) throw Error('ADVISORY_RESOURCE_AUTHORITY_REQUIRED');
+  const other = selected.filter(row => row.grantId && (row.member.identity.companyId !== props.data.identity.companyId || row.member.identity.locationId !== props.data.identity.locationId));
   return { cohort: selected.map(row => row.member), ...(other.length ? { resourceGrants: other.map(row => ({ companyId: row.member.identity.companyId, locationId: row.member.identity.locationId, grantId: row.grantId })) } : {}) };
 }
 function CohortInput({ context, props }: { context: Parameters<typeof AdvisoryFields>[0]['context']; props: AdvisoryFormProps }) {
   const de = props.language === 'de';
-  return <><AdvisoryChecks context={context} name="cohort" label={de ? 'Vorab festgelegte Unternehmen mit verfügbaren Nachweisen' : 'Preselected companies with available evidence'} language={props.language} choices={props.data.choices.cohortCandidates.filter(row => row.grantId || row.member.identity.companyId === props.data.identity.companyId && row.member.identity.locationId === props.data.identity.locationId).map(row => ({ value: cohortKey(row), label: row.label }))}/><p className="max-w-prose text-sm text-stone-600">{de ? 'Ein Unternehmen wird nur einmal berücksichtigt. Fremde Firmen und Standorte benötigen die aktuelle Freigabe aus der Arbeitsansicht. Unbekannte oder noch nicht abgeschlossene Ergebnisse bleiben erkennbar.' : 'Each company is counted once. Other companies and locations require current access from the workbench. Unknown and unfinished outcomes remain visible.'}</p></>;
+  return <><AdvisoryChecks context={context} name="cohort" label={de ? 'Vorab festgelegte Unternehmen mit verfügbaren Nachweisen' : 'Preselected companies with available evidence'} language={props.language} choices={props.data.choices.cohortCandidates.map(row => ({ value: cohortKey(row), label: row.label }))}/><p className="max-w-prose text-sm text-stone-600">{de ? 'Ein Unternehmen wird nur einmal berücksichtigt. Firmen und Standorte werden vor dem Speichern erneut auf Ihren aktuellen Zugang geprüft. Unbekannte oder noch nicht abgeschlossene Ergebnisse bleiben erkennbar.' : 'Each company is counted once. Access to companies and locations is checked again before saving. Unknown and unfinished outcomes remain visible.'}</p></>;
 }
 export function AdvisoryLearningForms(props: AdvisoryFormProps) {
   const de = props.language === 'de';
