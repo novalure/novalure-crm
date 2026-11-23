@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { advisoryIdentitySchema, advisoryUuid, advisoryReferenceSchema, advisoryRecordSchema, advisoryValueBasisSchema, advisoryDiscoveryAnswerSchema, advisoryCanonicalParentSchema, advisoryGroundedFactSchema, advisoryBuyerPacketInputSchema, advisoryAdviceInputSchema, advisoryAdviceDraftSchema, advisoryTranscriptSchema, advisoryAssertionSchema, advisoryTranscriptReviewSchema, advisoryTranscriptAssertionsValueSchema, advisoryEvaluationSchema, advisoryKnowledgeSchema, advisoryApprovalInputSchema, advisoryVideoInputSchema,
+import { advisoryIdentitySchema, advisoryUuid, advisoryText, advisoryReferenceSchema, advisoryRecordSchema, advisoryValueBasisSchema, advisoryDiscoveryAnswerSchema, advisoryCanonicalParentSchema, advisoryGroundedFactSchema, advisoryBuyerPacketInputSchema, advisoryAdviceInputSchema, advisoryAdviceDraftSchema, advisoryTranscriptSchema, advisoryAssertionSchema, advisoryTranscriptReviewSchema, advisoryTranscriptAssertionsValueSchema, advisoryEvaluationSchema, advisoryKnowledgeSchema, advisoryApprovalInputSchema, advisoryVideoInputSchema, advisoryRoleplayInputSchema, advisoryRoleplayValueSchema,
   type AdvisoryIdentity, type AdvisoryRecord, type AdvisoryReference, type AdvisorySource, type AdvisoryCanonicalParent, type AdvisoryGroundedFact } from './website-sales-advisory-types';
 
 export interface AdvisoryContext { identity: AdvisoryIdentity; workflowId: string; workflowVersion: number; authorizedResources?: readonly { identity: AdvisoryIdentity; workflowId: string; workflowVersion: number }[] }
@@ -123,6 +123,18 @@ export function assessAdvisoryCoaching(input: { transcript: AdvisoryRecord; know
 }
 export function prepareAdvisoryRoleplay(input: { knowledge: AdvisoryRecord; approval: AdvisoryRecord; scenarioId: string }, ctx: AdvisoryContext, nowISO: string) {
   return guarded(() => { const k = approvedKnowledge(input.knowledge, input.approval, ctx, nowISO), scenario = k.payload.scenarios.find(s => s.id === input.scenarioId); requireRule(scenario, 'ADVISORY_ROLEPLAY_SCENARIO_REQUIRED'); return outcome({ knowledgeRef: advisoryReference(k), scenarioId: scenario.id, situation: scenario.situation, customerOpening: scenario.customerOpening, rubric: k.payload.criteria.map(c => ({ id: c.id, label: c.label })), simulationOnly: true as const, customerContactAllowed: false as const }); });
+}
+/** The private job supplies an actual model response; the result remains fictional internal practice. */
+export function validateAdvisoryRoleplayTurn(input: { request: z.input<typeof advisoryRoleplayInputSchema>; knowledge: AdvisoryRecord; approval: AdvisoryRecord; previousRoleplay?: AdvisoryRecord; customerReply: string }, ctx: AdvisoryContext, nowISO: string) {
+  return guarded(() => {
+    const request = advisoryRoleplayInputSchema.parse(input.request), opening = prepareAdvisoryRoleplay({ knowledge: input.knowledge, approval: input.approval, scenarioId: request.scenarioId }, ctx, nowISO);
+    requireRule(opening.status === 'READY' && opening.value && sameRef(request.knowledgeRef, opening.value.knowledgeRef), 'ADVISORY_ROLEPLAY_SOURCE_CHANGED');
+    if (request.previousRoleplayRef) {
+      requireRule(input.previousRoleplay, 'ADVISORY_ROLEPLAY_PREVIOUS_TURN_REQUIRED'); const previous = verifyAdvisoryRecord(input.previousRoleplay, ctx, nowISO), body = advisoryEvaluationSchema(advisoryRoleplayValueSchema).parse(previous.payload);
+      requireRule(previous.kind === 'ROLEPLAY' && sameRef(request.previousRoleplayRef, advisoryReference(previous)) && body.status === 'READY' && body.value && sameRef(body.value.knowledgeRef, request.knowledgeRef) && body.value.scenarioId === request.scenarioId, 'ADVISORY_ROLEPLAY_PREVIOUS_TURN_CHANGED');
+    } else requireRule(input.previousRoleplay === undefined, 'ADVISORY_ROLEPLAY_PREVIOUS_TURN_CHANGED');
+    return outcome(advisoryRoleplayValueSchema.parse({ ...opening.value, previousRoleplayRef: request.previousRoleplayRef ?? null, sellerReply: request.sellerReply ?? null, customerReply: advisoryText.parse(input.customerReply), status: 'SIMULATION_ONLY' }));
+  });
 }
 export function prepareAdvisoryVideoStoryboard(input: { input: z.infer<typeof advisoryVideoInputSchema>; demo: AdvisoryCanonicalParent; packet: AdvisoryRecord | null; assets: AdvisoryCanonicalParent[]; facts: AdvisoryGroundedFact[] }, ctx: AdvisoryContext, nowISO: string) {
   return guarded(() => { const p = advisoryVideoInputSchema.parse(input.input), demo = parent(input.demo, 'DEMO', ctx, nowISO); requireRule(sameRef(demo.reference, p.demoRef), 'ADVISORY_VIDEO_DEMO_BINDING_CHANGED'); const rows = facts(input.facts, ctx, nowISO).filter(f => f.category !== 'INTERNAL_CUSTOMER_FACT' && (f.category !== 'APPROVED_REFERENCE' || f.approvalRef)); requireRule(rows.length > 0, 'ADVISORY_VIDEO_APPROVED_FACT_REQUIRED');
