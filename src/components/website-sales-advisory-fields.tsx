@@ -42,7 +42,7 @@ export function AdvisoryForm({ action, title, submitLabel, language, allowed, lo
     if (!allowed || locked || inFlight.current) return;
     const form = event.currentTarget, invalid: Record<string, string> = {};
     for (const field of Array.from(form.elements)) {
-      if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement) && !field.disabled && !field.validity.valid)
+      if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement) && !field.matches(':disabled') && !field.validity.valid)
         invalid[field.name] = de ? 'Bitte prüfen Sie dieses Feld.' : 'Please check this field.';
     }
     setErrors(invalid);
