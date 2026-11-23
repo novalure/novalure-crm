@@ -76,19 +76,27 @@ export async function renderWebsiteSalesAdvisoryVideo(rawBundle: AdvisoryVideoBu
     page.on('console', message => { if (message.type() === 'error') pageErrors++; });
     if (!video) throw Error('ADVISORY_VIDEO_CAPTURE_UNAVAILABLE');
     await page.goto(sealedOrigin + documentPath, { waitUntil: 'load', timeout: 15_000 });
-    await page.evaluate(() => {
-      const caption = document.createElement('div'); caption.id = 'novalure-approved-video-caption'; caption.setAttribute('role', 'note');
-      Object.assign(caption.style, { position: 'fixed', zIndex: '2147483647', left: '24px', right: '24px', bottom: '20px', padding: '18px 22px',
-        borderRadius: '12px', background: '#102231', color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', lineHeight: '1.4',
-        whiteSpace: 'pre-wrap', boxShadow: '0 2px 12px #0008' }); document.body.append(caption);
+    const captionHandle = await page.evaluateHandle(() => {
+      const host = document.createElement('div');
+      // No demo ID lookup, no inherited body styles, and no demo stylesheet access to the caption.
+      for (const [key, value] of Object.entries({ all: 'initial', display: 'block', position: 'fixed', 'z-index': '2147483647', left: '24px', right: '24px', bottom: '20px', opacity: '1', visibility: 'visible', transform: 'none' })) host.style.setProperty(key, value, 'important');
+      const shadow = host.attachShadow({ mode: 'closed' }), caption = document.createElement('div'); caption.setAttribute('role', 'note');
+      for (const [key, value] of Object.entries({ all: 'initial', display: 'block', padding: '18px 22px', 'border-radius': '12px', background: '#102231', color: '#ffffff',
+        'font-family': 'Arial, sans-serif', 'font-size': '18px', 'line-height': '1.4', 'white-space': 'pre-wrap', 'overflow-wrap': 'anywhere', 'box-shadow': '0 2px 12px #0008' })) caption.style.setProperty(key, value, 'important');
+      shadow.append(caption); document.documentElement.append(host); return caption;
     });
     for (const [index, shot] of storyboard.shots.entries()) {
       if (!await ports.isCurrent()) throw Error('ADVISORY_VIDEO_AUTHORITY_CHANGED');
-      await page.evaluate(({ text, index, count }) => {
-        const caption = document.getElementById('novalure-approved-video-caption')!; caption.textContent = text;
-        caption.style.fontSize = text.length > 600 ? '16px' : '20px';
+      const captionVisible = await captionHandle.evaluate((caption, text) => {
+        caption.textContent = text; caption.style.setProperty('font-size', text.length > 600 ? '16px' : '20px', 'important');
+        const rect = caption.getBoundingClientRect(), host = (caption.getRootNode() as ShadowRoot).host as HTMLElement;
+        return caption.textContent === text && rect.width > 100 && rect.height > 30 && rect.top >= 0 && rect.bottom <= innerHeight
+          && [caption, host, document.documentElement].every(node => { const style = getComputedStyle(node); return style.display !== 'none' && style.visibility === 'visible' && style.opacity === '1'; });
+      }, shot.narration);
+      if (!captionVisible) throw Error('ADVISORY_VIDEO_CAPTION_NOT_VISIBLE');
+      await page.evaluate(({ index, count }) => {
         window.scrollTo(0, count > 1 ? Math.max(0, document.documentElement.scrollHeight - innerHeight) * index / (count - 1) : 0);
-      }, { text: shot.narration, index, count: storyboard.shots.length });
+      }, { index, count: storyboard.shots.length });
       await page.waitForTimeout(shot.durationSeconds * 1000);
     }
     await context.close();

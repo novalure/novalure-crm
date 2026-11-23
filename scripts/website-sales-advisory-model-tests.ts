@@ -48,6 +48,13 @@ test('actual SDK structured generation selects only approved literal excerpts an
   assert.equal(out.reviewRequired, true); assert.equal(out.externalEffectAllowed, false);
   assert.deepEqual(f.counts(), { generated: 1, reserved: 1, checked: 3 }); assert.equal(f.settled.length, 1); assert.equal(f.settled[0].status, 'succeeded');
 });
+
+test('two distinct facts sharing one evidence reference retain the actual selected source position', async () => {
+  const f = fixture(); f.input.sources.push({ ref: f.input.sources[0].ref, text: 'Only the approved second excerpt describes the support hours.' });
+  f.output({ answerable: true, sourceIndices: [1], assertions: [], roleplayUtterance: null });
+  const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
+  assert.equal(out.status, 'READY'); assert.deepEqual(out.selectedSourceIndices, [1]); assert.equal(out.text, f.input.sources[1].text);
+});
 test('a previously reserved request is UNKNOWN and never causes a second provider call', async () => {
   const f = fixture(); f.replay(); const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
   assert.equal(out.status, 'UNKNOWN'); assert.equal(f.counts().generated, 0); assert.equal(f.settled.length, 0);

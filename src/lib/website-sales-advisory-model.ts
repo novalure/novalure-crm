@@ -8,13 +8,13 @@ import { reserveAiCredits, settleAiCredits } from './ai-billing/repository';
 import { AI_DEFAULT_MODEL, AI_METER_VERSION, AI_PROVIDER_TIMEOUT_MS, aiCreditsForTokens, reserveForMessages, resolveMeteredModel } from './ai-billing/metering';
 import { advisoryIdentitySchema, advisoryReferenceSchema, advisoryText, advisoryTranscriptSegmentSchema } from './website-sales-advisory-types';
 
-const sourceSchema = z.strictObject({ ref: advisoryReferenceSchema, text: advisoryText.max(800) });
+const sourceSchema = z.strictObject({ ref: advisoryReferenceSchema, text: advisoryText });
 const inputSchema = z.strictObject({ requestId: z.uuidv4(), identity: advisoryIdentitySchema, workflowId: z.uuid(),
   kind: z.enum(['ADVICE', 'TRANSCRIPT_ANALYSIS', 'ROLEPLAY']), question: advisoryText,
-  sources: z.array(sourceSchema).max(16), segments: z.array(advisoryTranscriptSegmentSchema).max(60),
+  sources: z.array(sourceSchema).max(20), segments: z.array(advisoryTranscriptSegmentSchema).max(90),
   scenario: advisoryText.nullable() });
-const selectionSchema = z.strictObject({ answerable: z.boolean(), sourceIndices: z.array(z.number().int().min(0).max(15)).max(2),
-  assertions: z.array(z.strictObject({ segmentIndex: z.number().int().min(0).max(59), exactQuote: z.string().min(1).max(900),
+const selectionSchema = z.strictObject({ answerable: z.boolean(), sourceIndices: z.array(z.number().int().min(0).max(19)).max(2),
+  assertions: z.array(z.strictObject({ segmentIndex: z.number().int().min(0).max(89), exactQuote: z.string().min(1).max(1000),
     kind: z.enum(['NEED', 'CONSTRAINT', 'QUESTION', 'POSSIBLE_COMMITMENT']) })).max(20),
   roleplayUtterance: z.string().min(1).max(1500).nullable() });
 const profileSchema = z.strictObject({ enabled: z.literal(true), targets: z.array(z.strictObject({ workspaceId: z.uuid(), projectId: z.uuid() })).min(1).max(50),
@@ -23,7 +23,7 @@ export type AdvisoryModelInput = z.infer<typeof inputSchema>;
 export type AdvisoryModelProfile = z.infer<typeof profileSchema>;
 export type AdvisoryModelResult = {
   status: 'READY' | 'UNANSWERABLE' | 'UNAVAILABLE' | 'UNKNOWN' | 'STALE'; reason: string;
-  text: string | null; sourceRefs: z.infer<typeof advisoryReferenceSchema>[];
+  text: string | null; sourceRefs: z.infer<typeof advisoryReferenceSchema>[]; selectedSourceIndices: number[];
   assertions: { segmentId: string; exactQuote: string; kind: z.infer<typeof selectionSchema>['assertions'][number]['kind'] }[];
   model: string | null; requestId: string; chargedCredits: number | null; reviewRequired: true; externalEffectAllowed: false;
 };
@@ -39,7 +39,7 @@ export interface AdvisoryModelPorts {
 }
 function result(input: AdvisoryModelInput, status: AdvisoryModelResult['status'], reason: string,
   extra: Partial<AdvisoryModelResult> = {}): AdvisoryModelResult {
-  return { status, reason, text: null, sourceRefs: [], assertions: [], model: null, requestId: input.requestId,
+  return { status, reason, text: null, sourceRefs: [], selectedSourceIndices: [], assertions: [], model: null, requestId: input.requestId,
     chargedCredits: null, reviewRequired: true, externalEffectAllowed: false, ...extra };
 }
 function configuredProfile(): unknown {
@@ -123,7 +123,7 @@ export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: Adv
     if (!out.sourceIndices.length || new Set(out.sourceIndices).size !== out.sourceIndices.length || out.sourceIndices.some(i => !input.sources[i])
       || out.assertions.length || out.roleplayUtterance !== null) return result(input, 'UNANSWERABLE', 'MODEL_SOURCE_SELECTION_INVALID', { model, chargedCredits });
     return result(input, 'READY', 'APPROVED_EXCERPTS_SELECTED', { text: out.sourceIndices.map(i => input.sources[i].text).join('\n\n'),
-      sourceRefs: out.sourceIndices.map(i => input.sources[i].ref), model, chargedCredits });
+      sourceRefs: out.sourceIndices.map(i => input.sources[i].ref), selectedSourceIndices: out.sourceIndices, model, chargedCredits });
   }
   if (input.kind === 'TRANSCRIPT_ANALYSIS') {
     if (out.sourceIndices.length || out.roleplayUtterance !== null || !out.assertions.length
