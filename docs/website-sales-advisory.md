@@ -55,6 +55,11 @@ Revocation, expiry or source changes deny later page and asset requests. A
 downloaded copy cannot be remotely erased; the open player clears its temporary
 object URL when its fresh read loses access.
 
+Questions and reviewed replies are visible only to the named authenticated buyer
+account. An anonymous presentation link does not reveal the conversation.
+Staff sharing links use the server-confirmed canonical origin; validation errors
+focus their fields without replacing the active CRM or buyer-grant fragment.
+
 ## Private execution
 
 The model worker accepts POST at `/api/cron/website-sales-advisory` with the
