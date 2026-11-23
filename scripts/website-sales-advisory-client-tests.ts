@@ -73,12 +73,31 @@ test('foreign scope, stale versions and malformed advisory receipts retain UNKNO
     (f: ReturnType<typeof fixture>) => { f.receipt.data.identity.companyId = randomUUID(); },
     (f: ReturnType<typeof fixture>) => { f.receipt.data.workflowId = randomUUID(); },
     (f: ReturnType<typeof fixture>) => { f.receipt.data.workflowVersion = 1; },
+    (f: ReturnType<typeof fixture>) => { f.receipt.data.version = f.command.expectedVersion; },
     (f: ReturnType<typeof fixture>) => { f.receipt.data.recordDigest = 'not-a-digest'; },
     (f: ReturnType<typeof fixture>) => { (f.receipt.data as { recordId: string | null }).recordId = null; },
+    (f: ReturnType<typeof fixture>) => { Object.assign(f.receipt.data, { recordId: null, recordDigest: null }); },
   ]) {
     const f = fixture(); mutate(f); mock(async () => Response.json(f.receipt));
     await assert.rejects(client.writeAdvisory(f.workspaceId, f.actorId, f.command));
     assert.equal(client.advisoryPending(f.workspaceId, f.actorId)?.state, 'UNKNOWN');
+  }
+});
+
+test('missing required native job effects retain UNKNOWN for writes and committed reconciliation', async () => {
+  const ref = { id: randomUUID(), version: 1, digest: 'a'.repeat(64) }, future = new Date(Date.now() + 3600000).toISOString();
+  const source = { id: randomUUID(), reference: 'synthetic:test-evidence', digest: 'b'.repeat(64), basis: 'OPERATOR_RECORDED', observedAt: new Date(Date.now() - 60000).toISOString(), validUntil: future };
+  const cases = {
+    register_transcript: { title: 'Synthetic transcript', segments: [{ id: randomUUID(), speaker: 'CUSTOMER', startMs: 0, endMs: 1000, text: 'Synthetic recorded question.' }], permissionReference: source, sourceReferences: [source], validUntil: future },
+    prepare_advice: { kind: 'WEBSITE', question: 'Synthetic advice question?', factRefs: [ref], artifactRefs: [], knowledgeRefs: [] },
+    prepare_roleplay: { knowledgeRef: ref, scenarioId: 'synthetic' },
+    approve_video_storyboard: { recordRef: ref, validUntil: future },
+  };
+  for (const [operation, payload] of Object.entries(cases)) {
+    const f = fixture(); f.command.operation = operation as WebsiteSalesAdvisoryCommand['operation']; f.command.payload = payload;
+    mock(async () => Response.json(f.receipt)); await assert.rejects(client.writeAdvisory(f.workspaceId, f.actorId, f.command)); assert.equal(client.advisoryPending(f.workspaceId, f.actorId)?.state, 'UNKNOWN');
+    mark(f); mock(async () => Response.json(reconcile(f))); await assert.rejects(client.reconcileAdvisory(f.workspaceId, f.actorId)); assert.equal(client.advisoryPending(f.workspaceId, f.actorId)?.state, 'UNKNOWN');
+    Object.assign(f.receipt.data, { jobId: randomUUID() }); mock(async () => Response.json(reconcile(f))); await client.reconcileAdvisory(f.workspaceId, f.actorId); assert.equal(client.advisoryPending(f.workspaceId, f.actorId), undefined);
   }
 });
 

@@ -129,10 +129,12 @@ export function markAdvisoryCurrentRead(workspaceId: string, actorId: string, re
 
 function receipt(raw: unknown, command: WebsiteSalesAdvisoryCommand, workspaceId: string) {
   const value = websiteSalesAdvisoryReceiptSchema.parse(raw), effect = value.data;
+  const recordRequired = !['revoke_buyer_grant', 'cancel_advisory_job'].includes(command.operation);
+  const jobRequired = ['register_transcript', 'prepare_advice', 'prepare_roleplay', 'approve_video_storyboard'].includes(command.operation);
   identity(effect.identity, workspaceId, command);
   if (value.correlationId !== command.correlationId || effect.workflowId !== command.workflowId ||
-    effect.version < command.expectedVersion || effect.workflowVersion < command.expectedWorkflowVersion ||
-    (effect.recordId === null) !== (effect.recordDigest === null)) throw Error('INVALID_ADVISORY_RECEIPT');
+    effect.version <= command.expectedVersion || effect.workflowVersion < command.expectedWorkflowVersion ||
+    (effect.recordId === null) !== (effect.recordDigest === null) || recordRequired && effect.recordId === null || jobRequired && effect.jobId === null) throw Error('INVALID_ADVISORY_RECEIPT');
   return value;
 }
 
