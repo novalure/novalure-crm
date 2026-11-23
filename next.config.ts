@@ -79,6 +79,8 @@ const canonicalSalesAliases = {
     "./website-sales-studio-error.js": "./src/lib/website-sales-studio-error.ts",
     "./website-sales-enablement.js": "./src/lib/website-sales-enablement.ts",
     "./website-sales-enablement-types.js": "./src/lib/website-sales-enablement-types.ts",
+    "./website-sales-advisory-types.js": "./src/lib/website-sales-advisory-types.ts",
+    "./website-sales-advisory-domain.js": "./src/lib/website-sales-advisory-domain.ts",
     "./website-sales-operations-contracts.js": "./src/lib/website-sales-operations-contracts.ts",
     "./website-sales-operations-outcomes.js": "./src/lib/website-sales-operations-outcomes.ts",
 };
