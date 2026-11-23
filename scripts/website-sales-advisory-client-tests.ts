@@ -156,4 +156,3 @@ test('buyer link origin comes only from valid volatile server metadata without a
     mock(async () => Response.json(f.read, { headers: { 'x-sales-review-origin': origin } })); const read = await client.readAdvisory(f.workspaceId, f.scope, f.workflowId); assert.equal(client.advisoryReviewOrigin(read), origin); assert.equal(client.advisoryReviewOrigin(structuredClone(read)), null); assert(!JSON.stringify(read).includes(origin));
   }
 });
-
