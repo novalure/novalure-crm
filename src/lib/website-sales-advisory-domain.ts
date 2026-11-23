@@ -166,6 +166,7 @@ function statsMemberMatch(member: StatsMember, observation: StatsObservation, as
 }
 function statsReadPlan(raw: AdvisoryRecord, ctx: AdvisoryContext, nowISO: string) {
   const row = verifyAdvisoryPeerRecord(raw, ctx, nowISO), plan = statsPlanSchema.parse(row.payload);
+  currentSources(plan.sourceReferences, nowISO);
   statsRequire(row.kind === 'EXPERIMENT_PLAN' && statsTime(plan.registeredAt) <= statsTime(row.createdAt) && statsTime(plan.enrollmentEndsAt) > statsTime(row.createdAt), 'ADVISORY_EXPERIMENT_PREREGISTRATION_REQUIRED');
   statsCohort(plan.cohort, ctx); return { row, plan };
 }
@@ -246,6 +247,7 @@ export function evaluateAdvisoryExperiment(input: { plan: AdvisoryRecord; assign
 export function forecastAdvisoryCohort(input: { policy: AdvisoryRecord; observations: unknown[] }, ctx: AdvisoryContext, nowISO: string) {
   try {
     const row = verifyAdvisoryPeerRecord(input.policy, ctx, nowISO), policy = statsPolicySchema.parse(row.payload), now = statsTime(nowISO), cut = statsTime(policy.trainEndsAt), start = statsTime(policy.holdoutStartsAt), end = statsTime(policy.holdoutEndsAt);
+    currentSources(policy.sourceReferences, nowISO);
     statsRequire(row.kind === 'FORECAST_POLICY' && cut < start && start <= end && end <= now && (policy.validationMode === 'RETROSPECTIVE_TIME_HOLDOUT' || statsTime(row.createdAt) <= start) && statsTime(policy.validUntil) > now, 'ADVISORY_FORECAST_SPLIT_INVALID');
     statsCohort(policy.cohort, ctx); statsRequire(input.observations.length === policy.cohort.length, 'ADVISORY_FORECAST_EXACT_COHORT_REQUIRED');
     const observations = input.observations.map(o => statsObservationSchema.parse(o));
