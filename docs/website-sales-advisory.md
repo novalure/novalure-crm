@@ -27,6 +27,8 @@ The workbench area “Beratung und Entscheidung” connects nine capabilities:
 8. Explainable forecasts based on actual recorded treatment origins and results.
    Retrospective time holdout is labelled post-hoc and requires review. Insufficient
    evidence produces no probability. A prediction never supplies its own labels.
+   A recorded assignment is an intention-to-treat source, not proof that a method
+   was actually executed or seen by the customer.
 9. Actual inert demo recording in a sealed local browser, approved visible
    captions, measured bounded WebM output and a protected buyer player with a
    text alternative. This implementation does not synthesize a voice or avatar.
