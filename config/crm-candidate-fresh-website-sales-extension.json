@@ -1,6 +1,6 @@
 {
   "format": "crm-candidate-source-extension-v1",
-  "id": "WEBSITE_SALES_COMMERCE_209",
+  "id": "WEBSITE_SALES_ADVISORY_210",
   "baseSourceRegistrySha256": "c6823ea7e096242923db1038975cb59d48974fac64fc8742a693a1310f358487",
   "baseExecutionVariantSha256": "5d102a9fbd3e0c5c67e77962bd820d3f2459cf30d3cb75c588c7193cf57c063a",
   "forward": [
@@ -42,6 +42,11 @@
     {
       "path": "migrations/209_website_sales_commerce.sql",
       "sha256": "3b8c8dd003bdbc335f3a9ddc482e8253029dda8e522b91320b90211e82e95aa7",
+      "manual": false
+    },
+    {
+      "path": "migrations/210_website_sales_advisory.sql",
+      "sha256": "0bfee33a70c03a0027a97d58ecf1d926924fb8af08e7ee4661bdba263eb089fe",
       "manual": false
     }
   ]

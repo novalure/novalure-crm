@@ -15,7 +15,8 @@ let log;
 let readyForStop = false;
 let stopRequested = false;
 let cleanup;
-const websiteSalesCommerce = process.argv.includes("--website-sales-commerce");
+const websiteSalesAdvisory = process.argv.includes("--website-sales-advisory");
+const websiteSalesCommerce = websiteSalesAdvisory || process.argv.includes("--website-sales-commerce");
 const websiteSalesOperations = websiteSalesCommerce || process.argv.includes("--website-sales-operations");
 const serveBuiltApplication = websiteSalesOperations || process.argv.includes("--built");
 const designCIntegration = websiteSalesOperations || process.argv.includes("--design-c");
@@ -95,10 +96,11 @@ try {
     for (const name of ["096_public_integration_gateway.sql", "110_account_ui_language_preference.sql", "146_ai_credit_billing.sql", "152_ai_billing_admin.sql", "153_ai_billing_runtime_acl.sql", "154_automation_graph.sql", "155_web_expose.sql", "156_property_portal_exports.sql", "157_newsletter_workspace.sql", "158_web_expose_retention.sql", "159_lead_qualification.sql", "160_project_sales_report_settings.sql", "161_crm_notification_preferences.sql", "162_lead_customer_requests.sql", "163_web_expose_resources.sql", "164_crm_onboarding_examples.sql", "165_automation_mail.sql", "166_web_expose_live_inventory.sql", "167_crm_partner_cooperation.sql", "168_crm_integrations.sql", "169_property_meeting_context.sql", "170_crm_personal_mailbox.sql", "171_property_inquiry_assignments.sql", "172_property_portal_release_checks.sql", "173_property_creation_drafts.sql", "174_lead_qualification_plan.sql", "175_web_expose_templates.sql", "176_newsletter_schedules.sql", "177_crm_notification_email.sql", "178_personal_mailbox_triage.sql", "179_lead_proof_retention.sql", "180_marketing_data.sql", "181_funnel_live_templates.sql", "182_personal_mailbox_sync.sql", "183_marketing_contact_policy.sql", "184_web_expose_brand_layout.sql", "185_property_matching_details.sql", "186_property_unit_details.sql", "187_property_fragment_editing.sql"]) await db.admin.query(await readFile(path.join("migrations", name), "utf8"));
   }
   checkStop();
-  const fixture = await seedSalesBrowser(db);
+  const fixture = await seedSalesBrowser(db, websiteSalesAdvisory ? { workspaceId: "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101" } : {});
   if (websiteSalesWorkbench || websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-workbench-browser-fixture.mjs")).seedWebsiteSalesWorkbenchBrowser(db, fixture));
   if (websiteSalesStudio || websiteSalesLifecycle) Object.assign(fixture, await (await import("./lib/website-sales-studio-browser-fixture.mjs")).seedWebsiteSalesStudioBrowser(db, fixture, { lifecycle: websiteSalesLifecycle, operations: websiteSalesOperations }));
   if (websiteSalesCommerce) Object.assign(fixture, await (await import("./lib/website-sales-commerce-browser-fixture.mjs")).seedWebsiteSalesCommerceBrowser(db, fixture));
+  if (websiteSalesAdvisory) Object.assign(fixture, await (await import("./lib/website-sales-advisory-browser-fixture.mjs")).seedWebsiteSalesAdvisoryBrowser(db, fixture));
   const localEncryptionKey = randomBytes(40).toString("hex");
   if (livelistedIntegration) {
     Object.assign(fixture, await (await import("./lib/livelisted-browser-fixture.mjs")).seedLivelistedBrowser(db, fixture, localEncryptionKey));

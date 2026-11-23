@@ -108,3 +108,28 @@ test("commerce host configuration and credentials remain server-only conditional
   assert.equal(manifest.remoteComparison.valuesRead, false);
   assert.equal(manifest.remoteComparison.status, "PARTIAL");
 });
+
+test("advisory host and AI bindings are production-only conditional metadata without release or provider authority", async () => {
+  const manifest = await json("config/vercel-environment-manifest.json");
+  const expected = new Map([
+    ["CRM_WEBSITE_SALES_ADVISORY_AI", "configuration"],
+    ["CRM_WEBSITE_SALES_ADVISORY_EXECUTOR_DATABASE_URL", "secret"],
+    ["CRM_WEBSITE_SALES_ADVISORY_HOST", "configuration"],
+    ["CRM_WEBSITE_SALES_ADVISORY_WORKER_SECRET", "secret"],
+  ]);
+  const groups = manifest.runtimeConditional.filter(({ feature }) => feature.startsWith("website-sales-advisory-"));
+  assert.deepEqual(groups.flatMap(({ names }) => names).sort(), [...expected.keys()].sort());
+  for (const group of groups) {
+    assert.equal(group.serverOnly, true); assert.deepEqual(group.targets, ["production"]);
+    assert.equal(Object.hasOwn(group, "value"), false);
+    for (const name of group.names) {
+      assert.equal(group.kind, expected.get(name));
+      assert.equal(manifest.runtimeRequired.some(entry => entry.name === name), false);
+      assert.equal(manifest.platformProvided.includes(name), false);
+      assert.equal(manifest.ciBuildFallbacks.includes(name), false);
+    }
+  }
+  assert.equal(manifest.valueInspection, "FORBIDDEN");
+  assert.equal(manifest.remoteComparison.valuesRead, false);
+  assert.equal(manifest.remoteComparison.status, "PARTIAL");
+});
