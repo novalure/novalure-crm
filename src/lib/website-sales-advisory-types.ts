@@ -13,10 +13,18 @@ export const advisorySourceSchema = z.strictObject({ id: advisoryUuid, reference
   basis: z.enum(['CANONICAL_CRM', 'MEASUREMENT', 'CUSTOMER_STATEMENT_RECORDED', 'OPERATOR_RECORDED', 'APPROVED_KNOWLEDGE', 'PUBLIC_OBSERVATION', 'TRANSCRIPT_SEGMENT']), observedAt: advisoryTime, validUntil: advisoryTime });
 const sources = z.array(advisorySourceSchema).min(1).max(20), refs = z.array(advisoryReferenceSchema).max(20);
 export const advisoryCohortMemberSchema = z.strictObject({ identity: advisoryIdentitySchema, workflowId: advisoryUuid, workflowVersion: z.number().int().positive().safe(), assignedAt: advisoryTime, sourceDigest: advisoryHash });
+export const advisoryObservationSchema = z.strictObject({ identity: advisoryIdentitySchema, workflowId: advisoryUuid, assignedAt: advisoryTime, horizonDays: z.number().int().min(1).max(365),
+  segmentKey: short, treatmentDigest: advisoryHash, outcome: z.enum(['WON', 'NOT_WON', 'PENDING', 'UNKNOWN']), outcomeAt: advisoryTime.nullable(), availableAt: advisoryTime,
+  coverage: z.enum(['COMPLETE', 'INCOMPLETE']), cohortSourceDigest: advisoryHash, sourceDigest: advisoryHash });
+export const advisoryBenefitComponentSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ id: advisoryUuid, effectKey: short, kind: z.literal('TIME_SAVING'), minutesPerMonth: integer.max(1_000_000), hourlyCostMinor: minor,
+    treatment: z.enum(['CAPACITY_ONLY', 'ASSUMED_CASH_REDUCTION']), sourceReferences: sources }),
+  z.strictObject({ id: advisoryUuid, effectKey: short, kind: z.literal('CONTRIBUTION'), additionalOrdersDecimal: z.string().regex(/^\d{1,7}(?:\.\d{1,3})?$/), contributionPerOrderMinor: minor, sourceReferences: sources }),
+]);
 export const advisoryValueBasisSchema = z.strictObject({ title: short, offerRef: advisoryReferenceSchema, currency: z.literal('EUR'), amountBasis: z.literal('NET'),
   horizonMonths: z.number().int().min(1).max(36), oneTimeCostMinor: minor, monthlyCostMinor: minor,
-  scenarios: z.array(z.strictObject({ name: z.enum(['LOW', 'BASE', 'HIGH']), monthlyBenefitMinor: minor, startsAtMonth: z.number().int().min(1).max(36),
-    assumption: advisoryText, sourceReferences: sources })).min(1).max(3), sourceReferences: sources, validUntil: advisoryTime });
+  scenarios: z.array(z.strictObject({ name: z.enum(['LOW', 'BASE', 'HIGH']), monthlyBenefitMinor: minor.optional(), components: z.array(advisoryBenefitComponentSchema).min(1).max(12).optional(), startsAtMonth: z.number().int().min(1).max(36),
+    assumption: advisoryText, sourceReferences: sources }).refine(v => (v.monthlyBenefitMinor !== undefined) !== (v.components !== undefined), 'ADVISORY_BENEFIT_BASIS_REQUIRED')).min(1).max(3), sourceReferences: sources, validUntil: advisoryTime });
 export const advisoryDiscoveryAnswerSchema = z.strictObject({ briefRef: advisoryReferenceSchema, questionId: short,
   kind: z.enum(['SITUATION', 'PROBLEM', 'IMPLICATION', 'NEED_PAYOFF']), answer: advisoryText, sourceReferences: sources, validUntil: advisoryTime });
 export const advisoryTranscriptSegmentSchema = z.strictObject({ id: advisoryUuid, speaker: z.enum(['CUSTOMER', 'SELLER', 'OTHER']), startMs: integer.max(14_400_000), endMs: integer.max(14_400_000), text: advisoryText.max(1000) }).refine(v => v.endMs > v.startMs, 'ADVISORY_SEGMENT_TIME_INVALID');
@@ -46,6 +54,13 @@ export const advisoryBuyerPacketInputSchema = z.strictObject({ title: short, bri
 export const advisoryAdviceInputSchema = z.strictObject({ kind: z.enum(['WEBSITE', 'DEMO']), question: advisoryText, factRefs: refs.min(1), artifactRefs: refs, knowledgeRefs: refs });
 export const advisoryVideoInputSchema = z.strictObject({ demoRef: advisoryReferenceSchema, packetRef: advisoryReferenceSchema.nullable(), title: short,
   language: z.enum(['de', 'en']), maximumSeconds: z.number().int().min(20).max(180), goal: advisoryText, assetRefs: refs });
+export const advisoryCanonicalParentSchema = z.strictObject({ reference: advisoryReferenceSchema, identity: advisoryIdentitySchema, workflowId: advisoryUuid,
+  workflowVersion: z.number().int().positive().safe(), kind: z.enum(['BRIEF', 'CLOSE_PLAN', 'DEMO', 'ASSET', 'OFFER']), label: short, validUntil: advisoryTime.nullable(), revokedAt: advisoryTime.nullable(), data: z.record(z.string(), z.unknown()) });
+export const advisoryGroundedFactSchema = z.strictObject({ id: advisoryUuid, identity: advisoryIdentitySchema, workflowId: advisoryUuid, text: advisoryText,
+  sourceReference: advisorySourceSchema, evidenceRef: advisoryReferenceSchema, visibility: z.enum(['INTERNAL', 'APPROVED_CUSTOMER']), approvalRef: advisoryReferenceSchema.nullable() });
+export const advisoryAdviceDraftSchema = z.strictObject({ summary: advisoryText, claims: z.array(z.strictObject({ factId: advisoryUuid, exactQuote: advisoryText, explanation: advisoryText })).min(1).max(15), questions: z.array(advisoryText).max(10), limitations: z.array(advisoryText).min(1).max(10), humanReviewRequired: z.literal(true) });
+export type AdvisoryCanonicalParent = z.infer<typeof advisoryCanonicalParentSchema>;
+export type AdvisoryGroundedFact = z.infer<typeof advisoryGroundedFactSchema>;
 export const advisoryApprovalInputSchema = z.strictObject({ recordRef: advisoryReferenceSchema, validUntil: advisoryTime });
 export const advisoryPayloadSchemas = {
   record_value_basis: advisoryValueBasisSchema, record_discovery_answer: advisoryDiscoveryAnswerSchema, register_transcript: advisoryTranscriptSchema,
@@ -80,30 +95,41 @@ export const advisoryRecordSchema = z.strictObject({ id: advisoryUuid, identity:
   validUntil: advisoryTime.nullable(), revokedAt: advisoryTime.nullable(), parentRefs: refs, payload: z.record(z.string(), z.unknown()) });
 export type AdvisoryRecord<T = Record<string, unknown>> = Omit<z.infer<typeof advisoryRecordSchema>, 'payload'> & { payload: T };
 export const advisoryChoiceSchema = z.strictObject({ ref: advisoryReferenceSchema, identity: advisoryIdentitySchema, workflowId: advisoryUuid, label: short, status: short });
+export const advisoryOfferChoiceSchema = advisoryChoiceSchema.extend({ totalNetMinor: minor, currency: z.literal('EUR'), taxBasis: z.literal('NET') });
+export const advisoryPrincipalChoiceSchema = z.strictObject({ userId: advisoryUuid, displayName: short, email: z.email(), sourceDigest: advisoryHash });
 export const advisoryReceiptDataSchema = z.strictObject({ identity: advisoryIdentitySchema, workflowId: advisoryUuid, version: integer, workflowVersion: z.number().int().positive().safe(), recordId: advisoryUuid.nullable(), recordDigest: advisoryHash.nullable(), jobId: advisoryUuid.nullable(), canContact: z.literal(false) });
 export const websiteSalesAdvisoryReceiptSchema = z.strictObject({ contractVersion: z.literal(websiteSalesAdvisoryContract), persisted: z.literal(true), commandId: advisoryUuid, auditReference: advisoryText.max(500), correlationId: z.uuidv4(), replayed: z.boolean(), data: advisoryReceiptDataSchema });
 export const websiteSalesAdvisoryReadSchema = z.strictObject({ contractVersion: z.literal(websiteSalesAdvisoryContract), source: z.literal('database'), identity: advisoryIdentitySchema,
   workflowId: advisoryUuid, version: integer, workflowVersion: z.number().int().positive().safe(), canWrite: z.boolean(), canApproveFacts: z.boolean(), canContact: z.literal(false),
   actionEligibility: z.array(z.strictObject({ operation: advisoryOperationSchema, eligible: z.boolean(), blockers: z.array(short).max(20) })).max(30), blockers: z.array(short).max(30), records: z.array(advisoryRecordSchema).max(200),
-  choices: z.strictObject({ briefs: z.array(advisoryChoiceSchema).max(20), closePlans: z.array(advisoryChoiceSchema).max(20), demos: z.array(advisoryChoiceSchema).max(20), contacts: z.array(advisoryChoiceSchema).max(30), principals: z.array(advisoryChoiceSchema).max(30), tasks: z.array(advisoryChoiceSchema).max(30), sources: z.array(advisorySourceSchema).max(100) }),
+  choices: z.strictObject({ briefs: z.array(advisoryChoiceSchema).max(20), closePlans: z.array(advisoryChoiceSchema).max(20), demos: z.array(advisoryChoiceSchema).max(20), offers: z.array(advisoryOfferChoiceSchema).max(25), contacts: z.array(advisoryChoiceSchema).max(30), principals: z.array(advisoryPrincipalChoiceSchema).max(30), tasks: z.array(advisoryChoiceSchema).max(30), sources: z.array(advisorySourceSchema).max(100),
+    cohortCandidates: z.array(z.strictObject({ label: short, member: advisoryCohortMemberSchema, grantId: advisoryUuid.nullable() })).max(50) }),
   jobs: z.array(z.strictObject({ id: advisoryUuid, kind: z.enum(['ADVICE', 'TRANSCRIPT_ANALYSIS', 'VIDEO']), recordRef: advisoryReferenceSchema, status: z.enum(['READY', 'CLAIMED', 'SUCCEEDED', 'UNKNOWN', 'FAILED', 'CANCELLED']), updatedAt: advisoryTime })).max(50),
   buyerGrants: z.array(z.strictObject({ id: advisoryUuid, packetRef: advisoryReferenceSchema, principalUserId: advisoryUuid, expiresAt: advisoryTime, revokedAt: advisoryTime.nullable() })).max(30) });
 export type WebsiteSalesAdvisoryRead = z.infer<typeof websiteSalesAdvisoryReadSchema>;
 export const websiteSalesAdvisoryReconcileSchema = z.discriminatedUnion('status', [z.strictObject({ contractVersion: z.literal('website-sales-advisory-reconcile-v1'), status: z.literal('NOT_FOUND'), correlationId: z.uuidv4() }),
   z.strictObject({ contractVersion: z.literal('website-sales-advisory-reconcile-v1'), status: z.literal('COMMITTED'), correlationId: z.uuidv4(), receipt: websiteSalesAdvisoryReceiptSchema, currentData: websiteSalesAdvisoryReadSchema })]);
 export const advisoryBuyerProjectionSchema = z.strictObject({ contractVersion: z.literal('website-sales-advisory-buyer-v1'), grantId: advisoryUuid, expiresAt: advisoryTime,
-  canWrite: z.boolean(), blockers: z.array(short).max(20), packetRef: advisoryReferenceSchema, title: short, summary: advisoryText, decisionCriteria: z.array(short).max(12),
+  grantVersion: z.number().int().positive().safe(), actorUserId: advisoryUuid.nullable(), authAssurance: z.enum(['READ_ONLY_LINK', 'AUTHENTICATED_ACCOUNT']), canWrite: z.boolean(), blockers: z.array(short).max(20), packetRef: advisoryReferenceSchema, title: short, summary: advisoryText, decisionCriteria: z.array(short).max(12),
   options: z.array(z.strictObject({ label: short, benefits: z.array(short).max(8), limits: z.array(short).max(8) })).max(4),
-  steps: z.array(z.strictObject({ id: advisoryUuid, label: short, responsible: z.enum(['BUYER', 'NOVALURE']), dueAt: advisoryTime.nullable(), status: z.enum(['PROPOSED', 'CONFIRMED', 'DONE']) })).max(15),
+  steps: z.array(z.strictObject({ id: advisoryUuid, version: z.number().int().positive().safe(), label: short, responsible: z.enum(['BUYER', 'NOVALURE']), dueAt: advisoryTime.nullable(), status: z.enum(['PROPOSED', 'CONFIRMED', 'DECLINED', 'DONE']) })).max(15),
   questions: z.array(z.strictObject({ id: advisoryUuid, text: advisoryText, answer: advisoryText.nullable() })).max(30),
   demo: z.strictObject({ id: advisoryUuid, title: short, accessPath: z.string().regex(/^\/sales-preview\/[A-Za-z0-9/_-]+$/) }).nullable(),
-  video: z.strictObject({ id: advisoryUuid, title: short, mediaPath: z.string().regex(/^\/api\/public\/website-sales\/advisory\/[A-Za-z0-9/_-]+$/), durationSeconds: z.number().positive().max(180), sha256: advisoryHash }).nullable() });
+  video: z.strictObject({ id: advisoryUuid, title: short, mediaPath: z.string().regex(/^\/api\/public\/website-sales\/advisory\/[A-Za-z0-9/_-]+$/), durationSeconds: z.number().positive().max(180), sha256: advisoryHash }).nullable() })
+  .refine(v => v.canWrite ? v.authAssurance === 'AUTHENTICATED_ACCOUNT' && v.actorUserId !== null : v.actorUserId === null, 'ADVISORY_BUYER_IDENTITY_REQUIRED');
 export type WebsiteSalesAdvisoryBuyerRead = z.infer<typeof advisoryBuyerProjectionSchema>;
+export const advisoryBuyerCommandSchema = z.strictObject({ contractVersion: z.literal('website-sales-advisory-buyer-v1'), grantId: advisoryUuid, expectedGrantVersion: z.number().int().positive().safe(), packetRef: advisoryReferenceSchema,
+  stepId: advisoryUuid.nullable(), expectedStepVersion: z.number().int().positive().safe().nullable(), disposition: z.enum(['CONFIRMED', 'DECLINED', 'QUESTION']), comment: advisoryText.max(1000).nullable(), idempotencyKey: z.uuidv4(), correlationId: z.uuidv4() })
+  .refine(v => v.stepId === null ? v.expectedStepVersion === null && v.disposition === 'QUESTION' && v.comment !== null : v.expectedStepVersion !== null, 'ADVISORY_BUYER_STEP_REQUIRED');
+export const advisoryBuyerReceiptSchema = z.strictObject({ contractVersion: z.literal('website-sales-advisory-buyer-v1'), persisted: z.literal(true), commandId: advisoryUuid, auditReference: advisoryText.max(500), correlationId: z.uuidv4(), replayed: z.boolean(),
+  data: z.strictObject({ grantId: advisoryUuid, packetRef: advisoryReferenceSchema, actorUserId: advisoryUuid, grantVersion: z.number().int().positive().safe(), stepId: advisoryUuid.nullable(), stepVersion: z.number().int().positive().safe().nullable(), questionId: advisoryUuid.nullable() }) });
+export const advisoryBuyerReconcileSchema = z.discriminatedUnion('status', [z.strictObject({ contractVersion: z.literal('website-sales-advisory-buyer-reconcile-v1'), status: z.literal('NOT_FOUND'), correlationId: z.uuidv4() }),
+  z.strictObject({ contractVersion: z.literal('website-sales-advisory-buyer-reconcile-v1'), status: z.literal('COMMITTED'), correlationId: z.uuidv4(), receipt: advisoryBuyerReceiptSchema, currentData: advisoryBuyerProjectionSchema })]);
 
 /** Identity validation is usable by browser clients; hashing and admission stay server-side. */
 export function validateWebsiteSalesAdvisoryRead(raw: unknown, identity: AdvisoryIdentity, workflowId: string): WebsiteSalesAdvisoryRead {
   const value = websiteSalesAdvisoryReadSchema.parse(raw), expected = advisoryIdentitySchema.parse(identity);
   const equal = (a: AdvisoryIdentity) => Object.keys(expected).every(k => a[k as keyof AdvisoryIdentity] === expected[k as keyof AdvisoryIdentity]);
-  if (!equal(value.identity) || value.workflowId !== workflowId || [...value.records, ...value.choices.briefs, ...value.choices.closePlans, ...value.choices.demos, ...value.choices.contacts, ...value.choices.principals, ...value.choices.tasks].some(r => !equal(r.identity) || r.workflowId !== workflowId)) throw Error('ADVISORY_READ_SCOPE_DENIED');
+  if (!equal(value.identity) || value.workflowId !== workflowId || [...value.records, ...value.choices.briefs, ...value.choices.closePlans, ...value.choices.demos, ...value.choices.offers, ...value.choices.contacts, ...value.choices.tasks].some(r => !equal(r.identity) || r.workflowId !== workflowId) || value.choices.cohortCandidates.some(c => c.member.identity.workspaceId !== expected.workspaceId || c.member.identity.projectId !== expected.projectId)) throw Error('ADVISORY_READ_SCOPE_DENIED');
   return value;
 }
