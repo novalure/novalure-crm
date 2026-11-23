@@ -6,10 +6,11 @@ import { dirname, resolve, sep } from 'node:path';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import { MockLanguageModelV4 } from 'ai/test';
-import { createWebsiteSalesAdvisoryExecutor, readWebsiteSalesAdvisoryJob } from '../../src/lib/db/website-sales-advisory-jobs';
+import { createWebsiteSalesAdvisoryExecutor, readWebsiteSalesAdvisoryJob, claimWebsiteSalesAdvisoryJob, withWebsiteSalesAdvisoryExecutorActor, readWebsiteSalesAdvisoryDemo, completeWebsiteSalesAdvisoryJob, markWebsiteSalesAdvisoryJobUnknown, type WebsiteSalesAdvisoryExecutor } from '../../src/lib/db/website-sales-advisory-jobs';
 import { advisoryProfileExecutionBinding } from '../../src/lib/website-sales-advisory-host';
 import { runWebsiteSalesAdvisoryModelJob } from '../../src/lib/website-sales-advisory-worker';
-import { runWebsiteSalesAdvisoryVideoJob } from '../website-sales-advisory-video-worker-native';
+import { createWebsiteSalesAdvisoryVideoJobRunner } from '../website-sales-advisory-video-worker';
+import { verifyWebsiteStudioQaCertificate } from '../../src/lib/website-sales-studio-qa';
 import { CRM_MACHINE_WORKSPACE_ID, CRM_MACHINE_ISSUER, CRM_MACHINE_AUDIENCE, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, CRM_MACHINE_SUBJECT, CRM_MACHINE_ENVIRONMENT } from '../../src/lib/crm-machine-auth';
 import { areQueueWorkersPaused } from '../../src/lib/cron/runtime';
 import { closeLocalTestPool } from '../../src/lib/db/local-test-transport';
@@ -68,14 +69,24 @@ async function main() {
     executorPool = new Pool({ ...fixture.database, user: saved.user, password: saved.password, max: 2 });
     const deadline = Date.now() + 240000;
     const executor = createWebsiteSalesAdvisoryExecutor({ pool: executorPool as unknown as TenantPool, assertCurrent: async () => { assert(!areQueueWorkersPaused()); assert.equal(hash(await readFile(fixtureFile, 'utf8')), fingerprint); return advisoryProfileExecutionBinding(saved.profile, deadline); } });
-    let generated = 0;
-    const result = input.mode === 'VIDEO' ? await runWebsiteSalesAdvisoryVideoJob(executor, input.jobId) : await runWebsiteSalesAdvisoryModelJob({ executor,
+    let generated = 0, rejectedOverlongVideo = false;
+    const runVideo = createWebsiteSalesAdvisoryVideoJobRunner<WebsiteSalesAdvisoryExecutor>({ read: readWebsiteSalesAdvisoryJob, claim: claimWebsiteSalesAdvisoryJob,
+      withActor: (cap, id, run) => withWebsiteSalesAdvisoryExecutorActor(cap, id, actor => run({ job: actor.job, isCurrent: actor.isCurrent })), readDemo: readWebsiteSalesAdvisoryDemo,
+      verifyQa: (certificate, artifact, workflowId, builderId, now) => { verifyWebsiteStudioQaCertificate(certificate, artifact, workflowId, builderId, now); }, markUnknown: markWebsiteSalesAdvisoryJobUnknown,
+      complete: async (cap, completion) => {
+        const current = await readWebsiteSalesAdvisoryJob(cap, completion.jobId), story = (current.frozenContext.storyboard as { payload: { value: { shots: unknown[]; maximumSeconds: number } } }).payload.value;
+        assert(story.shots.length >= 2 && story.maximumSeconds === 20);
+        await assert.rejects(completeWebsiteSalesAdvisoryJob(cap, { ...completion, video: { ...completion.video, durationSeconds: 21 } }), error => Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ADVISORY_VIDEO_APPROVED_DURATION_EXCEEDED'));
+        const retained = await readWebsiteSalesAdvisoryJob(cap, completion.jobId); assert.equal(retained.status, 'CLAIMED'); assert.equal(retained.resultDigest, null); rejectedOverlongVideo = true;
+        return completeWebsiteSalesAdvisoryJob(cap, completion);
+      } });
+    const result = input.mode === 'VIDEO' ? await runVideo(executor, input.jobId) : await runWebsiteSalesAdvisoryModelJob({ executor,
       modelPorts: { profile: { enabled: true, targets: [{ workspaceId: input.workspaceId, projectId: input.projectId }], validUntil: new Date(deadline).toISOString(), maxCreditsPerTurn: 100 },
         model: new MockLanguageModelV4({ doGenerate: async () => { generated++; return { content: [{ type: 'text', text: JSON.stringify({ answerable: true, sourceIndices: [0], assertions: [], roleplayUtterance: null }) }], finishReason: { unified: 'stop', raw: undefined }, warnings: [], usage: { inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 20, text: 20, reasoning: undefined } } }; } }) } }, input.jobId);
     const current = await readWebsiteSalesAdvisoryJob(executor, input.jobId);
     let actualCredits: number | null = null;
     if (input.mode === 'ADVICE') { const row = (await admin.query('select actual_credits from ai_credit_reservations where workspace_id=$1 and request_id=$2', [input.workspaceId, input.jobId])).rows[0]; actualCredits = row?.actual_credits ?? null; }
-    process.stdout.write(JSON.stringify({ syntheticOnly: true, productionAdmission: false, realProviderCalls: 0, syntheticSdkCalls: generated, mode: input.mode, jobId: input.jobId, status: result.status, persistedStatus: current.status, resultDigest: current.resultDigest, actualCredits }) + '\n');
+    process.stdout.write(JSON.stringify({ syntheticOnly: true, productionAdmission: false, realProviderCalls: 0, syntheticSdkCalls: generated, mode: input.mode, jobId: input.jobId, status: result.status, persistedStatus: current.status, resultDigest: current.resultDigest, actualCredits, rejectedOverlongVideo }) + '\n');
     if (current.status !== 'SUCCEEDED') process.exitCode = 2;
   } finally {
     await executorPool?.end(); await closeLocalTestPool(); await admin.end(); for (const [key, value] of Object.entries(environment)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
