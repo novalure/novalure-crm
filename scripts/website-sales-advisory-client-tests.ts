@@ -26,7 +26,7 @@ function fixture() {
     data: { identity: { workspaceId, ...scope }, workflowId, version: 1, workflowVersion: 2, recordId: randomUUID(), recordDigest: 'a'.repeat(64), jobId: null, canContact: false } };
   const read: WebsiteSalesAdvisoryRead = { contractVersion: websiteSalesAdvisoryContract, source: 'database', identity: { workspaceId, ...scope }, workflowId,
     version: 1, workflowVersion: 2, canWrite: false, canApproveFacts: false, canContact: false, actionEligibility: [], blockers: [], records: [], jobs: [], buyerGrants: [], groundedFacts: [], recordStates: [], coverage: { historyComplete: true, recordsLimit: 200, hasMore: false }, buyerQuestions: [], experimentAssessments: [],
-    choices: { briefs: [], closePlans: [], demos: [], offers: [], contacts: [], principals: [], tasks: [], sources: [], cohortCandidates: [] } };
+    choices: { briefs: [], closePlans: [], demos: [], offers: [], contacts: [], principals: [], tasks: [], sources: [], cohortCandidates: [], forecastOrigins: [] } };
   return { workspaceId, actorId, workflowId, scope, command, receipt, read };
 }
 function mock(run: (request: Request) => Promise<Response>) {
