@@ -56,6 +56,14 @@ test('two distinct facts sharing one evidence reference retain the actual select
   assert.equal(out.status, 'READY'); assert.deepEqual(out.selectedSourceIndices, [1]); assert.equal(out.text, f.input.sources[1].text);
 });
 
+test('a selected answer exceeding the public text bound is held for review without silently truncating either source', async () => {
+  const f = fixture(); f.input.sources = [{ ref: f.input.sources[0].ref, text: 'A'.repeat(1200) }, { ref: f.input.sources[0].ref, text: 'B'.repeat(1200) }];
+  f.output({ answerable: true, sourceIndices: [0, 1], assertions: [], roleplayUtterance: null });
+  const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
+  assert.equal(out.status, 'UNANSWERABLE'); assert.equal(out.reason, 'APPROVED_ANSWER_LENGTH_REQUIRES_REVIEW'); assert.equal(out.text, null);
+  assert.equal(f.settled.length, 1); assert.equal(f.settled[0].status, 'succeeded');
+});
+
 test('revoking the actual host AI profile during reservation prevents dispatch and releases the unused credits', async () => {
   const f = fixture(), previous = process.env.CRM_WEBSITE_SALES_ADVISORY_AI;
   process.env.CRM_WEBSITE_SALES_ADVISORY_AI = JSON.stringify(f.profile);

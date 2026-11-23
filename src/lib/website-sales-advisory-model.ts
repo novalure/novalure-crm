@@ -127,7 +127,9 @@ export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: Adv
   if (input.kind === 'ADVICE') {
     if (!out.sourceIndices.length || new Set(out.sourceIndices).size !== out.sourceIndices.length || out.sourceIndices.some(i => !input.sources[i])
       || out.assertions.length || out.roleplayUtterance !== null) return result(input, 'UNANSWERABLE', 'MODEL_SOURCE_SELECTION_INVALID', { model, chargedCredits });
-    return result(input, 'READY', 'APPROVED_EXCERPTS_SELECTED', { text: out.sourceIndices.map(i => input.sources[i].text).join('\n\n'),
+    const answer = out.sourceIndices.map(i => input.sources[i].text).join('\n\n');
+    if (!advisoryText.safeParse(answer).success) return result(input, 'UNANSWERABLE', 'APPROVED_ANSWER_LENGTH_REQUIRES_REVIEW', { model, chargedCredits });
+    return result(input, 'READY', 'APPROVED_EXCERPTS_SELECTED', { text: answer,
       sourceRefs: out.sourceIndices.map(i => input.sources[i].ref), selectedSourceIndices: out.sourceIndices, model, chargedCredits });
   }
   if (input.kind === 'TRANSCRIPT_ANALYSIS') {

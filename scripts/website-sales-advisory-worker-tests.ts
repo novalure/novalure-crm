@@ -5,7 +5,9 @@ import test from 'node:test';
 import { MockLanguageModelV4 } from 'ai/test';
 import { createAdvisoryFixture, prepareAdvisoryAdviceFixture } from './lib/website-sales-advisory-fixture';
 import { runWebsiteSalesAdvisoryModelJob } from '../src/lib/website-sales-advisory-worker';
-import { readWebsiteSalesAdvisoryJob } from '../src/lib/db/website-sales-advisory-jobs';
+import { createWebsiteSalesAdvisoryExecutor, readWebsiteSalesAdvisoryJob } from '../src/lib/db/website-sales-advisory-jobs';
+import { advisoryProfileExecutionBinding } from '../src/lib/website-sales-advisory-host';
+import type { TenantPool } from '../src/lib/db/tenant-client';
 
 // Actual restricted PostgreSQL, saved grants, existing credit ledger and actual AI SDK.
 // The language-model provider is explicitly synthetic; no vendor request or live funding.
@@ -23,13 +25,19 @@ test('private Sales jobs execute through the actual SDK and normal durable credi
         usage: { inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 20, text: 20, reasoning: undefined } } };
     } });
     const modelPorts = { model, profile: { enabled: true as const, targets: [{ workspaceId: f.ws, projectId: f.project }], validUntil: f.future, maxCreditsPerTurn: 100 } };
-    const run = (jobId: string) => runWebsiteSalesAdvisoryModelJob({ executor: f.executor, modelPorts }, jobId);
+    const fixedProfile = { id: randomUUID(), identity: { workspaceId: f.ws, projectId: f.project, companyId: f.company, locationId: f.scope.locationId },
+      workflowId: f.scope.workflowId, actorId: f.binding.actorId, workloadId: f.workload, grantId: f.grant, authorityReference: f.binding.authorityReference,
+      allowedKinds: ['ADVICE', 'TRANSCRIPT_ANALYSIS', 'ROLEPLAY'], validUntil: f.future };
+    const hostExecutor = createWebsiteSalesAdvisoryExecutor({ pool: f.executorPool as unknown as TenantPool,
+      assertCurrent: async () => advisoryProfileExecutionBinding(fixedProfile, Date.parse(f.future)) });
+    const run = (jobId: string) => runWebsiteSalesAdvisoryModelJob({ executor: hostExecutor, modelPorts }, jobId);
     await t.test('advice resolves an actual saved service actor, charges known usage once and persists a review draft', async () => {
       assert.equal((await run(prepared.jobId)).status, 'SUCCEEDED'); assert.equal(calls, 1);
       const rows = (await f.adminPool.query('select actor_id,status,actual_credits from ai_credit_reservations where workspace_id=$1 and request_id=$2', [f.ws, prepared.jobId])).rows;
       assert.equal(rows.length, 1); assert.equal(rows[0].actor_id, f.binding.actorId); assert.equal(rows[0].status, 'succeeded'); assert(rows[0].actual_credits > 0);
       const drafts = (await f.read()).records.filter(r => r.kind === 'ADVICE'); assert.equal(drafts.length, 1);
       assert.equal(drafts[0].payload.status, 'READY'); assert.equal((drafts[0].payload.value as Record<string, unknown>).status, 'DRAFT_REQUIRES_REVIEW');
+      assert.equal((drafts[0].payload.value as Record<string, unknown>).summary, prepared.facts[0].text);
       assert.equal((await run(prepared.jobId)).status, 'NOT_CLAIMED'); assert.equal(calls, 1);
     });
     await t.test('transcript analysis can quote the final one of all90 authorized segments without changing customer facts', async () => {

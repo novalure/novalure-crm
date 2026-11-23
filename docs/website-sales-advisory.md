@@ -65,6 +65,10 @@ capabilities. Unknown provider/settlement/completion outcomes are held UNKNOWN
 and are not automatically retried. Exact citations and review requirements are
 validated again before the result is persisted.
 
+Each fixed profile carries the actual saved workload/grant `authorityReference`.
+Configuration/revision freshness is checked separately; changing a deployment
+does not invent a different business-authority reference.
+
 VIDEO runs in a dedicated checked-out Node/browser process, outside the Vercel
 route bundle. Its actual clean repository revision/origin and private database
 target are verified; it does not impersonate a Vercel deployment. The worker

@@ -49,7 +49,7 @@ export function advisoryJobCandidate(job: FrozenAdvisoryJob, input: AdvisoryMode
       if (!fact) throw Error('ADVISORY_SELECTED_FACT_CHANGED');
       return { factId: fact.id, exactQuote: source.text, explanation: 'Wörtlicher Auszug aus der freigegebenen Quelle; vor Veröffentlichung prüfen.' };
     });
-    return advisoryAdviceDraftSchema.parse({ summary: 'Quellengebundene Antwort zur Prüfung.', claims, questions: [],
+    return advisoryAdviceDraftSchema.parse({ summary: output.text, claims, questions: [],
       limitations: ['Dieser Entwurf ist keine verbindliche Zusage und benötigt eine gesonderte Prüfung und Freigabe.'], humanReviewRequired: true });
   }
   if (job.kind === 'TRANSCRIPT_ANALYSIS') return output.assertions.map((assertion, index) => {

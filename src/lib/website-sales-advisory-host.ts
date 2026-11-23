@@ -13,7 +13,8 @@ import { advisoryModelProfileSchema } from './website-sales-advisory-model';
 
 const runtimeSchema = z.enum(['VERCEL', 'CHECKED_OUT_NODE']);
 const profileSchema = z.strictObject({ id: z.uuid(), identity: advisoryIdentitySchema, workflowId: z.uuid(), actorId: z.uuid(),
-  workloadId: z.uuid(), grantId: z.uuid(), allowedKinds: z.array(z.enum(['ADVICE', 'TRANSCRIPT_ANALYSIS', 'ROLEPLAY', 'VIDEO'])).min(1).max(4), validUntil: z.iso.datetime({ offset: true }) });
+  workloadId: z.uuid(), grantId: z.uuid(), authorityReference: z.string().trim().min(1).max(200),
+  allowedKinds: z.array(z.enum(['ADVICE', 'TRANSCRIPT_ANALYSIS', 'ROLEPLAY', 'VIDEO'])).min(1).max(4), validUntil: z.iso.datetime({ offset: true }) });
 const hostSchema = z.strictObject({ contractVersion: z.literal('website-sales-advisory-host-v1'), enabled: z.boolean(),
   hostRuntime: runtimeSchema, environment: z.literal('production'), revision: z.string().regex(/^[a-f0-9]{40}$/), databaseHostDigest: z.hash('sha256'),
   maxJobsPerRun: z.number().int().min(1).max(5), profiles: z.array(profileSchema).min(1).max(50) });
@@ -21,6 +22,14 @@ export type AdvisoryHostConfiguration = z.infer<typeof hostSchema>;
 export type AdvisoryHostRuntime = z.infer<typeof runtimeSchema>;
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 function unavailable(): never { throw new CrmCommandError('ADVISORY_HOST_NOT_CONFIGURED', 'Advisory host unavailable', 503); }
+
+/** Data binding after runtime admission. The native store independently checks the actual saved grant. */
+export function advisoryProfileExecutionBinding(raw: unknown, deadline: number): AdvisoryExecutionBinding {
+  const profile = profileSchema.parse(raw), expiresAt = Math.min(deadline, Date.parse(profile.validUntil));
+  if (!Number.isSafeInteger(deadline) || expiresAt <= Date.now()) return unavailable();
+  return { ...profile.identity, workflowId: profile.workflowId, actorId: profile.actorId, workloadId: profile.workloadId,
+    grantId: profile.grantId, allowedKinds: profile.allowedKinds, expiresAt, authorityReference: profile.authorityReference };
+}
 
 /** The dedicated video process verifies its actual clean checkout. It never impersonates a Vercel deployment. */
 function checkedOutRevision(revision: string) {
@@ -82,8 +91,7 @@ export function configuredAdvisoryExecutor(profileId: string, expectedRuntime: A
     const fresh = readAdvisoryHostConfiguration(expectedRuntime);
     if (!fresh || advisoryDigest(fresh) !== expected || Date.now() >= deadline) return unavailable();
     const current = fresh.profiles.find(p => p.id === profileId); if (!current) return unavailable();
-    return { ...current.identity, workflowId: current.workflowId, actorId: current.actorId, workloadId: current.workloadId,
-      grantId: current.grantId, allowedKinds: current.allowedKinds, expiresAt: deadline, authorityReference: `advisory-host:${expected}:${profileId}` };
+    return advisoryProfileExecutionBinding(current, deadline);
   } });
 }
 
