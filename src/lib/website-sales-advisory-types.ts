@@ -65,7 +65,7 @@ export const advisoryApprovalInputSchema = z.strictObject({ recordRef: advisoryR
 export const advisoryPayloadSchemas = {
   record_value_basis: advisoryValueBasisSchema, record_discovery_answer: advisoryDiscoveryAnswerSchema, register_transcript: advisoryTranscriptSchema,
   review_transcript_assertions: advisoryTranscriptReviewSchema, register_knowledge: advisoryKnowledgeSchema, approve_knowledge: advisoryApprovalInputSchema,
-  configure_experiment: advisoryExperimentPlanSchema, stop_experiment: z.strictObject({ experimentRef: advisoryReferenceSchema, reason: advisoryText }), configure_forecast: advisoryForecastPolicySchema,
+  configure_experiment: advisoryExperimentPlanSchema.extend({ registeredAt: advisoryTime.optional(), eligibilityDigest: advisoryHash.optional(), assignmentSaltDigest: advisoryHash.optional() }), stop_experiment: z.strictObject({ experimentRef: advisoryReferenceSchema, reason: advisoryText }), configure_forecast: advisoryForecastPolicySchema,
   approve_buyer_packet: advisoryApprovalInputSchema, approve_video_storyboard: advisoryApprovalInputSchema, review_advice: z.strictObject({ recordRef: advisoryReferenceSchema, decision: z.enum(['ACCEPTED', 'REJECTED']), reason: advisoryText, publishToBuyer: z.boolean().optional(), buyerQuestionId: advisoryUuid.optional() }).refine(v => !v.publishToBuyer || v.decision === 'ACCEPTED' && v.buyerQuestionId !== undefined, 'ADVISORY_BUYER_PUBLICATION_REQUIRES_ACCEPTED_QUESTION'),
   create_buyer_grant: z.strictObject({ packetRef: advisoryReferenceSchema, tokenHash: advisoryHash, expiresAt: advisoryTime, principalUserId: advisoryUuid }),
   revoke_buyer_grant: z.strictObject({ grantId: advisoryUuid, reason: advisoryText }),
