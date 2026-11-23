@@ -442,6 +442,7 @@ function KnowledgeCenterContent({
     source?: KnowledgeSource,
     type: KnowledgeSourceType = "manual",
   ) {
+    const focusWhenOpened = document.activeElement;
     const version = source?.version;
     const faqData = version?.structuredData;
     setEditor(
@@ -474,6 +475,8 @@ function KnowledgeCenterContent({
     setError("");
     setNotice("");
     window.requestAnimationFrame(() => {
+      // Preserve a field the user has already chosen before the next frame.
+      if (document.activeElement !== focusWhenOpened && document.activeElement !== document.body) return;
       const nameInput = document.getElementById(`${formId}-source-name`);
       nameInput?.scrollIntoView({ block: "nearest" });
       nameInput?.focus({ preventScroll: true });
