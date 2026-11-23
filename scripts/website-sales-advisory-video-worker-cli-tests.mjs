@@ -32,3 +32,8 @@ test('failed host admission or execution still closes the private pool without c
   await assert.rejects(runAdvisoryVideoWorkerCli(['--profile', profileId, '--job', jobId], async () => ({ configuredExecutor: async () => { throw Error('synthetic authority failure'); }, runJob: async () => { run++; }, close: async () => { closed++; } })));
   assert.equal(run, 0); assert.equal(closed, 1); assert.deepEqual({ VERCEL: process.env.VERCEL, NODE_ENV: process.env.NODE_ENV }, environment);
 });
+test('unexpected native result fields cannot be echoed as private data in a CLI receipt', async () => {
+  const profileId = randomUUID(), jobId = randomUUID(); let closed = 0;
+  await assert.rejects(runAdvisoryVideoWorkerCli(['--profile', profileId, '--job', jobId], async () => ({ configuredExecutor: async () => ({}), runJob: async () => ({ jobId, status: 'SUCCEEDED', resultDigest: 'synthetic private value must not be printed' }), close: async () => { closed++; } })), /RESULT_INVALID/);
+  assert.equal(closed, 1);
+});

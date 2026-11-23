@@ -28,7 +28,8 @@ export async function runAdvisoryVideoWorkerCli(args, load = nativePorts) {
   try {
     const executor = await ports.configuredExecutor(selected.profileId, 'CHECKED_OUT_NODE');
     const result = await ports.runJob(executor, selected.jobId);
-    if (result.jobId !== selected.jobId || !['NOT_CLAIMED', 'RECONCILIATION_REQUIRED', 'SUCCEEDED', 'SUCCEEDED_RECONCILED', 'UNKNOWN'].includes(result.status)) throw Error('ADVISORY_VIDEO_WORKER_RESULT_INVALID');
+    if (result.jobId !== selected.jobId || !['NOT_CLAIMED', 'RECONCILIATION_REQUIRED', 'SUCCEEDED', 'SUCCEEDED_RECONCILED', 'UNKNOWN'].includes(result.status)
+      || result.resultDigest !== null && (typeof result.resultDigest !== 'string' || !/^[a-f0-9]{64}$/.test(result.resultDigest))) throw Error('ADVISORY_VIDEO_WORKER_RESULT_INVALID');
     return { exitCode: ['UNKNOWN', 'RECONCILIATION_REQUIRED'].includes(result.status) ? 2 : 0,
       output: JSON.stringify({ runtime: 'CHECKED_OUT_NODE', jobId: result.jobId, status: result.status, resultDigest: result.resultDigest }) };
   } finally { await ports.close(); }
