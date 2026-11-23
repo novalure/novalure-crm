@@ -94,7 +94,7 @@ async function prepareCanonicalDemo() {
   const artifact = (await studioRead()).artifacts.find(row => row.id === built.data.artifactId); assert(artifact?.artifact.kind === 'DEMO');
   const qa = await login(fixture.websiteStudio.qa); secretValues.add(qa.account.password);
   const certificate = await inspectAndSignWebsiteDemo({ context: qa.context, baseUrl: base.href, scope: { workspaceId: actor.account.workspaceId, ...state.scope }, artifactRecord: artifact, workflowId: state.workflow.id, qaActorId: qa.account.userId, ...fixture.websiteStudio.signer, outputDirectory: path.join(output, 'canonical-demo-independent-qa') });
-  await studioWrite('submit_qa', { artifactId: artifact.id, certificate }); await refresh(); return { id: artifact.id, version: artifact.version, digest: artifact.digest ?? artifact.artifact.artifactDigest };
+  await studioWrite('submit_qa', { artifactId: artifact.id, certificate }); await refresh(); return { id: artifact.id, version: artifact.artifact.version, digest: artifact.artifact.artifactDigest };
 }
 let knowledgeRef, valueCaseRef, packetRef, grantId, demoRef, expectedAnswer, videoPath;
 try {
