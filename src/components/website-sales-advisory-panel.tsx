@@ -12,7 +12,7 @@ import { AdvisoryValueForms, AdvisoryDiscoveryForms } from './website-sales-advi
 import { AdvisoryKnowledgeForms, AdvisoryTranscriptForms } from './website-sales-advisory-conversations';
 import { AdvisoryAdviceForms, AdvisoryPacketForms, AdvisoryVideoForms } from './website-sales-advisory-customer-forms';
 import { AdvisoryLearningForms } from './website-sales-advisory-learning-forms';
-import { AdvisoryAssertionReviews, AdvisoryStoredRecords } from './website-sales-advisory-records';
+import { AdvisoryAssertionReviews, AdvisoryExperimentAssessments, AdvisoryStoredRecords } from './website-sales-advisory-records';
 import { AdvisoryAction, advisorySelected, type AdvisoryCall } from './website-sales-advisory-form-context';
 import { AdvisoryChoices, AdvisoryFields, advisoryText } from './website-sales-advisory-fields';
 
@@ -94,7 +94,7 @@ function AdvisoryPanel({ workspaceId, actorId, workflowId, language, sourceRevis
         <section hidden={stage !== 'advisor'} className="space-y-5"><AdvisoryAdviceForms {...formProps} call={call}/><AdvisoryStoredRecords data={data} language={language} kinds={['ADVICE_REQUEST', 'ADVICE', 'ADVICE_REVIEW']}/></section>
         <section hidden={stage !== 'conversation'} className="space-y-5"><AdvisoryTranscriptForms {...formProps} call={call}/><AdvisoryAssertionReviews {...formProps} call={call}/><AdvisoryStoredRecords data={data} language={language} kinds={['TRANSCRIPT', 'TRANSCRIPT_ASSERTIONS', 'TRANSCRIPT_REVIEW']}/></section>
         <section hidden={stage !== 'practice'} className="space-y-5"><AdvisoryKnowledgeForms {...formProps} call={call}/><AdvisoryStoredRecords data={data} language={language} kinds={['KNOWLEDGE', 'KNOWLEDGE_APPROVAL', 'COACHING', 'ROLEPLAY']}/></section>
-        <section hidden={stage !== 'learning'} className="space-y-5"><AdvisoryLearningForms {...formProps} call={call}/><AdvisoryStoredRecords data={data} language={language} kinds={['EXPERIMENT_PLAN', 'EXPERIMENT_ASSIGNMENT', 'EXPERIMENT_STOP', 'FORECAST_POLICY', 'FORECAST']}/></section>
+        <section hidden={stage !== 'learning'} className="space-y-5"><AdvisoryLearningForms {...formProps} call={call}/><AdvisoryExperimentAssessments data={data} language={language}/><AdvisoryStoredRecords data={data} language={language} kinds={['EXPERIMENT_PLAN', 'EXPERIMENT_ASSIGNMENT', 'EXPERIMENT_STOP', 'FORECAST_POLICY', 'FORECAST']}/></section>
         <section hidden={stage !== 'video'} className="space-y-5"><AdvisoryVideoForms {...formProps} call={call}/><AdvisoryStoredRecords data={data} language={language} kinds={['VIDEO_STORYBOARD', 'VIDEO_APPROVAL']}/></section>
       </div>}
     </>}
