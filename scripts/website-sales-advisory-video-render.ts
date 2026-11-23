@@ -44,7 +44,7 @@ export async function renderWebsiteSalesAdvisoryVideo(rawBundle: AdvisoryVideoBu
     || storyboard.shots.some(s => JSON.stringify(s.demoRef) !== JSON.stringify(bundle.demoRef))
     || storyboard.shots.reduce((sum, s) => sum + s.durationSeconds, 0) !== storyboard.maximumSeconds
     || storyboard.maximumSeconds > 150) throw Error('ADVISORY_VIDEO_SOURCE_OR_CAPTURE_BOUND');
-  const captionText = storyboard.shots.map(s => s.narration).join('\n\n');
+  const captionText = storyboard.shots.map(s => s.narration).join('\n');
   if (!captionText.trim() || captionText.length > 2000 || !await ports.isCurrent()) throw Error('ADVISORY_VIDEO_APPROVAL_REQUIRED');
   let assetBytes = 0;
   const assets = new Map<string, typeof bundle.assets[number]>();

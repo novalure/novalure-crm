@@ -12,15 +12,16 @@ const sourceSchema = z.strictObject({ ref: advisoryReferenceSchema, text: adviso
 const inputSchema = z.strictObject({ requestId: z.uuidv4(), identity: advisoryIdentitySchema, workflowId: z.uuid(),
   kind: z.enum(['ADVICE', 'TRANSCRIPT_ANALYSIS', 'ROLEPLAY']), question: advisoryText,
   sources: z.array(sourceSchema).max(20), segments: z.array(advisoryTranscriptSegmentSchema).max(90),
-  scenario: advisoryText.nullable() });
+  scenario: z.union([advisoryText, z.strictObject({ situation: advisoryText, opening: advisoryText,
+    previousCustomerTurn: advisoryText.nullable() })]).nullable() });
 const selectionSchema = z.strictObject({ answerable: z.boolean(), sourceIndices: z.array(z.number().int().min(0).max(19)).max(2),
   assertions: z.array(z.strictObject({ segmentIndex: z.number().int().min(0).max(89), exactQuote: z.string().min(1).max(1000),
     kind: z.enum(['NEED', 'CONSTRAINT', 'QUESTION', 'POSSIBLE_COMMITMENT']) })).max(20),
   roleplayUtterance: z.string().min(1).max(1500).nullable() });
-const profileSchema = z.strictObject({ enabled: z.literal(true), targets: z.array(z.strictObject({ workspaceId: z.uuid(), projectId: z.uuid() })).min(1).max(50),
+export const advisoryModelProfileSchema = z.strictObject({ enabled: z.literal(true), targets: z.array(z.strictObject({ workspaceId: z.uuid(), projectId: z.uuid() })).min(1).max(50),
   validUntil: z.iso.datetime({ offset: true }), maxCreditsPerTurn: z.number().int().min(1).max(100) });
 export type AdvisoryModelInput = z.infer<typeof inputSchema>;
-export type AdvisoryModelProfile = z.infer<typeof profileSchema>;
+export type AdvisoryModelProfile = z.infer<typeof advisoryModelProfileSchema>;
 export type AdvisoryModelResult = {
   status: 'READY' | 'UNANSWERABLE' | 'UNAVAILABLE' | 'UNKNOWN' | 'STALE'; reason: string;
   text: string | null; sourceRefs: z.infer<typeof advisoryReferenceSchema>[]; selectedSourceIndices: number[];
@@ -48,14 +49,18 @@ function configuredProfile(): unknown {
 /** Selects approved excerpts or exact transcript quotes. It has no tools or commercial write authority. */
 export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: AdvisoryModelInput, ports: AdvisoryModelPorts,
   options: TenantTransactionOptions = {}): Promise<AdvisoryModelResult> {
-  const input = inputSchema.parse(raw), clock = () => ports.now?.() ?? Date.now(), profile = profileSchema.safeParse(ports.profile ?? configuredProfile());
+  const input = inputSchema.parse(raw), clock = () => ports.now?.() ?? Date.now(), profile = advisoryModelProfileSchema.safeParse(ports.profile ?? configuredProfile());
+  const currentProfile = () => {
+    const fresh = advisoryModelProfileSchema.safeParse(ports.profile ?? configuredProfile());
+    return profile.success && fresh.success && JSON.stringify(fresh.data) === JSON.stringify(profile.data) && Date.parse(fresh.data.validUntil) > clock();
+  };
   const humanActor = !session.serviceIdentity && ['cookie', 'database'].includes(session.source) && session.authSessionId && session.authIdentityId;
   const delegatedActor = session.source === 'database' && ports.actorAuthority?.kind === 'BOUND_SALES_ADVISORY_EXECUTOR'
     && await ports.actorAuthority.isCurrentActor(session);
   if (!session.authenticated || session.workspaceId !== input.identity.workspaceId || (!humanActor && !delegatedActor))
     return result(input, 'UNAVAILABLE', 'AUTHENTICATED_MODEL_ACTOR_REQUIRED');
   if (!profile.success || !profile.data.targets.some(t => t.workspaceId === input.identity.workspaceId && t.projectId === input.identity.projectId)
-    || Date.parse(profile.data.validUntil) <= clock()) return result(input, 'UNAVAILABLE', 'MODEL_SCOPE_NOT_ACTIVATED');
+    || !currentProfile()) return result(input, 'UNAVAILABLE', 'MODEL_SCOPE_NOT_ACTIVATED');
   if (!await ports.isCurrent(input)) return result(input, 'STALE', 'CURRENT_SOURCE_AUTHORITY_REQUIRED');
   if (input.kind === 'ADVICE' && !input.sources.length || input.kind === 'TRANSCRIPT_ANALYSIS' && !input.segments.length
     || input.kind === 'ROLEPLAY' && (!input.scenario || !input.sources.length)) return result(input, 'UNANSWERABLE', 'SOURCE_REQUIRED');
@@ -85,12 +90,12 @@ export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: Adv
     if (held.replayed) return result(input, 'UNKNOWN', 'EXISTING_RESERVATION_NO_MODEL_RETRY', { model });
   } catch { return result(input, 'UNAVAILABLE', 'MODEL_CREDIT_AUTHORITY_REQUIRED', { model }); }
   // Authority may have changed while the independent durable credit reservation committed.
-  if (!await ports.isCurrent(input) || Date.parse(profile.data.validUntil) <= clock()) {
+  if (!await ports.isCurrent(input) || !currentProfile()) {
     try { await settle(session, { requestId: input.requestId, actualCredits: 0, status: 'failed' }, options); } catch { /* held for billing reconciliation */ }
     return result(input, 'STALE', 'SOURCE_OR_COST_PROFILE_CHANGED_BEFORE_MODEL', { model });
   }
   const remainingProfileMs = Date.parse(profile.data.validUntil) - clock();
-  if (remainingProfileMs <= 0) {
+  if (remainingProfileMs <= 0 || !currentProfile()) {
     try { await settle(session, { requestId: input.requestId, actualCredits: 0, status: 'failed' }, options); } catch { /* held for billing reconciliation */ }
     return result(input, 'STALE', 'COST_PROFILE_EXPIRED_AT_MODEL_DISPATCH', { model });
   }
@@ -114,7 +119,7 @@ export async function runWebsiteSalesAdvisoryModel(session: AppSession, raw: Adv
   const chargedCredits = aiCreditsForTokens(model, usage.inputTokens!, usage.outputTokens!);
   try { await settle(session, { requestId: input.requestId, actualCredits: chargedCredits, status: 'succeeded' }, options); }
   catch { return result(input, 'UNKNOWN', 'MODEL_SETTLEMENT_PENDING_REVIEW', { model }); }
-  if (!await ports.isCurrent(input) || Date.parse(profile.data.validUntil) <= clock()) return result(input, 'STALE', 'SOURCE_OR_COST_PROFILE_CHANGED_DURING_MODEL', { model, chargedCredits });
+  if (!await ports.isCurrent(input) || !currentProfile()) return result(input, 'STALE', 'SOURCE_OR_COST_PROFILE_CHANGED_DURING_MODEL', { model, chargedCredits });
   const parsed = selectionSchema.safeParse(generated.output);
   if (!parsed.success) return result(input, 'UNANSWERABLE', 'MODEL_OUTPUT_REQUIRES_REVIEW', { model, chargedCredits });
   const out = parsed.data;

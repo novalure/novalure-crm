@@ -55,6 +55,20 @@ test('two distinct facts sharing one evidence reference retain the actual select
   const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
   assert.equal(out.status, 'READY'); assert.deepEqual(out.selectedSourceIndices, [1]); assert.equal(out.text, f.input.sources[1].text);
 });
+
+test('revoking the actual host AI profile during reservation prevents dispatch and releases the unused credits', async () => {
+  const f = fixture(), previous = process.env.CRM_WEBSITE_SALES_ADVISORY_AI;
+  process.env.CRM_WEBSITE_SALES_ADVISORY_AI = JSON.stringify(f.profile);
+  const originalReserve = f.ports.reserve!;
+  try {
+    const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, { ...f.ports, profile: undefined, reserve: async (...args) => {
+      const held = await originalReserve(...args); delete process.env.CRM_WEBSITE_SALES_ADVISORY_AI; return held;
+    } });
+    assert.equal(out.status, 'STALE'); assert.equal(f.counts().generated, 0); assert.deepEqual(f.settled.map(s => s.actualCredits), [0]);
+  } finally {
+    if (previous === undefined) delete process.env.CRM_WEBSITE_SALES_ADVISORY_AI; else process.env.CRM_WEBSITE_SALES_ADVISORY_AI = previous;
+  }
+});
 test('a previously reserved request is UNKNOWN and never causes a second provider call', async () => {
   const f = fixture(); f.replay(); const out = await runWebsiteSalesAdvisoryModel(f.session, f.input, f.ports);
   assert.equal(out.status, 'UNKNOWN'); assert.equal(f.counts().generated, 0); assert.equal(f.settled.length, 0);
