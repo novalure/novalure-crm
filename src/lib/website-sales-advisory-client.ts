@@ -2,7 +2,7 @@
 
 import { csrfFetch } from './security/csrf-client';
 import { assertSalesWriteBarrier } from './website-sales-write-barrier';
-import { websiteSalesAdvisoryCommandSchema, websiteSalesAdvisoryReceiptSchema, websiteSalesAdvisoryReconcileSchema, type WebsiteSalesAdvisoryCommand } from './website-sales-advisory-types';
+import { websiteSalesAdvisoryCommandSchema, websiteSalesAdvisoryReceiptSchema, websiteSalesAdvisoryReconcileSchema, type WebsiteSalesAdvisoryCommand, type WebsiteSalesAdvisoryRead } from './website-sales-advisory-types';
 import { validateWebsiteSalesAdvisoryRead } from './website-sales-advisory-types';
 import { websiteSalesAdvisoryPath, type WebsiteSalesAdvisoryScope } from './website-sales-advisory-api-types';
 
@@ -20,6 +20,13 @@ export type AdvisoryPending = {
 };
 const pending = new Map<string, AdvisoryPending>();
 const listeners = new Set<() => void>();
+const reviewOrigins = new WeakMap<WebsiteSalesAdvisoryRead, string>();
+/** Canonical server metadata remains in memory and never enters a command or recovery journal. */
+export function advisoryReviewOrigin(data: WebsiteSalesAdvisoryRead): string | null { return reviewOrigins.get(data) ?? null; }
+function readReviewOrigin(value: string | null) {
+  if (!value) return null;
+  try { const url = new URL(value); return value === url.origin && (url.protocol === 'https:' || url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname)) ? value : null; } catch { return null; }
+}
 const notify = () => listeners.forEach(listener => listener());
 
 export function subscribeAdvisoryPending(listener: () => void) {
@@ -115,7 +122,9 @@ export async function readAdvisory(workspaceId: string, scope: WebsiteSalesAdvis
   const query = new URLSearchParams({ workspaceId, workflowId, projectId: scope.projectId, companyId: scope.companyId, ...(scope.locationId ? { locationId: scope.locationId } : {}) });
   const { response, data } = await request(`${websiteSalesAdvisoryPath}?${query}`, { method: 'GET', cache: 'no-store', credentials: 'same-origin', signal });
   if (!response.ok) throw Error('ADVISORY_READ_DENIED');
-  return validateWebsiteSalesAdvisoryRead(data, { workspaceId, ...scope }, workflowId);
+  const parsed = validateWebsiteSalesAdvisoryRead(data, { workspaceId, ...scope }, workflowId), origin = readReviewOrigin(response.headers.get('x-sales-review-origin'));
+  if (origin) reviewOrigins.set(parsed, origin);
+  return parsed;
 }
 
 export function markAdvisoryCurrentRead(workspaceId: string, actorId: string, reference: { idempotencyKey: string; correlationId: string; workflowId: string }, scope: WebsiteSalesAdvisoryScope) {

@@ -147,4 +147,13 @@ test('browser advisory reads reject an unrelated workflow before rendering its f
   const data = await client.readAdvisory(f.workspaceId, f.scope, f.workflowId);
   assert.equal(data.workflowId, f.workflowId); assert.equal(data.canWrite, false);
 });
+test('buyer link origin comes only from valid volatile server metadata without an alias fallback', async () => {
+  const f = fixture();
+  for (const origin of [null, 'https://canonical.example/', 'https://person@example.invalid', 'https://canonical.example/path', 'http://remote.example', 'javascript:alert(1)']) {
+    mock(async () => Response.json(f.read, { headers: origin ? { 'x-sales-review-origin': origin } : {} })); const read = await client.readAdvisory(f.workspaceId, f.scope, f.workflowId); assert.equal(client.advisoryReviewOrigin(read), null);
+  }
+  for (const origin of ['https://canonical.example', 'http://127.0.0.1:43001']) {
+    mock(async () => Response.json(f.read, { headers: { 'x-sales-review-origin': origin } })); const read = await client.readAdvisory(f.workspaceId, f.scope, f.workflowId); assert.equal(client.advisoryReviewOrigin(read), origin); assert.equal(client.advisoryReviewOrigin(structuredClone(read)), null); assert(!JSON.stringify(read).includes(origin));
+  }
+});
 
