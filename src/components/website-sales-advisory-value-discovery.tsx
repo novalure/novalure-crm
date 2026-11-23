@@ -1,0 +1,70 @@
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/status';
+import { advisoryDiscoveryAnswerSchema, advisoryValueBasisSchema } from '@/lib/website-sales-advisory-types';
+import { formatSalesMinor, parseSalesHundredths } from '@/lib/website-sales-operations-format';
+import { AdvisoryChoices, AdvisoryFields, advisoryIso, advisoryText } from './website-sales-advisory-fields';
+import { AdvisoryAction, AdvisoryAddRow, AdvisoryChecks, AdvisoryRefChoice, AdvisorySources, advisoryRecords, advisoryRef, advisoryRefKey, advisorySelected, readAdvisorySources, type AdvisoryFormProps } from './website-sales-advisory-form-context';
+
+type Scenario = 'LOW' | 'BASE' | 'HIGH';
+export function AdvisoryValueForms(props: AdvisoryFormProps) {
+  const de = props.language === 'de', [scenarios, setScenarios] = useState<Scenario[]>(['BASE']), [modes, setModes] = useState<Record<string, string>>({});
+  const [components, setComponents] = useState<Record<string, { id: string; kind: 'TIME_SAVING' | 'CONTRIBUTION' }[]>>({});
+  const rows = advisoryRecords(props.data, 'VALUE_BASIS', advisoryValueBasisSchema, props.now);
+  const scenarioName = (name: Scenario) => de ? { LOW: 'Vorsichtiges Szenario', BASE: 'Basisszenario', HIGH: 'Chancenreiches Szenario' }[name] : { LOW: 'Conservative scenario', BASE: 'Base scenario', HIGH: 'Upside scenario' }[name];
+  function changeMode(name: Scenario, mode: string) { setModes(old => ({ ...old, [name]: mode })); if (mode === 'COMPONENTS' && !components[name]?.length) setComponents(old => ({ ...old, [name]: [{ id: crypto.randomUUID(), kind: 'TIME_SAVING' }] })); }
+  return <div className="space-y-7">
+    <Notice>{de ? 'Diese Rechnung beschreibt Annahmen. Ein Kapazitätsgewinn ist nicht automatisch ein Zahlungseingang oder eine tatsächliche Kostensenkung.' : 'This calculation describes assumptions. Capacity gained is not automatically cash received or an actual cost reduction.'}</Notice>
+    <AdvisoryAction {...props} operation="record_value_basis" title={de ? 'Nutzenrechnung nachvollziehbar begründen' : 'Record a traceable value basis'} submitLabel={de ? 'Grundlage speichern' : 'Save value basis'} build={form => {
+      const sourceReferences = readAdvisorySources(form, 'basisSource', props.data);
+      return { title: advisoryText(form, 'title'), offerRef: advisorySelected(props.data.choices.offers, advisoryText(form, 'offer'), row => advisoryRefKey(row.ref)).ref, currency: 'EUR', amountBasis: 'NET',
+        horizonMonths: Number(advisoryText(form, 'horizonMonths')), oneTimeCostMinor: parseSalesHundredths(advisoryText(form, 'oneTimeCost')), monthlyCostMinor: parseSalesHundredths(advisoryText(form, 'monthlyCost')),
+        scenarios: scenarios.map(name => ({ name, startsAtMonth: Number(advisoryText(form, `${name}.startsAtMonth`)), assumption: advisoryText(form, `${name}.assumption`), sourceReferences,
+          ...(advisoryText(form, `${name}.mode`) === 'COMPONENTS' ? { components: (components[name] ?? []).map(row => ({ id: row.id, effectKey: advisoryText(form, `${row.id}.effectKey`), kind: row.kind, sourceReferences,
+            ...(row.kind === 'TIME_SAVING' ? { minutesPerMonth: Number(advisoryText(form, `${row.id}.minutes`)), hourlyCostMinor: parseSalesHundredths(advisoryText(form, `${row.id}.hourlyCost`)), treatment: advisoryText(form, `${row.id}.treatment`) }
+              : { additionalOrdersDecimal: advisoryText(form, `${row.id}.orders`).replace(',', '.'), contributionPerOrderMinor: parseSalesHundredths(advisoryText(form, `${row.id}.contribution`)) }) })) }
+            : { monthlyBenefitMinor: parseSalesHundredths(advisoryText(form, `${name}.monthlyBenefit`)) }) })), sourceReferences, validUntil: advisoryIso(form, 'validUntil') };
+    }}>{context => <>
+      <AdvisoryRefChoice context={context} name="offer" label={de ? 'Zugehörige Angebotsfassung' : 'Related offer version'} language={props.language} choices={props.data.choices.offers.map(row => ({ ref: row.ref, label: `${row.label} · ${formatSalesMinor(row.totalNetMinor, props.language)} ${de ? 'netto' : 'net'}` }))}/>
+      <AdvisoryFields context={context} fields={[{ name: 'title', label: de ? 'Bezeichnung der Rechnung' : 'Calculation title', maxLength: 200 }, { name: 'horizonMonths', label: de ? 'Betrachtungszeitraum in Monaten' : 'Planning horizon in months', type: 'number', min: 1, max: 36 },
+        { name: 'oneTimeCost', label: de ? 'Belegte einmalige Gesamtkosten netto (€)' : 'Evidenced total one-time net costs (€)', decimal: true }, { name: 'monthlyCost', label: de ? 'Belegte laufende Nettokosten pro Monat (€)' : 'Evidenced monthly net costs (€)', decimal: true }, { name: 'validUntil', label: de ? 'Grundlage gültig bis' : 'Basis valid until', type: 'datetime-local' }]}/>
+      {scenarios.map(name => <fieldset key={name} className="min-w-0 space-y-4 rounded-lg border border-stone-200 p-4"><legend className="px-1 text-sm font-semibold">{scenarioName(name)}</legend>
+        <AdvisoryChoices context={context} name={`${name}.mode`} label={de ? 'Wie wird der monatliche Nutzen hergeleitet?' : 'How is monthly benefit derived?'} language={props.language} value={modes[name] ?? 'AMOUNT'} onChange={value => changeMode(name, value)} choices={[{ value: 'AMOUNT', label: de ? 'Belegter Szenariobetrag' : 'Evidenced scenario amount' }, { value: 'COMPONENTS', label: de ? 'Zeitgewinn und zusätzlicher Deckungsbeitrag' : 'Time savings and additional contribution' }]}/>
+        <AdvisoryFields context={context} fields={[{ name: `${name}.startsAtMonth`, label: de ? 'Nutzen erstmals ab Monat' : 'Benefits start in month', type: 'number', min: 1, max: 36 }, { name: `${name}.assumption`, label: de ? 'Annahmen und Unsicherheiten' : 'Assumptions and uncertainty', multiline: true, maxLength: 2000 }]}/>
+        {modes[name] !== 'COMPONENTS' ? <AdvisoryFields context={context} fields={[{ name: `${name}.monthlyBenefit`, label: de ? 'Angenommener monatlicher Geldnutzen netto (€)' : 'Assumed monthly net cash benefit (€)', decimal: true }]}/>
+          : <div className="space-y-4">{(components[name] ?? []).map(row => <div key={row.id} className="space-y-4 border-t border-stone-200 pt-4">
+            <AdvisoryChoices context={context} name={`${row.id}.kind`} label={de ? 'Art des Nutzens' : 'Benefit type'} language={props.language} value={row.kind} onChange={value => setComponents(old => ({ ...old, [name]: old[name].map(item => item.id === row.id ? { ...item, kind: value as typeof row.kind } : item) }))} choices={[{ value: 'TIME_SAVING', label: de ? 'Zeitgewinn' : 'Time saved' }, { value: 'CONTRIBUTION', label: de ? 'Zusätzlicher Deckungsbeitrag' : 'Additional contribution' }]}/>
+            <AdvisoryFields context={context} fields={[{ name: `${row.id}.effectKey`, label: de ? 'Zugrunde liegende Verbesserung' : 'Underlying improvement', maxLength: 200, hint: de ? 'Dieselbe Verbesserung darf nicht mehrfach als Nutzen gezählt werden.' : 'Do not count the same improvement more than once.' }]}/>
+            {row.kind === 'TIME_SAVING' ? <><AdvisoryFields context={context} fields={[{ name: `${row.id}.minutes`, label: de ? 'Gesparte Minuten pro Monat' : 'Minutes saved per month', type: 'number', min: 0, max: 1000000 }, { name: `${row.id}.hourlyCost`, label: de ? 'Belegte Kosten je Arbeitsstunde netto (€)' : 'Evidenced net cost per working hour (€)', decimal: true }]}/><AdvisoryChoices context={context} name={`${row.id}.treatment`} label={de ? 'Wie soll der Zeitgewinn bewertet werden?' : 'How should the time savings be treated?'} language={props.language} choices={[{ value: 'CAPACITY_ONLY', label: de ? 'Nur zusätzliche Kapazität' : 'Additional capacity only' }, { value: 'ASSUMED_CASH_REDUCTION', label: de ? 'Angenommene tatsächliche Kostensenkung' : 'Assumed actual cash cost reduction' }]}/></>
+              : <AdvisoryFields context={context} fields={[{ name: `${row.id}.orders`, label: de ? 'Angenommene zusätzliche Aufträge pro Monat' : 'Assumed additional orders per month', decimal: true, maxLength: 11 }, { name: `${row.id}.contribution`, label: de ? 'Deckungsbeitrag pro zusätzlichem Auftrag netto (€)' : 'Net contribution per additional order (€)', decimal: true }]}/>}
+            {(components[name] ?? []).length > 1 && <Button type="button" variant="ghost" onClick={() => setComponents(old => ({ ...old, [name]: old[name].filter(item => item.id !== row.id) }))}>{de ? 'Nutzenbaustein entfernen' : 'Remove benefit component'}</Button>}
+          </div>)}<AdvisoryAddRow label={de ? 'Nutzenbaustein ergänzen' : 'Add benefit component'} count={components[name]?.length ?? 0} maximum={12} add={() => setComponents(old => ({ ...old, [name]: [...(old[name] ?? []), { id: crypto.randomUUID(), kind: 'TIME_SAVING' }] }))}/></div>}
+        {scenarios.length > 1 && <Button type="button" variant="ghost" onClick={() => setScenarios(old => old.filter(item => item !== name))}>{de ? 'Szenario entfernen' : 'Remove scenario'}</Button>}
+      </fieldset>)}
+      <AdvisoryAddRow label={de ? 'Weiteres Szenario ergänzen' : 'Add another scenario'} count={scenarios.length} maximum={3} add={() => setScenarios(old => [...old, (['LOW', 'BASE', 'HIGH'] as const).find(name => !old.includes(name))!])}/>
+      <AdvisorySources context={context} prefix="basisSource" label={de ? 'Belege für Kosten und Szenarioannahmen' : 'Evidence for costs and scenario assumptions'} data={props.data} language={props.language}/>
+    </>}</AdvisoryAction>
+    <AdvisoryAction {...props} operation="prepare_value_case" title={de ? 'Gespeicherte Grundlage berechnen' : 'Calculate a stored value basis'} submitLabel={de ? 'Szenarien berechnen' : 'Calculate scenarios'} build={form => ({ basisRef: advisoryRef(advisorySelected(rows, advisoryText(form, 'basis'), row => advisoryRefKey(advisoryRef(row)))) })}>{context => <AdvisoryRefChoice context={context} name="basis" label={de ? 'Genaue gespeicherte Grundlage' : 'Exact stored basis'} language={props.language} choices={rows.map(row => ({ ref: advisoryRef(row), label: `${row.payload.title} · ${row.version}` }))}/>}</AdvisoryAction>
+  </div>;
+}
+
+export function AdvisoryDiscoveryForms(props: AdvisoryFormProps) {
+  const de = props.language === 'de', [selectedBrief, setSelectedBrief] = useState('');
+  const answers = advisoryRecords(props.data, 'DISCOVERY_ANSWER', advisoryDiscoveryAnswerSchema, props.now), selectedAnswers = answers.filter(row => advisoryRefKey(row.payload.briefRef) === selectedBrief);
+  return <div className="space-y-7">
+    <p className="max-w-prose text-sm leading-6 text-stone-600">{de ? 'Die nächsten Fragen knüpfen an den gespeicherten Kundenbrief und dokumentierte Antworten an. Eine vermutete Absicht wird nicht als bestätigter Bedarf gespeichert.' : 'Next questions build on the stored customer brief and recorded answers. Suspected intent is not stored as confirmed need.'}</p>
+    <AdvisoryAction {...props} operation="prepare_discovery" title={de ? 'Passende nächste Fragen vorbereiten' : 'Prepare suitable next questions'} submitLabel={de ? 'Nächste Fragen vorbereiten' : 'Prepare next questions'} build={form => ({ briefRef: advisorySelected(props.data.choices.briefs, advisoryText(form, 'brief'), row => advisoryRefKey(row.ref)).ref,
+      answerRefs: form.getAll('answers').map(String).map(value => advisoryRef(advisorySelected(selectedAnswers, value, row => advisoryRefKey(advisoryRef(row))))) })}>{context => <>
+      <AdvisoryChoices context={context} name="brief" label={de ? 'Gespeicherter Kundenbrief' : 'Stored customer brief'} language={props.language} value={selectedBrief} onChange={setSelectedBrief} choices={props.data.choices.briefs.map(row => ({ value: advisoryRefKey(row.ref), label: row.label }))}/>
+      <AdvisoryChecks context={context} name="answers" label={de ? 'Bereits dokumentierte Antworten einbeziehen' : 'Include previously recorded answers'} language={props.language} choices={selectedAnswers.map(row => ({ value: advisoryRefKey(advisoryRef(row)), label: row.payload.answer }))}/>
+    </>}</AdvisoryAction>
+    <AdvisoryAction {...props} operation="record_discovery_answer" title={de ? 'Kundenantwort mit Beleg dokumentieren' : 'Record a customer answer with evidence'} submitLabel={de ? 'Antwort dokumentieren' : 'Record answer'} build={form => { const kind = advisoryText(form, 'kind'); return { briefRef: advisorySelected(props.data.choices.briefs, advisoryText(form, 'brief'), row => advisoryRefKey(row.ref)).ref, questionId: `SPIN_${kind}`, kind, answer: advisoryText(form, 'answer'), sourceReferences: readAdvisorySources(form, 'answerSource', props.data), validUntil: advisoryIso(form, 'validUntil') }; }}>{context => <>
+      <AdvisoryRefChoice context={context} name="brief" label={de ? 'Zugehöriger Kundenbrief' : 'Related customer brief'} language={props.language} choices={props.data.choices.briefs}/>
+      <AdvisoryChoices context={context} name="kind" label={de ? 'Welche Frage beantwortet die Aussage?' : 'Which question does this answer?'} language={props.language} choices={[{ value: 'SITUATION', label: de ? 'Heutige Situation' : 'Current situation' }, { value: 'PROBLEM', label: de ? 'Konkretes Problem' : 'Specific problem' }, { value: 'IMPLICATION', label: de ? 'Belegbare Folgen' : 'Evidenced impact' }, { value: 'NEED_PAYOFF', label: de ? 'Gewünschte Verbesserung' : 'Desired improvement' }]}/>
+      <AdvisoryFields context={context} fields={[{ name: 'answer', label: de ? 'Dokumentierte Antwort' : 'Recorded answer', multiline: true, maxLength: 2000 }, { name: 'validUntil', label: de ? 'Antwort erneut prüfen bis' : 'Review answer again by', type: 'datetime-local' }]}/>
+      <AdvisorySources context={context} prefix="answerSource" label={de ? 'Beleg der Antwort' : 'Evidence for the answer'} data={props.data} language={props.language}/>
+    </>}</AdvisoryAction>
+  </div>;
+}
