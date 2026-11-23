@@ -47,7 +47,7 @@ async function fixture() {
     readDemo: async () => structuredClone(snapshot),
     verifyQa: async () => { calls.verify++; },
     render: async (bundle, raw, guard) => { calls.render++; assert(await guard.isCurrent()); const value = raw as { sourceBindingDigest: string; shots: { narration: string }[] };
-      const bytes = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x00]); return { bytes, sha256: sha(bytes), mediaType: 'video/webm', durationSeconds: 20, width: 1280, height: 720, narration: 'CAPTIONS_ONLY', captionText: value.shots.map(row => row.narration).join('\n\n'), demoRef: bundle.demoRef, sourceBindingDigest: value.sourceBindingDigest, documentSha256: bundle.documentSha256, renderer: 'PLAYWRIGHT_SEALED_DEMO_V1', networkRequests: 3 }; },
+      const bytes = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x00]); return { bytes, sha256: sha(bytes), mediaType: 'video/webm', durationSeconds: 20, width: 1280, height: 720, narration: 'CAPTIONS_ONLY', captionText: value.shots.map(row => row.narration).join('\n'), demoRef: bundle.demoRef, sourceBindingDigest: value.sourceBindingDigest, documentSha256: bundle.documentSha256, renderer: 'PLAYWRIGHT_SEALED_DEMO_V1', networkRequests: 3 }; },
     complete: async (_cap, input) => { calls.complete++; committed = input; job.status = 'SUCCEEDED'; job.resultDigest = input.video.sha256; job.version++; job.leaseToken = null; job.leaseExpiresAt = null; return structuredClone(job); },
     markUnknown: async () => { calls.unknown++; job.status = 'UNKNOWN'; job.leaseToken = null; job.leaseExpiresAt = null; },
   };
@@ -66,6 +66,13 @@ test('the private adapter completes only exact checked capture bytes and immutab
   assert.equal(result.status, 'SUCCEEDED'); assert.equal(f.calls.render, 1); assert.equal(f.calls.complete, 1); assert.equal(f.calls.unknown, 0); assert(f.calls.verify >= 3);
   assert(completion); assert.equal(completion.result, null); assert.deepEqual(completion.video.captureProof.storyboardRef, reference(f.storyboard));
   assert.equal(completion.video.captureProof.documentSha256, f.snapshot.artifact.content.htmlDigest); assert.equal(completion.video.captureProof.qaCertificateId, f.snapshot.certificate.payload.certificateId);
+});
+test('two approved captions at the exact 2000-character boundary use the canonical single newline', async () => {
+  const f = await fixture(), value = f.storyboard.payload.value as { shots: { narration: string; durationSeconds: number; index: number; factId: string }[] };
+  const first = value.shots[0]; value.shots = [{ ...first, narration: 'a'.repeat(1000), durationSeconds: 10 }, { ...first, index: 1, factId: randomUUID(), narration: 'b'.repeat(999), durationSeconds: 10 }];
+  f.storyboard.digest = advisoryRecordDigest(f.storyboard); f.approval.payload.recordRef = reference(f.storyboard); f.approval.parentRefs = [reference(f.storyboard)]; f.approval.digest = advisoryRecordDigest(f.approval);
+  f.job.recordRef = reference(f.approval); f.job.sourceRefs = [reference(f.storyboard)]; f.job.contextDigest = advisoryDigest(f.job.frozenContext);
+  assert.equal((await createWebsiteSalesAdvisoryVideoJobRunner(f.ports)(f.executor, f.job.id)).status, 'SUCCEEDED'); assert.equal(f.completion()?.video.captureProof.captionText, 'a'.repeat(1000) + '\n' + 'b'.repeat(999));
 });
 test('unresolved or completed work is not re-rendered or automatically retried', async () => {
   for (const status of ['UNKNOWN', 'CLAIMED', 'SUCCEEDED', 'FAILED', 'CANCELLED']) { const f = await fixture(); f.job.status = status;

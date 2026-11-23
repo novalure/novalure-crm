@@ -75,7 +75,7 @@ function checkedCapture(value: AdvisoryVideoCapture, bundle: AdvisoryVideoBundle
   requireRule(value.mediaType === 'video/webm' && value.renderer === 'PLAYWRIGHT_SEALED_DEMO_V1' && value.narration === 'CAPTIONS_ONLY'
     && value.bytes instanceof Uint8Array && value.bytes.byteLength >= 5 && value.bytes.byteLength <= 25_000_000 && Buffer.from(value.bytes.subarray(0, 4)).toString('hex') === '1a45dfa3'
     && value.sha256 === sha(value.bytes) && equalRef(value.demoRef, bundle.demoRef) && value.documentSha256 === bundle.documentSha256
-    && value.sourceBindingDigest === storyboard.sourceBindingDigest && value.captionText === storyboard.shots.map(shot => shot.narration).join('\n\n')
+    && value.sourceBindingDigest === storyboard.sourceBindingDigest && value.captionText === storyboard.shots.map(shot => shot.narration).join('\n')
     && value.width === 1280 && value.height === 720 && Number.isFinite(value.durationSeconds) && value.durationSeconds > 0 && value.durationSeconds <= storyboard.maximumSeconds + .05
     && Number.isSafeInteger(value.networkRequests) && value.networkRequests >= 1, 'ADVISORY_VIDEO_RENDER_PROOF_INVALID');
 }
