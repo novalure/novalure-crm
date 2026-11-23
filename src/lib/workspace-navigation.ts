@@ -22,7 +22,7 @@ const groupEntries: Record<WorkspaceNavigationGroupId, readonly string[]> = {
   overview: ["dashboard", "dailyQueue", "analytics", "projectAnalytics"],
   contacts: ["contacts", "communication", "buyerProfiles"],
   sales: [
-    "leadInbox", "sellerLeads", "buyerLeads", "developerLeads", "studioWebsiteEnquiries",
+    "leadInbox", "sellerLeads", "buyerLeads", "developerLeads", "studioWebsiteEnquiries", "websiteSales",
     "pipelines", "projectPipeline", "deals", "slaCockpit", "demosTrials",
   ],
   properties: ["properties", "objectsMandates", "units", "reservations", "projects", "projectOverview"],

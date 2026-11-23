@@ -113,6 +113,18 @@ jobs:
       - name: Sales transactions against isolated local PostgreSQL
         run: npm run test:sales
 
+      - name: Website Sales machine, Studio and lifecycle regression
+        run: npm run test:website-sales-complete
+
+      - name: Verify guarded Sales contracts delivery and actual-source projections
+        run: npm run test:website-sales-commerce
+
+      - name: Verify Sales advisory identity, private jobs, credit ledger and recovery
+        run: npm run test:website-sales-advisory
+
+      - name: Record sealed canonical demo videos and verify visible captions and actual media duration
+        run: npm run test:website-sales-advisory-video
+
       - name: Final sales contract, approval, route and recovery regression
         run: npm run test:sales:final
 

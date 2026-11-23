@@ -1,0 +1,5 @@
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { websiteStudioQaRender } from "@/lib/db/website-sales-studio-repositories";
+import { websiteStudioNotFound,websiteStudioRenderedResponse } from "@/lib/website-sales-studio-http";
+export const runtime="nodejs";
+export async function GET(request:Request,context:{params:Promise<{artifactId:string;resource:string}>}){const auth=await resolveWorkspaceScopedSession(request,{permission:"crm:read"});if(!auth.ok)return websiteStudioNotFound();try{const p=await context.params;if(!['render','artifact'].includes(p.resource))return websiteStudioNotFound();const q=new URL(request.url).searchParams;const artifact=await websiteStudioQaRender(auth.session,{projectId:q.get("projectId")??"",companyId:q.get("companyId")??"",locationId:q.get("locationId")??""},p.artifactId);return p.resource==='artifact'?Response.json(artifact,{headers:{'Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow, noarchive','X-Content-Type-Options':'nosniff'}}):websiteStudioRenderedResponse(artifact);}catch{return websiteStudioNotFound();}}

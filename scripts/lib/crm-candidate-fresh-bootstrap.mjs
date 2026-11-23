@@ -373,11 +373,13 @@ export async function completeCrmCandidateFreshSchema({ client, manifest, earlyR
   await runOfficial(null);
   await assertProviderBaseline(client, earlyResult.providerRoleBaseline);
   const ledger = assertCrmCandidateLedger((await client.query(crmCandidateQueries.ledger)).rows, manifest.selected.filter(row => row.number >= 41));
-  check(ledger.rows === 125 && stages.length === 2, 'CRM_QA_FULL_SOURCE_COVERAGE');
-  await journal({ event: 'COMPLETE_SCHEMA_VERIFIED', ledger, sourceInventorySqlFiles: 169, forwardSqlFiles: 166,
-    executionVariant: manifest.executionVariant, excluded: manifest.excluded, staged087: stages });
-  return { status: 'PASS_NEW_NATIVE_STANDALONE_SCHEMA_201', ledger, sourceInventorySqlFiles: 169, forwardSqlFiles: 166,
-    executionVariant: manifest.executionVariant, excluded: manifest.excluded, historicalExecutions: 41, staged087: stages,
+  check(ledger.rows === manifest.coverage.expectedCanonicalLedgerRows && stages.length === 2, 'CRM_QA_FULL_SOURCE_COVERAGE');
+  const sourceInventorySqlFiles = manifest.forward.length, forwardSqlFiles = manifest.selected.length;
+  await journal({ event: 'COMPLETE_SCHEMA_VERIFIED', ledger, sourceInventorySqlFiles, forwardSqlFiles,
+    sourceExtensionSha256: manifest.sourceExtensionSha256, executionVariant: manifest.executionVariant, excluded: manifest.excluded, staged087: stages });
+  return { status: 'PASS_NEW_NATIVE_STANDALONE_SCHEMA_210', ledger, sourceInventorySqlFiles, forwardSqlFiles,
+    sourceExtensionSha256: manifest.sourceExtensionSha256, executionVariant: manifest.executionVariant, excluded: manifest.excluded,
+    historicalExecutions: manifest.coverage.historicalExecutionsBeforeLedger, staged087: stages,
     applicationAcceptance: 'PENDING_EXISTING_MANUAL_QA', productionReadiness: false };
 }
 

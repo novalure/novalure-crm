@@ -133,10 +133,32 @@ try {
     await page.getByRole("button", { name: /^Wissensquellen \(/ }).click();
     await page.getByRole("button", { name: "Wissen hinzufügen", exact: true }).click();
     const sourceForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Wissen hinzufügen" }) });
+    // Opening still focuses Name normally. Then defer the next real focus frame
+    // until the user has chosen Content, reproducing the CI focus-stealing race.
+    await expect(sourceForm.getByLabel("Name", { exact: true })).toBeFocused();
+    await sourceForm.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    await page.evaluate(() => {
+      const original = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        window.requestAnimationFrame = original;
+        window.releaseKnowledgeSourceFocusFrame = () => callback(performance.now());
+        return 0;
+      };
+    });
+    await page.getByRole("button", { name: "Wissen hinzufügen", exact: true }).click();
     await sourceForm.getByLabel("Wissensbereich", { exact: true }).selectOption({ label: "SYNTHETIC Firmenwissen" });
     await sourceForm.getByLabel("Name", { exact: true }).fill("SYNTHETIC Öffnungszeiten");
-    await sourceForm.getByLabel("Inhalt", { exact: true }).fill("SYNTHETIC mango: geöffnet ab 09:00 Uhr.");
+    const content = sourceForm.getByLabel("Inhalt", { exact: true });
+    await content.focus();
+    await page.evaluate(() => { const release = window.releaseKnowledgeSourceFocusFrame; delete window.releaseKnowledgeSourceFocusFrame; if (!release) throw Error("Source focus frame was not captured"); release(); });
+    await expect(content).toBeFocused();
+    await page.keyboard.insertText("SYNTHETIC mango: geöffnet ab 09:00 Uhr.");
+    await expect(sourceForm.getByLabel("Name", { exact: true })).toHaveValue("SYNTHETIC Öffnungszeiten");
+    await expect(content).toHaveValue("SYNTHETIC mango: geöffnet ab 09:00 Uhr.");
+    const savedResponse = page.waitForResponse(response => new URL(response.url()).pathname === "/api/knowledge-center/sources" && response.request().method() === "POST");
     await sourceForm.getByRole("button", { name: "Speichern", exact: true }).click();
+    const saved = await savedResponse; assert.equal(saved.status(), 201);
+    const body = await saved.json(); assert.equal(body.source.name, "SYNTHETIC Öffnungszeiten"); assert.equal(body.source.version.content, "SYNTHETIC mango: geöffnet ab 09:00 Uhr.");
     await expect(page.getByRole("heading", { name: "SYNTHETIC Öffnungszeiten", exact: true })).toBeVisible();
     const snapshot = await readSnapshot(); sourceId = snapshot.sources[0].id;
     assert.equal(snapshot.sources[0].version.status, "draft");

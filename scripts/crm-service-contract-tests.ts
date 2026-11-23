@@ -203,6 +203,12 @@ test("HTTP: every legacy CRM method rejects service bearer plus forged owner hea
     const state=await db.admin.query("select consumed_at from crm_mailbox_oauth_states where state_hash=$1",[stateHash]);
     assert.deepEqual(state.rows,[{consumed_at:null}],"A forged session cannot consume even a valid local OAuth state");
     mailboxCallbacks++;
+   }else if(method==="GET"&&pathname.startsWith("/api/crm/website-sales/studio/qa-render/")){
+    // Render/asset endpoints conceal resource existence even when session auth fails.
+    assert.equal(result.status,404);
+    assert.equal(await result.text(),"Preview unavailable");
+    assert.equal(result.headers.get("cache-control"),"private, no-store");
+    assert.equal(result.headers.get("set-cookie"),null);
    }else{
     assert.ok([401,403].includes(result.status),method+" "+pathname+" status="+result.status);
    }

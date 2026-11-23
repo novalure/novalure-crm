@@ -1,12 +1,21 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import assert from "node:assert/strict";
+import path from "node:path";
 import { hashPassword } from "../../src/lib/auth/passwords.ts";
 /** Synthetic-only fixture for an ephemeral loopback PostgreSQL cluster. */
-export async function seedSalesBrowser(db) {
- const workspaceId=randomUUID(), userId=randomUUID(), projectId=randomUUID(), pipelineId=randomUUID(), developerId=randomUUID(), developerContactId=randomUUID();
+export async function seedSalesBrowser(db, {workspaceId:fixedWorkspaceId}={}) {
+ if(fixedWorkspaceId!==undefined&&fixedWorkspaceId!=="8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101")throw Error("Only the fixed synthetic Advisory machine workspace may be selected");
+ const workspaceId=fixedWorkspaceId??randomUUID(), userId=randomUUID(), projectId=randomUUID(), pipelineId=randomUUID(), developerId=randomUUID(), developerContactId=randomUUID();
  // Random credentials are persisted only in the ignored loopback QA context.
  const email = "synthetic-sales-"+userId.replaceAll("-","")+"@example.invalid";
  const password = randomBytes(32).toString("base64url");
- await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC SALES QA','novalure_internal','novalure_internal',$2::jsonb)",[workspaceId,JSON.stringify({salesApprovalUserId:userId})]);
+ if(fixedWorkspaceId!==undefined){
+  assert.equal(db.fixtureMode,"design-c-current-application-originals");assert.equal(db.database,"neondb");assert(/^sales_qa_[a-f0-9]+$/.test(db.role));assert(path.resolve(db.directory).startsWith(path.resolve(".npm-cache/qa")+path.sep));
+  // Original030 already creates this internal workspace. Preserve its reviewed setup and change only this fixture's approval actor.
+  const existing=(await db.admin.query("select operating_model,customer_type from workspaces where id=$1",[workspaceId])).rows[0];
+  if(existing)assert.deepEqual(existing,{operating_model:"novalure_internal",customer_type:"novalure_internal"});
+  const seeded=await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC SALES QA','novalure_internal','novalure_internal',$2::jsonb) on conflict(id) do update set setup_state=coalesce(workspaces.setup_state,'{}'::jsonb)||excluded.setup_state where workspaces.operating_model='novalure_internal' and workspaces.customer_type='novalure_internal' returning id",[workspaceId,JSON.stringify({salesApprovalUserId:userId})]);assert.equal(seeded.rowCount,1);
+ }else await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC SALES QA','novalure_internal','novalure_internal',$2::jsonb)",[workspaceId,JSON.stringify({salesApprovalUserId:userId})]);
  const user=await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic sales owner',$3,'owner','novalureAdmin','active') returning auth_identity_id",[userId,workspaceId,email]);
  const authIdentityId = user.rows[0].auth_identity_id;
  await db.admin.query("update auth_identities set credential_state='active', password_hash=$2 where id=$1",[authIdentityId,await hashPassword(password)]);

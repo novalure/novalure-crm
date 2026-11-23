@@ -2,6 +2,7 @@
   "buildCommand": "npm run build -- --webpack",
   "git": {
     "deploymentEnabled": {
+      "codex/website-sales-workflow-20261119": false,
       "codex/crm-release-20261106": false,
       "codex/shared-learning-package4-20261102": false,
       "codex/continuous-operation-20261029-crm": false,

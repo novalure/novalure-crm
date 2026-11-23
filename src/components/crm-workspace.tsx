@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { countActiveWorkspaceProjects, selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
 import { Notice as CommandNotice } from "../../design-c/components/ui";
 import { canAccessCrmBilling, getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
@@ -73,6 +74,10 @@ import { OnboardingWorkspace } from "@/components/onboarding-workspace";
 import { WorkspaceNavigation } from "@/components/workspace-navigation";
 import { WorkspaceSectionTabs } from "@/components/workspace-section-tabs";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
+
+// Recovery metadata belongs to the current browser session. Defer this internal
+// workbench until selected and avoid hydrating server markup from browser storage.
+const WebsiteSalesWorkbench = dynamic(() => import("@/components/website-sales-workbench").then(module => module.WebsiteSalesWorkbench), { ssr: false });
 import { can as hasAppPermission } from "@/lib/auth/permissions";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
 import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
@@ -292,6 +297,7 @@ type NavigationEntryId =
   | "slaCockpit"
   | "systemReleases"
   | "studioWebsiteEnquiries"
+  | "websiteSales"
   | "studioKnowledgeAi"
   | "tasks"
   | "ticketsSupport"
@@ -387,6 +393,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     navigationEntries: [
       "dashboard",
       "studioWebsiteEnquiries",
+      "websiteSales",
       "contacts",
       "pipelines",
       "tasks",
@@ -411,6 +418,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "workspaces",
       "projects",
       "leadInbox",
+      "websiteSales",
       "contacts",
       "pipelines",
       "tasks",
@@ -625,6 +633,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "dailyQueue",
       "properties",
       "leadInbox",
+      "websiteSales",
       "contacts",
       "pipelines",
       "deals",
@@ -662,6 +671,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "meetings", "tasks"],
     navigationEntries: [
       "workspaces",
+      "websiteSales",
       "properties",
       "usersRoles",
       "dataHygiene",
@@ -750,6 +760,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   slaCockpit: { id: "slaCockpit", section: "leadInbox" },
   systemReleases: { id: "systemReleases", section: "settings" },
   studioWebsiteEnquiries: { id: "studioWebsiteEnquiries", section: "leadInbox" },
+  websiteSales: { id: "websiteSales", section: "leadInbox" },
   studioKnowledgeAi: { id: "studioKnowledgeAi", section: "knowledge" },
   tasks: { id: "tasks", section: "tasks" },
   ticketsSupport: { id: "ticketsSupport", section: "customerSuccess" },
@@ -1256,6 +1267,7 @@ const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
   settings: "settings",
   systemReleases: "system-releases",
   studioWebsiteEnquiries: "website-enquiries",
+  websiteSales: "website-sales",
   studioKnowledgeAi: "studio-knowledge-ai",
   workspaces: "workspaces",
 };
@@ -1303,6 +1315,7 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     kunden: "managedService",
     leadinbox: "leadInbox",
     "lead-inbox": "leadInbox",
+    "website-sales": "leadInbox",
     jarvis: "analysis",
     meeting: "calendar",
     meetings: "calendar",
@@ -1992,6 +2005,7 @@ function SettingsCommandCenter({
 
 function WorkspaceContextBar({
   areaLabel,
+  compact = false,
   copy,
   dataScopeLabel,
   profileLabel,
@@ -1999,6 +2013,7 @@ function WorkspaceContextBar({
   workspaceName,
 }: {
   areaLabel: string;
+  compact?: boolean;
   copy: ReturnType<typeof getDashboardCopy>;
   dataScopeLabel: string;
   profileLabel: string;
@@ -2031,6 +2046,8 @@ function WorkspaceContextBar({
     [contextCopy.dataScope, dataScopeLabel],
   ];
   const breadcrumbItems = [workspaceName, projectLabel, profileLabel, areaLabel];
+
+  if (compact) return <p className="break-words text-sm text-stone-600" data-website-sales-workspace>{contextCopy.workspace}: <strong className="font-semibold text-slate-900">{workspaceName}</strong></p>;
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm" data-crm-context>
@@ -3448,6 +3465,7 @@ export function CrmWorkspace({
     billing: getAiBillingNavigationLabel(language),
     aiBillingAdmin: language === "de" ? "KI-Buchungsanfragen" : "AI booking requests",
     aiAssistant: language === "de" ? "KI-Assistent" : "AI assistant",
+    websiteSales: language === "de" ? "Website-Vertrieb" : "Website sales",
   };
   const marketingNavigationEntries: NavigationEntryId[] = marketingNavigation?.workspaceId === activeWorkspace.id &&
     marketingNavigation.entryId === activeNavigationEntryId && normalizedActivePreset.navigationEntries.includes("marketing")
@@ -3461,6 +3479,8 @@ export function CrmWorkspace({
       : marketingNavigationEntries;
   const billingProductRole = activeWorkspace.productRole ?? workspaceContext.productRole;
   const enabledNavigationEntryIds = getCrmSelfServiceEntries(taskNavigationEntries, billingProductRole).filter((entryId) => {
+    if (entryId === "websiteSales") return workspaceContext.operatingModel === "novalure_internal" &&
+      hasProductCapability(billingProductRole, "novalure:internal");
     if (entryId === "billing") return canAccessCrmBilling(billingProductRole);
     if (entryId === "aiBillingAdmin") return ["platform_admin", "novalureAdmin"].includes(billingProductRole) && workspaceContext.operatingModel === "novalure_internal";
     if (isStudioNavigation) {
@@ -4734,13 +4754,14 @@ export function CrmWorkspace({
           >
             <WorkspaceContextBar
               areaLabel={activeAreaLabel}
+              compact={visibleActiveNavigationEntry.id === "websiteSales"}
               copy={copy}
               dataScopeLabel={projectScopeLabel}
               profileLabel={activePresetProfile.label}
               projectLabel={projectScopeLabel}
               workspaceName={workspaceContext.workspaceName}
             />
-            {scopeHydrated && !projectScopeInvalid && activeProject ? <ProjectWizardSummary
+            {visibleActiveNavigationEntry.id !== "websiteSales" && scopeHydrated && !projectScopeInvalid && activeProject ? <ProjectWizardSummary
               key={`${sessionUserId}:${activeWorkspace.id}:${activeProject.id}`}
               workspaceId={activeWorkspace.id} projectId={activeProject.id} projectType={activeProject.type} language={language}
             /> : null}
@@ -4776,6 +4797,8 @@ export function CrmWorkspace({
               <AiBillingAdminPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
             ) : !sectionScopeUnavailable && visibleActiveNavigationEntry.id === "aiAssistant" ? (
               <CrmAiAssistant key={activeWorkspace.id} workspaceId={activeWorkspace.id} projectId={activeProjectId === "all" ? null : activeProjectId} language={language} />
+            ) : !sectionScopeUnavailable && visibleActiveNavigationEntry.id === "websiteSales" ? (
+              <WebsiteSalesWorkbench key={`${activeWorkspace.id}:${activeProjectId}`} actorId={sessionUserId} workspaceId={activeWorkspace.id} language={language} initialProjectId={activeProject?.id ?? null} />
             ) : unavailableSectionCollections.length || sectionScopeUnavailable || relatedSectionUnavailable || sessionOnlySectionUnavailable ? (
               <section className="dc-card rounded-xl border border-stone-200 bg-white" data-crm-source-unavailable role="status">
                 <h2>{language === "de" ? "Daten für diesen Bereich nicht verfügbar" : "Data for this section is unavailable"}</h2>
