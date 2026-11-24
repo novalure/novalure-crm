@@ -16,6 +16,8 @@
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test:livelisted": "node scripts/run-livelisted-checks.mjs",
+    "test:marketing-seo": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/marketing-seo-tests.ts",
+    "qa:marketing-seo": "node scripts/marketing-seo-ui-tests.mjs",
     "test:ai-billing": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/ai-credit-billing-tests.ts scripts/ai-billing-http-tests.ts scripts/ai-billing-model-tests.ts scripts/ai-billing-admin-http-tests.ts scripts/ai-billing-runtime-acl-tests.ts",
     "test:ai-billing:runtime-acl": "node --conditions=react-server --import tsx --test scripts/ai-billing-runtime-acl-tests.ts",
     "qa:ai-billing-ui": "node scripts/ai-billing-ui-tests.mjs",

@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 // Reproducible domain checks. Each database suite creates and removes its own
 // disposable loopback database; serial execution avoids competing DB instances.
 const suites=[
- 'marketing-overview-tests.ts','marketing-contact-policy-tests.ts','marketing-data-tests.ts','mailbox-auto-sync-tests.ts','funnel-live-tests.ts','funnel-empty-state-tests.ts','web-expose-brand-layout-tests.ts',
+ 'marketing-overview-tests.ts','marketing-contact-policy-tests.ts','marketing-data-tests.ts','marketing-seo-tests.ts','mailbox-auto-sync-tests.ts','funnel-live-tests.ts','funnel-empty-state-tests.ts','web-expose-brand-layout-tests.ts',
  'property-country-tests.ts','property-country-db-tests.ts','web-expose-tracking-tests.ts','web-expose-db-tests.ts','web-expose-media-tests.ts','web-expose-template-tests.ts','web-expose-pdf-tests.ts',
  'property-completeness-tests.ts','property-completeness-ui-tests.ts','property-unit-details-tests.ts','property-fragment-roundtrip-tests.ts','property-cost-draft-tests.ts','property-public-details-tests.ts',
  'automation-graph-tests.ts','automation-database-tests.ts','automation-mail-tests.ts','lead-qualification-tests.ts','lead-qualification-plan-tests.ts','lead-customer-request-tests.ts','lead-proof-retention-tests.ts','property-booking-tests.ts',
