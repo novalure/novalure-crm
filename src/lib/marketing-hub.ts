@@ -1,4 +1,4 @@
-export type MarketingArea = "overview" | "campaigns" | "flows" | "mailings" | "audiences" | "templates" | "reports";
+export type MarketingArea = "overview" | "campaigns" | "flows" | "mailings" | "audiences" | "templates" | "reports" | "seo";
 export type MarketingSourceTarget = { kind: "newsletter" | "automation" | "funnel" | "expose" | "form"; id: string; projectId: string | null; propertyId?: string };
 export type MarketingOverview = {
   workspaceId: string;

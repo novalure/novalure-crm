@@ -40,6 +40,7 @@ import { InquirySourceReport } from "@/components/inquiry-source-report";
 import { MarketingHub } from "@/components/marketing-hub";
 import { MarketingContactPolicyEditor } from "@/components/marketing-contact-policy-editor";
 import { MarketingDataWorkspace } from "@/components/marketing-data-workspace";
+import { MarketingSeoWorkspace } from "@/components/marketing-seo-workspace";
 import type { MarketingSourceTarget } from "@/lib/marketing-hub";
 import { IntegrationCommandCenter } from "@/components/integration-command-center";
 import { FunnelCommandCenter } from "@/components/funnel-command-center";
@@ -5156,6 +5157,7 @@ export function CrmWorkspace({
                 onProjectChange={handleProjectScopeChange} onOpenSource={handleOpenMarketingSource}
                 onOpenTool={entry => handleNavigationChange(entry, { fromMarketing: true })}
                 renderArea={(area, country) => {
+                  if (area === "seo") return <MarketingSeoWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} />;
                   if (area === "campaigns" || area === "audiences") return <MarketingDataWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} area={area} country={country} onOpenSource={handleOpenMarketingSource} />;
                   if (area === "templates") return <div className="space-y-5">
                     {isWorkspaceModuleEnabled(workspaceContext.enabledModules, "newsletter") ? <details open className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-lg font-semibold">{language === "de" ? "Mailvorlagen · DE / EN / ES" : "Email templates · DE / EN / ES"}</summary><MarketingDataWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} area="templates" onOpenSource={handleOpenMarketingSource} /></details> : null}

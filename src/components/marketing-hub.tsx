@@ -47,6 +47,7 @@ function MarketingHubContent({ workspaceId, projectId, projects, language, onPro
     { id: "audiences", label: t("Zielgruppen & Tags", "Audiences & tags"), allowed: Boolean(current?.modules.contacts) },
     { id: "templates", label: t("Inhalte & Vorlagen", "Content & templates"), allowed: Boolean(current?.modules.newsletter || current?.modules.properties) },
     { id: "reports", label: "Reports", allowed: Boolean(current?.modules.reports) },
+    { id: "seo", label: "SEO", allowed: Boolean(current?.modules.reports) },
   ];
   const visibleArea = tabs.some(tab => tab.id === area && tab.allowed) ? area : "overview";
   const cards: Array<{ id: MarketingArea | "properties" | "funnels"; title: string; description: string; tags: string[]; state: string; action: string; allowed: boolean }> = [
