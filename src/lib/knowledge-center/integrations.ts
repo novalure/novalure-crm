@@ -7,6 +7,7 @@ import type { TenantTransactionOptions } from "@/lib/db/tenant-client";
 import { requiresLivePropertyFacts } from "@/lib/bots/agent-tools";
 import { queryKnowledgeCenter } from "./repository";
 import { KnowledgeCenterError, knowledgeId, knowledgeText } from "./policy";
+import { isReviewedStudioEstateChunk } from "./studio-estate-reviewed-chunks";
 import type { KnowledgeChannel, KnowledgeQueryResult } from "./types";
 
 export type LivePropertyFact = Readonly<{
@@ -170,7 +171,9 @@ export async function retrieveKnowledgeForSavedChannel(
     for (const match of result.matches) {
       // The repository derives policy context in the same SQL snapshot as the
       // authorized hits, so a concurrent project change cannot mix profiles.
-      if (requiresLivePropertyFacts(query, match.projectDivision) || requiresLivePropertyFacts(match.excerpt, match.projectDivision) || remaining <= 0) continue;
+      const guardedContent = requiresLivePropertyFacts(match.excerpt, match.projectDivision);
+      if (requiresLivePropertyFacts(query, match.projectDivision) || remaining <= 0 ||
+          (guardedContent && !isReviewedStudioEstateChunk({ workspaceId: session.workspaceId, assistantId: input.assistantId, channel: input.channel, match }))) continue;
       // Keep the original chunk above for policy checks; select useful facts for
       // the bounded assistant context instead of always clipping its beginning.
       const excerpt = assistantExcerpt(match, Math.min(assistantKnowledgeLimits.excerptCharacters, remaining));

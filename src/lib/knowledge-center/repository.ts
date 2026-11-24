@@ -5,6 +5,7 @@ import { extractKnowledgeDocument } from "./document-extraction";
 import type { KnowledgeDocumentUploadMetadata, VerifiedKnowledgeDocumentUpload } from "./document-upload";
 import type { AppSession } from "../auth/session";
 import { knowledgeMonitoringAuditMetadata } from "./monitoring-delegation";
+import { isStudioEstatePolicyRequest } from "./studio-estate-reviewed-chunks";
 import { assertProjectGrant, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
 import { KnowledgeCenterError, knowledgeId, knowledgePermissions, knowledgeRevision, knowledgeStructured, knowledgeText, knowledgeUrl, requireKnowledgePermission } from "./policy";
 import type { AssignKnowledgeAreasInput, CreateKnowledgeAreaInput, CreateKnowledgeSourceInput, KnowledgeArea, KnowledgeCenterSnapshot, KnowledgeChannel, KnowledgeDocument, KnowledgeDocumentFormat, KnowledgeDocumentProcessingStatus, KnowledgeEntitlement, KnowledgeQueryResult, KnowledgeSource, KnowledgeSourceType, KnowledgeUsage, KnowledgeVersion, QueryKnowledgeCenterInput, UpdateKnowledgeSourceInput } from "./types";
@@ -284,7 +285,11 @@ export async function queryKnowledgeCenter(session: AppSession, input: QueryKnow
     const current = await usage(tx, fresh);
     if (current.queriesThisMonth >= contract.maxQueriesPerMonth) fail("LIMIT_EXCEEDED", "Monthly knowledge query limit reached", 409);
     await tx.execute(`insert into knowledge_query_usage(workspace_id,month,query_count) values($1::uuid,date_trunc('month',now() at time zone 'UTC')::date,1) on conflict(workspace_id,month) do update set query_count=knowledge_query_usage.query_count+1`, [fresh.workspaceId]);
+    const studioPolicyRequest = isStudioEstatePolicyRequest(fresh.workspaceId, input.botId, targetChannel);
+    const policyColumns = studioPolicyRequest ? `s.project_id as "policySourceProjectId",a.project_id as "policyAreaProjectId",
+      (select policy_bot.project_id from bots policy_bot where policy_bot.id=$4::uuid and policy_bot.workspace_id=s.workspace_id) as "policyBotProjectId",` : '';
     const matches = await tx.query<KnowledgeQueryResult["matches"][number]>(`select s.id as "sourceId",v.id as "versionId",c.id as "chunkId",a.id as "areaId",v.name as title,left(c.content,1600) as excerpt,
+      ${policyColumns}
       ts_headline('simple',c.content,websearch_to_tsquery('simple',$2),
         'StartSel="",StopSel="",MaxWords=35,MinWords=10,MaxFragments=3,FragmentDelimiter=" … "') as "relevantExcerpt",
       v.source_url as "citationUrl",ts_rank_cd(to_tsvector('simple',c.content),websearch_to_tsquery('simple',$2))::float8 as score,
@@ -302,6 +307,11 @@ export async function queryKnowledgeCenter(session: AppSession, input: QueryKnow
         where g.workspace_id=s.workspace_id and g.bot_id=$4::uuid and g.channel=$5 and g.area_id=a.id and (a.project_id is null or a.project_id=b.project_id)))
        and (to_tsvector('simple',c.content) @@ websearch_to_tsquery('simple',$2) or strpos(lower(c.content),lower($2))>0)
       order by score desc,s.id,c.chunk_index limit $6`, [fresh.workspaceId, query, areaIds, input.botId ?? null, targetChannel, limit]);
+    // Scope evidence is server-only. Do not add internal policy fields to
+    // JSON responses or provider prompts when normal knowledge is returned.
+    if (studioPolicyRequest) for (const match of matches) for (const key of ["policySourceProjectId", "policyAreaProjectId", "policyBotProjectId"] as const) {
+      Object.defineProperty(match, key, { value: match[key], enumerable: false, configurable: false, writable: false });
+    }
     await audit(tx, fresh, "knowledge.query.executed", input.botId ?? fresh.userId, { botId: input.botId ?? null, channel: targetChannel, matchedSources: [...new Set(matches.map(item => item.sourceId))] });
     return { matches, grounded: matches.length > 0, usage: await usage(tx, fresh) };
   }, options);
