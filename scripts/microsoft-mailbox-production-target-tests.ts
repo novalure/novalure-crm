@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import type { AppSession } from "../src/lib/auth/session";
 import type { TenantTransaction } from "../src/lib/crm-command";
@@ -9,6 +9,7 @@ import type { TenantPool } from "../src/lib/db/tenant-client";
 import { exchangeMailboxToken, mailboxAuthorizationUrl } from "../src/lib/integrations/mailbox-provider";
 
 const sha = "a".repeat(40);
+const hashAddress = (address: string) => createHash("sha256").update(address).digest("hex");
 const production = {
   VERCEL: "1",
   VERCEL_ENV: "production",
@@ -141,7 +142,8 @@ test("first verified-production sync does not store old mail or unknown removals
   const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId, authIdentityId } as AppSession;
   const activation = "2026-11-26T14:00:00.000Z", old = "2026-11-26T13:59:59.999Z";
   const identity = { tenantId: randomUUID(), accountId: randomUUID(), subject: "synthetic-subject" };
-  process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE = JSON.stringify({ workspaceId, actorId:userId, projectId:randomUUID(), contactIds:[randomUUID()], microsoftTenantId:identity.tenantId, microsoftObjectId:identity.accountId });
+  const projectId = randomUUID();
+  process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE = JSON.stringify({ workspaceId, actorId:userId, projectId, contactAddressHashes:{[randomUUID()]: hashAddress("pilot@example.invalid")}, microsoftTenantId:identity.tenantId, microsoftObjectId:identity.accountId });
   const label = "synthetic@example.invalid", access = protectMailboxToken(session, "microsoft", "synthetic", label);
   const inbox = "synthetic-inbox", graphUser = "https://graph.microsoft.com/v1.0/me";
   let revision = 3, policyRevision = 1;
@@ -151,6 +153,8 @@ test("first verified-production sync does not store old mail or unknown removals
     if (query.includes("pg_roles runtime_role")) return { rows: [{ safe: true }] };
     if (query.includes("set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
     if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId }] };
+    if (query.includes("crm_lock_project_access")) return { rows: [{ allowed: true }] };
+    if (query.startsWith("select id from projects where")) return { rows: [{ id: projectId }] };
     if (query.includes("current_setting('neon.project_id'")) return { rows: [{ ready: true }] };
     if (query.includes("to_regclass('public.crm_mailbox_auto_settings')") || query.includes("crm_mailbox_contact_review_guard_ready")) return { rows: [{ ready: true }] };
     if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: [{ start: Date.parse(activation) }] };
@@ -186,26 +190,33 @@ test("first verified-production sync does not store old mail or unknown removals
 test("only the explicit pilot actor may create a production authorization state", async () => {
   const workspaceId = randomUUID(), userId = randomUUID();
   const session = { authenticated: true, source: "cookie", role: "owner", productRole: "customer_owner", workspaceId, userId, authSessionId: randomUUID(), authIdentityId: randomUUID() } as AppSession;
-  const scope = { workspaceId, actorId: userId, projectId: randomUUID(), contactIds: [randomUUID()], microsoftTenantId: randomUUID(), microsoftObjectId: randomUUID() };
-  const settings = [undefined, JSON.stringify({ ...scope, actorId: randomUUID() }), JSON.stringify({ ...scope, contactIds: [scope.contactIds[0], scope.contactIds[0].toUpperCase()] })];
+  const contactId = randomUUID(), addressHash = hashAddress("pilot@example.invalid");
+  const scope = { workspaceId, actorId: userId, projectId: randomUUID(), contactAddressHashes: { [contactId]: addressHash }, microsoftTenantId: randomUUID(), microsoftObjectId: randomUUID() };
+  const invalid = [
+    { ...scope, actorId: randomUUID() },
+    { ...scope, contactAddressHashes: { [contactId]: addressHash, [contactId.toUpperCase()]: hashAddress("other@example.invalid") } },
+    { ...scope, contactAddressHashes: { [contactId]: addressHash, [randomUUID()]: addressHash } },
+    { ...scope, contactAddressHashes: { [contactId]: "invalid" } },
+  ];
+  const settings = [undefined, ...invalid.map(value => JSON.stringify(value))];
   for (const value of settings) await withProductionEnv({ NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE: value }, async () => {
     const tx = { async queryOne() { return { ready: true }; }, async query() { assert.fail("an invalid pilot created authorization state"); } } as unknown as TenantTransaction;
     await assert.rejects(beginCrmMailboxOAuth(tx, session, "microsoft", input.requestUrl), { code: "MAIL_PILOT_SCOPE_UNAVAILABLE" });
   });
 });
 
-for (const scenario of ["allowed", "address changed", "sender changed", "ambiguous", "database drift", "wrong account", "missing activation"] as const) {
+for (const scenario of ["allowed", "address changed", "sender changed", "ambiguous", "database drift", "wrong account", "missing activation", "unapproved address", "contact disappeared at lock", "project grant revoked"] as const) {
   test(`production pilot ${scenario} case checks scope before content and at the commit`, async () => withProductionEnv({}, async () => {
     const workspaceId = randomUUID(), userId = randomUUID(), connectionId = randomUUID(), authIdentityId = randomUUID();
     const projectId = randomUUID(), contactId = randomUUID(), unselectedContactId = randomUUID(), foreignProjectId = randomUUID();
     const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId, authIdentityId } as AppSession;
     const activation = "2026-11-26T14:00:00.000Z", received = "2026-11-26T14:01:00.000Z";
     const identity = { tenantId: randomUUID(), accountId: randomUUID(), subject: "synthetic-subject" };
-    process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE = JSON.stringify({ workspaceId, actorId: userId, projectId, contactIds: [contactId], microsoftTenantId: identity.tenantId, microsoftObjectId: scenario === "wrong account" ? randomUUID() : identity.accountId });
     const label = "synthetic@example.invalid", approvedSender = "pilot@example.invalid", outsideSender = "unrelated@example.invalid";
+    process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE = JSON.stringify({ workspaceId, actorId: userId, projectId, contactAddressHashes: { [contactId]: hashAddress(scenario === "unapproved address" ? outsideSender : approvedSender) }, microsoftTenantId: identity.tenantId, microsoftObjectId: scenario === "wrong account" ? randomUUID() : identity.accountId });
     const access = protectMailboxToken(session, "microsoft", "synthetic", label);
     const graph = "https://graph.microsoft.com/v1.0/me", inbox = "synthetic-inbox";
-    let revision = 3, policyRevision = 1, providerCalls = 0, detailCalls = 0, copies = 0, decisions = 0, approvals = 0, checkpoints = 0, checkouts = 0;
+    let revision = 3, policyRevision = 1, providerCalls = 0, detailCalls = 0, copies = 0, decisions = 0, approvals = 0, contactLocks = 0, checkpoints = 0, checkouts = 0;
     const pool = { async connect() {
       const checkout = ++checkouts;
       return { release() {}, async query(sql: string, args: unknown[] = []) {
@@ -214,6 +225,11 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
         if (query.includes("pg_roles runtime_role")) return { rows: [{ safe: true }] };
         if (query.includes("set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
         if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId }] };
+        if (query.includes("crm_lock_project_access")) {
+          assert.deepEqual(args, [workspaceId, projectId, false, userId]);
+          return { rows: [{ allowed: scenario !== "project grant revoked" }] };
+        }
+        if (query.startsWith("select id from projects where")) return { rows: [{ id: projectId }] };
         if (query.includes("current_setting('neon.project_id'")) return { rows: [{ ready: scenario !== "database drift" || checkout === 1 }] };
         if (query.includes("to_regclass('public.crm_mailbox_auto_settings')") || query.includes("crm_mailbox_contact_review_guard_ready")) return { rows: [{ ready: true }] };
         if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: scenario === "missing activation" ? [] : [{ start: Date.parse(activation) }] };
@@ -236,8 +252,14 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
           if (scenario === "ambiguous") return { rows: [{ contactId, projectId }, { contactId: unselectedContactId, projectId: foreignProjectId }] };
           return { rows: [{ contactId, projectId }] };
         }
+        if (query.includes("for share of c,p")) {
+          assert.deepEqual(args, [workspaceId, projectId, contactId, approvedSender]);
+          contactLocks++;
+          return { rows: scenario === "contact disappeared at lock" ? [] : [{ id: contactId }] };
+        }
         if (query.startsWith("insert into crm_mailbox_messages")) {
           assert.equal(scenario, "allowed");
+          assert.equal(contactLocks, 1);
           assert.equal(args[3], "allowed-message");
           copies++;
           return { rows: [{ id: randomUUID() }] };
@@ -274,7 +296,7 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
         return Response.json({ id, from: { emailAddress: { address: id === 'allowed-message' ? approvedSender : outsideSender } }, receivedDateTime: received, parentFolderId: inbox });
       }
       if (url.startsWith(`${graph}/mailFolders/${inbox}/messages/allowed-message?`)) {
-        assert.ok(scenario === "allowed" || scenario === "address changed" || scenario === "sender changed");
+        assert.ok(["allowed", "address changed", "sender changed", "contact disappeared at lock"].includes(scenario));
         detailCalls++;
         return Response.json({ id: "allowed-message", subject: "Synthetic pilot", from: { emailAddress: { address: scenario === "sender changed" ? outsideSender : approvedSender } }, receivedDateTime: received, parentFolderId: inbox, body: { contentType: "text", content: "Synthetic private text" }, hasAttachments: scenario === "sender changed" });
       }
@@ -286,8 +308,9 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
       assert.equal(copies + decisions + checkpoints, 0);
       return;
     }
-    if (scenario === "database drift" || scenario === "wrong account" || scenario === "missing activation") {
-      await assert.rejects(run, { code: scenario === "database drift" ? "MAIL_PRODUCTION_DATABASE_UNAVAILABLE" : scenario === "wrong account" ? "MAIL_PILOT_SCOPE_UNAVAILABLE" : "MAIL_IMPORT_START_UNAVAILABLE" });
+    if (scenario === "database drift" || scenario === "wrong account" || scenario === "missing activation" || scenario === "project grant revoked") {
+      const expected = { "database drift": "MAIL_PRODUCTION_DATABASE_UNAVAILABLE", "wrong account": "MAIL_PILOT_SCOPE_UNAVAILABLE", "missing activation": "MAIL_IMPORT_START_UNAVAILABLE", "project grant revoked": "PROJECT_FORBIDDEN" };
+      await assert.rejects(run, { code: expected[scenario] });
       assert.equal(providerCalls, 0);
       assert.equal(copies, 0);
       assert.equal(checkpoints, 0);
@@ -300,6 +323,7 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
     assert.equal(copies, saved);
     assert.equal(decisions, saved);
     assert.equal(checkpoints, 1);
-    assert.equal(approvals, scenario === "ambiguous" ? 1 : 2);
+    assert.equal(approvals, ["ambiguous", "unapproved address"].includes(scenario) ? 1 : 2);
+    assert.equal(contactLocks, scenario === "contact disappeared at lock" || scenario === "allowed" ? 1 : 0);
   }));
 }

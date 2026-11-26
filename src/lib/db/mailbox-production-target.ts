@@ -38,10 +38,10 @@ export function assertProductionMailboxPilot(
   if (!isProductionMicrosoftMailbox(provider)) return null;
   try {
     const raw = process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE ?? "";
-    if (!raw || raw.length > 8192) throw new Error();
+    if (!raw || raw.length > 16_384) throw new Error();
     const value: unknown = JSON.parse(raw);
     if (!value || typeof value !== "object" || Array.isArray(value) ||
-        Object.keys(value).sort().join() !== "actorId,contactIds,microsoftObjectId,microsoftTenantId,projectId,workspaceId") throw new Error();
+        Object.keys(value).sort().join() !== "actorId,contactAddressHashes,microsoftObjectId,microsoftTenantId,projectId,workspaceId") throw new Error();
     const scope = value as Record<string, unknown>;
     const workspaceId = assertCrmUuid(scope.workspaceId).toLowerCase();
     const actorId = assertCrmUuid(scope.actorId).toLowerCase();
@@ -50,10 +50,18 @@ export function assertProductionMailboxPilot(
     const objectId = normalizeMicrosoftMailboxGuid(scope.microsoftObjectId);
     if (workspaceId !== session.workspaceId.toLowerCase() || actorId !== session.userId.toLowerCase() || !tenantId || !objectId ||
         identity && (tenantId !== normalizeMicrosoftMailboxGuid(identity.tenantId) || objectId !== normalizeMicrosoftMailboxGuid(identity.objectId))) throw new Error();
-    if (!Array.isArray(scope.contactIds) || scope.contactIds.length < 1 || scope.contactIds.length > 100) throw new Error();
-    const contactIds = scope.contactIds.map(id => assertCrmUuid(id).toLowerCase()).sort();
-    if (new Set(contactIds).size !== contactIds.length) throw new Error();
-    return { workspaceId, actorId, projectId, tenantId, objectId, contactIds };
+    const pairs = scope.contactAddressHashes;
+    if (!pairs || typeof pairs !== "object" || Array.isArray(pairs)) throw new Error();
+    const entries = Object.entries(pairs);
+    if (entries.length < 1 || entries.length > 100) throw new Error();
+    const normalized = entries.map(([id, hash]) => {
+      if (typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) throw new Error();
+      return [assertCrmUuid(id).toLowerCase(), hash] as const;
+    }).sort(([first], [second]) => first.localeCompare(second));
+    const contactAddressHashes = Object.fromEntries(normalized);
+    if (Object.keys(contactAddressHashes).length !== entries.length ||
+        new Set(Object.values(contactAddressHashes)).size !== entries.length) throw new Error();
+    return { workspaceId, actorId, projectId, tenantId, objectId, contactAddressHashes };
   } catch {
     throw new CrmCommandError("MAIL_PILOT_SCOPE_UNAVAILABLE", "Dieser persönliche Outlook-Test ist für den gewählten Umfang nicht verfügbar.", 403);
   }

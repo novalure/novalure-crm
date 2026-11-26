@@ -1,7 +1,7 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AppSession } from "../auth/session";
-import { assertCrmUuid, CrmCommandError, crmPayloadDigest, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
+import { assertCrmUuid, assertProjectGrant, CrmCommandError, crmPayloadDigest, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
 import { hasMailboxReadScope, hasVerifiedMicrosoftMailboxScopes, type MailboxImportedMessage, type MailboxProvider } from "../crm-mailbox";
 import { assertMicrosoftMailboxCheckpoint, assertMicrosoftReadyCheckpoint, assertMicrosoftRecovery, MailboxCheckpointReviewRequired, contactBackfillCheckpoint, emptyMailboxCheckpoint, mailboxCursorResetAllowed, mailboxSyncCurrent, mailboxSyncFailureStatus, mailboxSyncPosition, microsoftCheckpointUsesContinuation, microsoftContactBackfillCheckpoint, microsoftRecoveryReplay, queueMicrosoftMailboxDecision, type MailboxMetadata, type MailboxSyncCheckpoint, type MailboxSyncDecision } from "../crm-mailbox-sync";
 import { exchangeMailboxToken, fetchMailboxAccountIdentity, MailboxProviderError, verifiedExternalMailboxMode, type MailboxTransport } from "../integrations/mailbox-provider";
@@ -124,9 +124,11 @@ async function decide(tx: TenantTransaction, session: AppSession, claim: Claim, 
   const prior=await tx.queryOne<{deleted:boolean; leadId:string|null;projectId:string|null;contactId:string|null}>(`select m.deleted_at is not null as deleted,coalesce(l.lead_id,d.lead_id) as "leadId",coalesce(l.project_id,d.project_id) as "projectId",coalesce(l.contact_id,d.contact_id) as "contactId" from crm_mailbox_messages m left join crm_mailbox_links l on l.workspace_id=m.workspace_id and l.user_id=m.user_id and l.message_id=m.id left join crm_mailbox_private_decisions d on d.workspace_id=m.workspace_id and d.user_id=m.user_id and d.message_id=m.id and d.status='filed' where m.connection_id=$1::uuid and m.provider_id=$2`,[claim.id,meta.providerId]);
   if(prior?.deleted)return result('ignored','locally_erased');
   if(claim.pilot){
-    const matches=meta.fromAddress?await visibleMailboxContacts(tx,session.workspaceId,meta.fromAddress):[];
+    if(!meta.fromAddress)return result('ignored','unknown_sender_no_content_import');
+    const matches=await visibleMailboxContacts(tx,session.workspaceId,meta.fromAddress);
     const contact=matches[0];
-    if(matches.length!==1||contact.projectId!==claim.pilot.projectId||!claim.pilot.contactIds.includes(contact.contactId))return result('ignored','unknown_sender_no_content_import');
+    const addressHash=createHash('sha256').update(meta.fromAddress).digest('hex');
+    if(matches.length!==1||contact.projectId!==claim.pilot.projectId||claim.pilot.contactAddressHashes[contact.contactId]!==addressHash)return result('ignored','unknown_sender_no_content_import');
     return {status:'known',reason:'exact_address_unique_contact_unverified_sender',leadId:null,projectId:contact.projectId,contactId:contact.contactId,automatic:false};
   }
   if(prior?.leadId){const current=await tx.queryOne<Lead>(`select id as "leadId",project_id as "projectId",contact_id as "contactId" from leads where workspace_id=$1::uuid and id=$2::uuid and project_id=$3::uuid`,[session.workspaceId,prior.leadId,prior.projectId]);return current?result('known','existing_personal_association_preserved',current,true):result('review','lead_permission_changed');}
@@ -154,6 +156,7 @@ async function verify(tx:TenantTransaction,session:AppSession,claim:Claim){
   requireMicrosoftBinding(claim.provider,row.tenantId,row.subject,row.accountId);if(row.tenantId!==claim.tenantId||row.subject!==claim.subject||row.accountId!==claim.accountId)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Postfachidentität hat sich geändert',409);
   const pilot=assertProductionMailboxPilot(claim.provider,session,{tenantId:row.tenantId,objectId:row.accountId});
   if(JSON.stringify(pilot)!==JSON.stringify(claim.pilot))throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Der Outlook-Testumfang hat sich geändert.',409);
+  if(pilot)await assertProjectGrant(tx,session,pilot.projectId);
   if(await productionMailboxImportStart(tx,claim.provider,claim.id)!==claim.importStart)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Der Startzeitpunkt des Postfachabrufs hat sich geändert.',409);
   await assertMailboxLeaseAfterLock(tx,{id:claim.id,workspaceId:session.workspaceId,userId:session.userId,revision:claim.revision,lease:claim.lease});
 }
@@ -181,6 +184,7 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
   await assertProductionMailboxDatabase(tx, c.provider);
   const pilot=assertProductionMailboxPilot(c.provider,fresh,{tenantId:c.tenantId,objectId:c.accountId});
   if(pilot){
+   await assertProjectGrant(tx,fresh,pilot.projectId);
    const feature=await tx.queryOne<{ready:boolean}>(`select to_regprocedure('public.crm_mailbox_contact_review_guard_ready()') is not null as ready`);
    if(!feature?.ready||!c.contactReview||c.autoFile||c.backfillReplaying)throw new CrmCommandError('MAIL_PILOT_CONTACT_REVIEW_REQUIRED','Outlook benötigt die private Kontaktprüfung.',409);
   }
@@ -319,6 +323,19 @@ async function checkpointCommit(session:AppSession,claim:Claim,state:MailboxSync
   const decision=await decide(tx,fresh,claim,outcome.meta!);let messageId:string|undefined;
   // Re-evaluate current lead rights/participants after provider I/O, within the same page transaction.
   if(outcome.content&&decision.status==='known'&&decision.leadId===outcome.decision?.leadId&&decision.contactId===outcome.decision?.contactId&&decision.projectId===outcome.decision?.projectId){
+   if(claim.pilot){
+    // Keep the approved link stable through the local copy and review write.
+    const locked = await tx.queryOne(`
+      select c.id from contacts c
+      join projects p on p.id = c.project_id and p.workspace_id = c.workspace_id
+      where c.workspace_id = $1::uuid and c.project_id = $2::uuid and c.id = $3::uuid
+        and c.archived_at is null and lower(btrim(c.email)) = $4
+        and crm_classification_allowed(c.workspace_id, c.data_classification, c.data_purpose)
+        and crm_classification_allowed(p.workspace_id, p.data_classification, p.data_purpose)
+      for share of c,p
+    `, [fresh.workspaceId, claim.pilot.projectId, decision.contactId, outcome.meta!.fromAddress]);
+    if(!locked)continue;
+   }
    const review=assessMailboxObjectionReview({metadata:outcome.meta!,decision,message:outcome.content});
    if(review.state==='unavailable')throw new CrmCommandError('MAIL_REVIEW_SOURCE_CHANGED','Die persönliche Nachricht muss erneut im Postfach geprüft werden.',409);
    messageId=await saveContent(tx,fresh,claim,outcome.content,outcome.meta!);if(messageId)count++;
