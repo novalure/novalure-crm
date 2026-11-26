@@ -296,10 +296,15 @@ export async function exchangeMailboxToken(input: { provider: MailboxProvider; c
     throw new MailboxProviderError("MAIL_REFRESH_GRANT_REQUIRED");
   }
   const idToken = typeof result.id_token === "string" ? result.id_token : null;
-  // A successful OIDC refresh can omit the ID token. Without a fresh identity
-  // proof, defer the sync and retain the existing encrypted credentials.
-  if (verifiedMicrosoftRefresh && (result.id_token == null || idToken?.trim() === "")) {
-    throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE");
+  // Refresh can omit the ID token. A missing identity proof or malformed
+  // replacement credential must leave the current encrypted grant in place.
+  if (verifiedMicrosoftRefresh) {
+    const replacement = result.refresh_token;
+    const invalidReplacement = replacement != null &&
+      (typeof replacement !== "string" || /[\s\u0000-\u001f\u007f]/u.test(replacement));
+    if (!idToken?.trim() || invalidReplacement) {
+      throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE");
+    }
   }
   return { accessToken: result.access_token, refreshToken, idToken, scopes, expiresAt: new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() };
 }

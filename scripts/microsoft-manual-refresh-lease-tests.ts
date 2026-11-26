@@ -112,15 +112,23 @@ for (const scenario of refreshFailures) test(`verified manual refresh handles ${
   assert.equal(f.refresh, reauthorize ? null : "OLD_REFRESH");
 });
 
-for (const idToken of [undefined, "", " \t"] as const) test(`verified manual refresh without a usable ID token retains the connection (${JSON.stringify(idToken)})`, async () => {
+const malformedRefreshReplies = [
+  { idToken: undefined, refreshToken: "UNVERIFIED_REFRESH" },
+  { idToken: "", refreshToken: "UNVERIFIED_REFRESH" },
+  { idToken: " \t", refreshToken: "UNVERIFIED_REFRESH" },
+  { idToken: 123, refreshToken: "UNVERIFIED_REFRESH" },
+  { idToken: "synthetic-id", refreshToken: "invalid replacement" },
+  { idToken: "synthetic-id", refreshToken: 123 },
+] as const;
+for (const { idToken, refreshToken } of malformedRefreshReplies) test(`verified manual refresh retains the connection with malformed credentials (${JSON.stringify({ idToken, refreshToken })})`, async () => {
   const f = fixture("normal");
   let calls = 0;
   const transport: MailboxTransport = async (url) => {
     calls++;
     assert.equal(url, `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`);
-    return Response.json({ access_token: "UNVERIFIED_ACCESS", refresh_token: "UNVERIFIED_REFRESH", id_token: idToken, expires_in: 3600, scope: "Mail.Read" });
+    return Response.json({ access_token: "UNVERIFIED_ACCESS", refresh_token: refreshToken, id_token: idToken, expires_in: 3600, scope: "Mail.Read" });
   };
-  await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool: f.pool }, transport, async () => assert.fail("missing token must not be passed to the verifier"), auth), { code: "MAIL_PROVIDER_UNAVAILABLE", status: 503 });
+  await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool: f.pool }, transport, async () => assert.fail("malformed reply must not be passed to the verifier"), auth), { code: "MAIL_PROVIDER_UNAVAILABLE", status: 503 });
   assert.equal(calls, 1);
   assert.equal(f.status, "connected");
   assert.equal(f.lastError, "MAIL_PROVIDER_UNAVAILABLE");
