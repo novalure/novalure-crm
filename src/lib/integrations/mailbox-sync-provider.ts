@@ -5,10 +5,10 @@ import { assertGmailInboxDetail, fetchMicrosoftInboxContent, gmailMessageLabels,
 const defaultTransport: MailboxTransport = (url, init) => fetch(url, init);
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
 function rows(v: unknown, max = 5000) { if (v === undefined) return []; if (!Array.isArray(v) || v.length > max) throw new MailboxProviderError("MAIL_INVALID_RESPONSE"); return v.map(obj); }
-const auth = (token: string, microsoft = false) => ({ Authorization: `Bearer ${token}`, Accept: "application/json", ...(microsoft ? { Prefer: 'IdType="ImmutableId", odata.maxpagesize=5' } : {}) });
+const auth = (token: string, microsoft = false, microsoftPageSize = 5) => ({ Authorization: `Bearer ${token}`, Accept: "application/json", ...(microsoft ? { Prefer: `IdType="ImmutableId", odata.maxpagesize=${microsoftPageSize}` } : {}) });
 const historyId = (v: unknown) => { if (typeof v !== "string" || !/^\d{1,40}$/.test(v)) throw new MailboxProviderError("MAIL_INVALID_HISTORY_ID"); return v; };
 const metadataSelect = "id,conversationId,internetMessageId,internetMessageHeaders,subject,from,toRecipients,ccRecipients,receivedDateTime,parentFolderId";
-export async function fetchMailboxSyncPage(provider: MailboxProvider, token: string, checkpoint: MailboxSyncCheckpoint, transport = defaultTransport, inboxId?: string, importStart?: number | null) {
+export async function fetchMailboxSyncPage(provider: MailboxProvider, token: string, checkpoint: MailboxSyncCheckpoint, transport = defaultTransport, inboxId?: string, importStart?: number | null, options: { productionPilot?: boolean } = {}) {
   const after = mailboxSyncPosition(checkpoint), changes: MailboxSyncChange[] = [];
   if (provider === "google") {
     if (!after.anchor && !after.historyCheckpoint) { const profile = await mailboxProviderJson("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: auth(token) }, transport, 65536); after.anchor = historyId(profile.historyId); }
@@ -28,18 +28,21 @@ export async function fetchMailboxSyncPage(provider: MailboxProvider, token: str
     assertMicrosoftMailboxCheckpoint(checkpoint, inboxId);
     if (checkpoint.queued.length) throw new MailboxCheckpointReviewRequired();
     const cursor = after.pendingCursor ?? after.deltaCheckpoint;
-    const initial = new URL(`https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$select=${metadataSelect}&$top=5`);
+    const pageSize = options.productionPilot ? 1 : 5;
+    const initial = new URL(`https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$select=${metadataSelect}&$top=${pageSize}`);
     if (importStart != null) {
       initial.searchParams.set("$select", "id,receivedDateTime");
       initial.searchParams.set("$filter", `receivedDateTime ge ${new Date(importStart).toISOString()}`);
     }
     const url = cursor == null ? mailboxDeltaUrl(initial.toString(), inboxId) : mailboxDeltaContinuationUrl(cursor, inboxId, after.pendingCursor != null ? "next" : "delta");
-    const page = await mailboxProviderJson(url, { headers: auth(token, true) }, transport);
+    const page = await mailboxProviderJson(url, { headers: auth(token, true, pageSize) }, transport);
     // A partial or ambiguous response must not advance the durable checkpoint.
     // Graph returns a value array and exactly one opaque continuation link.
     const hasNext = Object.hasOwn(page, "@odata.nextLink"), hasDelta = Object.hasOwn(page, "@odata.deltaLink");
     if (!Array.isArray(page.value) || hasNext === hasDelta) throw new MailboxProviderError("MAIL_INVALID_RESPONSE");
     const continuation = mailboxDeltaContinuationUrl(page[hasNext ? "@odata.nextLink" : "@odata.deltaLink"], inboxId, hasNext ? "next" : "delta");
+    // Graph may return more than the requested page size. Keep the entire page
+    // within the existing response bounds so the caller can commit it atomically.
     for (const row of rows(page.value, 500)) {
       const receivedAt = typeof row.receivedDateTime === "string" ? Date.parse(row.receivedDateTime) : NaN;
       if (importStart != null && receivedAt < importStart) continue;

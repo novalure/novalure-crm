@@ -22,7 +22,25 @@ export function assertGmailInboxDetail(raw: Record<string, unknown>, expectedId:
 }
 const defaultTransport: MailboxTransport = (url, init) => fetch(url, init);
 const allowedHosts = new Set(["graph.microsoft.com", "gmail.googleapis.com", "oauth2.googleapis.com", "openidconnect.googleapis.com", "login.microsoftonline.com"]);
-export async function mailboxProviderJson(url: string, init: RequestInit, transport: MailboxTransport, maxBytes = 1048576): Promise<Record<string, unknown>> {
+// Entra documents these as expiration or revocation of the refresh grant.
+// The OAuth error must independently identify that grant as invalid.
+const revokedOrExpiredMicrosoftRefreshCodes = new Set([50173, 70008, 700082, 700084, 70043]);
+function providerRetryAfter(response: Response): number | undefined {
+  const retry = response.headers.get("retry-after");
+  const seconds = retry ? /^\d+$/.test(retry) ? Number(retry) : Math.ceil((Date.parse(retry) - Date.now()) / 1000) : undefined;
+  return seconds && Number.isFinite(seconds) ? Math.max(1, Math.min(86400, seconds)) : undefined;
+}
+function verifiedMicrosoftRefreshFailure(result: Record<string, unknown>, response: Response) {
+  const { status } = response;
+  const codes = result.error_codes;
+  if (status === 400 && result.error === "invalid_grant" &&
+      Array.isArray(codes) && codes.length === 1 && revokedOrExpiredMicrosoftRefreshCodes.has(codes[0])) {
+    return new MailboxProviderError("MAIL_REAUTH_REQUIRED", status, providerRetryAfter(response));
+  }
+  return new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE", status, providerRetryAfter(response));
+}
+
+export async function mailboxProviderJson(url: string, init: RequestInit, transport: MailboxTransport, maxBytes = 1048576, verifiedMicrosoftRefresh = false): Promise<Record<string, unknown>> {
   const target = new URL(url); if (target.protocol !== "https:" || target.username || target.password || !allowedHosts.has(target.hostname) || target.port) throw new MailboxProviderError("UNSAFE_PROVIDER_URL");
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -44,8 +62,10 @@ export async function mailboxProviderJson(url: string, init: RequestInit, transp
       return value;
     });
     response = await Promise.race([pending, deadline]);
-    if (!response.ok) { const retry = response.headers.get("retry-after"), seconds = retry ? /^\d+$/.test(retry) ? Number(retry) : Math.ceil((Date.parse(retry) - Date.now()) / 1000) : undefined; throw new MailboxProviderError(response.status === 401 || response.status === 403 ? "MAIL_AUTHORIZATION_REQUIRED" : response.status === 429 ? "MAIL_PROVIDER_RATE_LIMIT" : response.status === 404 ? "MAIL_PROVIDER_NOT_FOUND" : response.status === 410 ? "MAIL_CHECKPOINT_EXPIRED" : response.status === 400 && url.includes("/token") ? "MAIL_REAUTH_REQUIRED" : "MAIL_PROVIDER_UNAVAILABLE", response.status, seconds && Number.isFinite(seconds) ? Math.max(1, Math.min(86400, seconds)) : undefined); }
-    const declared = response.headers.get("content-length"); if (declared && Number(declared) > maxBytes) throw new MailboxProviderError("MAIL_RESPONSE_TOO_LARGE");
+    const readMicrosoftRefreshFailure = verifiedMicrosoftRefresh && [400, 401, 403].includes(response.status);
+    if (!response.ok && !readMicrosoftRefreshFailure) { throw new MailboxProviderError(response.status === 401 || response.status === 403 ? "MAIL_AUTHORIZATION_REQUIRED" : response.status === 429 ? "MAIL_PROVIDER_RATE_LIMIT" : response.status === 404 ? "MAIL_PROVIDER_NOT_FOUND" : response.status === 410 ? "MAIL_CHECKPOINT_EXPIRED" : response.status === 400 && url.includes("/token") ? "MAIL_REAUTH_REQUIRED" : "MAIL_PROVIDER_UNAVAILABLE", response.status, providerRetryAfter(response)); }
+    const responseLimit = readMicrosoftRefreshFailure ? Math.min(maxBytes, 16_384) : maxBytes;
+    const declared = response.headers.get("content-length"); if (declared && Number(declared) > responseLimit) throw new MailboxProviderError("MAIL_RESPONSE_TOO_LARGE");
     reader = response.body?.getReader(); if (!reader) throw new MailboxProviderError("MAIL_INVALID_RESPONSE");
     let length = 0, reads = 0; const chunks: Uint8Array[] = [];
     while (true) {
@@ -53,10 +73,16 @@ export async function mailboxProviderJson(url: string, init: RequestInit, transp
       // Fragmentation says nothing about the size or validity of the message.
       // Keep this failure retryable instead of quarantining a valid message.
       if (++reads > 8192) throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE");
-      length += item.value.byteLength; if (length > maxBytes) throw new MailboxProviderError("MAIL_RESPONSE_TOO_LARGE"); chunks.push(item.value);
+      length += item.value.byteLength; if (length > responseLimit) throw new MailboxProviderError("MAIL_RESPONSE_TOO_LARGE"); chunks.push(item.value);
     }
-    try { const result: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8")); if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("object required"); return result as Record<string, unknown>; }
-    catch { throw new MailboxProviderError("MAIL_INVALID_RESPONSE"); }
+    let result: Record<string, unknown>;
+    try {
+      const decoded: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("object required");
+      result = decoded as Record<string, unknown>;
+    } catch { throw new MailboxProviderError("MAIL_INVALID_RESPONSE"); }
+    if (readMicrosoftRefreshFailure) throw verifiedMicrosoftRefreshFailure(result, response);
+    return result;
   } finally {
     if (timer) clearTimeout(timer);
     if (!complete) {
@@ -260,10 +286,16 @@ export async function exchangeMailboxToken(input: { provider: MailboxProvider; c
   if (input.refreshToken) body.set("refresh_token", input.refreshToken); else { if (!input.code || !input.codeVerifier || !input.requestUrl) throw new MailboxProviderError("MAIL_OAUTH_STATE"); body.set("code", input.code); body.set("code_verifier", input.codeVerifier); body.set("redirect_uri", mailboxRedirect(provider, input.requestUrl)); }
   if (provider === "microsoft") body.set("scope", mailboxRequestedScopes.microsoft.join(" "));
   const authority = provider === "microsoft" ? (input.verifiedMicrosoftAuthority ? verifiedAuthority(input.verifiedMicrosoftAuthority) : tenant()) : "";
-  const result = await json(provider === "google" ? "https://oauth2.googleapis.com/token" : `https://login.microsoftonline.com/${authority}/oauth2/v2.0/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, transport, 65536);
+  const verifiedMicrosoftRefresh = provider === "microsoft" && Boolean(input.refreshToken && input.verifiedMicrosoftAuthority);
+  const result = await json(provider === "google" ? "https://oauth2.googleapis.com/token" : `https://login.microsoftonline.com/${authority}/oauth2/v2.0/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, transport, 65536, verifiedMicrosoftRefresh);
   const scopes = typeof result.scope === "string" ? result.scope.split(/\s+/).filter(Boolean) : input.refreshToken ? input.priorScopes ?? [] : [];
   if (!hasMailboxReadScope(provider, scopes) || provider === "microsoft" && input.verifiedMicrosoftAuthority && !hasVerifiedMicrosoftMailboxScopes(scopes) || typeof result.access_token !== "string" || !result.access_token || !Number.isSafeInteger(result.expires_in) || Number(result.expires_in) < 30 || Number(result.expires_in) > 86400 || result.token_type && String(result.token_type).toLowerCase() !== "bearer") throw new MailboxProviderError("MAIL_SCOPE_REQUIRED");
-  return { accessToken: result.access_token, refreshToken: typeof result.refresh_token === "string" ? result.refresh_token : input.refreshToken ?? null, idToken: typeof result.id_token === "string" ? result.id_token : null, scopes, expiresAt: new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() };
+  const refreshToken = typeof result.refresh_token === "string" ? result.refresh_token : input.refreshToken ?? null;
+  if (provider === "microsoft" && input.verifiedMicrosoftAuthority && !input.refreshToken &&
+      (!refreshToken || /[\s\u0000-\u001f\u007f]/u.test(refreshToken))) {
+    throw new MailboxProviderError("MAIL_REFRESH_GRANT_REQUIRED");
+  }
+  return { accessToken: result.access_token, refreshToken, idToken: typeof result.id_token === "string" ? result.id_token : null, scopes, expiresAt: new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() };
 }
 export async function fetchMailboxAccountLabel(provider: MailboxProvider, token: string, transport: MailboxTransport = defaultTransport) {
   const result = await json(provider === "google" ? "https://gmail.googleapis.com/gmail/v1/users/me/profile" : "https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName", { headers: headers(token) }, transport, 65536);

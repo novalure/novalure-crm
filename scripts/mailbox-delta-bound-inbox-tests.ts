@@ -49,6 +49,7 @@ test("sync follows Graph's folder-id continuation bound to the same token's inbo
     calls.push(url);
     assert.equal(new Headers(init.headers).get("authorization"), `Bearer ${token}`);
     if (url === `${root}/mailFolders/inbox?$select=id`) return response({ id: inbox });
+    assert.equal(new Headers(init.headers).get("prefer"), 'IdType="ImmutableId", odata.maxpagesize=5');
     if (url.startsWith(`${root}/mailFolders/inbox/messages/delta`)) return response({ value: [], "@odata.nextLink": path });
     if (url === path) return response({ value: [], "@odata.deltaLink": odata });
     throw new Error("Unexpected provider request");
@@ -60,6 +61,27 @@ test("sync follows Graph's folder-id continuation bound to the same token's inbo
   assert.equal(second.after.deltaCheckpoint, odata);
   assert.equal(second.after.phase, "ready");
   assert.equal(calls.length, 3);
+});
+
+test("the production pilot requests one item without truncating a returned page or rewriting its cursors", async () => {
+  const requested: string[] = [];
+  const options = { productionPilot: true };
+  const transport: MailboxTransport = async (url, init) => {
+    requested.push(url);
+    assert.equal(new Headers(init.headers).get("prefer"), 'IdType="ImmutableId", odata.maxpagesize=1');
+    if (url === path) return response({ value: [{ id: "continued-message" }], "@odata.deltaLink": odata });
+    if (url === odata) return response({ value: [], "@odata.deltaLink": odata });
+    assert.equal(new URL(url).searchParams.get("$top"), "1");
+    return response({ value: [{ id: "first-message" }, { id: "second-message" }], "@odata.nextLink": path });
+  };
+  const first = await fetchMailboxSyncPage("microsoft", "SYNTHETIC", emptyMailboxCheckpoint(), transport, inbox, null, options);
+  assert.deepEqual(first.changes, [{ id: "first-message" }, { id: "second-message" }]);
+  assert.equal(first.after.pendingCursor, path);
+  const second = await fetchMailboxSyncPage("microsoft", "SYNTHETIC", { ...first.after, queued: [], afterQueue: null }, transport, inbox, null, options);
+  assert.deepEqual(second.changes, [{ id: "continued-message" }]);
+  assert.equal(second.after.deltaCheckpoint, odata);
+  await fetchMailboxSyncPage("microsoft", "SYNTHETIC", { ...second.after, queued: [], afterQueue: null }, transport, inbox, null, options);
+  assert.deepEqual(requested.slice(1), [path, odata]);
 });
 
 test("bounded Outlook delta requests minimal fields and discards dated old events across pages", async () => {

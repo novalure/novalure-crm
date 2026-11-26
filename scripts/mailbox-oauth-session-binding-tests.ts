@@ -4,7 +4,7 @@ import type { AppSession } from "../src/lib/auth/session";
 import type { TenantPool, TenantTransaction } from "../src/lib/db/tenant-client";
 import { beginCrmMailboxOAuth, consumeCrmMailboxOAuth, finishCrmMailboxOAuth, saveCrmMailboxConnection } from "../src/lib/db/crm-mailbox-repository";
 import { createSignedOAuthState, encryptOAuthStateSecret, hashOAuthState } from "../src/lib/integrations/calendar-oauth-state";
-import type { MailboxTransport } from "../src/lib/integrations/mailbox-provider";
+import { exchangeMailboxToken, type MailboxTransport } from "../src/lib/integrations/mailbox-provider";
 
 // Application-level fake database and transport. These tests do not establish
 // PostgreSQL/RLS behavior, real cookies, provider semantics or deployment safety.
@@ -200,6 +200,50 @@ test("revocation during provider I/O prevents saving the verified connection", a
   await assert.rejects(finishCrmMailboxOAuth(session, "microsoft", state, "synthetic-code", config.NOVALURE_APP_ORIGIN, { pool }, transport, auth, verify), /Session is expired or revoked/);
   assert.equal(providerCalls, 2, "in-flight provider calls are not represented as cancellable");
 }));
+
+test("an unusable initial Microsoft refresh grant never overwrites an existing mailbox", async () => withEnv(config, async () => {
+  for (const refreshToken of [undefined, null, 123, "", " \t", "synthetic\nrefresh"]) {
+    const store = fakeStateStore();
+    const state = await started(store);
+    store.setPriorBindings([{ label: "synthetic@example.invalid", accountId: userId, tenantId: workspaceId, subject: "synthetic-subject" }]);
+    let providerCalls = 0, verifierCalls = 0;
+    const transport: MailboxTransport = async (url) => {
+      providerCalls++;
+      assert.equal(url, "https://login.microsoftonline.com/common/oauth2/v2.0/token");
+      return Response.json({ access_token: "synthetic-access", refresh_token: refreshToken, id_token: "synthetic-id", scope: "Mail.Read User.Read", token_type: "Bearer", expires_in: 3600 });
+    };
+    const auth = async () => ({ client_id: "synthetic-client", client_assertion: "synthetic-assertion" });
+    const verify = async () => { verifierCalls++; return { tenantId: workspaceId, objectId: userId, subject: "synthetic-subject" }; };
+    const finish = () => finishCrmMailboxOAuth(session, "microsoft", state, "synthetic-code", config.NOVALURE_APP_ORIGIN, { pool: fakePool(store, () => true) }, transport, auth, verify);
+    await assert.rejects(finish(), { code: "MAIL_REFRESH_GRANT_REQUIRED" });
+    assert.equal(providerCalls, 1);
+    assert.equal(verifierCalls, 0);
+    assert.deepEqual(store.savedAccountIds, []);
+    assert.ok(!store.calls.some(sql => /^(?:insert into|update|delete from) crm_mailbox_(?:connections|auto_settings)\b/i.test(sql)));
+    await assert.rejects(finish(), { code: "MAIL_OAUTH_STATE" });
+    assert.equal(providerCalls, 1, "the failed authorization attempt remains single-use");
+  }
+}));
+
+test("Google and explicitly enabled legacy Microsoft exchanges retain access-only behavior", async () => {
+  for (const provider of ["google", "microsoft"] as const) {
+    await withEnv({
+      NOVALURE_APP_ORIGIN: config.NOVALURE_APP_ORIGIN,
+      MICROSOFT_MAILBOX_ALLOW_LEGACY: "1",
+      MICROSOFT_CLIENT_ID: "synthetic-legacy",
+      MICROSOFT_CLIENT_SECRET: "synthetic-legacy-secret",
+      GOOGLE_CLIENT_ID: "synthetic-google",
+      GOOGLE_CLIENT_SECRET: "synthetic-google-secret",
+    }, async () => {
+      const scopes = provider === "microsoft" ? "Mail.Read" : "https://www.googleapis.com/auth/gmail.readonly";
+      const tokens = await exchangeMailboxToken({ provider, code: "synthetic-code", codeVerifier: "synthetic-verifier", requestUrl: config.NOVALURE_APP_ORIGIN },
+        async () => Response.json({ access_token: "synthetic-access", scope: scopes, expires_in: 3600 }),
+        async () => ({ client_id: "synthetic-legacy", client_secret: "synthetic-legacy-secret" }));
+      assert.equal(tokens.refreshToken, null);
+      assert.equal(tokens.accessToken, "synthetic-access");
+    });
+  }
+});
 
 test("revocation during token exchange prevents key and mailbox lookups", async () => withEnv(config, async () => {
   const store = fakeStateStore(), state = await started(store);

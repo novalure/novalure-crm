@@ -173,11 +173,15 @@ test("first verified-production sync does not store old mail or unknown removals
     assert.fail(`Out-of-window mail reached a decision or content query: ${query}`);
   } }; } } as unknown as TenantPool;
   const fetched: string[] = [];
-  const result = await runPersonalMailboxSync(session, id, { pool, maxPages: 1, transport: async url => {
+  const result = await runPersonalMailboxSync(session, id, { pool, maxPages: 1, transport: async (url, init) => {
     fetched.push(url);
     if (url === `${graphUser}?$select=id,mail,userPrincipalName`) return Response.json({ id: identity.accountId, mail: label });
     if (url === `${graphUser}/mailFolders/inbox?$select=id`) return Response.json({ id: inbox });
-    if (url.startsWith(`${graphUser}/mailFolders/inbox/messages/delta`)) return Response.json({ value: [{ id: "dated-old", receivedDateTime: old }, { id: "undated-old" }, { id: "old-removed", "@removed": { reason: "deleted" } }], "@odata.deltaLink": `${graphUser}/mailFolders/inbox/messages/delta?$deltatoken=synthetic` });
+    if (url.startsWith(`${graphUser}/mailFolders/inbox/messages/delta`)) {
+      assert.equal(new URL(url).searchParams.get("$top"), "1");
+      assert.equal(new Headers(init.headers).get("prefer"), 'IdType="ImmutableId", odata.maxpagesize=1');
+      return Response.json({ value: [{ id: "dated-old", receivedDateTime: old }, { id: "undated-old" }, { id: "old-removed", "@removed": { reason: "deleted" } }], "@odata.deltaLink": `${graphUser}/mailFolders/inbox/messages/delta?$deltatoken=synthetic` });
+    }
     if (url.startsWith(`${graphUser}/messages/undated-old?`)) return Response.json({ id: "undated-old", parentFolderId: inbox, receivedDateTime: old });
     if (url.startsWith(`${graphUser}/messages/old-removed?`)) return Response.json({}, { status: 404 });
     assert.fail("Old mail triggered a body or unnecessary metadata request");

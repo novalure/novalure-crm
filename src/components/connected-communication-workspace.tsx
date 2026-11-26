@@ -32,7 +32,31 @@ function Communication({ workspaceId, language,initialMessageId }: Props) {
 
   const load = useCallback(async () => { const response = await fetch(endpoint, { cache: "no-store" }), result = await response.json() as { data?: State; error?: string }; if (!response.ok || !result.data) throw new Error(result.error || (de ? "Postfachansicht nicht verfügbar" : "Mailbox view unavailable")); return result.data; }, [endpoint, de]);
 
-  useEffect(() => { let alive = true; const ticket = viewFence.current.begin(); void applyMailboxView(viewFence.current, ticket, load(), (data) => { if (alive) { setState(data); const callbackUrl = new URL(window.location.href); const callbackStatus = callbackUrl.searchParams.get("mailbox"); if (callbackStatus === "authorization_required") setNotice(de ? "Postfach-Verbindung wurde nicht bestätigt. Erneut verbinden und Mail-Lesezugriff ausdrücklich erlauben." : "Mailbox connection was not confirmed. Reconnect and explicitly allow mail reading."); if (callbackStatus) { callbackUrl.searchParams.delete("mailbox"); window.history.replaceState(window.history.state, "", callbackUrl); } } }).catch((error: unknown) => { if (alive && viewFence.current.isCurrent(ticket)) { viewFence.current.invalidate(); setState(null); setNotice(error instanceof Error ? error.message : "Mailbox unavailable"); } }); return () => { alive = false; }; }, [load, de]);
+  useEffect(() => {
+    let alive = true;
+    const ticket = viewFence.current.begin();
+    void applyMailboxView(viewFence.current, ticket, load(), (data) => {
+      if (!alive) return;
+      setState(data);
+      const callbackUrl = new URL(window.location.href);
+      const callbackStatus = callbackUrl.searchParams.get("mailbox");
+      if (callbackStatus === "authorization_required") {
+        setNotice(de ? "Postfach-Verbindung wurde nicht bestätigt. Erneut verbinden und Mail-Lesezugriff ausdrücklich erlauben." : "Mailbox connection was not confirmed. Reconnect and explicitly allow mail reading.");
+      } else if (callbackStatus === "offline_access_required") {
+        setNotice(de ? "Microsoft hat den automatischen Postfachabruf nicht bestätigt. Verbinde Outlook erneut und prüfe die angeforderten Berechtigungen." : "Microsoft did not confirm access for automatic mailbox checks. Reconnect Outlook and review the requested permissions.");
+      }
+      if (callbackStatus) {
+        callbackUrl.searchParams.delete("mailbox");
+        window.history.replaceState(window.history.state, "", callbackUrl);
+      }
+    }).catch((error: unknown) => {
+      if (!alive || !viewFence.current.isCurrent(ticket)) return;
+      viewFence.current.invalidate();
+      setState(null);
+      setNotice(error instanceof Error ? error.message : "Mailbox unavailable");
+    });
+    return () => { alive = false; };
+  }, [load, de]);
   async function connect(provider: MailboxProvider) {
 
     if (busyRef.current || uncertain) return; busyRef.current = true; setBusy(true); setNotice("");

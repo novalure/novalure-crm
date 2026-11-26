@@ -76,6 +76,42 @@ test("manual sync keeps credentials and reports host configuration failure as te
   assert.equal(f.status,"connected");assert.equal(f.lastError,"MAIL_OAUTH_NOT_CONFIGURED");assert.equal(f.providerCalls,0);assert.equal(f.access,"OLD_ACCESS");assert.equal(f.refresh,"OLD_REFRESH");
 });
 
+const refreshFailures = [
+  { label: "invalid client", status: 401, body: { error: "invalid_client", error_codes: [7000215] }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "invalid request", status: 400, body: { error: "invalid_request", error_codes: [50173] }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "temporary provider failure", status: 400, body: { error: "temporarily_unavailable" }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "ambiguous invalid grant", status: 400, body: { error: "invalid_grant" }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "conflicting invalid grant codes", status: 400, body: { error: "invalid_grant", error_codes: [50173, 7000215] }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "non-numeric diagnostic code", status: 400, body: { error: "invalid_grant", error_codes: ["700082"] }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "mismatched HTTP status", status: 403, body: { error: "invalid_grant", error_codes: [50173] }, code: "MAIL_PROVIDER_UNAVAILABLE" },
+  { label: "oversized provider error", status: 400, body: { error: "invalid_grant", error_codes: [50173], extra: "x".repeat(16_384) }, code: "MAIL_RESPONSE_TOO_LARGE" },
+  { label: "confirmed expired refresh grant", status: 400, body: { error: "invalid_grant", error_codes: [700082] }, code: "MAIL_REAUTH_REQUIRED" },
+] as const;
+
+for (const scenario of refreshFailures) test(`verified manual refresh handles ${scenario.label} with no provider diagnostics disclosed`, async () => {
+  const f = fixture("normal");
+  let calls = 0;
+  const providerDescription = "synthetic private provider diagnostic";
+  const transport: MailboxTransport = async (url, init) => {
+    calls++;
+    assert.equal(url, `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`);
+    assert.equal((init.body as URLSearchParams).get("grant_type"), "refresh_token");
+    return Response.json({ ...scenario.body, error_description: providerDescription }, { status: scenario.status });
+  };
+  const reauthorize = scenario.code === "MAIL_REAUTH_REQUIRED";
+  await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool: f.pool }, transport, f.verifier, auth), (failure: unknown) => {
+    assert.ok(failure instanceof Error);
+    assert.deepEqual({ code: Reflect.get(failure, "code"), status: Reflect.get(failure, "status") }, { code: scenario.code, status: reauthorize ? 409 : 503 });
+    assert.ok(!JSON.stringify(failure).includes(providerDescription) && !failure.message.includes(providerDescription));
+    return true;
+  });
+  assert.equal(calls, 1);
+  assert.equal(f.lastError, scenario.code);
+  assert.equal(f.status, reauthorize ? "reauthorization_required" : "connected");
+  assert.equal(f.access, reauthorize ? null : "OLD_ACCESS");
+  assert.equal(f.refresh, reauthorize ? null : "OLD_REFRESH");
+});
+
 test("manual sync keeps unknown AUTH-named failure fail-closed", async () => {
   const f=fixture("normal");let calls=0;
   const transport:MailboxTransport=async()=>{calls++;throw Object.assign(new Error("synthetic"),{code:"MAIL_UNKNOWN_AUTH_FAILURE"});};

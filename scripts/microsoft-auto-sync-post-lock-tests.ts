@@ -57,7 +57,9 @@ test("automatic legacy sync rejects missing explicit exception before any write 
   } finally { if (previous === undefined) delete process.env.MICROSOFT_MAILBOX_ALLOW_LEGACY; else process.env.MICROSOFT_MAILBOX_ALLOW_LEGACY = previous; }
 });
 
-for (const mode of ["configuration", "scope", "unknown-auth"] as const) test(`automatic sync handles ${mode} without relaxing other auth failures`, async () => {
+for (const mode of ["configuration", "scope", "unknown-auth", "entra-client", "entra-expired"] as const) test(`automatic sync handles ${mode} without relaxing other auth failures`, async () => {
+  const verified = mode === "entra-client" || mode === "entra-expired";
+  const binding = { tenantId: verified ? workspaceId : null, subject: verified ? "synthetic-subject" : null, accountId };
   let revision=3,policyRevision=4,leaseId:string|null=null,status="connected",policyStatus="",lastError="",providerCalls=0;
   let access=protectMailboxToken(session,"microsoft","SYNTHETIC_ACCESS",session.email),refresh=protectMailboxToken(session,"microsoft","SYNTHETIC_REFRESH",session.email);
   const priorAccess=access,priorRefresh=refresh;
@@ -68,10 +70,10 @@ for (const mode of ["configuration", "scope", "unknown-auth"] as const) test(`au
     if(q.includes("set_config('app.tenant_id'"))return {rows:[{workspaceId,actorId:userId}]};
     if(q.includes("crm_lock_active_member"))return {rows:[{role:"owner",productRole:"customer_owner",operatingModel:"self_service_customer",authIdentityId:identityId}]};
     if(q.includes("to_regclass('public.crm_mailbox_auto_settings')"))return {rows:[{ready:true}]};
-    if(q.startsWith("select c.id,c.provider")&&q.includes("for update of c,s"))return {rows:status==="connected"?[{id,provider:"microsoft",tenantId:null,subject:null,label:session.email,accountId,format:"immutable",access,refresh,scopes:["Mail.Read"],expiresAt:new Date(mode==="unknown-auth"?Date.now()+3600000:0).toISOString(),revision,policyRevision,identityId,autoFile:false,contactReview:false,backfillReplaying:false,failures:0,enabled:true,due:true,busy:false}]:[]};
+    if(q.startsWith("select c.id,c.provider")&&q.includes("for update of c,s"))return {rows:status==="connected"?[{id,provider:"microsoft",...binding,label:session.email,format:"immutable",access,refresh,scopes:["Mail.Read"],expiresAt:new Date(mode==="unknown-auth"?Date.now()+3600000:0).toISOString(),revision,policyRevision,identityId,autoFile:false,contactReview:false,backfillReplaying:false,failures:0,enabled:true,due:true,busy:false}]:[]};
     if(q.startsWith("select checkpoint from crm_mailbox_auto_checkpoints"))return {rows:[]};
     if(q.startsWith("update crm_mailbox_connections c set sync_lease_id=$2::uuid")){leaseId=String(args[1]);revision++;return {rows:[{revision}]};}
-    if(q.startsWith("select to_jsonb(c)")&&q.includes("for update of c,s"))return {rows:[{tenantId:null,subject:null,accountId}]};
+    if(q.startsWith("select to_jsonb(c)")&&q.includes("for update of c,s"))return {rows:[binding]};
     if(q.startsWith("select revision from crm_mailbox_connections"))return {rows:[{revision}]};
     if(q.startsWith("select id from crm_mailbox_private_decisions"))return {rows:[]};
     if(q.startsWith("update crm_mailbox_auto_settings set status=")){policyStatus=String(args[1]);lastError=String(args[2]);policyRevision++;return {rows:[{revision:policyRevision}]};}
@@ -84,15 +86,33 @@ for (const mode of ["configuration", "scope", "unknown-auth"] as const) test(`au
     }
     throw new Error(`Unexpected synthetic query: ${q.slice(0,100)}`);
   }};}} as unknown as TenantPool;
-  const transport:MailboxTransport=async()=>{providerCalls++;if(mode==="unknown-auth")throw new MailboxProviderError("MAIL_UNKNOWN_AUTH_FAILURE");if(mode==="scope")return Response.json({access_token:"synthetic-new",refresh_token:"synthetic-new-refresh",expires_in:3600,scope:"Calendar.Read"});throw new Error("unexpected synthetic provider call");};
+  const transport: MailboxTransport = async (url) => {
+    providerCalls++;
+    if (mode === "unknown-auth") throw new MailboxProviderError("MAIL_UNKNOWN_AUTH_FAILURE");
+    if (mode === "scope") return Response.json({ access_token: "synthetic-new", refresh_token: "synthetic-new-refresh", expires_in: 3600, scope: "Calendar.Read" });
+    if (verified) {
+      assert.equal(url, `https://login.microsoftonline.com/${workspaceId}/oauth2/v2.0/token`);
+      return Response.json(mode === "entra-client"
+        ? { error: "invalid_client", error_codes: [7000215] }
+        : { error: "invalid_grant", error_codes: [50173] }, { status: 400 });
+    }
+    throw new Error("unexpected synthetic provider call");
+  };
   const microsoftAuth=async()=>{if(mode==="configuration")throw new Error("synthetic unclassified SDK outage");return {client_id:"synthetic-client",client_secret:"synthetic-secret"};};
-  await assert.rejects(runPersonalMailboxSync(session,id,{pool,transport,microsoftAuth,ignoreDue:true}));
-  const requiresReauth=mode!=="configuration";
-  assert.equal(policyStatus,requiresReauth?"reauthorization_required":"delayed");assert.equal(status,requiresReauth?"reauthorization_required":"connected");
-  assert.equal(lastError,({configuration:"MAIL_OAUTH_NOT_CONFIGURED",scope:"MAIL_SCOPE_REQUIRED","unknown-auth":"MAIL_UNKNOWN_AUTH_FAILURE"})[mode]);
-  assert.equal(access,requiresReauth?null:priorAccess);assert.equal(refresh,requiresReauth?null:priorRefresh);
-  if(mode==="configuration")assert.equal(providerCalls,0);
-  if(requiresReauth){const priorCalls=providerCalls;assert.equal((await runPersonalMailboxSync(session,id,{pool,transport,microsoftAuth,ignoreDue:true})).status,"quiet");assert.equal(providerCalls,priorCalls);}
+  const verifiedEnv = { MICROSOFT_MAILBOX_ALLOW_LEGACY: "0", MICROSOFT_MAILBOX_CLIENT_ID: "synthetic-client", MICROSOFT_MAILBOX_CLIENT_AUTH_METHOD: "vercel-oidc", MICROSOFT_MAILBOX_IDENTITY_MODE: "verified-preview", VERCEL: "1", VERCEL_ENV: "preview" };
+  const previous = new Map(Object.keys(verifiedEnv).map(key => [key, process.env[key]]));
+  if (verified) Object.assign(process.env, verifiedEnv);
+  try {
+    await assert.rejects(runPersonalMailboxSync(session,id,{pool,transport,microsoftAuth,ignoreDue:true}));
+    const requiresReauth=mode!=="configuration"&&mode!=="entra-client";
+    assert.equal(policyStatus,requiresReauth?"reauthorization_required":"delayed");assert.equal(status,requiresReauth?"reauthorization_required":"connected");
+    assert.equal(lastError,({configuration:"MAIL_OAUTH_NOT_CONFIGURED",scope:"MAIL_SCOPE_REQUIRED","unknown-auth":"MAIL_UNKNOWN_AUTH_FAILURE","entra-client":"MAIL_PROVIDER_UNAVAILABLE","entra-expired":"MAIL_REAUTH_REQUIRED"})[mode]);
+    assert.equal(access,requiresReauth?null:priorAccess);assert.equal(refresh,requiresReauth?null:priorRefresh);
+    assert.equal(providerCalls,mode==="configuration"?0:1);
+    if(requiresReauth){const priorCalls=providerCalls;assert.equal((await runPersonalMailboxSync(session,id,{pool,transport,microsoftAuth,ignoreDue:true})).status,"quiet");assert.equal(providerCalls,priorCalls);}
+  } finally {
+    for (const [key, value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
 });
 
 for(const mode of ["post-lock-expired","claim-denied"] as const)test(`automatic sync fails closed before provider access: ${mode}`, async () => {
