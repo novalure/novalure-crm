@@ -79,7 +79,7 @@ test("form proof is kept in request memory and never enters the persistent raw p
   assert.throws(() => prepareFormBookingFields(form, new FormData()), /FORM_BOOKING_CONFIRMATION_REQUIRED/);
 });
 
-test("legacy reschedule rechecks a pending calendar result but persists a known successful result", async () => {
+test("legacy reschedule respects organizer cutover and requires a confirmed Microsoft calendar connection", async () => {
   const workspaceId = randomUUID(), actorId = randomUUID(), pageId = randomUUID(), bookingId = randomUUID(), token = randomUUID();
   const day = new Date(Date.now() + 3 * 86400000), originalAt = new Date(Date.now() + 5 * 86400000).toISOString();
   const selectedDate = day.toISOString().slice(0, 10);
@@ -99,6 +99,9 @@ test("legacy reschedule rechecks a pending calendar result but persists a known 
       // Bounded synthetic legacy repository: production privileges and RLS remain unchanged.
       const legacy: TenantTransaction = {
         async query<Row>(sql: string, params: readonly unknown[] = []) {
+          if (sql.includes("to_regprocedure('public.crm_property_booking_action_lookup(uuid,text)')")) {
+            return [{ ready: false, legacyRead: true }] as Row[];
+          }
           if (sql.includes("to_regprocedure")) return [{ installed: true }] as Row[];
           if (sql.includes("booking_workspace_publication_lookup")) return [{ publication: cutover ? { config: { publicId, enabled: true } } : null }] as Row[];
           if (/from meeting_bookings b/.test(sql)) { assert.equal(params[0], bookingId); return [booking] as Row[]; }
@@ -122,12 +125,19 @@ test("legacy reschedule rechecks a pending calendar result but persists a known 
         return Response.json({ id: "SYNTHETIC-existing-event" });
       };
       const result = await runWithTenantTransaction({ workspaceId, actorId }, legacy, () => reschedulePublicMeetingBooking({ bookingId, token, selectedDate, slot: "10:00", requestUrl: "https://crm.example.invalid/book/synthetic-pending" }));
-      assert.equal(tokenReads, 1, `${provider}/${scenario} reached the calendar context`);
-      if (scenario === "pending_cutover") {
-        assert.deepEqual(result, { error: "booking_reschedule_requires_organizer", ok: false });
-        assert.equal(bookingWrites, 0, `${provider} preserves the original local appointment`);
-      } else { assert.equal(result.ok, true, `${provider}/${scenario}`); assert.equal(bookingWrites, 1); }
-      assert.equal(providerWrites, scenario === "synced_cutover" ? 1 : 0);
+      const caseName = `${provider}/${scenario}`;
+      assert.equal(tokenReads, 1, `${caseName} reached the calendar context`);
+      if (provider === "microsoft" && scenario !== "synced_cutover") {
+        assert.deepEqual(result, { error: "calendar_sync_failed", ok: false }, caseName);
+        assert.equal(bookingWrites, 0, `${caseName} preserves the original local appointment`);
+      } else if (scenario === "pending_cutover") {
+        assert.deepEqual(result, { error: "booking_reschedule_requires_organizer", ok: false }, caseName);
+        assert.equal(bookingWrites, 0, `${caseName} preserves the original local appointment`);
+      } else {
+        assert.equal(result.ok, true, caseName);
+        assert.equal(bookingWrites, 1, caseName);
+      }
+      assert.equal(providerWrites, scenario === "synced_cutover" ? 1 : 0, caseName);
     }
   } finally {
     globalThis.fetch = originalFetch;
