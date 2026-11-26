@@ -5094,6 +5094,7 @@ export function CrmWorkspace({
                   onContactsChanged={async () => {
                     await refreshCoreData();
                   }}
+                  onOpenCommunication={(messageId) => { setMailboxFocus({workspaceId:activeWorkspace.id,messageId}); handleSectionChange("communication"); }}
                   organizations={visibleOrganizations}
                   projects={draftScopeProjects}
                   relationships={visibleContactRelationships}

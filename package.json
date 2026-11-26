@@ -8,6 +8,8 @@
     "npm": ">=11 <12"
   },
   "scripts": {
+    "test:mailbox-deployment-boundary": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/microsoft-mailbox-production-target-tests.ts scripts/microsoft-dedicated-identity-mode-tests.ts scripts/microsoft-mailbox-client-separation-tests.ts scripts/microsoft-verified-scope-boundary-tests.ts scripts/mailbox-visible-state-tests.ts scripts/mailbox-oauth-session-binding-tests.ts scripts/build-metadata-tests.ts",
+    "test:microsoft-federated": "npm run test:mailbox-deployment-boundary && node --test scripts/mailbox-release-lineage-tests.mjs && node --conditions=react-server --experimental-test-module-mocks --import tsx --test scripts/mailbox-read-pilot-http-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/mailbox-assertion-availability-tests.ts scripts/mailbox-provider-deadline-tests.ts scripts/mailbox-delta-bound-inbox-tests.ts scripts/mailbox-microsoft-folder-integrity-tests.ts scripts/mailbox-checkpoint-auxiliary-tests.ts scripts/mailbox-contact-backfill-tests.ts scripts/microsoft-auto-sync-post-lock-tests.ts scripts/microsoft-mailbox-manual-folder-tests.ts scripts/microsoft-manual-refresh-lease-tests.ts scripts/microsoft-mailbox-body-completeness-tests.ts scripts/projectless-personal-mail-hints-tests.ts scripts/gmail-label-sync-flow-tests.ts scripts/gmail-label-integrity-tests.ts scripts/mailbox-objection-review-tests.ts scripts/microsoft-oidc-identity-tests.ts && node --import tsx --test scripts/mailbox-coverage-ui-tests.tsx scripts/mailbox-checkpoint-review-ui-tests.tsx scripts/mailbox-visible-state-ui-tests.tsx scripts/microsoft-mailbox-body-warning-ui-tests.tsx scripts/projectless-personal-mail-hints-ui-tests.tsx",
     "test:crm-assistant": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-ai-assistant-tests.ts scripts/crm-ai-assistant-guard-tests.ts",
     "qa:crm-assistant": "node scripts/crm-ai-assistant-ui-tests.mjs",
     "dev": "next dev",
@@ -124,6 +126,7 @@
     "@vercel/oidc": "4.0.6",
     "dompurify": "3.4.17",
     "html2canvas": "^1.4.1",
+    "jose": "^5.10.0",
     "jspdf": "^4.2.1",
     "next": "16.4.5",
     "pdf-lib": "1.17.1",
