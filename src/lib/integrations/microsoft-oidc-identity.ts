@@ -3,10 +3,20 @@ import { createLocalJWKSet, decodeProtectedHeader, jwtVerify, type JSONWebKeySet
 
 const microsoftKeysUrl = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const issuerPattern = /^https:\/\/login\.microsoftonline\.com\/([0-9A-Fa-f-]{36})\/v2\.0$/;
 type MicrosoftSigningKey = JWK & { issuer?: string };
 export type MicrosoftVerifiedIdentity = Readonly<{ tenantId: string; objectId: string; subject: string }>;
 export class MicrosoftIdentityError extends Error {
   constructor(public readonly code: "MICROSOFT_IDENTITY_UNAVAILABLE" | "MICROSOFT_IDENTITY_UNVERIFIED") { super(code); }
+}
+
+export function normalizeMicrosoftMailboxGuid(value: unknown): string | null {
+  return typeof value === "string" && uuid.test(value) ? value.toLowerCase() : null;
+}
+
+export function sameMicrosoftMailboxGuid(first: unknown, second: unknown): boolean {
+  const normalized = normalizeMicrosoftMailboxGuid(first);
+  return normalized !== null && normalized === normalizeMicrosoftMailboxGuid(second);
 }
 
 async function loadMicrosoftKeys(): Promise<JSONWebKeySet> {
@@ -74,13 +84,14 @@ export async function verifyMicrosoftMailboxIdentity(input: { idToken: string; c
     const { payload } = await jwtVerify(input.idToken, createLocalJWKSet({ keys: matching }), {
       algorithms: ["RS256"], audience: input.clientId, requiredClaims: ["aud", "iss", "sub", "exp", "iat", "tid", "oid", ...(input.flow === "authorization" ? ["nonce"] : [])], clockTolerance: 0,
     });
-    if (payload.aud !== input.clientId || typeof payload.tid !== "string" || !uuid.test(payload.tid) ||
-        typeof payload.oid !== "string" || !uuid.test(payload.oid) || typeof payload.sub !== "string" || !payload.sub || payload.sub.length > 255 ||
+    const tenantId = normalizeMicrosoftMailboxGuid(payload.tid), objectId = normalizeMicrosoftMailboxGuid(payload.oid);
+    if (payload.aud !== input.clientId || !tenantId || !objectId || typeof payload.sub !== "string" || !payload.sub || payload.sub.length > 255 ||
         input.flow === "authorization" && payload.nonce !== input.expectedNonce || payload.ver !== "2.0" || !Number.isSafeInteger(payload.iat) || payload.iat! > Math.floor(Date.now() / 1000) + 30) throw new Error();
-    const issuer = `https://login.microsoftonline.com/${payload.tid}/v2.0`;
-    if (payload.iss !== issuer || matching[0].issuer.replace(/\{tenantid\}/gi, payload.tid) !== issuer) throw new Error();
-    const identity = Object.freeze({ tenantId: payload.tid, objectId: payload.oid, subject: payload.sub });
-    if (input.flow === "refresh" && (identity.tenantId !== input.expectedIdentity.tenantId || identity.objectId !== input.expectedIdentity.objectId || identity.subject !== input.expectedIdentity.subject)) throw new Error();
+    const issuerTenant = issuerPattern.exec(typeof payload.iss === "string" ? payload.iss : "")?.[1];
+    const keyTenant = issuerPattern.exec(matching[0].issuer.replace(/\{tenantid\}/gi, tenantId))?.[1];
+    if (normalizeMicrosoftMailboxGuid(issuerTenant) !== tenantId || normalizeMicrosoftMailboxGuid(keyTenant) !== tenantId) throw new Error();
+    const identity = Object.freeze({ tenantId, objectId, subject: payload.sub });
+    if (input.flow === "refresh" && (tenantId !== normalizeMicrosoftMailboxGuid(input.expectedIdentity.tenantId) || objectId !== normalizeMicrosoftMailboxGuid(input.expectedIdentity.objectId) || identity.subject !== input.expectedIdentity.subject)) throw new Error();
     return identity;
   } catch (error) { if (error instanceof MicrosoftIdentityError) throw error; throw new MicrosoftIdentityError("MICROSOFT_IDENTITY_UNVERIFIED"); }
 }

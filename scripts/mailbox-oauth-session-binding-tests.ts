@@ -29,6 +29,8 @@ async function withEnv(values: Record<string, string>, fn: () => Promise<void>) 
 
 function fakeStateStore() {
   const records = new Map<string, { nonce: string; workspace: string; user: string; provider: string; verifier: string; consumed: boolean; expiresAt?: number }>();
+  const savedAccountIds: unknown[] = [];
+  let priorBindings: { label: string; accountId: string; tenantId: string; subject: string }[] = [];
   let statements = 0;
   let expireAfterLock = false;
   let databaseTime: number | undefined;
@@ -58,10 +60,16 @@ function fakeStateStore() {
       row.consumed = true;
       return [{ verifier: row.verifier }];
     }
+    if (sql.startsWith("select account_label as label") && sql.includes("lower(provider_account_id)=$5")) return priorBindings;
+    if (sql.startsWith("insert into crm_mailbox_connections")) {
+      savedAccountIds.push(params[10]);
+      return [{ id: userId, revision: 1 }];
+    }
+    if (sql.startsWith("update crm_mailbox_auto_settings")) return [];
     throw new Error("Unexpected synthetic query");
   };
   const tx = { query: run, async queryOne(sql: string, params?: readonly unknown[]) { return (await run(sql, params))[0] ?? null; }, async execute() { throw new Error("Unexpected execute"); } } as unknown as TenantTransaction;
-  return { tx, records, run, calls, expireAfterLock() { expireAfterLock = true; }, setDatabaseTime(seconds: number) { databaseTime = seconds; }, get statements() { return statements; } };
+  return { tx, records, run, calls, savedAccountIds, setPriorBindings(bindings: typeof priorBindings) { priorBindings = bindings; }, expireAfterLock() { expireAfterLock = true; }, setDatabaseTime(seconds: number) { databaseTime = seconds; }, get statements() { return statements; } };
 }
 
 function fakePool(store: ReturnType<typeof fakeStateStore>, isActive: () => boolean): TenantPool {
@@ -230,6 +238,33 @@ test("verified connection cannot be saved from a non-personal session", async ()
   const store = fakeStateStore();
   await assert.rejects(saveCrmMailboxConnection(store.tx, { ...session, source: "database" }, "microsoft", { accessToken: "synthetic", refreshToken: "synthetic", scopes: ["Mail.Read"], expiresAt: "2030-01-01T00:00:00Z" }, "mailbox@example.invalid", { tenantId: workspaceId, objectId: userId, subject: "synthetic" }), /Persönliche CRM-Anmeldung/);
   assert.equal(store.statements, 0);
+}));
+
+test("verified callback canonicalizes new GUIDs and preserves an existing binding's exact spelling", async () => withEnv(config, async () => {
+  const objectId = "abcdef12-1234-4567-89ab-abcdef123456";
+  const identity = { tenantId: workspaceId, objectId, subject: "synthetic-subject" };
+  const label = "mailbox@example.invalid";
+  const auth = async () => ({ client_id: "synthetic-client", client_assertion: "synthetic-assertion" });
+  const transport: MailboxTransport = async url => {
+    if (url.includes("/oauth2/v2.0/token")) return Response.json({ access_token: "synthetic-access", refresh_token: "synthetic-refresh", id_token: "synthetic-id", scope: "Mail.Read User.Read", token_type: "Bearer", expires_in: 3600 });
+    assert.equal(url, "https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName");
+    return Response.json({ id: objectId.toUpperCase(), mail: label });
+  };
+  const existing = { label, tenantId: identity.tenantId, accountId: objectId.toUpperCase(), subject: identity.subject };
+
+  for (const [prior, saved] of [[[], objectId], [[existing], existing.accountId]] as const) {
+    const store = fakeStateStore(), state = await started(store);
+    store.setPriorBindings([...prior]);
+    await finishCrmMailboxOAuth(session, "microsoft", state, "synthetic-code", config.NOVALURE_APP_ORIGIN, { pool: fakePool(store, () => true) }, transport, auth, async () => identity);
+    assert.deepEqual(store.savedAccountIds, [saved]);
+  }
+
+  for (const prior of [[{ ...existing, subject: identity.subject.toUpperCase() }], [existing, { ...existing, accountId: objectId }]]) {
+    const store = fakeStateStore(), state = await started(store);
+    store.setPriorBindings(prior);
+    await assert.rejects(finishCrmMailboxOAuth(session, "microsoft", state, "synthetic-code", config.NOVALURE_APP_ORIGIN, { pool: fakePool(store, () => true) }, transport, auth, async () => identity), { code: "MAIL_ACCOUNT_CHANGED" });
+    assert.deepEqual(store.savedAccountIds, []);
+  }
 }));
 
 test("Google and explicitly enabled shared Microsoft legacy states retain their previous contract", async () => {

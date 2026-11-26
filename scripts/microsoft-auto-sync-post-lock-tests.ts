@@ -127,9 +127,10 @@ test("automatic sync refuses nested transactions before any provider or pool acc
   assert.equal(calls,0);
 });
 
-test("automatic token work fails and simulated transaction rolls back if its lease expires during the work", async () => {
+for (const verified of [false, true]) test(`automatic token work preserves the ${verified ? "verified" : "legacy"} account ID and rolls back on lease expiry`, async () => {
   let revision=3, snapshotRevision=revision, currentLease:string|null=null, expired=false, committedTokenWrite=false, snapshotWrite=false, providerCalls=0, rollbacks=0;
   const access=protectMailboxToken(session,"microsoft","SYNTHETIC_ACCESS",session.email), refresh=protectMailboxToken(session,"microsoft","SYNTHETIC_REFRESH",session.email);
+  const bound = { tenantId: verified ? workspaceId : null, subject: verified ? "Synthetic-Subject" : null, accountId: verified ? "ABCDEF12-1234-4567-89AB-ABCDEF123456" : accountId };
   const pool={async connect(){return {release(){},async query(sql:string,args:unknown[]=[]){
     const q=sql.replace(/\s+/g," ").trim().toLowerCase();
     if(q.includes("from pg_roles runtime_role"))return {rows:[{safe:true}]};
@@ -139,16 +140,23 @@ test("automatic token work fails and simulated transaction rolls back if its lea
     if(q.includes("set_config('app.tenant_id'"))return {rows:[{workspaceId,actorId:userId}]};
     if(q.includes("crm_lock_active_member"))return {rows:[{role:"owner",productRole:"customer_owner",operatingModel:"self_service_customer",authIdentityId:identityId}]};
     if(q.includes("to_regclass('public.crm_mailbox_auto_settings')"))return {rows:[{ready:true}]};
-    if(q.startsWith("select c.id,c.provider")&&q.includes("for update of c,s"))return {rows:[{id,provider:"microsoft",tenantId:null,subject:null,label:session.email,accountId,format:"immutable",access,refresh,scopes:["Mail.Read"],expiresAt:new Date(Date.now()+3600000).toISOString(),revision,policyRevision:4,identityId,autoFile:false,contactReview:false,backfillReplaying:false,failures:0,enabled:true,due:true,busy:false}]};
+    if(q.startsWith("select c.id,c.provider")&&q.includes("for update of c,s"))return {rows:[{id,provider:"microsoft",...bound,label:session.email,format:"immutable",access,refresh,scopes:["Mail.Read"],expiresAt:new Date(Date.now()+3600000).toISOString(),revision,policyRevision:4,identityId,autoFile:false,contactReview:false,backfillReplaying:false,failures:0,enabled:true,due:true,busy:false}]};
     if(q.startsWith("select checkpoint from crm_mailbox_auto_checkpoints"))return {rows:[]};
     if(q.startsWith("update crm_mailbox_connections c set sync_lease_id")){currentLease=String(args[1]);revision++;return {rows:[{revision}]};}
-    if(q.startsWith("select to_jsonb(c)")&&q.includes("for update of c,s"))return {rows:expired?[]:[{tenantId:null,subject:null,accountId}]};
+    if(q.startsWith("select to_jsonb(c)")&&q.includes("for update of c,s"))return {rows:expired?[]:[bound]};
     if(q.startsWith("select revision from crm_mailbox_connections"))return {rows:expired?[]:[{revision}]};
-    if(q.startsWith("update crm_mailbox_connections set provider_account_id")){assert.equal(args[0],id);committedTokenWrite=true;revision++;expired=true;return {rows:[]};}
+    if(q.startsWith("update crm_mailbox_connections set provider_account_id")){assert.equal(args[0],id);assert.equal(args[1],bound.accountId);committedTokenWrite=true;revision++;expired=true;return {rows:[]};}
     throw new Error(`Unexpected synthetic query: ${q.slice(0,100)}`);
   }};}} as unknown as TenantPool;
-  const transport:MailboxTransport=async(url)=>{providerCalls++;assert.ok(url.includes("/v1.0/me?$select=id"));return Response.json({id:accountId,mail:session.email});};
-  await assert.rejects(runPersonalMailboxSync(session,id,{pool,transport,ignoreDue:true}),/Persönliche Freigabe/);
+  const transport:MailboxTransport=async(url)=>{providerCalls++;assert.ok(url.includes("/v1.0/me?$select=id"));return Response.json({id:bound.accountId.toLowerCase(),mail:session.email});};
+  const verifiedEnv = { MICROSOFT_MAILBOX_ALLOW_LEGACY: "0", MICROSOFT_MAILBOX_CLIENT_ID: "synthetic-client", MICROSOFT_MAILBOX_CLIENT_AUTH_METHOD: "vercel-oidc", MICROSOFT_MAILBOX_IDENTITY_MODE: "verified-preview", VERCEL: "1", VERCEL_ENV: "preview" };
+  const previous = new Map(Object.keys(verifiedEnv).map(key => [key, process.env[key]]));
+  if (verified) Object.assign(process.env, verifiedEnv);
+  try {
+    await assert.rejects(runPersonalMailboxSync(session,id,{pool,transport,ignoreDue:true}),/Persönliche Freigabe/);
+  } finally {
+    for (const [key, value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
   assert.ok(currentLease); assert.equal(providerCalls,1); assert.equal(committedTokenWrite,false); assert.ok(rollbacks>=1);
 });
 

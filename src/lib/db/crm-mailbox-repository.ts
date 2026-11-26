@@ -9,7 +9,7 @@ import { exchangeMailboxToken, fetchMailboxAccountIdentity, fetchMailboxPage, ma
 import { recordSourceAutomationEvent } from "@/lib/automation/source-events";
 import { microsoftMailboxClientAuthFields } from "@/lib/integrations/microsoft-client-auth";
 import { microsoftMailboxClientId } from "@/lib/integrations/microsoft-client-auth-config";
-import { MicrosoftIdentityError, verifyMicrosoftMailboxIdentity, type MicrosoftVerifiedIdentity } from "@/lib/integrations/microsoft-oidc-identity";
+import { MicrosoftIdentityError, normalizeMicrosoftMailboxGuid, sameMicrosoftMailboxGuid, verifyMicrosoftMailboxIdentity, type MicrosoftVerifiedIdentity } from "@/lib/integrations/microsoft-oidc-identity";
 import { hasPersonalMailboxReviewSession } from "@/lib/db/mailbox-personal-review-access";
 import { currentTenantTransaction } from "./transaction-context";
 import { assertMailboxLeaseAfterLock } from "./crm-mailbox-lease-wall-clock";
@@ -118,19 +118,32 @@ export async function finishCrmMailboxOAuth(session: AppSession, provider: Mailb
     await revalidatePersonalSession();
   }
   const identity = await fetchMailboxAccountIdentity(provider, tokens.accessToken, transport);
-  if (verified && identity.accountId.toLowerCase() !== verified.objectId.toLowerCase()) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Bestätigtes Microsoft-Konto stimmt nicht überein", 409);
+  const accountId = verified ? normalizeMicrosoftMailboxGuid(verified.objectId) : identity.accountId;
+  if (accountId === null || verified && !sameMicrosoftMailboxGuid(accountId, identity.accountId)) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Bestätigtes Microsoft-Konto stimmt nicht überein", 409);
   return withCrmRead(session, async (tx, fresh) => {
     await assertProductionMailboxDatabase(tx, provider);
     const schema = await tx.queryOne<{ ready: boolean }>(`select exists(select 1 from information_schema.columns where table_name='crm_mailbox_connections' and column_name='provider_account_id') as ready`);
     const verifiedSchema = provider === "microsoft" ? await tx.queryOne<{ ready: boolean }>(`select count(*)=2 as ready from information_schema.columns where table_name='crm_mailbox_connections' and column_name=any($1::text[])`, [["provider_tenant_id", "provider_subject"]]) : null;
-    if (verified && !verifiedSchema?.ready) throw new CrmCommandError("MAIL_IDENTITY_MIGRATION_REQUIRED", "Sichere Postfachidentität nicht verfügbar", 409);
+    if (verified && (!schema?.ready || !verifiedSchema?.ready)) throw new CrmCommandError("MAIL_IDENTITY_MIGRATION_REQUIRED", "Sichere Postfachidentität nicht verfügbar", 409);
+    let binding = verified ? { ...verified, objectId: accountId } : undefined;
     if (schema?.ready) {
-      const prior = await tx.queryOne<{ id: string; label: string; accountId: string | null; tenantId?: string | null; subject?: string | null }>(`select id,account_label as label,provider_account_id as "accountId"${verifiedSchema?.ready ? ',provider_tenant_id::text as "tenantId",provider_subject as subject' : ''} from crm_mailbox_connections where workspace_id=$1::uuid and user_id=$2::uuid and provider=$3 and(account_label=$4 or provider_account_id=$5) for update`, [fresh.workspaceId,fresh.userId,provider,identity.label,identity.accountId]);
-      if (prior && (prior.accountId && prior.accountId !== identity.accountId || prior.label !== identity.label)) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Das Anbieterkonto oder seine Adresse hat sich geändert. Bestehende Privatkopien werden nicht einem anderen Konto zugewiesen.", 409);
-      if (prior && (verified ? prior.tenantId !== verified.tenantId || prior.subject !== verified.subject : Boolean(prior.tenantId))) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Eine bestehende oder anders bestätigte Postfachidentität darf nicht überschrieben werden.", 409);
+      type Prior = { label: string; accountId: string | null; tenantId?: string | null; subject?: string | null };
+      const lookup = `select account_label as label,provider_account_id as "accountId"${verifiedSchema?.ready ? ',provider_tenant_id::text as "tenantId",provider_subject as subject' : ''} from crm_mailbox_connections where workspace_id=$1::uuid and user_id=$2::uuid and provider=$3`;
+      const args = [fresh.workspaceId, fresh.userId, provider, identity.label, accountId];
+      const matches = verified
+        ? await tx.query<Prior>(`${lookup} and (account_label=$4 or lower(provider_account_id)=$5) order by id limit 2 for update`, args)
+        : [await tx.queryOne<Prior>(`${lookup} and(account_label=$4 or provider_account_id=$5) for update`, args)];
+      if (matches.length > 1) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Mehrere bestehende Postfachverbindungen passen zu diesem Microsoft-Konto.", 409);
+      const [prior] = matches;
+      if (prior && (prior.label !== identity.label || (verified ? !sameMicrosoftMailboxGuid(prior.accountId, accountId) : prior.accountId && prior.accountId !== accountId))) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Das Anbieterkonto oder seine Adresse hat sich geändert. Bestehende Privatkopien werden nicht einem anderen Konto zugewiesen.", 409);
+      if (prior && (verified ? !sameMicrosoftMailboxGuid(prior.tenantId, verified.tenantId) || prior.subject !== verified.subject : Boolean(prior.tenantId))) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Eine bestehende oder anders bestätigte Postfachidentität darf nicht überschrieben werden.", 409);
+      if (binding && prior?.accountId) binding = { ...binding, objectId: prior.accountId };
     }
-    const saved = await saveCrmMailboxConnection(tx, fresh, provider, tokens, identity.label, verified);
-    if (schema?.ready) { await tx.query(`update crm_mailbox_connections set provider_account_id=$2,revision=revision+1 where id=$1::uuid`, [saved.id,identity.accountId]); await tx.query(`update crm_mailbox_auto_settings set enabled=false,status='disabled',revision=revision+1,updated_at=now() where connection_id=$1::uuid`,[saved.id]); }
+    const saved = await saveCrmMailboxConnection(tx, fresh, provider, tokens, identity.label, binding);
+    if (schema?.ready) {
+      if (!binding) await tx.query(`update crm_mailbox_connections set provider_account_id=$2,revision=revision+1 where id=$1::uuid`, [saved.id, accountId]);
+      await tx.query(`update crm_mailbox_auto_settings set enabled=false,status='disabled',revision=revision+1,updated_at=now() where connection_id=$1::uuid`, [saved.id]);
+    }
     return saved;
   }, options);
 }
@@ -183,7 +196,7 @@ export async function syncCrmMailbox(session: AppSession, input: { connectionId:
       accessToken = renewed.accessToken;
     }
     if (!accessToken) throw new CrmCommandError("MAIL_REAUTH_REQUIRED", "Postfach erneut verbinden", 409);
-    if (expectedIdentity) { const account = await fetchMailboxAccountIdentity(c.provider, accessToken, transport); if (account.accountId.toLowerCase() !== expectedIdentity.objectId.toLowerCase() || account.label !== c.accountLabel) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Postfachidentität stimmt nicht mehr überein", 409); }
+    if (expectedIdentity) { const account = await fetchMailboxAccountIdentity(c.provider, accessToken, transport); if (!sameMicrosoftMailboxGuid(account.accountId, expectedIdentity.objectId) || account.label !== c.accountLabel) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Postfachidentität stimmt nicht mehr überein", 409); }
     // A later page fetch can fail after Microsoft has issued a replacement
     // refresh token. Persist it first only for the externally verified flow,
     // after checking the account and revalidating the live lease and binding.

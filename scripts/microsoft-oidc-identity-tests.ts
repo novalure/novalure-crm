@@ -24,7 +24,11 @@ test("Microsoft mailbox identity requires signature, tenant-scoped issuer, key i
     assert.deepEqual(await verifyMicrosoftMailboxIdentity({ flow: "authorization", idToken: token, clientId, expectedNonce: nonce }), identity);
   } finally { globalThis.fetch = originalFetch; }
   assert.deepEqual(await verifyMicrosoftMailboxIdentity({ flow: "refresh", idToken: token, clientId, expectedIdentity: identity }, keys), identity);
-  for (const altered of [{ ...identity, tenantId: otherTenant }, { ...identity, objectId: randomUUID() }, { ...identity, subject: "foreign-subject" }]) {
+  const upperClaims = { tid: tenant.toUpperCase(), oid: objectId.toUpperCase() };
+  assert.deepEqual(await verifyMicrosoftMailboxIdentity({ flow: "authorization", idToken: await issue(upperClaims), clientId, expectedNonce: nonce }, keys), identity);
+  const existingBinding = { ...identity, objectId: objectId.toUpperCase() };
+  assert.deepEqual(await verifyMicrosoftMailboxIdentity({ flow: "refresh", idToken: token, clientId, expectedIdentity: existingBinding }, keys), identity);
+  for (const altered of [{ ...identity, tenantId: otherTenant }, { ...identity, objectId: randomUUID() }, { ...identity, subject: "synthetic-subject".toUpperCase() }]) {
     await assert.rejects(verifyMicrosoftMailboxIdentity({ flow: "refresh", idToken: token, clientId, expectedIdentity: altered }, keys), /MICROSOFT_IDENTITY_UNVERIFIED/);
   }
   await assert.rejects(verifyMicrosoftMailboxIdentity({ flow: "authorization", idToken: token, clientId: randomUUID(), expectedNonce: nonce }, keys), /MICROSOFT_IDENTITY_UNVERIFIED/);
