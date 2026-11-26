@@ -426,11 +426,12 @@ async function verifyOperationalReaders() {
       operatorPage.on("response", listener);
       operatorPage.on("request", requestListener);
       try {
-        await operatorPage
-          .locator(
-            "[data-crm-sidebar] [data-crm-nav-item][aria-label='KI-Bots']",
-          )
-          .click();
+        const botsGroup = operatorPage.locator("[data-crm-sidebar]")
+          .getByRole("button", { name: "Wissen & KI", exact: true });
+        await botsGroup.click();
+        if (await botsGroup.getAttribute("data-crm-nav-target") !== "bots") {
+          await operatorPage.locator("[data-crm-section-entry='bots']").click();
+        }
         await expect(
           operatorPage.getByRole("navigation", {
             name: "Bot-Arbeitsbereich",
@@ -999,7 +1000,7 @@ async function chooseProfile(page, profile) {
     await expect(sidebar).toHaveAttribute("data-collapsed", "false", {
       timeout: 1500,
     });
-    const select = page.locator("[data-crm-profile-card] select");
+    const select = sidebar.locator("[data-crm-profile-select]");
     await select.selectOption(profile, { timeout: 1500 });
     await expect(select).toHaveValue(profile, { timeout: 1500 });
   }).toPass({ timeout: 15000, intervals: [100, 250, 500] });
@@ -1024,10 +1025,10 @@ async function themeAndLayout(page) {
   );
   assert.equal(
     styles.sidebar,
-    "rgb(23, 29, 48)",
-    "Actual CRM navigation must use Design C navy",
+    "rgb(30, 79, 194)",
+    "Actual CRM navigation must use the branded blue",
   );
-  assert(styles.accent, "Design C token sheet must be present");
+  assert.equal(styles.accent, "#2d68f0", "Design C must use the branded primary accent");
   assert(
     styles.document <= styles.viewport + 1,
     `Horizontal overflow: ${JSON.stringify(styles)}`,
@@ -1303,13 +1304,14 @@ async function runIntegration() {
     "Every operator navigation button retains Design C and the booking link returns to the CRM calendar",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
-      const nav = operatorPage.locator("[data-crm-sidebar] [data-crm-nav]");
+      const nav = operatorPage.locator("[data-crm-sidebar]");
       const entries = await nav
         .locator("[data-crm-nav-item]")
         .evaluateAll((elements) =>
           elements.map((element) => ({
             label: element.getAttribute("aria-label") || element.textContent.trim(),
             tag: element.tagName.toLowerCase(),
+            group: element.getAttribute("data-crm-nav-group"),
             href: element.getAttribute("href"),
           })),
         );
@@ -1318,7 +1320,7 @@ async function runIntegration() {
         "Expected real role-authorized CRM navigation",
       );
       assert.deepEqual(entries.filter(entry => entry.tag === "a"), [
-        { label: "Terminbuchung", tag: "a", href: "/booking" },
+        { label: "Terminbuchung", tag: "a", group: null, href: "/booking" },
       ], "The authorized operator has exactly the explicit booking-page link");
       const visited = [];
       const bookingNavigation = [];
@@ -1352,7 +1354,7 @@ async function runIntegration() {
           throw new Error(`${phase}: ${JSON.stringify(bookingNavigation)}`);
         }
       }
-      for (const { label, tag, href } of entries) {
+      for (const { label, tag, group, href } of entries) {
         if (tag === "a") {
           assert.equal(href, "/booking");
           for (let roundTrip = 1; roundTrip <= 3; roundTrip++) {
@@ -1385,6 +1387,18 @@ async function runIntegration() {
         ).toHaveAttribute("aria-current", "page");
         await themeAndLayout(operatorPage);
         visited.push({ label, hash: new URL(operatorPage.url()).hash });
+        assert.ok(group, `Navigation group is missing for ${label}`);
+        const tabs = operatorPage.locator(`[data-crm-section-group="${group}"]`);
+        const sectionIds = await tabs.locator("[data-crm-section-entry]").evaluateAll(
+          (elements) => elements.map((element) => element.getAttribute("data-crm-section-entry")),
+        );
+        for (const sectionId of sectionIds) {
+          const tab = tabs.locator(`[data-crm-section-entry="${sectionId}"]`);
+          await tab.click();
+          await expect(tab).toHaveAttribute("aria-current", "page");
+          await themeAndLayout(operatorPage);
+          visited.push({ label: await tab.innerText(), hash: new URL(operatorPage.url()).hash });
+        }
       }
       return { visited, bookingNavigation };
     },
@@ -1695,9 +1709,9 @@ async function runIntegration() {
       await expect(
         customerPage.locator("[data-crm-content]"),
       ).not.toContainText(/FOREIGN PRIVATE|SECOND PROJECT CONTACT/);
-      const navText = await customerPage
-        .locator("[data-crm-sidebar] [data-crm-nav]")
-        .innerText();
+      const navText = (await customerPage
+        .locator("[data-crm-sidebar] [data-crm-nav], [data-crm-section-tabs]")
+        .allTextContents()).join(" ");
       assert(
         !/Mandantenverwaltung|Customer Access|Kundenzugänge|Managed Service|Novalure Studio/.test(
           navText,
