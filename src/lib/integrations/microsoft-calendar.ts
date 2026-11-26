@@ -1,4 +1,6 @@
 import { getCalendarAccessToken } from "@/lib/integrations/calendar-connections";
+import { readCalendarConnectionStatuses } from "@/lib/db/crm-operational-readers";
+import type { AppSession } from "@/lib/auth/session";
 
 export type MicrosoftCalendarResult = {
   provider: "microsoft-365" | "mock";
@@ -22,7 +24,7 @@ export type MicrosoftCalendarProviderStatus = {
   provider: "microsoft-365" | "mock";
   external: boolean;
   accountLabel: string | null;
-  mode: "access-token" | "client-credentials" | "not-configured";
+  mode: "access-token" | "client-credentials" | "workspace-oauth" | "not-configured";
   reason: string | null;
   scopes: string[];
 };
@@ -103,8 +105,24 @@ export function getMicrosoftCalendarProviderStatus(): MicrosoftCalendarProviderS
   };
 }
 
+/** Do not advertise a global app calendar as a workspace connection. */
+export async function getWorkspaceMicrosoftCalendarProviderStatus(session: AppSession): Promise<MicrosoftCalendarProviderStatus> {
+  const { microsoft: connection } = await readCalendarConnectionStatuses(session);
+  return {
+    configured: connection.connected,
+    provider: "microsoft-365",
+    external: connection.connected,
+    accountLabel: connection.connected ? connection.accountLabel : null,
+    mode: connection.connected ? "workspace-oauth" : "not-configured",
+    reason: connection.connected ? null : "calendar_workspace_connection_required",
+    scopes: connection.connected ? connection.scopes : [],
+  };
+}
+
 async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
-  if (workspaceId) {
+  if (workspaceId !== undefined) {
+    // Explicit but absent/invalid workspace input must not select the global calendar.
+    if (typeof workspaceId !== "string" || !workspaceId.trim()) return null;
     const token = await getCalendarAccessToken({ provider: "microsoft", workspaceId }).catch(() => null);
 
     if (token) {
@@ -114,6 +132,8 @@ async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
         token,
       };
     }
+    // Workspace OAuth absence or failure must never fall back to global credentials.
+    return null;
   }
 
   const directToken = envValue("MICROSOFT_GRAPH_ACCESS_TOKEN");
@@ -194,7 +214,7 @@ export async function syncMicrosoftCalendarEvent(input: {
 }): Promise<MicrosoftCalendarResult> {
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
-  if (!providerStatus.configured && !input.workspaceId) {
+  if (!providerStatus.configured && input.workspaceId === undefined) {
     return {
       provider: "mock",
       status: "pending",
@@ -206,11 +226,9 @@ export async function syncMicrosoftCalendarEvent(input: {
     const graph = await getGraphToken(input.workspaceId);
 
     if (!graph) {
-      return {
-        provider: "mock",
-        status: "pending",
-        error: providerStatus.reason,
-      };
+      return input.workspaceId !== undefined
+        ? { provider: "microsoft-365", status: "failed", error: "calendar_workspace_connection_required" }
+        : { provider: "mock", status: "pending", error: providerStatus.reason };
     }
 
     const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
@@ -345,7 +363,7 @@ export async function updateMicrosoftCalendarEvent(input: {
 }): Promise<MicrosoftCalendarMutationResult> {
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
-  if (!providerStatus.configured && !input.workspaceId) {
+  if (!providerStatus.configured && input.workspaceId === undefined) {
     return {
       provider: "mock",
       status: "pending",
@@ -357,11 +375,9 @@ export async function updateMicrosoftCalendarEvent(input: {
     const graph = await getGraphToken(input.workspaceId);
 
     if (!graph) {
-      return {
-        provider: "mock",
-        status: "pending",
-        error: providerStatus.reason,
-      };
+      return input.workspaceId !== undefined
+        ? { provider: "microsoft-365", status: "failed", error: "calendar_workspace_connection_required" }
+        : { provider: "mock", status: "pending", error: providerStatus.reason };
     }
 
     const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
@@ -430,7 +446,7 @@ export async function deleteMicrosoftCalendarEvent(input: {
 }): Promise<MicrosoftCalendarMutationResult> {
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
-  if (!providerStatus.configured && !input.workspaceId) {
+  if (!providerStatus.configured && input.workspaceId === undefined) {
     return {
       provider: "mock",
       status: "pending",
@@ -442,11 +458,9 @@ export async function deleteMicrosoftCalendarEvent(input: {
     const graph = await getGraphToken(input.workspaceId);
 
     if (!graph) {
-      return {
-        provider: "mock",
-        status: "pending",
-        error: providerStatus.reason,
-      };
+      return input.workspaceId !== undefined
+        ? { provider: "microsoft-365", status: "failed", error: "calendar_workspace_connection_required" }
+        : { provider: "mock", status: "pending", error: providerStatus.reason };
     }
 
     const eventUrl = graph.eventEndpoint.replace(/\/events$/, `/events/${encodeURIComponent(input.eventId)}`);
