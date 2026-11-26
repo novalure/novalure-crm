@@ -5,7 +5,7 @@ import type { AppSession } from "./auth/session";
 import { getRolePermissions } from "./auth/permissions";
 import { getProductRoleCapabilities } from "./product-model";
 import { queryAuthenticationRows } from "./db/tenant-client";
-import { assertProjectGrant,CrmCommandError,crmPayloadDigest,executeCrmCommand,withCrmRead,withCrmCommandPreflight,
+import { assertProjectGrant,CrmCommandError,crmPayloadDigest,executeCrmCommand,reconcileCrmCommand,withCrmRead,withCrmCommandPreflight,
  type CrmCommandInput,type TenantTransaction,type TenantTransactionOptions } from "./crm-command";
 import { CrmMachineAuthError,getCrmMachineBearer,verifyCrmMachineToken,type CrmMachineAuthOptions } from "./crm-machine-auth";
 import { CRM_PERSONAL_SOURCE,verifyPersonalAutonomousCrmToken } from "./crm-autonomous-personal-auth";
@@ -19,21 +19,22 @@ import { readAutonomousModule,writeAutonomousModule,autonomousModuleExists,asser
 import { assertAndConsumeAutonomousBusinessAuthority } from "./crm-autonomous-business-authority";
 
 export const autonomousModuleDelegationDomain=`${autonomousModuleContract}.POST.${autonomousAccessPath}`;
+export const autonomousModuleReconciliationDomain=`${autonomousModuleContract}-reconcile.POST.${autonomousAccessPath}`;
 type Options=TenantTransactionOptions&{machineAuth?:CrmMachineAuthOptions};
 const grantSql="select * from public.crm_lock_autonomous_access_grant($1::uuid,$2::uuid)";
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 function denied(code="ACCESS_DENIED",status=403):never{throw new CrmCommandError(code,"CRM module access is not granted",status);}
 const readOnly=(op:string)=>op==="Read"||op==="DescribeAssignment";
-const native=(op:string)=>op==="PrepareOffer"||op==="PrepareReservation";
 const guarded=new Set(["SendOffer","ConfirmReservation","ConfirmSale"]);
 function delegation(value:string|null){
  const p=value?.split(".");if(!p||p.length!==4||p[0]!=="v1"||!uuid.test(p[1]!)||!/^[a-z0-9_-]+$/i.test(p[2]!)||p[2]!.length>1400||!/^[a-z0-9_-]{86}$/i.test(p[3]!))denied("DELEGATION_INVALID",401);
  return {grantId:p[1]!,payload:p[2]!,signature:p[3]!};
 }
-function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModuleGrant,body:AutonomousModuleRequest,now:Date){
+function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModuleGrant,body:AutonomousModuleRequest,now:Date,reconcileOnly=false){
  let p:Record<string,unknown>;
  try{const key=createPublicKey({key:Buffer.from(grant.delegation_public_key,"base64url"),format:"der",type:"spki"});
-  if(key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(`${autonomousModuleDelegationDomain}.${d.grantId}.${d.payload}`),key,Buffer.from(d.signature,"base64url")))denied("DELEGATION_INVALID",401);
+  const domain=reconcileOnly?autonomousModuleReconciliationDomain:autonomousModuleDelegationDomain;
+  if(key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(`${domain}.${d.grantId}.${d.payload}`),key,Buffer.from(d.signature,"base64url")))denied("DELEGATION_INVALID",401);
   p=JSON.parse(Buffer.from(d.payload,"base64url").toString("utf8")) as Record<string,unknown>;
  }catch{denied("DELEGATION_INVALID",401);}
  const t=Math.floor(now.valueOf()/1000);
@@ -69,6 +70,9 @@ function validateGrant(grant:AutonomousModuleGrant|null|undefined,workspace:stri
 export async function handleAutonomousCrmModules(request:Request,options:Options={}):Promise<Response>{
  try{
   const url=new URL(request.url);if(request.method!=="POST"||url.pathname!==autonomousAccessPath||url.search||request.headers.has("cookie")||request.headers.has("origin"))denied("ACCESS_DENIED",401);
+  const reconciliationHeader=request.headers.get("x-evelyn-reconcile-only");
+  if(reconciliationHeader!==null&&reconciliationHeader!=="1")denied("INVALID_REQUEST",400);
+  const reconcileOnly=reconciliationHeader==="1";
   const token=getCrmMachineBearer(request.headers);if(!token)denied("ACCESS_DENIED",401);
   const claims=await verifyCrmMachineToken(token,options.machineAuth).catch(error=>{const env=options.machineAuth?.env??process.env;
    if(env.CRM_MACHINE_AUTH_ENABLED!=="1"||env.CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED!=="1")throw error;return verifyPersonalAutonomousCrmToken(token,options.machineAuth);});
@@ -78,8 +82,9 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
   if(!principal||principal.workspace_id!==claims.workspaceId||principal.identity_id!==(personal?CRM_PERSONAL_SOURCE.identityId:"EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY"))denied();
   const d=delegation(request.headers.get("x-evelyn-delegation"));
   const body=parseAutonomousModuleRequest(await readKnowledgeJson(request,["contractVersion","operation","correlationId","idempotencyKey","expectedVersion","patch"],autonomousModuleMaximumBytes));
+  if(reconcileOnly&&readOnly(body.operation))denied("INVALID_REQUEST",400);
   const grant=(await queryAuthenticationRows<AutonomousModuleGrant>(grantSql,[principal.id,d.grantId],options))[0];validateGrant(grant,claims.workspaceId);
-  const now=()=>options.machineAuth?.now??new Date();const nonce=verifyDelegation(d,grant,body,now());assertPolicy(grant,body);
+  const now=()=>options.machineAuth?.now??new Date();const nonce=verifyDelegation(d,grant,body,now(),reconcileOnly);assertPolicy(grant,body);
   const session:AppSession={authenticated:true,source:"database",workspaceId:grant.workspace_id,userId:grant.actor_user_id,workspaceName:"Registered internal operations",name:"Registered CRM department agent",email:"delegated-agent@service.invalid",role:"agent",productRole:"novalure_operator",permissions:getRolePermissions("agent"),productPermissions:getProductRoleCapabilities("novalure_operator"),
    serviceIdentity:claims.environment==="franz-personal"
     ?{identityId:CRM_PERSONAL_SOURCE.identityId,role:claims.role,consumer:claims.consumer,environment:claims.environment,jtiHash:claims.jtiHash}
@@ -88,7 +93,7 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
   const command:CrmCommandInput={operation:`autonomous.module.${grant.entity.toLowerCase()}.${body.operation.toLowerCase()}`,resourceId:grant.source_id,projectId:grant.project_id,expectedVersion:body.expectedVersion??undefined,idempotencyKey:body.idempotencyKey,correlationId:body.correlationId,capability:["Unit","Viewing","Reservation","Sale"].includes(grant.entity)?"reservations:write":"workspace:operate",payload:{...attribution,policyVersion:policy.policyVersion,request:body}};
   const access=async(tx:TenantTransaction,fresh:AppSession)=>{
    const revalidate=async()=>{const current=await tx.queryOne<AutonomousModuleGrant>(grantSql,[principal.id,grant.id]);validateGrant(current,claims.workspaceId);
-    if(grantDigest(current)!==grantDigest(grant))denied();verifyDelegation(d,current,body,now());if(claims.expiresAt<=Math.floor(now().valueOf()/1000))denied("ACCESS_DENIED",401);assertPolicy(current,body);return current;};
+    if(grantDigest(current)!==grantDigest(grant))denied();verifyDelegation(d,current,body,now(),reconcileOnly);if(claims.expiresAt<=Math.floor(now().valueOf()/1000))denied("ACCESS_DENIED",401);assertPolicy(current,body);return current;};
    await revalidate();await assertProjectGrant(tx,fresh,grant.project_id,!readOnly(body.operation));
    await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`autonomous-access:${grant.id}:${nonce}`]);await revalidate();
    if(await tx.queryOne("select nonce from crm_autonomous_access_events where grant_id=$1 and nonce=$2",[grant.id,nonce]))denied("NONCE_REPLAY",409);
@@ -101,16 +106,18 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
    }else if(body.operation==="Read")data=await readAutonomousModule(tx,grant,readFields);
    else{
     await assertAutonomousModuleRelations(tx,grant,body.patch);await revalidate();
-    if(native(body.operation)){
-     const result=await writeAutonomousModule(tx,fresh,grant,body);replayed=result.replayed;
-     const receipt=await tx.queryOne<{auditReference:string}>("select audit_reference as \"auditReference\" from crm_command_receipts where workspace_id=$1 and idempotency_key=$2",[grant.workspace_id,body.idempotencyKey]);if(!receipt)denied("RECEIPT_REQUIRED",503);auditReference=receipt.auditReference;
-     data=await readAutonomousModule(tx,grant,readFields);
-    }else{
-     const result=await executeCrmCommand(fresh,command,async commandTx=>{await revalidate();if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(commandTx,fresh,grant,body);await writeAutonomousModule(commandTx,fresh,grant,body);await revalidate();return readAutonomousModule(commandTx,grant,readFields);},options);
-     if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(tx,fresh,grant,body);
-     // A stored receipt never bypasses current source scope or field policy.
-     await readAutonomousModule(tx,grant,readFields);data=result.data;auditReference=result.auditReference;replayed=result.replayed;
-    }
+    let result:{data:Record<string,unknown>;auditReference:string;replayed:boolean};
+    if(reconcileOnly){
+     const stored=await reconcileCrmCommand<Record<string,unknown>>(fresh,command,options);
+     if(stored.status==="NOT_FOUND")denied("RECEIPT_NOT_FOUND",404);
+     result=stored;
+    }else result=await executeCrmCommand(fresh,command,async commandTx=>{await revalidate();if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(commandTx,fresh,grant,body);await writeAutonomousModule(commandTx,fresh,grant,body);await revalidate();return readAutonomousModule(commandTx,grant,readFields);},options);
+    if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(tx,fresh,grant,body);
+    // A stored receipt never bypasses current source scope or field policy.
+    await readAutonomousModule(tx,grant,readFields);
+    if(!result.data||typeof result.data!=="object"||Array.isArray(result.data))denied("INVALID_CRM_RESPONSE",502);
+    data=Object.fromEntries(Object.entries(result.data).filter(([field])=>field==="version"||field==="updatedAt"||readFields.includes(field)));
+    auditReference=result.auditReference;replayed=result.replayed;
    }
    if(!readOnly(body.operation))await assertAutonomousModuleRelations(tx,grant,body.patch,true);
    await revalidate();

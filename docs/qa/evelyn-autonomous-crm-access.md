@@ -370,6 +370,12 @@ means explicit human quality attestation, not independent automated QA.
 Agents cannot issue any of these decisions. Consumption, native effect, audit and
 receipts share one transaction; a failed native command rolls consumption back.
 Exact replay revalidates current grant, owner and revocation before disclosure.
+Unknown-outcome recovery is receipt-only: the exact original command is signed
+under `crm-autonomous-access-v2-reconcile.POST./api/integrations/evelyn/access`
+and sent with `x-evelyn-reconcile-only: 1`. A missing receipt returns HTTP 404 /
+`RECEIPT_NOT_FOUND` without creating a command or consuming business authority.
+Changing or removing that mode invalidates the signature. Native preparation
+also has an outer v2 receipt and a distinct inner native idempotency key.
 The native offer operation queues its existing manual-attestation delivery path;
 it does not claim that an email or contract was delivered.
 

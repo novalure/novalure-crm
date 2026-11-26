@@ -90,7 +90,7 @@ export async function writeAutonomousModule(tx:TenantTransaction,session:AppSess
    if(!contact||contact.organizationId!==grant.related_resources.organizationId||!lead||lead.contactId!==grant.related_resources.contactId)denied("RELATION_NOT_ASSIGNED");
   }
   const result=await executeOfferCommand(session,{operation:grant.lifecycle_mode==="CREATE"?"create":"revise",offerId:grant.source_id,
-   dealId:grant.related_resources.dealId,projectId:grant.project_id,expectedVersion:request.expectedVersion!,idempotencyKey:request.idempotencyKey,correlationId:request.correlationId,
+   dealId:grant.related_resources.dealId,projectId:grant.project_id,expectedVersion:request.expectedVersion!,idempotencyKey:nativeKey(grant,request),correlationId:request.correlationId,
    payload:{content:p.content,...(grant.lifecycle_mode==="CREATE"?{leadId:grant.related_resources.leadId}:{})}});
   return {replayed:result.replayed};
  }
@@ -101,7 +101,7 @@ export async function writeAutonomousModule(tx:TenantTransaction,session:AppSess
   if(!await tx.queryOne("select id from property_units where id=$1 and workspace_id=$2 and project_id=$3 for update",[grant.related_resources.unitId,grant.workspace_id,grant.project_id]))denied();
   const buyer=await tx.queryOne<{contactId:string}>("select contact_id as \"contactId\" from leads where id=$1 and workspace_id=$2 and project_id=$3 for update",[grant.related_resources.leadId,grant.workspace_id,grant.project_id]);
   if(!buyer||buyer.contactId!==grant.related_resources.contactId)denied("RELATION_NOT_ASSIGNED");
-  const result=await runPropertySalesCommand(session,{action:"reservation.request",projectId:grant.project_id,expectedVersion:request.expectedVersion!,idempotencyKey:request.idempotencyKey,correlationId:request.correlationId,
+  const result=await runPropertySalesCommand(session,{action:"reservation.request",projectId:grant.project_id,expectedVersion:request.expectedVersion!,idempotencyKey:nativeKey(grant,request),correlationId:request.correlationId,
    payload:{reservationId:grant.source_id,unitId:grant.related_resources.unitId,leadId:grant.related_resources.leadId,expiresAt:p.expiresAt}});
   return {replayed:result.replayed};
  }

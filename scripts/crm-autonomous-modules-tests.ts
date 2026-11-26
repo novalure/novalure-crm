@@ -4,7 +4,7 @@ import {readFile} from "node:fs/promises";
 import {after,before,test} from "node:test";
 import {setTimeout as delay} from "node:timers/promises";
 import {startLocalSalesDb,applySalesSchema} from "./lib/local-sales-db.mjs";
-import {handleAutonomousCrmModules,autonomousModuleDelegationDomain} from "../src/lib/crm-autonomous-modules";
+import {handleAutonomousCrmModules,autonomousModuleDelegationDomain,autonomousModuleReconciliationDomain} from "../src/lib/crm-autonomous-modules";
 import {autonomousModuleContract,autonomousModuleFields,type AutonomousModuleEntity} from "../src/lib/crm-autonomous-module-contract";
 import {registerAutonomousCrmAccess,autonomousCrmDepartments,type AutonomousCrmRegistration} from "../src/lib/crm-autonomous-registration";
 import {crmPayloadDigest} from "../src/lib/crm-command";
@@ -30,6 +30,7 @@ function signature(id:string,b:Record<string,unknown>,privateKey:KeyObject=key.p
 async function call(id:string,b=body(),credential=signature(id,b),headers:Record<string,string>={}){
  const response=await handleAutonomousCrmModules(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${bearer}`,"content-type":"application/json","x-evelyn-delegation":credential,...headers},body:JSON.stringify(b)}),{pool:db.pool as unknown as TenantPool,machineAuth:auth()});return {status:response.status,body:await response.json()};
 }
+function reconcile(id:string,b:ReturnType<typeof body>){return call(id,b,signature(id,b,key.privateKey,autonomousModuleReconciliationDomain),{"x-evelyn-reconcile-only":"1"});}
 function registration(entity:AutonomousModuleEntity,sourceId:string,overrides:Partial<AutonomousCrmRegistration>={}):AutonomousCrmRegistration{
  const names:Record<AutonomousModuleEntity,string>={Contact:"contacts",Company:"companies",Developer:"developers",Project:"projects",Unit:"units",BuyerLead:"leads",Qualification:"qualifications",Offer:"offers",Task:"tasks",Appointment:"appointments",Viewing:"viewings",Reservation:"reservations",Sale:"sales",Communication:"communications",ApprovalReference:"approvals"};
  return {workloadId:workload,workloadActorId:actor,grantId:randomUUID(),actorId:actor,projectId:project,sourceId,taskId:mission,departmentId:"SALES",agentId:"synthetic.sales.worker",entity,scopes:[`crm.${names[entity]}.read`],publicKey:key.publicKey.export({format:"der",type:"spki"}).toString("base64url"),authorityReference:"SYNTHETIC module integration acceptance",expiresAt:null,
@@ -159,6 +160,7 @@ test("native offer preparation binds its exact new ID and retains genuine approv
  const r=registration("Offer",offer,{scopes:["crm.offers.read","crm.offers.prepare"],module:{contractVersion:autonomousModuleContract,readFields:["title","content","status"],writeFields:["content"],relatedResources:{dealId:deal,leadId:lead,contactId:contact,organizationId:company},lifecycleMode:"CREATE"}});await provision(r);
  const content={subject:"SYNTHETIC offer",recipientName:"SYNTHETIC buyer",recipientEmail:"synthetic@example.invalid",scope:"SYNTHETIC internal scoped proposal",paymentPlan:"SYNTHETIC draft",discounts:"SYNTHETIC none",specialTerms:"SYNTHETIC none",riskComplianceNotes:"SYNTHETIC no real delivery",terms:"SYNTHETIC draft only",validUntil:new Date(Date.now()+86400000).toISOString(),currency:"EUR",taxBasis:"NET",items:[{description:"SYNTHETIC work",quantity:1,unitNetCents:1000}]};
  const b=body("PrepareOffer",{content},1),first=await call(r.grantId,b);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.sourceId,offer);assert.equal(first.body.data.status,"DRAFT");assert.equal(first.body.data.content.subject,content.subject);assert.equal((await call(r.grantId,b)).body.replayed,true);
+ const recovered=await reconcile(r.grantId,b);assert.equal(recovered.status,200,JSON.stringify(recovered.body));assert.equal(recovered.body.replayed,true);assert.equal(recovered.body.auditReference,first.body.auditReference);assert.deepEqual(recovered.body.data,first.body.data);
  assert.equal((await db.admin.query("select count(*) from crm_offer_deliveries where offer_id=$1",[offer])).rows[0].count,"0");
 });
 
@@ -168,6 +170,7 @@ test("native reservation preparation keeps the unit unreserved and respects qual
  const unitVersion=Number((await db.admin.query("select version from property_units where id=$1",[unit])).rows[0].version);
  const r=registration("Reservation",reservation,{scopes:["crm.reservations.read","crm.reservations.prepare"],module:{contractVersion:autonomousModuleContract,readFields:["unitId","contactId","status","expiresAt","nextAction"],writeFields:["unitId","contactId","leadId","expiresAt","unitVersion"],relatedResources:{unitId:unit,leadId:lead,contactId:contact},lifecycleMode:"CREATE"}});await provision(r);
  const b=body("PrepareReservation",{unitId:unit,contactId:contact,leadId:lead,expiresAt:new Date(Date.now()+86400000).toISOString(),unitVersion},unitVersion),first=await call(r.grantId,b);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.sourceId,reservation);assert.equal(first.body.data.status,"requested");assert.equal((await call(r.grantId,b)).body.replayed,true);
+ const recovered=await reconcile(r.grantId,b);assert.equal(recovered.status,200,JSON.stringify(recovered.body));assert.deepEqual(recovered.body.data,first.body.data);assert.equal(recovered.body.auditReference,first.body.auditReference);
  assert.equal((await db.admin.query("select status from property_units where id=$1",[unit])).rows[0].status,"available");
 });
 
@@ -193,6 +196,7 @@ test("native reservation confirmation consumes a genuine exact owner decision an
  const b=body("ConfirmReservation",{approvalReference:decisionId,unitVersion,sourceReference:"SYNTHETIC approved exact reservation"},Number(reservation.version));
  const absent=await call(r.grantId,b);assert.equal(absent.status,403,JSON.stringify(absent.body));assert.equal(absent.body.code,"APPROVAL_REQUIRED");
  await decideAutonomousBusinessAuthority(owner,{decision:"APPROVED",decisionId,grantId:r.grantId,command:b,expiresAt:new Date(Date.now()+60000).toISOString()},{pool:db.pool as unknown as TenantPool});
+ const notExecuted=await reconcile(r.grantId,b);assert.equal(notExecuted.status,404,JSON.stringify(notExecuted.body));assert.equal(notExecuted.body.code,"RECEIPT_NOT_FOUND");assert.equal((await db.admin.query("select count(*) from crm_autonomous_business_consumptions where decision_id=$1",[decisionId])).rows[0].count,"0");
  const nativeDenied=await call(r.grantId,b);assert.equal(nativeDenied.status,403,JSON.stringify(nativeDenied.body));assert.equal((await db.admin.query("select count(*) from crm_autonomous_business_consumptions where decision_id=$1",[decisionId])).rows[0].count,"0");
  const developerContact=randomUUID();await db.admin.query("insert into contacts(id,workspace_id,project_id,organization_id,name,role) values($1,$2,$3,$4,'SYNTHETIC mandate contact','Bauträger')",[developerContact,CRM_MACHINE_WORKSPACE_ID,project,company]);
  await db.admin.query("update projects set developer_organization_id=$2 where id=$1",[project,company]);await db.admin.query("update crm_project_sales_authorities set contact_id=$4,can_confirm_reservation=true,can_confirm_sale=true,assigned_by=$5 where workspace_id=$1 and project_id=$2 and user_id=$3",[CRM_MACHINE_WORKSPACE_ID,project,actor,developerContact,ownerId]);
@@ -254,4 +258,23 @@ test("the protected Communication SQL helper masks every ungranted business fiel
 
 /** Test-only shared fixture for the separately invoked cross-repository proof.
  * No production route imports this module; it never reads an environment DB URL. */
+test("signed receipt-only recovery never creates a missing effect and cannot become an execution request",async()=>{
+ const r=registration("Task",task,{scopes:["crm.tasks.read","crm.tasks.write"],module:{contractVersion:autonomousModuleContract,readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode:"EXISTING"}});await provision(r);
+ const original=(await db.admin.query("select title,version from tasks where id=$1",[task])).rows[0];
+ const b=body("Update",{title:"SYNTHETIC receipt-only intent"},Number(original.version));
+ const absent=await reconcile(r.grantId,b);assert.equal(absent.status,404,JSON.stringify(absent.body));assert.equal(absent.body.code,"RECEIPT_NOT_FOUND");
+ assert.deepEqual((await db.admin.query("select title,version from tasks where id=$1",[task])).rows[0],original);
+ assert.equal((await db.admin.query("select count(*) from crm_command_receipts where idempotency_key=$1",[b.idempotencyKey])).rows[0].count,"0");
+ assert.equal((await call(r.grantId,b,signature(r.grantId,b),{"x-evelyn-reconcile-only":"1"})).status,401);
+ assert.equal((await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReconciliationDomain))).status,401);
+ assert.equal((await call(r.grantId,b,signature(r.grantId,b),{"x-evelyn-reconcile-only":"0"})).status,400);
+ const first=await call(r.grantId,b);assert.equal(first.status,200,JSON.stringify(first.body));
+ const recovered=await reconcile(r.grantId,b);assert.equal(recovered.status,200,JSON.stringify(recovered.body));assert.equal(recovered.body.replayed,true);assert.equal(recovered.body.auditReference,first.body.auditReference);assert.deepEqual(recovered.body.data,first.body.data);
+ const changed=await reconcile(r.grantId,{...b,patch:{title:"SYNTHETIC different intent"}});assert.equal(changed.status,409,JSON.stringify(changed.body));assert.equal(changed.body.code,"IDEMPOTENCY_CONFLICT");
+ await db.admin.query("update crm_autonomous_access_grants set revoked_at=clock_timestamp() where id=$1",[r.grantId]);assert.equal((await reconcile(r.grantId,b)).status,403);
+ assert.equal((await db.admin.query("select count(*) from crm_command_receipts where idempotency_key=$1",[b.idempotencyKey])).rows[0].count,"1");
+ const id=randomUUID(),create=registration("Task",id,{scopes:["crm.tasks.read","crm.tasks.create"],module:{contractVersion:autonomousModuleContract,readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode:"CREATE"}});await provision(create);
+ const intent=body("Create",{title:"SYNTHETIC not yet created"});assert.equal((await reconcile(create.grantId,intent)).status,404);assert.equal((await db.admin.query("select count(*) from tasks where id=$1",[id])).rows[0].count,"0");
+});
+
 export function autonomousPairedFixture(){return {db,registration,provision,body,ids:{actor,workload,project,mission,task,workspace:CRM_MACHINE_WORKSPACE_ID}};}

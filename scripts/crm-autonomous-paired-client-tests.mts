@@ -30,9 +30,11 @@ test("paired immutable Evelyn client and real CRM handler recover a lost respons
  const parent=f.registration("Task",f.ids.task,{agentId:"synthetic.sales.paired.parent",scopes:["crm.tasks.read","crm.tasks.write"],publicKey:parentKey.publicKey.export({format:"der",type:"spki"}).toString("base64url"),module:{contractVersion:"crm-autonomous-access-v2",readFields:["title","status"],writeFields:["title"],relatedResources:{},lifecycleMode:"EXISTING",delegationKind:"DEPARTMENT",parentGrantId:null}});await f.provision(parent);
  const child=f.registration("Task",f.ids.task,{agentId:"synthetic.sales.paired.child",scopes:["crm.tasks.read","crm.tasks.write"],publicKey:childKey.publicKey.export({format:"der",type:"spki"}).toString("base64url"),module:{contractVersion:"crm-autonomous-access-v2",readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode:"EXISTING",delegationKind:"SUBAGENT",parentGrantId:parent.grantId}});await f.provision(child);
  const assignment=(r:typeof parent,key:typeof parentKey)=>({grantId:r.grantId,workspaceId:f.ids.workspace,projectId:f.ids.project,sourceId:f.ids.task,taskId:f.ids.mission,departmentId:r.departmentId,agentId:r.agentId,entity:r.entity,signingKeyReference:`paired.${r.agentId}`,publicKeyDigest:createHash("sha256").update(key.publicKey.export({format:"der",type:"spki"})).digest("hex"),delegationKind:r.module!.delegationKind,parentGrantId:r.module!.parentGrantId,operations:["DescribeAssignment","Read","Update"],readFields:r.module!.readFields,writeFields:r.module!.writeFields,expiresAt:Math.floor(Date.now()/1000)+60});
- let dropNext=false,serverCalls=0,realRsaVerifications=0;
+ let dropNext=false,dropBeforeNext=false,transportAttempts=0,serverCalls=0,realRsaVerifications=0;
  const fetcher:typeof fetch=async(input,init)=>{
-  serverCalls++;const request=new Request(String(input),init),raw=await request.clone().json();
+  transportAttempts++;const request=new Request(String(input),init),raw=await request.clone().json();
+  if(dropBeforeNext&&raw.operation==="Update"){dropBeforeNext=false;throw new Error("SYNTHETIC request never delivered");}
+  serverCalls++;
   const response=await handleAutonomousCrmModules(request,{pool:f.db.pool as unknown as TenantPool,machineAuth:{...machineAuth,verifier:async(t,o)=>{realRsaVerifications++;return machineAuth.verifier!(t,o);}}});
   if(dropNext&&raw.operation==="Update"&&response.status===200){dropNext=false;await response.arrayBuffer();throw new Error("SYNTHETIC committed response lost");}return response;
  };
@@ -41,6 +43,12 @@ test("paired immutable Evelyn client and real CRM handler recover a lost respons
  const childClient=actualClient.createCrmOperationsClient(childAssignment,{resolveGrant:async()=>childAssignment,resolveSigningKey:async()=>childKey.privateKey,getToken:token,fetch:fetcher});
  const described=await childClient.execute(f.body("DescribeAssignment"));assert.equal(described.outcome,"CONFIRMED",JSON.stringify(described));assert.equal(described.receipt.data.parentGrantId,parent.grantId);assert.equal(described.receipt.data.delegationKind,"SUBAGENT");
  const read=await childClient.execute(f.body());assert.equal(read.outcome,"CONFIRMED",JSON.stringify(read));
+ const notDelivered=f.body("Update",{title:"SYNTHETIC unknown request never reached receiver"},read.receipt.data.version);dropBeforeNext=true;
+ const neverSent=await childClient.execute(notDelivered);assert.equal(neverSent.outcome,"UNKNOWN");
+ const missing=await childClient.resume(neverSent.pending);assert.equal(missing.outcome,"UNKNOWN",JSON.stringify(missing));assert.deepEqual(missing.pending,neverSent.pending);
+ assert.equal((await childClient.resume(missing.pending)).outcome,"UNKNOWN");
+ assert.equal((await f.db.admin.query("select count(*) from crm_command_receipts where workspace_id=$1 and idempotency_key=$2",[f.ids.workspace,notDelivered.idempotencyKey])).rows[0].count,"0");
+ assert.equal(Number((await f.db.admin.query("select version from tasks where id=$1",[f.ids.task])).rows[0].version),read.receipt.data.version);
  const command=f.body("Update",{title:"SYNTHETIC exact cross-repository write"},read.receipt.data.version);dropNext=true;
  const lost=await childClient.execute(command);assert.equal(lost.outcome,"UNKNOWN");const recovered=await childClient.resume(lost.pending);assert.equal(recovered.outcome,"CONFIRMED",JSON.stringify(recovered));assert.equal(recovered.receipt.replayed,true);assert.equal(recovered.receipt.data.title,command.patch.title);assert.equal(recovered.receipt.data.version,command.expectedVersion!+1);
  assert.equal((await f.db.admin.query("select count(*) from crm_command_receipts where workspace_id=$1 and idempotency_key=$2",[f.ids.workspace,command.idempotencyKey])).rows[0].count,"1");
@@ -59,5 +67,5 @@ test("paired immutable Evelyn client and real CRM handler recover a lost respons
   assert.equal((await f.db.admin.query("select title from tasks where id=$1",[f.ids.task])).rows[0].title,command.patch.title);
  }finally{await lock.query("rollback");lock.release();}
  assert.ok(serverCalls>=6);assert.equal(realRsaVerifications,serverCalls);
- process.stdout.write(`PAIRED_EVIDENCE ${JSON.stringify({evelynRevision:expectedRevision,compiledClientSha256:compiledSha256,serverCalls,realRsaVerifications,credentials:"SYNTHETIC_LOCAL_ONLY",parentRace:"DENIED_ZERO_EFFECT",lostResponse:"ORIGINAL_RECEIPT_RECOVERED"})}\n`);
+ process.stdout.write(`PAIRED_EVIDENCE ${JSON.stringify({evelynRevision:expectedRevision,compiledClientSha256:compiledSha256,transportAttempts,serverCalls,realRsaVerifications,credentials:"SYNTHETIC_LOCAL_ONLY",parentRace:"DENIED_ZERO_EFFECT",lostBeforeDelivery:"UNKNOWN_ZERO_EFFECT",lostResponse:"ORIGINAL_RECEIPT_RECOVERED"})}\n`);
 });
