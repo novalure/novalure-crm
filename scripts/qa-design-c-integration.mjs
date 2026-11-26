@@ -1570,6 +1570,13 @@ async function runIntegration() {
     "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId, "contacts");
+      const content = operatorPage.locator("[data-crm-content]");
+      const refresh = operatorPage
+        .locator("[data-crm-header]")
+        .getByRole("button", { name: "Aktualisieren", exact: true });
+      await expect(content).toContainText("Synthetic developer representative");
+      await expect(refresh).toBeEnabled();
+      const testHeader = "x-synthetic-core-fallback";
       const handler = async (route) => {
         const response = await route.fetch();
         const payload = await response.json();
@@ -1585,26 +1592,19 @@ async function runIntegration() {
             name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
           },
         ];
-        await route.fulfill({ response, json: payload });
+        await route.fulfill({ response, headers: { [testHeader]: "1", "cache-control": "no-store" }, json: payload });
       };
       await operatorPage.route("**/api/crm/core**", handler);
       try {
-        const refresh = operatorPage
-          .locator("[data-crm-header]")
-          .getByRole("button", { name: "Aktualisieren", exact: true });
         await Promise.all([
           operatorPage.waitForResponse(
-            (response) => new URL(response.url()).pathname === "/api/crm/core",
+            (response) => new URL(response.url()).pathname === "/api/crm/core" && response.headers()[testHeader] === "1",
           ),
           refresh.click(),
         ]);
         await expect(refresh).toBeEnabled();
-        await expect(
-          operatorPage.locator("[data-crm-content]"),
-        ).not.toContainText("SYNTHETIC UNTRUSTED FALLBACK SENTINEL");
-        await expect(
-          operatorPage.locator("[data-crm-content]"),
-        ).not.toContainText("Synthetic developer representative");
+        await expect(content).not.toContainText("SYNTHETIC UNTRUSTED FALLBACK SENTINEL");
+        await expect(content).not.toContainText("Synthetic developer representative");
         await operatorPage
           .locator("[data-crm-sidebar] [data-crm-nav-item]")
           .first()
@@ -1620,7 +1620,9 @@ async function runIntegration() {
             "Unknown data was presented as a numeric business result",
           );
       } finally {
-        await operatorPage.unroute("**/api/crm/core**", handler);
+        // Page routes are scenario-local. The context-level network guard
+        // remains active, and this cleanup waits for any in-flight handler.
+        await operatorPage.unrouteAll({ behavior: "wait" });
         await open(operatorPage, accounts.operator.workspaceId);
       }
     },
