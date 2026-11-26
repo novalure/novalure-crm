@@ -9,6 +9,7 @@ import path from "node:path";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { createTextPdf } from "./lib/knowledge-document-fixtures.ts";
+import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
 import {
   seedDesignCIntegration,
   seedDesignCReaderRows,
@@ -992,7 +993,12 @@ async function open(
 
 async function chooseProfile(page, profile) {
   // Initial hash/profile hydration can reset the focused sidebar. Perform the
-  // actual toggle and observe its state before operating its conditional form.
+  // actual toggle and confirm React saved the choice, beyond the DOM value.
+  const key = getStudioNavigationPreferenceKey(
+    "novalure-crm-navigation-preset-v1",
+    accounts.operator.userId,
+    profile === "novalureStudio" ? accounts.studio.workspaceId : accounts.operator.workspaceId,
+  );
   await expect(async () => {
     const sidebar = page.locator("[data-crm-sidebar]");
     if ((await sidebar.getAttribute("data-collapsed")) === "true")
@@ -1003,6 +1009,7 @@ async function chooseProfile(page, profile) {
     const select = sidebar.locator("[data-crm-profile-select]");
     await select.selectOption(profile, { timeout: 1500 });
     await expect(select).toHaveValue(profile, { timeout: 1500 });
+    assert.equal(await page.evaluate(storageKey => localStorage.getItem(storageKey), key), profile);
   }).toPass({ timeout: 15000, intervals: [100, 250, 500] });
 }
 
@@ -1226,7 +1233,11 @@ async function runIntegration() {
   );
   await step(
     "Operator chooses its existing authorized internal navigation profile",
-    () => chooseProfile(operatorPage, "novalureInternal"),
+    async () => {
+      await chooseProfile(operatorPage, "novalureInternal");
+      await open(operatorPage, accounts.operator.workspaceId);
+      await expect(operatorPage.locator("[data-crm-profile-select]")).toHaveValue("novalureInternal");
+    },
     true,
   );
   if (workspaceOnly) {
@@ -1305,6 +1316,8 @@ async function runIntegration() {
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
       const nav = operatorPage.locator("[data-crm-sidebar]");
+      await expect(nav.getByRole("button", { name: "Übersicht", exact: true })).toBeVisible();
+      await expect(nav.getByRole("link", { name: "Terminbuchung", exact: true })).toBeVisible();
       const entries = await nav
         .locator("[data-crm-nav-item]")
         .evaluateAll((elements) =>
@@ -1407,10 +1420,11 @@ async function runIntegration() {
   await step(
     "Authorized search uses a native modal and never reveals another tenant",
     async () => {
-      await open(operatorPage, accounts.operator.workspaceId);
+      await open(operatorPage, accounts.operator.workspaceId, "contacts");
       await expect(operatorPage.locator("[data-crm-eyebrow]")).toHaveText(
         "Alle Projekte",
       );
+      await expect(operatorPage.locator("[data-crm-content]")).toContainText("Synthetic developer representative");
       const trigger = operatorPage.getByRole("button", {
         name: "CRM durchsuchen",
         exact: true,
@@ -1421,39 +1435,32 @@ async function runIntegration() {
         name: "CRM durchsuchen",
         exact: true,
       });
-      await expect(dialog).toBeVisible();
-      assert(
-        await dialog.evaluate(
-          (element) =>
-            element instanceof HTMLDialogElement && element.matches(":modal"),
-        ),
-      );
-      const query = dialog.getByRole("searchbox", {
-        name: "CRM durchsuchen",
-        exact: true,
-      });
-      await query.fill("SYNTHETIC FOREIGN");
-      await expect(dialog.locator("[data-crm-search-results]")).toHaveText(
-        "Keine passenden Ergebnisse im geladenen Bereich.",
-      );
-      await query.fill("Synthetic developer representative");
-      await expect(
-        dialog.getByRole("button", {
-          name: "Synthetic developer representative",
-          exact: true,
-        }),
-      ).toBeVisible();
-      for (let index = 0; index < 5; index++) {
-        await operatorPage.keyboard.press("Tab");
+      try {
+        await expect(dialog).toBeVisible();
         assert(
           await dialog.evaluate(
-            (element) =>
-              element.contains(document.activeElement) ||
-              document.activeElement === document.body,
+            (element) => element instanceof HTMLDialogElement && element.matches(":modal"),
           ),
         );
+        const query = dialog.getByRole("searchbox", { name: "CRM durchsuchen", exact: true });
+        await query.fill("SYNTHETIC FOREIGN");
+        await expect(dialog.locator("[data-crm-search-results]")).toHaveText(
+          "Keine passenden Ergebnisse im geladenen Bereich.",
+        );
+        await query.fill("Synthetic developer representative");
+        await expect(dialog.getByRole("button", {
+          name: "Synthetic developer representative",
+          exact: true,
+        })).toBeVisible();
+        for (let index = 0; index < 5; index++) {
+          await operatorPage.keyboard.press("Tab");
+          assert(await dialog.evaluate((element) =>
+            element.contains(document.activeElement) || document.activeElement === document.body,
+          ));
+        }
+      } finally {
+        if (await dialog.isVisible()) await operatorPage.keyboard.press("Escape");
       }
-      await operatorPage.keyboard.press("Escape");
       await expect(dialog).not.toBeVisible();
       await expect(trigger).toBeFocused();
     },

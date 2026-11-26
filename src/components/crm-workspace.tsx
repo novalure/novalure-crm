@@ -1212,6 +1212,7 @@ const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
   billing: "billing",
   aiBillingAdmin: "ai-billing-admin",
   aiAssistant: "ai-assistant",
+  bots: "bots",
   buyerLeads: "buyer-leads",
   buyerProfiles: "buyer-profiles",
   dailyQueue: "daily-queue",
