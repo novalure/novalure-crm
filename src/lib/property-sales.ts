@@ -1,9 +1,10 @@
 /** Pure validation for persistent Flow B commands. */
+import type { PropertyType } from "./crm-types";
 export class PropertySalesValidationError extends Error {}
 export const salesActions = ['authority.assign','qualification.save','handover.create','viewing.save','reservation.request','reservation.confirm','reservation.extend','reservation.expire','sale.confirm','unit.price.confirm'] as const;
 export type PropertySalesAction = typeof salesActions[number];
 export type SalesPriority = 'high' | 'medium' | 'low';
-export type BuyerQualification = {budgetFrom:number;budgetTo:number;financingStatus:string;purchaseTimeline:string;useCase:'Eigennutzung'|'Anlage';desiredUnitId:string;priority:SalesPriority;sourceReference:string};
+export type BuyerQualification = {budgetFrom:number;budgetTo:number;financingStatus:string;purchaseTimeline:string;useCase:'Eigennutzung'|'Anlage';desiredUnitId:string;priority:SalesPriority;sourceReference:string;desiredLocation?:string;mustHaveCriteria?:string[];niceToHaveCriteria?:string[];propertyType?:PropertyType};
 export function salesText(value:unknown,label:string,max=2000):string {
  if(typeof value!=='string'||!value.trim()||value.trim().length>max) throw new PropertySalesValidationError(label+' is required');
  return value.trim();
@@ -25,7 +26,14 @@ export function validateQualification(value:Record<string,unknown>):BuyerQualifi
  const purchaseTimeline=salesText(value.purchaseTimeline,'purchaseTimeline',200);
  if(value.useCase!=='Eigennutzung'&&value.useCase!=='Anlage') throw new PropertySalesValidationError('useCase is required');
  if(value.priority!=='high'&&value.priority!=='medium'&&value.priority!=='low') throw new PropertySalesValidationError('priority is required');
- return {budgetFrom,budgetTo,financingStatus,purchaseTimeline,useCase:value.useCase,priority:value.priority,desiredUnitId:salesUuid(value.desiredUnitId,'desiredUnitId'),sourceReference:salesText(value.sourceReference,'sourceReference')};
+ const preferences:Pick<BuyerQualification,'desiredLocation'|'mustHaveCriteria'|'niceToHaveCriteria'|'propertyType'>={};
+ if(value.desiredLocation!==undefined)preferences.desiredLocation=salesText(value.desiredLocation,'desiredLocation',500);
+ for(const field of ['mustHaveCriteria','niceToHaveCriteria'] as const)if(value[field]!==undefined){
+  const items=value[field];if(!Array.isArray(items)||items.length>50)throw new PropertySalesValidationError('Invalid '+field);
+  preferences[field]=items.map(item=>salesText(item,field,500));
+ }
+ if(value.propertyType!==undefined){if(!['Wohnung','Haus','Neubau','Zinshaus','Gewerbe','Grundstück','Portfolio'].includes(String(value.propertyType)))throw new PropertySalesValidationError('Invalid propertyType');preferences.propertyType=String(value.propertyType) as PropertyType;}
+ return {budgetFrom,budgetTo,financingStatus,purchaseTimeline,useCase:value.useCase,priority:value.priority,desiredUnitId:salesUuid(value.desiredUnitId,'desiredUnitId'),sourceReference:salesText(value.sourceReference,'sourceReference'),...preferences};
 }
 export function validateViewing(value:Record<string,unknown>,previous?:string) {
  const startsAt=salesText(value.startsAt,'startsAt'),endsAt=salesText(value.endsAt,'endsAt'),timeZone=salesText(value.timeZone,'timeZone',100);

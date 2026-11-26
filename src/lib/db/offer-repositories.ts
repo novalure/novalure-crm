@@ -99,7 +99,9 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
         }
         if (!contact.organizationId) await tx.execute(`update contacts set organization_id=$3::uuid,version=version+1,updated_at=now() where workspace_id=$1::uuid and id=$2::uuid`, [session.workspaceId, contact.id, organizationId]);
         await tx.execute(`update deals set lead_id=$3::uuid,organization_id=$4::uuid,version=version+1,updated_at=now() where workspace_id=$1::uuid and id=$2::uuid and version=$5`, [session.workspaceId, deal.id, leadId, organizationId, expectedVersion]);
-        const id = randomUUID();
+        // A registered machine creation may prebind its exact new resource ID.
+        // Normal callers retain the generated-ID path and all native checks.
+        const id = input.offerId === undefined ? randomUUID() : assertCrmUuid(input.offerId, "offerId");
         await tx.execute(`insert into crm_offers(id,workspace_id,project_id,deal_id,contact_id,lead_id,organization_id,created_by) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7::uuid,$8::uuid)`, [id, session.workspaceId, deal.projectId, deal.id, contact.id, leadId, organizationId, session.userId]);
         await revision(tx, { id, workspaceId: session.workspaceId, projectId: deal.projectId, contactId: contact.id, leadId, organizationId }, 1, content, session.userId);
         return { id, ...(await readView(tx, session, deal.id)) };
