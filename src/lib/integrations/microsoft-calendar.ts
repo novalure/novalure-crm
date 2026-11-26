@@ -494,12 +494,13 @@ export async function deleteMicrosoftCalendarEvent(input: {
     });
     const rawBody = await response.text();
 
-    if (!response.ok && response.status !== 404) {
+    // A scoped 404 cannot establish whether an older event belongs to this organizer.
+    if (!response.ok && (response.status !== 404 || input.workspaceId !== undefined)) {
       return {
         provider: "microsoft-365",
         status: "failed",
         eventId: input.eventId,
-        error: graphErrorMessage(response.status, rawBody),
+        error: response.status === 404 ? "calendar_delete_unconfirmed" : graphErrorMessage(response.status, rawBody),
       };
     }
 

@@ -9,6 +9,7 @@ let workspaceToken: "missing" | "unavailable" | "connected" = "missing";
 let reads = 0;
 let connected = false;
 let calendarResponse: (() => Response) | null = null;
+let deleteResponseStatus = 204;
 mock.module(moduleUrl("src/lib/integrations/calendar-connections.ts"), {namedExports: {
   getCalendarAccessToken: async () => {
     reads++;
@@ -35,12 +36,13 @@ async function withGlobalCredentials(direct: boolean, run: (calls: string[]) => 
   globalThis.fetch = async (url, init) => {
     calls.push(`${init?.method ?? "GET"} ${String(url)}`);
     if (String(url).includes("login.microsoftonline.com")) return Response.json({access_token:"synthetic-app-token"});
-    if (init?.method === "DELETE") return new Response(null, {status:204});
+    if (init?.method === "DELETE") return new Response(null, {status:deleteResponseStatus});
     if (calendarResponse && String(url).includes("/calendarView")) return calendarResponse();
     return Response.json(init?.method === "POST" ? {id:"synthetic-event"} : {value:[]});
   };
   try { await run(calls); } finally {
     calendarResponse = null;
+    deleteResponseStatus = 204;
     globalThis.fetch = previousFetch;
     for (const [key,value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
@@ -82,6 +84,25 @@ test("a connected workspace uses its personal token and never the app token endp
     workspaceToken="connected";
     assert.equal((await calendar.syncMicrosoftCalendarEvent({...event,workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"})).status,"synced");
     assert.equal(calls.length,1); assert.match(calls[0],/graph\.microsoft\.com\/v1\.0\/me\/calendar\/events/);
+  });
+});
+test("workspace cancellation requires Graph to confirm deletion in its own calendar", async () => {
+  await withGlobalCredentials(true, async calls => {
+    workspaceToken = "connected";
+    const request = {eventId: "synthetic-event", workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"};
+    deleteResponseStatus = 404;
+    const missing = await calendar.deleteMicrosoftCalendarEvent(request);
+    assert.equal(missing.status, "failed");
+    assert.equal(missing.error, "calendar_delete_unconfirmed");
+    deleteResponseStatus = 204;
+    assert.equal((await calendar.deleteMicrosoftCalendarEvent(request)).status, "synced");
+    assert.deepEqual(calls, Array(2).fill("DELETE https://graph.microsoft.com/v1.0/me/calendar/events/synthetic-event"));
+  });
+});
+test("an explicitly unscoped calendar cancellation still accepts a missing event", async () => {
+  await withGlobalCredentials(true, async () => {
+    deleteResponseStatus = 404;
+    assert.equal((await calendar.deleteMicrosoftCalendarEvent({eventId: "synthetic-event"})).status, "synced");
   });
 });
 for (const direct of [true, false]) test(`explicitly unscoped ${direct ? "direct-token" : "app-credentials"} behavior remains available`, async () => {
