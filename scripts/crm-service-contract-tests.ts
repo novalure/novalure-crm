@@ -9,10 +9,13 @@ import { createServer, type Server } from "node:http";
 import { startLocalSalesDb,applySalesSchema } from "./lib/local-sales-db.mjs";
 import { CRM_CONTRACT_SCOPES,parseCrmContractRequest } from "../src/lib/crm-service-contract";
 import { crmPayloadDigest } from "../src/lib/crm-command";
+import { getTrustedAppOrigin } from "../src/lib/auth/app-origin";
 
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 type Handler=(request:Request,context:{params:Promise<Record<string,string>>})=>Promise<Response>;
 const routes=new Map<string,Record<string,Handler>>();
+const mailboxCallbackPath = /^\/api\/crm\/mailbox\/oauth\/([^/]+)\/callback$/;
+const mailboxCallbackProviders = ["microsoft", "google"] as const;
 let db:Awaited<ReturnType<typeof startLocalSalesDb>>,server:Server,baseUrl:string;
 const w=randomUUID(),actor=randomUUID(),project=randomUUID(),hidden=randomUUID(),foreignW=randomUUID(),foreignProject=randomUUID(),foreignActor=randomUUID();
 const contact=randomUUID(),hiddenContact=randomUUID(),privateContact=randomUUID(),unknownContact=randomUUID(),task=randomUUID(),principalId=randomUUID();
@@ -29,7 +32,7 @@ async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
  if(target.origin!==new URL(baseUrl).origin)throw new Error("Test HTTP target is not the owned loopback server");
  const headers=new Headers(init.headers);headers.set("connection","close");
  try {
-  const response=await fetch(target,{...init,headers,signal:AbortSignal.timeout(15_000)});
+  const response=await fetch(target,{...init,headers,redirect:"manual",signal:AbortSignal.timeout(15_000)});
   assert.equal(response.headers.get("connection"),"close","Harness must not pool connections between test cases");
   return response;
  } catch(error) {
@@ -70,6 +73,9 @@ before(async()=>{
   const handlers:Record<string,Handler>={};
   for(const method of ["GET","POST","PATCH","PUT","DELETE"])if(typeof routeModule[method]==="function")handlers[method]=routeModule[method] as Handler;
   routes.set(pathname,handlers);
+  if (mailboxCallbackPath.test(pathname)) {
+   for (const provider of mailboxCallbackProviders) routes.set(`/api/crm/mailbox/oauth/${provider}/callback`,handlers);
+  }
  }
 
  server=createServer(async(req,res)=>{
@@ -78,7 +84,8 @@ before(async()=>{
    let body="";for await(const part of req)body+=part;
    const headers=new Headers();for(const [key,value]of Object.entries(req.headers))if(value)headers.set(key,Array.isArray(value)?value.join(","):value);
    const target=new URL(req.url??"/",baseUrl);const method=req.method??"GET";const handler=routes.get(target.pathname)?.[method];if(!handler){res.writeHead(404);res.end();return;}
-   const response=await handler(new Request(target,{method,headers,...(["GET","HEAD"].includes(method)?{}:{body})}),{params:Promise.resolve({dealId:contact,notificationId:contact})});
+   const provider = mailboxCallbackPath.exec(target.pathname)?.[1];
+   const response=await handler(new Request(target,{method,headers,...(["GET","HEAD"].includes(method)?{}:{body})}),{params:Promise.resolve({dealId:contact,notificationId:contact,...(provider ? {provider} : {})})});
    res.writeHead(response.status,Object.fromEntries(response.headers));res.end(await response.text());
   }catch{res.writeHead(500);res.end("failed");}
  });
@@ -177,7 +184,21 @@ test("HTTP: every legacy CRM method rejects service bearer plus forged owner hea
   if(pathname==="/api/crm/contract/v1")continue;
   for(const method of Object.keys(methods)) {
    const result=await fetchLocal(new URL(pathname,baseUrl),{method,headers:{authorization:"Bearer "+token,"content-type":"application/json","x-novalure-role":"owner","x-novalure-user-id":actor,"x-novalure-workspace-id":w},...(["GET","HEAD"].includes(method)?{}:{body:"{}"})});
-   assert.ok([401,403].includes(result.status),method+" "+pathname+" status="+result.status+" "+await result.text());checked++;
+   const provider = mailboxCallbackPath.exec(pathname)?.[1];
+   if (provider && mailboxCallbackProviders.some((candidate) => candidate === provider)) {
+    assert.equal(result.status,303,`${method} ${pathname} must reach the OAuth denial redirect`);
+    const location = result.headers.get("location");
+    assert.ok(location);
+    const denied = new URL(location);
+    assert.equal(denied.origin, new URL(getTrustedAppOrigin()).origin);
+    assert.equal(`${denied.pathname}${denied.search}${denied.hash}`,"/?mailbox=authorization_required#communication");
+   } else if (provider) {
+    assert.equal(result.status,404,`${method} ${pathname} must reject unsupported providers`);
+    assert.equal(result.headers.get("location"),null);
+   } else {
+    assert.ok([401,403].includes(result.status),`${method} ${pathname} status=${result.status}`);
+   }
+   checked++;
   }
  }
  assert.ok(checked>=40,"Full historical CRM method inventory must be covered");
