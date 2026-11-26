@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {fetchMailboxMetadata} from '../src/lib/integrations/mailbox-sync-provider';
+import {fetchMailboxKnownContent,fetchMailboxMetadata} from '../src/lib/integrations/mailbox-sync-provider';
 import {MailboxProviderError, type MailboxTransport} from '../src/lib/integrations/mailbox-provider';
 
 const inbox='synthetic-inbox-id';
@@ -40,4 +40,60 @@ test('Google label behavior is unchanged and does not require a Microsoft inbox 
  const gmail=(labels:string[])=>({id:messageId,internalDate:'1795608000000',labelIds:labels,payload:{headers:[]}});
  assert.equal((await fetchMailboxMetadata('google','SYNTHETIC',messageId,async()=>respond(gmail(['INBOX']))))?.inInbox,true);
  assert.equal((await fetchMailboxMetadata('google','SYNTHETIC',messageId,async()=>respond(gmail([]))))?.inInbox,false);
+});
+
+test('automatic Microsoft reads use only Inbox-scoped detail and attachment routes',async()=>{
+ const paths:string[]=[];
+ const scoped=`/v1.0/me/mailFolders/${inbox}/messages/${messageId}`;
+ const transport:MailboxTransport=async(url,request)=>{
+  const path=new URL(url).pathname;
+  paths.push(path);
+  assert.match(new Headers(request.headers).get('Prefer')??'',/IdType="ImmutableId"/);
+  if(path===scoped)return respond({...message(inbox),body:{contentType:'text',content:'Synthetic body'},hasAttachments:true});
+  assert.equal(path,`${scoped}/attachments`);
+  return respond({value:[{id:'synthetic-attachment',name:'synthetic.txt',contentType:'text/plain',size:10,isInline:false}]});
+ };
+ const content=await fetchMailboxKnownContent('microsoft','SYNTHETIC',messageId,transport,inbox);
+ assert.equal(content.bodyText,'Synthetic body');
+ assert.equal(content.attachments.length,1);
+ assert.deepEqual(paths,[scoped,`${scoped}/attachments`]);
+});
+
+test('automatic Microsoft does not return content for a message moved during a read',async()=>{
+ const scoped=`/v1.0/me/mailFolders/${inbox}/messages/${messageId}`;
+ const paths:string[]=[];
+ const moved:MailboxTransport=async(url)=>{
+  const path=new URL(url).pathname;
+  paths.push(path);
+  if(path===`/v1.0/me/messages/${messageId}`)return respond(message(inbox));
+  assert.equal(path,scoped);
+  return new Response('{}',{status:404});
+ };
+ assert.equal((await fetchMailboxMetadata('microsoft','SYNTHETIC',messageId,moved,inbox))?.inInbox,true);
+ await assert.rejects(fetchMailboxKnownContent('microsoft','SYNTHETIC',messageId,moved,inbox),/MAIL_MICROSOFT_DETAIL_CHANGED/);
+ assert.deepEqual(paths,[`/v1.0/me/messages/${messageId}`,scoped]);
+
+ const attachmentMoved:MailboxTransport=async(url)=>{
+  const path=new URL(url).pathname;
+  if(path===scoped)return respond({...message(inbox),hasAttachments:true});
+  assert.equal(path,`${scoped}/attachments`);
+  return new Response('{}',{status:404});
+ };
+ await assert.rejects(fetchMailboxKnownContent('microsoft','SYNTHETIC',messageId,attachmentMoved,inbox),/MAIL_MICROSOFT_DETAIL_CHANGED/);
+});
+
+test('automatic Microsoft rejects an unexpected detail folder or message before attachment access',async()=>{
+ for(const [detail,error] of [
+  [{...message('synthetic-archive-id'),hasAttachments:true},/MAIL_INVALID_FOLDER_ID/],
+  [{...message(inbox),id:'another-message',hasAttachments:true},/MAIL_MICROSOFT_DETAIL_CHANGED/],
+ ] as const){
+  let calls=0;
+  const transport:MailboxTransport=async()=>{calls++;return respond(detail);};
+  await assert.rejects(fetchMailboxKnownContent('microsoft','SYNTHETIC',messageId,transport,inbox),error);
+  assert.equal(calls,1);
+ }
+ let calls=0;
+ const transport:MailboxTransport=async()=>{calls++;return respond(message(inbox));};
+ for(const invalid of [undefined,'..','has space'])await assert.rejects(fetchMailboxKnownContent('microsoft','SYNTHETIC',messageId,transport,invalid),invalidFolder);
+ assert.equal(calls,0);
 });

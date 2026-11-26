@@ -1,7 +1,7 @@
 import "server-only";
 import { mailboxAddress, mailboxCursor, mailboxProviderId, mailboxText, type MailboxImportedMessage, type MailboxProvider } from "../crm-mailbox";
 import { assertMicrosoftMailboxCheckpoint, MailboxCheckpointReviewRequired, mailboxDeltaContinuationUrl, mailboxDeltaUrl, mailboxSyncPosition, type MailboxMetadata, type MailboxSyncCheckpoint, type MailboxSyncChange } from "../crm-mailbox-sync";
-import { assertGmailInboxDetail, gmailMessageLabels, mailboxProviderJson, MailboxProviderError, parseGoogleMailboxMessage, parseMicrosoftMailboxMessage, type MailboxTransport } from "./mailbox-provider";
+import { assertGmailInboxDetail, fetchMicrosoftInboxContent, gmailMessageLabels, mailboxProviderJson, MailboxProviderError, parseGoogleMailboxMessage, type MailboxTransport } from "./mailbox-provider";
 const defaultTransport: MailboxTransport = (url, init) => fetch(url, init);
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
 function rows(v: unknown, max = 5000) { if (v === undefined) return []; if (!Array.isArray(v) || v.length > max) throw new MailboxProviderError("MAIL_INVALID_RESPONSE"); return v.map(obj); }
@@ -72,15 +72,25 @@ export async function fetchMailboxMetadata(provider: MailboxProvider, token: str
   const timestamp = provider === "google" ? Number(raw.internalDate) : Date.parse(String(raw.receivedDateTime)); if (!Number.isFinite(timestamp)) throw new MailboxProviderError("MAIL_INVALID_DATE");
   return { providerId: mailboxProviderId(raw.id), threadId: typeof (raw.threadId || raw.conversationId) === "string" ? String(raw.threadId || raw.conversationId) : null, internetMessageId: provider === "google" ? header("message-id") || null : mailboxText(raw.internetMessageId, 2000) || null, inReplyTo: header("in-reply-to") || null, references: (header("references").match(/<[^<>\s]+>/g) || []).slice(0, 50), fromAddress, toAddresses, participants: [...new Set([...(fromAddress ? [fromAddress] : []), ...toAddresses, ...cc])].sort(), subject: mailboxText(provider === "google" ? header("subject") : raw.subject, 1000), receivedAt: new Date(timestamp).toISOString(), inInbox: provider === "google" ? googleLabels!.includes('INBOX') : microsoftInInbox };
 }
-export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport): Promise<MailboxImportedMessage> {
-  const encoded = encodeURIComponent(mailboxProviderId(id)), google = provider === "google";
+export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string): Promise<MailboxImportedMessage> {
+  if (provider === "microsoft") {
+    try {
+      return await fetchMicrosoftInboxContent({ accessToken: token, inboxId, messageId: id, immutableIds: true }, transport);
+    } catch (error) {
+      // A concurrent move can make the detail or attachment route go away.
+      // Keep the queued observation so the next run can check its new location.
+      if (error instanceof MailboxProviderError && (error.status === 404 || error.status === 410 || error.code === "MAIL_MESSAGE_ID_CHANGED")) {
+        throw new MailboxProviderError("MAIL_MICROSOFT_DETAIL_CHANGED");
+      }
+      throw error;
+    }
+  }
+  const encoded = encodeURIComponent(mailboxProviderId(id));
   let raw: Record<string, unknown>;
-  try { raw = await mailboxProviderJson(google ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encoded}?format=full` : `https://graph.microsoft.com/v1.0/me/messages/${encoded}?$select=${metadataSelect},body,bodyPreview,hasAttachments`, { headers: { ...auth(token, !google), ...(!google ? { Prefer: 'IdType="ImmutableId", outlook.body-content-type="text"' } : {}) } }, transport); }
-  catch (error) { if (google && error instanceof MailboxProviderError && (error.status === 404 || error.status === 410)) throw new MailboxProviderError("MAIL_GMAIL_DETAIL_CHANGED"); if (google && !(error instanceof MailboxProviderError)) throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE"); throw error; }
-  if (google) { assertGmailInboxDetail(raw, id); return parseGoogleMailboxMessage(raw); }
-  const attachments = raw.hasAttachments === true ? await mailboxProviderJson(`https://graph.microsoft.com/v1.0/me/messages/${encoded}/attachments?$select=id,name,contentType,size,isInline&$top=50`, { headers: auth(token, true) }, transport) : null;
-  if (attachments?.["@odata.nextLink"]) throw new MailboxProviderError("MAIL_TOO_MANY_ATTACHMENTS");
-  return parseMicrosoftMailboxMessage(raw, attachments ? rows(attachments.value, 50) : []);
+  try { raw = await mailboxProviderJson(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encoded}?format=full`, { headers: auth(token) }, transport); }
+  catch (error) { if (error instanceof MailboxProviderError && (error.status === 404 || error.status === 410)) throw new MailboxProviderError("MAIL_GMAIL_DETAIL_CHANGED"); if (!(error instanceof MailboxProviderError)) throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE"); throw error; }
+  assertGmailInboxDetail(raw, id);
+  return parseGoogleMailboxMessage(raw);
 }
 export async function translateMailboxLegacyIds(token: string, ids: string[], transport = defaultTransport) {
   if (!ids.length || ids.length > 20) throw new MailboxProviderError("MAIL_INVALID_ID_BATCH");

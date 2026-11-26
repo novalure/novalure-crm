@@ -64,6 +64,6 @@ test("a small, valid but highly fragmented Microsoft reply remains retryable", a
       else controller.enqueue(data.subarray(offset, ++offset));
     },
   }));
-  await assert.rejects(fetchMailboxKnownContent("microsoft", "synthetic", "item", transport),
+  await assert.rejects(fetchMailboxKnownContent("microsoft", "synthetic", "item", transport, "synthetic-inbox"),
     (error: unknown) => error instanceof MailboxProviderError && error.code === "MAIL_PROVIDER_UNAVAILABLE");
 });

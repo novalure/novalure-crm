@@ -100,6 +100,26 @@ export function parseMicrosoftMailboxMessage(raw: Record<string, unknown>, attac
   const completeText = plain && bodyContent !== null && !(!hasVisibleText(cleanedBody) && hasVisibleText(preview)), content = completeText ? cleanedBody : preview;
   return { providerId: mailboxProviderId(raw.id), threadId: typeof raw.conversationId === "string" ? mailboxProviderId(raw.conversationId) : null, internetMessageId: mailboxText(raw.internetMessageId, 2000) || null, subject: mailboxText(raw.subject, 1000), fromLabel: mailboxText(from.name || from.address, 1000), fromAddress: mailboxAddress(from.address), toAddresses: (Array.isArray(raw.toRecipients) ? raw.toRecipients.slice(0, 50) : []).map((item) => mailboxAddress(object(object(item).emailAddress).address)).filter((value): value is string => value !== null), receivedAt: received(raw.receivedDateTime), bodyText: content, bodyTruncated: !completeText || (bodyContent?.length ?? 0) > 65536, attachments: attachmentRows.slice(0, 50).map((row) => { const item = object(row); return metadataAttachment(item, item.id, item.name, item.contentType, item.size); }), senderIdentityVerified: false };
 }
+
+export async function fetchMicrosoftInboxContent(input: { accessToken: string; inboxId: unknown; messageId: string; immutableIds?: boolean }, transport: MailboxTransport = defaultTransport) {
+  let inboxId: string;
+  try {
+    inboxId = mailboxProviderId(input.inboxId);
+    if (inboxId === "." || inboxId === "..") throw new Error();
+  } catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
+  const messageId = mailboxProviderId(input.messageId);
+  if (messageId === "." || messageId === "..") throw new MailboxProviderError("MAIL_INVALID_MESSAGE");
+  const auth = { ...headers(input.accessToken), ...(input.immutableIds ? { Prefer: 'IdType="ImmutableId"' } : {}) };
+  const url = `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(inboxId)}/messages/${encodeURIComponent(messageId)}`;
+  const detail = await json(`${url}?$select=id,parentFolderId,conversationId,internetMessageId,subject,from,toRecipients,receivedDateTime,body,bodyPreview,hasAttachments`, { headers: { ...auth, Prefer: `${input.immutableIds ? 'IdType="ImmutableId", ' : ''}outlook.body-content-type="text"` } }, transport);
+  try { if (mailboxProviderId(detail.id) !== messageId) throw new Error(); } catch { throw new MailboxProviderError("MAIL_MESSAGE_ID_CHANGED"); }
+  let folderId: string;
+  try { folderId = mailboxProviderId(detail.parentFolderId); } catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
+  if (folderId !== inboxId) throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID");
+  const attachments = detail.hasAttachments === true ? await json(`${url}/attachments?$select=id,name,contentType,size,isInline&$top=50`, { headers: auth }, transport) : null;
+  if (attachments?.["@odata.nextLink"]) throw new MailboxProviderError("MAIL_TOO_MANY_ATTACHMENTS");
+  return parseMicrosoftMailboxMessage(detail, attachments ? array(attachments.value, 50) : []);
+}
 export async function fetchMailboxPage(input: { provider: MailboxProvider; accessToken: string; grantedScopes: string[]; cursor: string | null; immutableIds?: boolean }, transport: MailboxTransport = defaultTransport) {
   if (!hasMailboxReadScope(input.provider, input.grantedScopes)) throw new MailboxProviderError("MAIL_SCOPE_REQUIRED");
   const auth = { ...headers(input.accessToken), ...(input.immutableIds ? { Prefer: 'IdType="ImmutableId"' } : {}) };
@@ -139,17 +159,7 @@ export async function fetchMailboxPage(input: { provider: MailboxProvider; acces
   const messages: MailboxImportedMessage[] = [];
   for (const row of rows) {
     const listedId = mailboxProviderId(object(row).id);
-    if (listedId === "." || listedId === "..") throw new MailboxProviderError("MAIL_INVALID_MESSAGE");
-    const id = encodeURIComponent(listedId);
-    const messageUrl = `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(inboxId)}/messages/${id}`;
-    const detail = await json(`${messageUrl}?$select=id,parentFolderId,conversationId,internetMessageId,subject,from,toRecipients,receivedDateTime,body,bodyPreview,hasAttachments`, { headers: { ...auth, Prefer: `${input.immutableIds ? 'IdType="ImmutableId", ' : ''}outlook.body-content-type="text"` } }, transport);
-    try { if (mailboxProviderId(detail.id) !== listedId) throw new Error(); } catch { throw new MailboxProviderError("MAIL_MESSAGE_ID_CHANGED"); }
-    let folderId: string;
-    try { folderId = mailboxProviderId(detail.parentFolderId); } catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
-    if (folderId !== inboxId) throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID");
-    const attachmentResponse = detail.hasAttachments === true ? await json(`${messageUrl}/attachments?$select=id,name,contentType,size,isInline&$top=50`, { headers: auth }, transport) : null;
-    if (attachmentResponse?.["@odata.nextLink"]) throw new MailboxProviderError("MAIL_TOO_MANY_ATTACHMENTS");
-    messages.push(parseMicrosoftMailboxMessage(detail, attachmentResponse ? array(attachmentResponse.value, 50) : []));
+    messages.push(await fetchMicrosoftInboxContent({ accessToken: input.accessToken, inboxId, messageId: listedId, immutableIds: input.immutableIds }, transport));
   }
   return { messages, nextCursor, verifiedInboxId: inboxId };
 }
