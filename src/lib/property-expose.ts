@@ -88,3 +88,10 @@ export type PropertyExposeDocument = {
 export const PROPERTY_EXPOSE_MAX_PDF_BYTES = 10 * 1024 * 1024;
 export const PROPERTY_EXPOSE_MAX_IMAGES = 20;
 export const PROPERTY_EXPOSE_MAX_FLOORPLANS = 8;
+
+/** Keep the user's existing ordering and add remaining eligible photos up to the PDF limit. */
+export function selectPropertyExposePhotos(media: PropertyExposeMediaChoice[], selected: string[], maximum = PROPERTY_EXPOSE_MAX_IMAGES): string[] {
+  const photos = media.filter((item) => item.kind === "image");
+  const available = new Set(photos.map((item) => item.id));
+  return Array.from(new Set([...selected.filter((id) => available.has(id)), ...photos.map((item) => item.id)])).slice(0, maximum);
+}

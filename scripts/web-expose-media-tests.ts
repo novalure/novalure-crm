@@ -5,20 +5,22 @@ import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { PDFDocument } from "pdf-lib";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 import { withCrmRead, type TenantTransaction } from "../src/lib/crm-command";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import type { AppSession } from "../src/lib/auth/session";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
-import { createSellerListingRecord } from "../src/lib/db/property-department-repositories";
+import { attachPropertyDocument, attachPropertyMedia, createSellerListingRecord } from "../src/lib/db/property-department-repositories";
 import { buildWebExposeSnapshot, publishWebExpose, webExposeHash, type WebExposePublishInput } from "../src/lib/db/web-expose-repository";
 import { createPropertyGeography } from "../src/lib/property-country";
 import { normalizeWebExposeResourceUrl, parseWebExposeResourceInput, type WebExposeResource } from "../src/lib/web-expose-media";
 import { readWebExposeUploadForm, validateWebExposeUpload, validateWebExposeVideoContent } from "../src/lib/web-expose-media-validation";
 import { archiveWebExposeResource, getWebExposeResourceFile, loadWebExposeMedia, saveWebExposeResource, uploadWebExposeResource } from "../src/lib/web-expose-media-repository";
-import { getPrivateMediaBlobToken, mediaAssetPath, saveLeadProofFile, type MediaAsset } from "../src/lib/media-store";
+import { getPrivateMediaBlobToken, mediaAssetPath, saveLeadProofFile, saveWorkspaceFile, type MediaAsset } from "../src/lib/media-store";
 import { deleteDatabaseMedia } from "../src/lib/media-lifecycle";
+import { getPropertyExposeState, mutatePropertyExpose, readPropertyExposePdf } from "../src/lib/property-expose-service";
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC", "base64");
 const linkInput = { kind: "external_link", assetId: null, url: "https://example.invalid/property-tour", title: "Synthetic tour", position: 0, visibility: "private", status: "draft" };
@@ -78,6 +80,49 @@ test("resource upload, review, private preview and public revocation are real sc
       const asset = (await db.admin.query('select id,workspace_id as "workspaceId",relative_path as "relativePath",storage_provider as "storageProvider" from media_assets where id=$1', [assetId])).rows[0] as MediaAsset;
       const file = mediaAssetPath(asset); assert.ok(file.startsWith(path.resolve(".data/media/uploads") + path.sep)); files.push(file);
     };
+    await t.test("separately uploaded private floor plans appear in property PDF without exposing another project", async () => {
+      const image = await run((_tx, scoped) => saveWorkspaceFile({ workspaceId: scoped.workspaceId, folder: `properties/${propertyId}`,
+        file: new File([Uint8Array.from(png)], "synthetic-plan.png", { type: "image/png" }) }));
+      await registerFile(image.id);
+      const attached = await run((_tx, scoped) => attachPropertyMedia({ session: scoped, propertyId, projectId,
+        media: { mediaAssetId: image.id, category: "floorplan", mediaType: "floorplan", title: "Synthetic floor plan", visibility: "private", status: "draft", isCover: false } }));
+      assert.equal(attached.persisted, true);
+      if (!attached.persisted) return;
+      const state = await run((_tx, scoped) => getPropertyExposeState(scoped, propertyId));
+      assert.ok(state.media.some(item => item.id === attached.data.id && item.kind === "floorplan"));
+      const generated = await run((_tx, scoped) => mutatePropertyExpose(scoped, { operation: "generate", propertyId, expectedRevision: state.revision, confirmed: true,
+        options: { ...state.defaultOptions, template: "full", address: "full", showPrice: false, floorPlanIds: [attached.data.id] } }));
+      assert.ok(generated.documentId);
+      const generatedPdf = await run((_tx, scoped) => readPropertyExposePdf(scoped, propertyId, generated.documentId!));
+      assert.ok(generatedPdf.bytes.length > 0); await registerFile(generatedPdf.version.assetId);
+      const rawPlan = await PDFDocument.create(); rawPlan.addPage([200, 200]).drawText("SYNTHETIC FLOOR PLAN", { x: 10, y: 100, size: 10 }); const planBytes = await rawPlan.save();
+      const pdf = await run((_tx, scoped) => saveWorkspaceFile({ workspaceId: scoped.workspaceId, folder: `properties/${propertyId}`,
+        file: new File([Uint8Array.from(planBytes)], "synthetic-plan.pdf", { type: "application/pdf" }) }));
+      await registerFile(pdf.id);
+      const document = await run((_tx, scoped) => attachPropertyDocument({ session: scoped, propertyId, projectId,
+        document: { mediaAssetId: pdf.id, category: "floorplan", title: "Synthetic PDF plan", visibility: "private", status: "needs_review", requiredForPublication: false } }));
+      assert.equal(document.persisted, true);
+      if (!document.persisted) return;
+      const updated = await run((_tx, scoped) => getPropertyExposeState(scoped, propertyId));
+      assert.ok(updated.media.some(item => item.id === `document:${document.data.id}` && item.kind === "floorplan"));
+      await assert.rejects(run((_tx, scoped) => mutatePropertyExpose(scoped, { operation: "generate", propertyId, expectedRevision: updated.revision, confirmed: true,
+        options: { ...updated.defaultOptions, template: "full", address: "city", showPrice: false, floorPlanIds: [`document:${document.data.id}`] } })), { code: "EXPOSE_FLOORPLAN_ADDRESS_REVIEW" });
+      const withPlan = await run((_tx, scoped) => mutatePropertyExpose(scoped, { operation: "generate", propertyId, expectedRevision: updated.revision, confirmed: true,
+        options: { ...updated.defaultOptions, template: "full", address: "full", showPrice: false, floorPlanIds: [`document:${document.data.id}`] } }));
+      assert.ok(withPlan.documentId);
+      const pdfWithPlan = await run((_tx, scoped) => readPropertyExposePdf(scoped, propertyId, withPlan.documentId!));
+      await registerFile(pdfWithPlan.version.assetId);
+      const parsed = await getDocument({ data: Uint8Array.from(pdfWithPlan.bytes), useSystemFonts: true }).promise;
+      const content: string[] = [];
+      for (let page = 1; page <= parsed.numPages; page++) {
+        const text = await (await parsed.getPage(page)).getTextContent();
+        content.push(text.items.map(item => "str" in item ? item.str : "").join(" "));
+      }
+      assert.match(content.join(" "), /SYNTHETIC FLOOR PLAN/);
+      const hidden = await run((_tx, scoped) => createSellerListingRecord({ session: scoped, property: { title: "SYNTHETIC hidden property", address: "Synthetic street 2", region: "Wien", geography: createPropertyGeography("AT", "Wien"), areaSqm: 80, rooms: 3, yearBuilt: 2000, price: 100000, usageType: "residential", objectType: "Wohnung", projectId: hiddenProject } }));
+      assert.equal(hidden.persisted, true);
+      if (hidden.persisted) await assert.rejects(run((_tx, scoped) => getPropertyExposeState(scoped, hidden.data.id), viewer));
+    });
     await t.test("direct upload saves private bytes and idempotent replay returns the same resource", async () => {
       const input = { propertyId, kind: "image" as const, title: "Synthetic image caption", file: new File([Uint8Array.from(png)], "synthetic.png", { type: "image/png" }), idempotencyKey: randomUUID(), correlationId: randomUUID() };
       const result = await uploadWebExposeResource(session, input, options); uploaded = result.data; assert.ok(uploaded.assetId); await registerFile(uploaded.assetId!);

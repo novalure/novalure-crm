@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const propertyId = assertCrmUuid(b.propertyId, "propertyId");
     if (!canWritePropertyExpose(auth.session)) throw new CrmCommandError("FORBIDDEN", "Veröffentlichungsrecht fehlt", 403);
     if (action === "preview") {
-      const built = await withCrmRead(auth.session, (tx, s) => buildWebExposeSnapshot(tx, s, parseWebExposePublishInput(b)));
+      const built = await withCrmRead(auth.session, (tx, s) => buildWebExposeSnapshot(tx, s, parseWebExposePublishInput(b), { privatePreview: true }));
       return Response.json({ data: built, preview: true, tracked: false }, { headers });
     }
     const metadata = crmRequestMetadata(request, b);

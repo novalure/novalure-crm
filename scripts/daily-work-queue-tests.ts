@@ -10,6 +10,11 @@ function input(){return {workspaceId:'workspace',projectId:'project',contacts:[{
 test('low-score new enquiries retain first priority, exact lead context, source and resolved owner',()=>{
  const queue=buildDailyWorkQueue(input());assert.equal(queue[0].kind,'newLead');assert.equal(queue[0].leadId,'lead');assert.equal(queue[0].owner,'Synthetic owner');assert.equal(queue[0].source,'Website');assert.equal(queue[0].title,'Synthetic contact');
 });
+test('known CRM defaults follow the display language while custom text stays unchanged',()=>{
+ const base={...input(),contacts:[],language:'en' as const};base.leads=[{...lead,intent:'Verkaufsabsicht in 3 Monaten',nextAction:'Rückruf heute'}];
+ const shown=buildDailyWorkQueue(base)[0];assert.equal(shown.title,'Selling intent within 3 months');assert.ok(shown.meta.includes('Callback today'));
+ base.leads=[{...lead,intent:'User-entered intent',nextAction:'Custom follow-up'}];const custom=buildDailyWorkQueue(base)[0];assert.equal(custom.title,'User-entered intent');assert.ok(custom.meta.includes('Custom follow-up'));
+});
 test('callback classification is explicit and only due callbacks enter the daily callback count',()=>{
  const base=input();assert.equal(buildDailyWorkQueue(base).find(item=>item.id==='task:task')?.kind,'task');
  base.tasks=[{...task,actionType:'callback'}];assert.equal(buildDailyWorkQueue(base).find(item=>item.id==='task:task')?.kind,'callback');

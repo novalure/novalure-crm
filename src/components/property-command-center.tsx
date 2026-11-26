@@ -60,6 +60,8 @@ import { GuidedPropertyCreateWorkspace } from "@/components/guided-property-crea
 import type { PropertyInquiryState } from "@/lib/property-inquiries";
 import { PropertyExposeWorkspace } from "@/components/property-expose-workspace";
 import { createPropertyDraftStore } from "@/lib/property-draft-store";
+import { classifyPropertyUploadResponse, isConfirmedPropertyAttachment, PropertyUploadError, shouldSetPropertyCover, uploadPropertyBatch } from "@/lib/property-batch-upload";
+import { preparePropertyUploadFile } from "@/lib/property-upload-preparation";
 import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
 import { createPropertyGeography, type PropertyGeography } from "@/lib/property-country";
 import { PropertyGeographyFields } from "@/components/property-geography-fields";
@@ -371,6 +373,7 @@ export function PropertyCommandCenter({
   const [saving, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaUploadProgress, setMediaUploadProgress] = useState<{ completed: number; total: number; propertyLabel: string } | null>(null);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [editingRelationshipListingId, setEditingRelationshipListingId] = useState<string | null>(null);
   const [workflowDraftStore] = useState(createPropertyDraftStore);
@@ -561,56 +564,106 @@ export function PropertyCommandCenter({
     }
   }
 
-  async function uploadAndAttachFile(file: File, kind: "media" | "document") {
-    if (!selectedAsset?.sellerListingId || saving || !workflowCapabilities.canEditProperty) return;
+  async function uploadAndAttachFiles(files: File[], kind: "media" | "document" | "floorplan") {
+    if (!selectedAsset?.sellerListingId || saving || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty) return;
+    const propertyLabel = [selectedAsset.title, selectedAsset.location].filter(Boolean).join(" – ");
     const setUploading = kind === "media" ? setUploadingMedia : setUploadingDocument;
     setUploading(true);
     setNotice(null);
+    if (kind === "media") setMediaUploadProgress({ completed: 0, total: files.length, propertyLabel });
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", `properties/${selectedAsset.sellerListingId}`);
-      formData.append("name", file.name);
-      formData.append("alt", file.name.replace(/\.[^.]+$/, ""));
-      formData.append("public", "false");
-      const uploadResponse = await csrfFetch(`/api/media?${new URLSearchParams({ workspaceId: context.workspaceId })}`, { body: formData, method: "POST" });
-      const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
-      if (!uploadResponse.ok || !uploadPayload.asset?.id) {
-        throw new Error(typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed);
-      }
-      await postPropertyOperation(kind === "media" ? {
-        media: {
-          category: file.type.startsWith("image/") ? "gallery" : "document",
-          isCover: selectedMedia.length === 0,
-          mediaAssetId: uploadPayload.asset.id,
-          mediaType: file.type.startsWith("image/") ? "image" : "document",
-          position: selectedMedia.length,
-          status: "draft",
-          title: file.name,
-          visibility: "private",
-        },
-        operation: "attach_media",
-        projectId: selectedAsset.projectId,
-        propertyId: selectedAsset.sellerListingId,
-      } : {
-        document: {
-          category: "expose",
-          mediaAssetId: uploadPayload.asset.id,
-          requiredForPublication: false,
-          status: "needs_review",
-          title: file.name,
-          visibility: "private",
-        },
-        operation: "attach_document",
-        projectId: selectedAsset.projectId,
-        propertyId: selectedAsset.sellerListingId,
+      const result = await uploadPropertyBatch(files, async (file, attachedCount) => {
+        const preparedFile = await preparePropertyUploadFile(file, kind);
+        const floorplanImage = kind === "floorplan" && ["image/jpeg", "image/png", "image/webp"].includes(preparedFile.type.toLowerCase());
+        if (kind === "floorplan" && !floorplanImage && preparedFile.type.toLowerCase() !== "application/pdf") {
+          throw new PropertyUploadError(language === "de" ? "Grundriss als JPEG, PNG, WebP oder PDF auswählen." : "Select a floor plan in JPEG, PNG, WebP or PDF format.", true);
+        }
+        const formData = new FormData();
+        formData.append("file", preparedFile);
+        formData.append("folder", `properties/${selectedAsset.sellerListingId}`);
+        formData.append("name", preparedFile.name);
+        formData.append("alt", preparedFile.name.replace(/\.[^.]+$/, ""));
+        formData.append("public", "false");
+        let uploadResponse: Response;
+        try {
+          uploadResponse = await csrfFetch(`/api/media?${new URLSearchParams({ workspaceId: context.workspaceId })}`, { body: formData, method: "POST" });
+        } catch {
+          throw new PropertyUploadError(language === "de"
+            ? "Verbindung unterbrochen; Speicherstatus dieser Datei ist unbekannt. Bitte vor erneutem Hochladen prüfen."
+            : "Connection lost; the storage status of this file is unknown. Check before uploading it again.", true);
+        }
+        const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
+        const uploadState = classifyPropertyUploadResponse(uploadResponse.status, uploadPayload.asset?.id, uploadPayload.code);
+        if (uploadState !== "confirmed") {
+          throw new PropertyUploadError(
+            uploadState === "uncertain" ? (language === "de"
+              ? "Speicherstatus dieser Datei ist unbekannt. Bitte vor erneutem Hochladen prüfen."
+              : "The storage status of this file is unknown. Check before uploading it again.")
+              : typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed,
+            uploadState !== "continue",
+          );
+        }
+        try {
+          const attachment = await postPropertyOperation(kind === "media" || floorplanImage ? {
+            media: {
+              category: floorplanImage ? "floorplan" : "gallery",
+              isCover: shouldSetPropertyCover(selectedMedia, floorplanImage, attachedCount),
+              mediaAssetId: uploadPayload.asset.id,
+              mediaType: floorplanImage ? "floorplan" : "image",
+              position: selectedMedia.length + attachedCount,
+              status: "draft",
+              title: preparedFile.name,
+              visibility: "private",
+            },
+            operation: "attach_media",
+            projectId: selectedAsset.projectId,
+            propertyId: selectedAsset.sellerListingId,
+          } : {
+            document: {
+              category: kind === "floorplan" ? "floorplan" : "expose",
+              mediaAssetId: uploadPayload.asset.id,
+              requiredForPublication: false,
+              status: "needs_review",
+              title: preparedFile.name,
+              visibility: "private",
+            },
+            operation: "attach_document",
+            projectId: selectedAsset.projectId,
+            propertyId: selectedAsset.sellerListingId,
+          });
+          if (!isConfirmedPropertyAttachment(attachment)) throw new Error(language === "de" ? "Keine bestätigte Zuordnung erhalten." : "No confirmed attachment was returned.");
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : copy.notices.uploadSaveFailed;
+          throw new PropertyUploadError(language === "de"
+            ? `Datei im Medienspeicher, aber nicht sicher dem Objekt zugeordnet: ${reason}`
+            : `File stored, but not confirmed as attached to the property: ${reason}`, true);
+        }
+      }, (completed, total) => {
+        if (kind === "media") setMediaUploadProgress({ completed, total, propertyLabel });
       });
-      setNotice({ kind: "success", message: kind === "media" ? copy.notices.mediaAttached : copy.notices.documentAttached });
-      await onPropertyChanged?.();
+      let refreshFailed = false;
+      if (result.attached > 0) {
+        try { await onPropertyChanged?.(); } catch { refreshFailed = true; }
+      }
+      if (result.failures.length || result.notAttempted || refreshFailed) {
+        const failures = result.failures.map(({ file, message }) => `${file.name}: ${message}`).join("; ");
+        const summary = language === "de"
+          ? `${result.attached} von ${files.length} Dateien zugeordnet. ${result.notAttempted ? `${result.notAttempted} nicht versucht. ` : ""}${refreshFailed ? "Aktualisierung der Anzeige fehlgeschlagen. " : ""}`
+          : `${result.attached} of ${files.length} files attached. ${result.notAttempted ? `${result.notAttempted} not attempted. ` : ""}${refreshFailed ? "Refreshing the view failed. " : ""}`;
+        setNotice({ kind: "error", message: `${propertyLabel}: ${summary}${failures}` });
+      } else {
+        const message = kind === "floorplan"
+          ? (language === "de" ? "Grundriss wurde privat am Objekt gespeichert. Im PDF-Exposé kann er ausgewählt werden." : "Floor plan saved privately with the property. It can be selected for the PDF brochure.")
+          : kind === "media" && files.length > 1
+          ? (language === "de" ? `${result.attached} Bilder wurden dem Objekt zugeordnet.` : `${result.attached} images were attached to the property.`)
+          : kind === "media" ? copy.notices.mediaAttached : copy.notices.documentAttached;
+        setNotice({ kind: "success", message: `${propertyLabel}: ${message}` });
+      }
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.uploadSaveFailed });
+      setNotice({ kind: "error", message: `${propertyLabel}: ${error instanceof Error ? error.message : copy.notices.uploadSaveFailed}` });
     } finally {
       setUploading(false);
+      if (kind === "media") setMediaUploadProgress(null);
     }
   }
 
@@ -1407,12 +1460,13 @@ export function PropertyCommandCenter({
               <label className="cursor-pointer rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50">
                 {uploadingMedia ? copy.subviews.uploading : copy.subviews.uploadImage}
                 <input
-                  accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
+                  accept="image/avif,image/gif,image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || !workflowCapabilities.canEditProperty}
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty}
+                  multiple
                   onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void uploadAndAttachFile(file, "media");
+                    const files = Array.from(event.target.files ?? []);
+                    if (files.length) void uploadAndAttachFiles(files, "media");
                     event.currentTarget.value = "";
                   }}
                   type="file"
@@ -1423,10 +1477,24 @@ export function PropertyCommandCenter({
                 <input
                   accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingDocument || !workflowCapabilities.canEditProperty}
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file) void uploadAndAttachFile(file, "document");
+                    if (file) void uploadAndAttachFiles([file], "document");
+                    event.currentTarget.value = "";
+                  }}
+                  type="file"
+                />
+              </label>
+              <label className="cursor-pointer rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50">
+                {uploadingDocument ? copy.subviews.uploading : (language === "de" ? "Grundriss hochladen" : "Upload floor plan")}
+                <input
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf"
+                  className="sr-only"
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadAndAttachFiles([file], "floorplan");
                     event.currentTarget.value = "";
                   }}
                   type="file"
@@ -1434,6 +1502,8 @@ export function PropertyCommandCenter({
               </label>
             </div>
           </div>
+          <p className="mt-2 text-xs text-stone-600">{language === "de" ? "HEIC/HEIF bis 10 MB und 40 Megapixel wird vor dem Upload auf deinem Gerät in JPEG umgewandelt. " : "HEIC/HEIF up to 10 MB and 40 megapixels is converted to JPEG on your device before upload. "}<a className="underline" href="/third-party/heic-decoder/NOTICE.txt" target="_blank" rel="noreferrer">{language === "de" ? "Softwarelizenzen" : "Software licences"}</a></p>
+          {mediaUploadProgress ? <p aria-live="polite" role="status" className="mt-3 text-sm text-stone-600">{mediaUploadProgress.propertyLabel}: {language === "de" ? `Bilder verarbeitet: ${mediaUploadProgress.completed} / ${mediaUploadProgress.total}` : `Images processed: ${mediaUploadProgress.completed} / ${mediaUploadProgress.total}`}</p> : null}
           {notice ? <p aria-atomic="true" className={`mt-3 text-sm font-semibold ${notice.kind === "success" ? "text-emerald-800" : "text-rose-800"}`}
             role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</p> : null}
           {selectedListing ? (

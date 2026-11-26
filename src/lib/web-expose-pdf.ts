@@ -15,7 +15,7 @@ import {webExposeSnapshotTemplate,webExposeTemplateSections} from '@/lib/web-exp
 
 const PAGE={width:595.28,height:841.89,margin:44,top:88,bottom:778},WIDTH=507.28;
 const COLOR={paper:'#faf9f7',ink:'#292a26',muted:'#66685f',line:'#e3e2db',accent:'#f5df79',white:'#ffffff',link:'#205c59'};
-const MAX_ASSET_BYTES=10*1024*1024,MAX_INPUT_BYTES=80*1024*1024,MAX_OUTPUT_BYTES=30*1024*1024;
+const MAX_ASSET_BYTES=10*1024*1024,MAX_INPUT_BYTES=80*1024*1024,MAX_OUTPUT_BYTES=30*1024*1024,MAX_PDF_PHOTOS=20;
 const copy={
  de:{eyebrow:'IMMOBILIENEXPOSÉ',energy:'Energie & Gebäude',contact:'Ihr Kontakt',documents:'Dokumente',videos:'Videos',links:'Weitere Informationen',number:'Einheit',area:'Fläche',rooms:'Zimmer',price:'Preis',status:'Status',date:'Veröffentlichter Stand',page:'Seite',open:'Online öffnen',map:'Lagekarte öffnen',enquire:'Zur Immobilie anfragen',note:'Angaben und Einheitenstatus entsprechen dem veröffentlichten Stand. Aktuelle Verfügbarkeit bitte beim Anbieter erfragen.',unknown:'Status auf Anfrage'},
  en:{eyebrow:'PROPERTY BROCHURE',energy:'Energy & building',contact:'Your contact',documents:'Documents',videos:'Videos',links:'Further information',number:'Unit',area:'Area',rooms:'Rooms',price:'Price',status:'Status',date:'Published information',page:'Page',open:'Open online',map:'Open location map',enquire:'Enquire about this property',note:'Information and unit status reflect the published version. Please ask the provider for current availability.',unknown:'Status on request'},
@@ -28,7 +28,7 @@ export class WebExposePdfError extends Error {constructor(readonly status:404|50
 export type WebExposePdfImage={id:string;kind:'image'|'floorplan'|'logo'|'letterhead';title:string;bytes:Uint8Array;width:number;height:number};
 export type WebExposePdfPlan={id:string;title:string;bytes:Uint8Array;pageCount:number};
 export type WebExposePdfLink={kind:'document'|'video'|'external_link'|'floorplan';title:string;url:string};
-type RenderInput={snapshot:WebExposeSnapshot;images:WebExposePdfImage[];plans:WebExposePdfPlan[];links:WebExposePdfLink[];pageUrl:string};
+type RenderInput={snapshot:WebExposeSnapshot;images:WebExposePdfImage[];plans:WebExposePdfPlan[];links:WebExposePdfLink[];pageUrl:string;photosOmitted?:boolean};
 type Options={origin?:string;lookup?:(token:string)=>Promise<WebExposePublic|null>;asset?:(token:string,id:string)=>Promise<MediaAsset|null>;read?:(asset:MediaAsset)=>ReturnType<typeof readMediaAssetContent>};
 const defaults={lookup:lookupWebExpose,asset:async(token:string,id:string)=>(await queryOne<{data:MediaAsset|null}>('select crm_web_expose_asset($1,$2::uuid) as data',[webExposeHash(token),id]))?.data??null,read:readMediaAssetContent};
 
@@ -45,7 +45,7 @@ async function boundedBytes(asset:MediaAsset,read:NonNullable<Options['read']>){
 }
 function mediaSignature(data:WebExposePublic){return JSON.stringify({versionId:data.versionId,snapshot:data.snapshot},(key,value)=>key==='inventoryAsOf'?undefined:value);}
 /** Only server-authorized snapshot content enters this document. No URL is fetched by the renderer. */
-export async function renderWebExposePdf({snapshot,images,plans,links,pageUrl}:RenderInput):Promise<Uint8Array>{
+export async function renderWebExposePdf({snapshot,images,plans,links,pageUrl,photosOmitted=false}:RenderInput):Promise<Uint8Array>{
  if(!['de','en','es'].includes(snapshot.language)||!clean(snapshot.title)||!Number.isFinite(Date.parse(snapshot.publishedAt))||snapshot.units.length>200||images.length>130||links.length>130)throw new WebExposePdfError();
  const language=snapshot.language as WebExposeLanguage,c=copy[language],web=webExposeCopy[language];
  const template=webExposeSnapshotTemplate(snapshot),companyName=template?.companyName??'novalure',accentColor=template?.accentColor??COLOR.accent,layout=template?.layout??'classic',grid=template?.imageGrid??1,logo=images.find(i=>i.kind==='logo'),letterhead=images.find(i=>i.kind==='letterhead');
@@ -86,6 +86,7 @@ export async function renderWebExposePdf({snapshot,images,plans,links,pageUrl}:R
    if(showPrices)paragraph(snapshot.price??web.priceRequest,18);
    if(snapshot.inventoryAsOf)paragraph(`${inventoryLabel}: ${inventoryDate}`,9,COLOR.muted);
    const hero=images.find(item=>item.kind==='image');if(hero)image(hero,true);
+   if(photosOmitted)paragraph(language==='de'?'Weitere Bilder findest du im Online-Exposé.':language==='es'?'Encontrará más fotos en el dossier en línea.':'More photos are available in the online brochure.',10,COLOR.link,pageUrl+'#gallery');
    paragraph(c.enquire,11,COLOR.link,pageUrl+'#contact');
    const energyPattern=/energie|energy|energía|energ[eé]tic|hwb|fgee|ber\b|ausweis|certif|rating|energieträger|gültig|valid|válido|ausgestellt|issued|registr|skala|scale|scheme|co2|emiss/i;
    const facts=snapshot.facts.filter(f=>!energyPattern.test(f.label)),energy=snapshot.facts.filter(f=>energyPattern.test(f.label));
@@ -124,24 +125,28 @@ export async function buildPublicWebExposePdf(token:string,options:Options={}){
  const pageUrl=new URL('/expose/'+token,origin).href,snapshot=data.snapshot,images:WebExposePdfImage[]=[],plans:WebExposePdfPlan[]=[],links:WebExposePdfLink[]=[],usedAssets=new Map<string,string>();let inputBytes=0,artworkBytes=0;const deadline=Date.now()+35000;
  const assetSignature=(asset:MediaAsset)=>JSON.stringify([asset.id,asset.workspaceId,asset.folder,asset.mimeType,asset.sizeBytes,asset.relativePath,asset.storageProvider,asset.storageAccess]);
  const candidates=[...snapshot.media.map(item=>({...item,mimeType:null,url:null})),...(snapshot.resources??[]),...(snapshot.template?.brandAssets??[]).map(item=>({id:item.assetId,assetId:item.assetId,kind:item.purpose,title:snapshot.template?.companyName??'Company artwork',url:null}))];
- const seen=new Set<string>();
+ const seen=new Set<string>();let photoCount=0,photosOmitted=false;
  for(const item of candidates){
   if(Date.now()>deadline)throw new WebExposePdfError();
   if(!item.assetId){const url=externalUrl(item.url);if(url&&['document','video','external_link','floorplan'].includes(item.kind))links.push({kind:item.kind as WebExposePdfLink['kind'],title:item.title,url});continue;}
   if(!uuid.test(item.assetId))continue;
+  // Do not fetch or decode extra photos. Floor plans, document links and
+  // branding use their existing separate validation and budgets.
+  if(item.kind==='image'&&!seen.has(item.assetId)&&photoCount>=MAX_PDF_PHOTOS){photosOmitted=true;continue;}
   const asset=await assetLookup(token,item.assetId);if(!asset)continue;
   if(asset.id!==item.assetId||asset.storageAccess!=='private'||asset.isPublic||asset.publicToken||asset.hasActivePublicShare)continue;
   const url=new URL(`/api/public/exposes/${token}/media/${asset.id}`,origin).href;
   if(['document','video'].includes(item.kind)){links.push({kind:item.kind as 'document'|'video',title:item.title,url});usedAssets.set(asset.id,assetSignature(asset));continue;}
   if(!['image','floorplan','logo','letterhead'].includes(item.kind)||seen.has(asset.id))continue;seen.add(asset.id);
   if(!['image/png','image/jpeg','image/webp','image/gif','image/avif','application/pdf'].includes(asset.mimeType)||(asset.mimeType==='application/pdf'&&item.kind!=='floorplan'))continue;
+  if(item.kind==='image')photoCount++;
   inputBytes+=asset.sizeBytes;if(inputBytes>MAX_INPUT_BYTES)throw new WebExposePdfError();
   const bytes=await boundedBytes(asset,read);usedAssets.set(asset.id,assetSignature(asset));
   if(asset.mimeType==='application/pdf'){const {pageCount}=await validatePropertyExposePdf(bytes);if(pageCount>40||plans.reduce((n,p)=>n+p.pageCount,0)+pageCount>40)throw new WebExposePdfError();plans.push({id:item.id,title:item.title,bytes,pageCount});links.push({kind:'floorplan',title:item.title,url});}
   else{const image=await sharp(bytes,{failOn:'warning',limitInputPixels:rasterUploadLimits.maxPixels,page:0,pages:1}).timeout({seconds:rasterUploadLimits.timeoutSeconds}).rotate().resize({width:1800,height:1800,fit:'inside',withoutEnlargement:true}).jpeg({quality:82}).toBuffer({resolveWithObject:true});artworkBytes+=image.data.byteLength;if(artworkBytes>24*1024*1024)throw new WebExposePdfError();images.push({id:item.id,kind:item.kind as WebExposePdfImage['kind'],title:item.title,bytes:image.data,width:image.info.width,height:image.info.height});}
  }
  if(Date.now()>deadline)throw new WebExposePdfError();
- const bytes=await renderWebExposePdf({snapshot,images,plans,links,pageUrl});if(bytes.byteLength>MAX_OUTPUT_BYTES)throw new WebExposePdfError();
+ const bytes=await renderWebExposePdf({snapshot,images,plans,links,pageUrl,photosOmitted});if(bytes.byteLength>MAX_OUTPUT_BYTES)throw new WebExposePdfError();
  // Capability and media approval can change while a large PDF is being built. Never return an obsolete authorization result.
  const current=await lookup(token);if(!current||mediaSignature(current)!==mediaSignature(data))throw new WebExposePdfError(404);
  for(const [id,signature] of usedAssets){const asset=await assetLookup(token,id);if(!asset||asset.storageAccess!=='private'||asset.isPublic||asset.publicToken||asset.hasActivePublicShare||assetSignature(asset)!==signature)throw new WebExposePdfError(404);}

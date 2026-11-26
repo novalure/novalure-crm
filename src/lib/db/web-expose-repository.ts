@@ -13,12 +13,12 @@ import { projectReportMoney } from "@/lib/project-sales-report";
 import { freezeWebExposeTemplate } from "@/lib/db/web-expose-template-repository";
 import { formatApprovedPropertyCosts, publicPropertyCostKeys, publicPropertyDetailGroups, publicPropertyDetailPayloadSql, publicPropertyUnitFacts, publicUnitDetailsSql, readPublicPropertyDetails, type PublicPropertyUnitDetails } from "@/lib/property-expose-details";
 import { propertyDetailNumber } from "@/lib/property-details";
+import { webExposeLegalReadiness } from "@/lib/web-expose-readiness";
 
 export const webExposeToken = () => randomBytes(32).toString("base64url");
 export const webExposeHash = (value: string) => createHash("sha256").update(value).digest("hex");
 export const validWebExposeToken = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
-function safeUrl(value: unknown) { try { const u = new URL(text(value)); return u.protocol === "https:" && !u.username && !u.password ? u.toString() : ""; } catch { return ""; } }
 export type WebExposePublishInput = { propertyId: string; language: WebExposeLanguage; title?: string; description?: string; privacyUrl: string; legalUrl: string; controller: string; showAddress: boolean; showContact: boolean; reviewed: boolean; resourceIds?:string[];includeLegacyMedia?:boolean;expectedSourceFingerprint?: string;templateVersionId?:string };
 export function parseWebExposePublishInput(value: Record<string, unknown>): WebExposePublishInput {
   for (const key of ["controller", "privacyUrl", "legalUrl"]) if (typeof value[key] !== "string") throw new CrmCommandError("INVALID_INPUT", "Anbieter und Rechtstexte fehlen");
@@ -30,7 +30,7 @@ export function parseWebExposePublishInput(value: Record<string, unknown>): WebE
     showAddress: value.showAddress, showContact: value.showContact, reviewed: value.reviewed, title: value.title as string | undefined, description: value.description as string | undefined,
     includeLegacyMedia:value.includeLegacyMedia!==false,resourceIds:Array.isArray(value.resourceIds)?value.resourceIds as string[]:[],expectedSourceFingerprint: typeof value.expectedSourceFingerprint === "string" ? value.expectedSourceFingerprint : undefined };
 }
-export async function buildWebExposeSnapshot(tx: TenantTransaction, session: AppSession, input: WebExposePublishInput) {
+export async function buildWebExposeSnapshot(tx: TenantTransaction, session: AppSession, input: WebExposePublishInput, options: { privatePreview?: boolean } = {}) {
   const id = assertCrmUuid(input.propertyId);
   const row = await tx.queryOne<{ projectId: string | null; unitId: string | null; title: string; address: string; city: string; region: string; objectType: string; area: string; rooms: string; yearBuilt: number; priceCents: string; priceVisibility: string; canonicalPayload: Record<string, unknown>; publicDetails: Record<string, unknown>; contactName: string; contactEmail: string; contactPhone: string }>(`select project_id as "projectId",unit_id::text as "unitId",title,address,city,region,object_type as "objectType",area_sqm::text as area,rooms::text,year_built as "yearBuilt",coalesce(public_price_cents,target_price_cents)::text as "priceCents",price_visibility as "priceVisibility",canonical_payload as "canonicalPayload",${publicPropertyDetailPayloadSql("p")} as "publicDetails",contact_name as "contactName",contact_email as "contactEmail",contact_phone as "contactPhone" from seller_listings p where id=$1::uuid and workspace_id=$2::uuid`, [id, session.workspaceId]);
   if (!row) throw new CrmCommandError("NOT_FOUND", "Immobilie nicht gefunden", 404);
@@ -41,12 +41,18 @@ export async function buildWebExposeSnapshot(tx: TenantTransaction, session: App
   const customDescription = text(input.description);
   const texts = await tx.query<{ content: string }>(`select content from property_text_blocks where workspace_id=$1::uuid and property_id=$2::uuid and unit_id is null and text_key='expose' and visibility in ('public','channel') and status in ('approved','published') and coalesce(metadata->>'language',$3)=$3 order by position,id`, [session.workspaceId, id, input.language]);
   if (input.language !== geography.contentLanguage && !customDescription) throw new CrmCommandError("TRANSLATION_REQUIRED", "Für diese Sprachversion einen eigenen Beschreibungstext erfassen");
-  const privacyUrl = safeUrl(input.privacyUrl), legalUrl = safeUrl(input.legalUrl);
-  if (!privacyUrl || !legalUrl || !text(input.controller) || input.controller.length > 300 || (input.title?.length ?? 0) > 300 || customDescription.length > 16000) throw new CrmCommandError("PUBLICATION_INPUT", "Titel, Beschreibung, Anbieter, Datenschutz- und Impressumslink prüfen");
+  const { privacyUrl, legalUrl, checks: legalChecks } = webExposeLegalReadiness(input);
+  if ((!options.privatePreview && legalChecks.some(check => check.status === "missing")) || input.controller.length > 300 || (input.title?.length ?? 0) > 300 || customDescription.length > 16000) throw new CrmCommandError("PUBLICATION_INPUT", "Titel, Beschreibung, Anbieter, Datenschutz- und Impressumslink prüfen");
   const energy = normalizePropertyEnergyCertificate(row.canonicalPayload?.energyCertificate) ?? {};
   const extra = await tx.queryOne<{ usageType: string; yearBuilt: number; rentPrice: string | null; marketingType: string; webVisibility: string | null }>(`select usage_type as "usageType",year_built as "yearBuilt",rent_price_cents::text as "rentPrice",marketing_type as "marketingType",channel_price_visibility->>'Website' as "webVisibility" from seller_listings where id=$1::uuid and workspace_id=$2::uuid`, [id, session.workspaceId]);
-  const checks = countryPublicationChecks({ geography, energy, usageType: extra?.usageType, yearBuilt: extra?.yearBuilt });
-  const media = await tx.query<WebExposeSnapshot["media"][number]>(`select m.id::text,m.title,case when m.media_type='floorplan' then 'floorplan' else 'image' end as kind,m.media_asset_id::text as "assetId" from property_media m join media_assets a on a.id=m.media_asset_id and a.workspace_id=m.workspace_id::text where m.workspace_id=$1::uuid and m.property_id=$2::uuid and m.project_id is not distinct from $3::uuid and m.unit_id is null and m.status in ('approved','published') and m.visibility in ('public','channel') and lower(m.category) not in('proof','internal','contract','funding') and a.storage_access='private' and not a.is_public and a.public_token is null and lower(a.folder) not like 'lead-proof-private-%' and lower(a.folder) not like 'knowledge-private-%' and a.mime_type in ('image/jpeg','image/png','image/webp') and not exists(select 1 from property_media blocked where blocked.workspace_id=m.workspace_id and blocked.media_asset_id=a.id and lower(blocked.category) in('proof','internal','contract','funding')) and not exists(select 1 from property_documents blocked where blocked.workspace_id=m.workspace_id and blocked.media_asset_id=a.id and blocked.category not in('expose','novalure_expose','floorplan','energy_certificate')) order by m.is_cover desc,m.position,m.id limit 30`, [session.workspaceId, id,row.projectId]);
+  const checks = [...countryPublicationChecks({ geography, energy, usageType: extra?.usageType, yearBuilt: extra?.yearBuilt }), ...legalChecks];
+  // Keep the web snapshot bounded; PDF has its own independent photo budget.
+  // The extra record detects truncation and blocks publication rather than
+  // silently omitting approved material.
+  const mediaCandidates = await tx.query<WebExposeSnapshot["media"][number]>(`select m.id::text,m.title,case when m.media_type='floorplan' then 'floorplan' else 'image' end as kind,m.media_asset_id::text as "assetId" from property_media m join media_assets a on a.id=m.media_asset_id and a.workspace_id=m.workspace_id::text where m.workspace_id=$1::uuid and m.property_id=$2::uuid and m.project_id is not distinct from $3::uuid and m.unit_id is null and m.status in ('approved','published') and m.visibility in ('public','channel') and lower(m.category) not in('proof','internal','contract','funding') and a.storage_access='private' and not a.is_public and a.public_token is null and lower(a.folder) not like 'lead-proof-private-%' and lower(a.folder) not like 'knowledge-private-%' and a.mime_type in ('image/jpeg','image/png','image/webp') and not exists(select 1 from property_media blocked where blocked.workspace_id=m.workspace_id and blocked.media_asset_id=a.id and lower(blocked.category) in('proof','internal','contract','funding')) and not exists(select 1 from property_documents blocked where blocked.workspace_id=m.workspace_id and blocked.media_asset_id=a.id and blocked.category not in('expose','novalure_expose','floorplan','energy_certificate')) order by m.is_cover desc,m.position,m.id limit 251`, [session.workspaceId, id,row.projectId]);
+  const legacyMediaOverflow = input.includeLegacyMedia !== false && mediaCandidates.length > 250;
+  const media = mediaCandidates.slice(0, 250);
+  if (legacyMediaOverflow) checks.push({ id: "EXPOSE-MEDIA-LIMIT", ruleVersion: "web-expose-1", status: "missing", message: "Mehr als 250 freigegebene Objektmedien sind vorhanden. Bitte die Anzahl für dieses Web-Exposé auf höchstens 250 reduzieren.", source: "" });
   let resources:NonNullable<WebExposeSnapshot["resources"]>=[];
   if(input.resourceIds?.length){
     const installed=await tx.queryOne<{ready:boolean}>(`select to_regclass('public.web_expose_resources') is not null as ready`);
@@ -89,7 +95,7 @@ export async function buildWebExposeSnapshot(tx: TenantTransaction, session: App
     units: units.map(u => ({ id: u.id, number: u.number, status: u.status, area: Number(u.area)>0?num(u.area):"—", rooms: Number(u.rooms)>0?num(u.rooms):"—", price: visibility === "publish_price" ? money(u.price) : null, facts: publicPropertyUnitFacts(u.details, input.language, locale) })),
     contact: input.showContact ? { name: text(row.contactName), email: text(row.contactEmail), phone: text(row.contactPhone) } : { name: "", email: "", phone: "" },
     privacyUrl, legalUrl, controller: text(input.controller), publishedAt: new Date().toISOString() };
-  return { snapshot, checks, projectId: row.projectId, sourceFingerprint: webExposeHash(JSON.stringify({ ...snapshot, publishedAt: null })) };
+  return { snapshot, checks, projectId: row.projectId, sourceFingerprint: webExposeHash(JSON.stringify({ ...snapshot, publishedAt: null, ...(legacyMediaOverflow ? { legacyMediaOverflow: true } : {}) })) };
 }
 export async function publishWebExpose(tx: TenantTransaction, session: AppSession, input: WebExposePublishInput) {
   if (!canWritePropertyExpose(session)) throw new CrmCommandError("FORBIDDEN", "Veröffentlichungsrecht fehlt", 403);
