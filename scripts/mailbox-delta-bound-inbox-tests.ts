@@ -62,6 +62,26 @@ test("sync follows Graph's folder-id continuation bound to the same token's inbo
   assert.equal(calls.length, 3);
 });
 
+test("bounded Outlook delta requests minimal fields and discards dated old events across pages", async () => {
+  const start = "2026-11-25T12:00:00.000Z";
+  const old = { id: "older-message", receivedDateTime: "2026-11-25T11:59:59.999Z" };
+  const current = { id: "current-message", receivedDateTime: start };
+  const calls: string[] = [];
+  const transport: MailboxTransport = async url => {
+    calls.push(url);
+    if (url === path) return response({ value: [old, current], "@odata.deltaLink": odata });
+    const { searchParams } = new URL(url);
+    assert.equal(searchParams.get("$filter"), `receivedDateTime ge ${start}`);
+    assert.equal(searchParams.get("$select"), "id,receivedDateTime");
+    return response({ value: [old, { id: "unclassified-removal", "@removed": { reason: "deleted" } }], "@odata.nextLink": path });
+  };
+  const first = await fetchMailboxSyncPage("microsoft", "SYNTHETIC", emptyMailboxCheckpoint(), transport, inbox, Date.parse(start));
+  assert.deepEqual(first.changes, [{ id: "unclassified-removal", removed: true }]);
+  const second = await fetchMailboxSyncPage("microsoft", "SYNTHETIC", { ...first.after, queued: [], afterQueue: null }, transport, inbox, Date.parse(start));
+  assert.deepEqual(second.changes, [{ id: "current-message" }]);
+  assert.equal(calls[1], path, "the returned continuation remains opaque");
+});
+
 test("wrong-folder cursors and provider continuations cannot be used or persisted", async () => {
   let requests = 0;
   const other = `${root}/mailFolders/other/messages/delta?$skiptoken=x`;

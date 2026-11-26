@@ -101,7 +101,7 @@ export function parseMicrosoftMailboxMessage(raw: Record<string, unknown>, attac
   return { providerId: mailboxProviderId(raw.id), threadId: typeof raw.conversationId === "string" ? mailboxProviderId(raw.conversationId) : null, internetMessageId: mailboxText(raw.internetMessageId, 2000) || null, subject: mailboxText(raw.subject, 1000), fromLabel: mailboxText(from.name || from.address, 1000), fromAddress: mailboxAddress(from.address), toAddresses: (Array.isArray(raw.toRecipients) ? raw.toRecipients.slice(0, 50) : []).map((item) => mailboxAddress(object(object(item).emailAddress).address)).filter((value): value is string => value !== null), receivedAt: received(raw.receivedDateTime), bodyText: content, bodyTruncated: !completeText || (bodyContent?.length ?? 0) > 65536, attachments: attachmentRows.slice(0, 50).map((row) => { const item = object(row); return metadataAttachment(item, item.id, item.name, item.contentType, item.size); }), senderIdentityVerified: false };
 }
 
-export async function fetchMicrosoftInboxContent(input: { accessToken: string; inboxId: unknown; messageId: string; immutableIds?: boolean }, transport: MailboxTransport = defaultTransport) {
+export async function fetchMicrosoftInboxContent(input: { accessToken: string; inboxId: unknown; messageId: string; immutableIds?: boolean; importStart?: number | null }, transport: MailboxTransport = defaultTransport) {
   let inboxId: string;
   try {
     inboxId = mailboxProviderId(input.inboxId);
@@ -116,11 +116,12 @@ export async function fetchMicrosoftInboxContent(input: { accessToken: string; i
   let folderId: string;
   try { folderId = mailboxProviderId(detail.parentFolderId); } catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
   if (folderId !== inboxId) throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID");
+  if (input.importStart != null && Date.parse(received(detail.receivedDateTime)) < input.importStart) throw new MailboxProviderError("MAIL_MICROSOFT_DETAIL_CHANGED");
   const attachments = detail.hasAttachments === true ? await json(`${url}/attachments?$select=id,name,contentType,size,isInline&$top=50`, { headers: auth }, transport) : null;
   if (attachments?.["@odata.nextLink"]) throw new MailboxProviderError("MAIL_TOO_MANY_ATTACHMENTS");
   return parseMicrosoftMailboxMessage(detail, attachments ? array(attachments.value, 50) : []);
 }
-export async function fetchMailboxPage(input: { provider: MailboxProvider; accessToken: string; grantedScopes: string[]; cursor: string | null; immutableIds?: boolean }, transport: MailboxTransport = defaultTransport) {
+export async function fetchMailboxPage(input: { provider: MailboxProvider; accessToken: string; grantedScopes: string[]; cursor: string | null; immutableIds?: boolean; importStart?: number | null }, transport: MailboxTransport = defaultTransport) {
   if (!hasMailboxReadScope(input.provider, input.grantedScopes)) throw new MailboxProviderError("MAIL_SCOPE_REQUIRED");
   const auth = { ...headers(input.accessToken), ...(input.immutableIds ? { Prefer: 'IdType="ImmutableId"' } : {}) };
   if (input.provider === "google") {
@@ -146,7 +147,12 @@ export async function fetchMailboxPage(input: { provider: MailboxProvider; acces
   try { inboxId = mailboxProviderId(inbox.id); if (inboxId === "." || inboxId === "..") throw new Error(); } catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
   const cursor = mailboxCursor("microsoft", input.cursor, inboxId);
   const url = cursor ? new URL(cursor) : new URL("https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages");
-  if (!cursor) { url.searchParams.set("$top", "5"); url.searchParams.set("$orderby", "receivedDateTime desc"); url.searchParams.set("$select", "id"); }
+  if (!cursor) {
+    url.searchParams.set("$top", "5");
+    url.searchParams.set("$orderby", "receivedDateTime desc");
+    url.searchParams.set("$select", input.importStart == null ? "id" : "id,receivedDateTime");
+    if (input.importStart != null) url.searchParams.set("$filter", `receivedDateTime ge ${new Date(input.importStart).toISOString()}`);
+  }
   const requestedUrl = cursor ?? url.toString();
   const list = await json(requestedUrl, { headers: auth }, transport), rows = array(list.value, 5);
   // Validate a returned continuation before reading any listed message.
@@ -158,8 +164,10 @@ export async function fetchMailboxPage(input: { provider: MailboxProvider; acces
   // not release its lease while another chain can still request attachments.
   const messages: MailboxImportedMessage[] = [];
   for (const row of rows) {
-    const listedId = mailboxProviderId(object(row).id);
-    messages.push(await fetchMicrosoftInboxContent({ accessToken: input.accessToken, inboxId, messageId: listedId, immutableIds: input.immutableIds }, transport));
+    const item = object(row);
+    if (input.importStart != null && Date.parse(received(item.receivedDateTime)) < input.importStart) continue;
+    const listedId = mailboxProviderId(item.id);
+    messages.push(await fetchMicrosoftInboxContent({ accessToken: input.accessToken, inboxId, messageId: listedId, immutableIds: input.immutableIds, importStart: input.importStart }, transport));
   }
   return { messages, nextCursor, verifiedInboxId: inboxId };
 }

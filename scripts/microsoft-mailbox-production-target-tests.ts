@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { AppSession } from "../src/lib/auth/session";
 import type { TenantTransaction } from "../src/lib/crm-command";
-import { beginCrmMailboxOAuth, syncCrmMailbox } from "../src/lib/db/crm-mailbox-repository";
+import { beginCrmMailboxOAuth, protectMailboxToken, syncCrmMailbox } from "../src/lib/db/crm-mailbox-repository";
+import { runPersonalMailboxSync } from "../src/lib/db/crm-mailbox-sync-repository";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import { exchangeMailboxToken, mailboxAuthorizationUrl } from "../src/lib/integrations/mailbox-provider";
 
@@ -113,7 +114,7 @@ test("production does not generate a mailbox OAuth state on an unready or mismat
   });
 });
 
-test("manual sync checks the database again after committing its lease", async () => {
+for (const importStart of [Date.parse("2026-11-26T14:00:00Z"), null]) test(importStart ? "manual sync checks the database again after committing its lease" : "manual sync refuses a missing activation time before claiming or calling Microsoft", async () => {
   await withProductionEnv({}, async () => {
     const workspaceId = randomUUID(), userId = randomUUID(), id = randomUUID();
     const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId } as AppSession;
@@ -131,6 +132,8 @@ test("manual sync checks the database again after committing its lease", async (
           if (query.includes("current_setting('neon.project_id'")) { targetChecks++; return { rows: [{ ready: checkout === 1 }] }; }
           assert.equal(checkout, 1, "only the first checkout is trusted to access mailbox state");
           if (query.startsWith("select id,provider,account_label")) return { rows: [{ id, provider: "microsoft", status: "connected", scopes: ["Mail.Read"], tenantId: randomUUID(), subject: "synthetic", accountId: randomUUID(), revision: 7 }] };
+          if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: importStart ? [{ start: importStart }] : [] };
+          assert.notEqual(importStart, null, "an unset activation must stop before the sync claim");
           if (query.startsWith("select id,status,request_hash")) return { rows: [] };
           if (query.startsWith("select coalesce(sync_lease_until")) return { rows: [{ busy: false }] };
           if (query.startsWith("insert into crm_mailbox_sync_runs")) return { rows: [] };
@@ -140,8 +143,54 @@ test("manual sync checks the database again after committing its lease", async (
       },
     } as unknown as TenantPool;
     const noIo = async (): Promise<never> => { assert.fail("the second database must be checked before provider I/O"); };
-    await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool }, noIo, noIo, noIo), { code: "MAIL_PRODUCTION_DATABASE_UNAVAILABLE" });
-    assert.equal(checkouts, 3); // claim, denied provider preflight, denied failure write
-    assert.equal(targetChecks, 3);
+    await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool }, noIo, noIo, noIo), { code: importStart ? "MAIL_PRODUCTION_DATABASE_UNAVAILABLE" : "MAIL_IMPORT_START_UNAVAILABLE" });
+    assert.equal(checkouts, importStart ? 3 : 1); // claim, denied provider preflight, denied failure write
+    assert.equal(targetChecks, checkouts);
   });
 });
+
+test("first verified-production sync does not store old mail or unknown removals", async () => withProductionEnv({}, async () => {
+  const workspaceId = randomUUID(), userId = randomUUID(), id = randomUUID(), authIdentityId = randomUUID();
+  const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId, authIdentityId } as AppSession;
+  const activation = "2026-11-26T14:00:00.000Z", old = "2026-11-26T13:59:59.999Z";
+  const identity = { tenantId: randomUUID(), accountId: randomUUID(), subject: "synthetic-subject" };
+  const label = "synthetic@example.invalid", access = protectMailboxToken(session, "microsoft", "synthetic", label);
+  const inbox = "synthetic-inbox", graphUser = "https://graph.microsoft.com/v1.0/me";
+  let revision = 3, policyRevision = 1;
+  const pool = { async connect() { return { release() {}, async query(sql: string, args: unknown[] = []) {
+    const query = sql.replace(/\s+/g, " ").trim();
+    if (["begin", "commit", "rollback"].includes(query)) return { rows: [], command: query.toUpperCase() };
+    if (query.includes("pg_roles runtime_role")) return { rows: [{ safe: true }] };
+    if (query.includes("set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
+    if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId }] };
+    if (query.includes("current_setting('neon.project_id'")) return { rows: [{ ready: true }] };
+    if (query.includes("to_regclass('public.crm_mailbox_auto_settings')")) return { rows: [{ ready: true }] };
+    if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: [{ start: Date.parse(activation) }] };
+    if (query.startsWith("select c.id,c.provider")) return { rows: [{ id, provider: "microsoft", ...identity, label, format: "immutable", access, refresh: null, scopes: ["Mail.Read"], expiresAt: new Date(Date.now() + 3_600_000).toISOString(), revision, policyRevision, identityId: authIdentityId, autoFile: false, contactReview: true, backfillReplaying: false, failures: 0, enabled: true, due: true, busy: false }] };
+    if (query.startsWith("select to_jsonb(c)")) return { rows: [identity] };
+    if (query.startsWith("select revision from crm_mailbox_connections")) return { rows: [{ revision }] };
+    if (query.startsWith("update crm_mailbox_connections c set sync_lease_id")) return { rows: [{ revision: ++revision }] };
+    if (query.startsWith("update crm_mailbox_connections set provider_account_id")) { revision++; return { rows: [] }; }
+    if (query.startsWith("update crm_mailbox_auto_settings set status=")) return { rows: [{ revision: ++policyRevision }] };
+    if (query.startsWith("update crm_mailbox_messages set source_status")) {
+      assert.deepEqual(args, [id, "old-removed", "source_missing", Date.parse(activation)]);
+      assert.match(query, /received_at>=to_timestamp/);
+      return { rows: [] };
+    }
+    if (query.startsWith("select checkpoint from crm_mailbox_auto_checkpoints") || query.startsWith("insert into crm_mailbox_auto_checkpoints") || query.includes("contact_review_backfill_resume") || query.includes("to_regclass('public.crm_mailbox_cursor_recovery')") || query.startsWith("select id from crm_mailbox_private_decisions") || query.startsWith("delete from crm_mailbox_private_decisions")) return { rows: [] };
+    assert.fail(`Out-of-window mail reached a decision or content query: ${query}`);
+  } }; } } as unknown as TenantPool;
+  const fetched: string[] = [];
+  const result = await runPersonalMailboxSync(session, id, { pool, maxPages: 1, transport: async url => {
+    fetched.push(url);
+    if (url === `${graphUser}?$select=id,mail,userPrincipalName`) return Response.json({ id: identity.accountId, mail: label });
+    if (url === `${graphUser}/mailFolders/inbox?$select=id`) return Response.json({ id: inbox });
+    if (url.startsWith(`${graphUser}/mailFolders/inbox/messages/delta`)) return Response.json({ value: [{ id: "dated-old", receivedDateTime: old }, { id: "undated-old" }, { id: "old-removed", "@removed": { reason: "deleted" } }], "@odata.deltaLink": `${graphUser}/mailFolders/inbox/messages/delta?$deltatoken=synthetic` });
+    if (url.startsWith(`${graphUser}/messages/undated-old?`)) return Response.json({ id: "undated-old", parentFolderId: inbox, receivedDateTime: old });
+    if (url.startsWith(`${graphUser}/messages/old-removed?`)) return Response.json({}, { status: 404 });
+    assert.fail("Old mail triggered a body or unnecessary metadata request");
+  } });
+  assert.equal(result.status, "current");
+  assert.equal(result.imported, 0);
+  assert.equal(fetched.length, 5);
+}));

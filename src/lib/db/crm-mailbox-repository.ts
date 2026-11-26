@@ -14,7 +14,7 @@ import { hasPersonalMailboxReviewSession } from "@/lib/db/mailbox-personal-revie
 import { currentTenantTransaction } from "./transaction-context";
 import { assertMailboxLeaseAfterLock } from "./crm-mailbox-lease-wall-clock";
 import { mailboxHostConfigurationUnavailable } from "../crm-mailbox-sync";
-import { assertProductionMailboxDatabase } from "./mailbox-production-target";
+import { assertProductionMailboxDatabase, isProductionMicrosoftMailbox, productionMailboxImportStart } from "./mailbox-production-target";
 const returnTo = "/?mailbox=connected";
 const verifiedReturnTo = "/?mailbox=connected&verified_identity=v1";
 type Connection = { format?: string; tenantId?: string | null; subject?: string | null; accountId?: string | null; id: string; provider: MailboxProvider; accountLabel: string | null; status: string; scopes: string[]; access: string | null; refresh: string | null; expiresAt: string | null; revision: number; nextCursor: string | null };
@@ -142,7 +142,15 @@ export async function finishCrmMailboxOAuth(session: AppSession, provider: Mailb
     const saved = await saveCrmMailboxConnection(tx, fresh, provider, tokens, identity.label, binding);
     if (schema?.ready) {
       if (!binding) await tx.query(`update crm_mailbox_connections set provider_account_id=$2,revision=revision+1 where id=$1::uuid`, [saved.id, accountId]);
-      await tx.query(`update crm_mailbox_auto_settings set enabled=false,status='disabled',revision=revision+1,updated_at=now() where connection_id=$1::uuid`, [saved.id]);
+      if (binding && isProductionMicrosoftMailbox(provider)) {
+        // Establish the first import boundary in the same transaction as the
+        // connection, while leaving automatic sync disabled. Reconnects must
+        // not move this boundary or reassign an existing delegation.
+        const anchored = await tx.queryOne(`insert into crm_mailbox_auto_settings(workspace_id,user_id,connection_id,identity_id,status,activated_at) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,'disabled',clock_timestamp()) on conflict(workspace_id,user_id,connection_id) do update set enabled=false,status='disabled',revision=crm_mailbox_auto_settings.revision+1,updated_at=now() where crm_mailbox_auto_settings.identity_id=excluded.identity_id returning connection_id`, [fresh.workspaceId, fresh.userId, saved.id, assertCrmUuid(fresh.authIdentityId)]);
+        if (!anchored) throw new CrmCommandError("MAIL_IMPORT_START_UNAVAILABLE", "Der Startzeitpunkt des Outlook-Abrufs ist nicht bestätigt.", 409);
+      } else {
+        await tx.query(`update crm_mailbox_auto_settings set enabled=false,status='disabled',revision=revision+1,updated_at=now() where connection_id=$1::uuid`, [saved.id]);
+      }
     }
     return saved;
   }, options);
@@ -160,6 +168,7 @@ export async function syncCrmMailbox(session: AppSession, input: { connectionId:
     if (!c || c.status !== "connected" || !hasMailboxReadScope(c.provider, c.scopes)) throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Postfach erneut mit ausdrücklich erlaubtem Mail-Lesezugriff verbinden", 409);
     if (c.provider === "microsoft") { const mode = verifiedExternalMailboxMode(); if (mode !== Boolean(c.tenantId) || c.tenantId && (!c.subject || !c.accountId)) throw new CrmCommandError("MAIL_REAUTH_REQUIRED", "Postfachidentität muss erneut sicher verbunden werden", 409); if (mode && !hasVerifiedMicrosoftMailboxScopes(c.scopes)) throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Nur Postfach-Lesezugriff ist für diese Verbindung zulässig.", 409); }
     await assertProductionMailboxDatabase(tx, c.provider);
+    const importStart = await productionMailboxImportStart(tx, c.provider, c.id);
     const prior = await tx.queryOne<{ id: string; status: string; hash: string; importedCount: number }>(`select id,status,request_hash as hash,imported_count as "importedCount" from crm_mailbox_sync_runs where workspace_id=$1::uuid and user_id=$2::uuid and request_id=$3::uuid for update`, [fresh.workspaceId, fresh.userId, input.requestId]);
     if (prior && prior.hash !== hash) throw new CrmCommandError("IDEMPOTENCY_CONFLICT", "Abrufkennung gehört zu einem anderen Vorgang", 409);
     if (prior?.status === "succeeded") return { completed: true as const, result: { id: prior.id, status: prior.status, importedCount: prior.importedCount, replayed: true } };
@@ -173,16 +182,20 @@ export async function syncCrmMailbox(session: AppSession, input: { connectionId:
     await tx.query(`insert into crm_mailbox_sync_runs(id,workspace_id,user_id,connection_id,request_id,request_hash,status,lease_id) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,'running',$7::uuid) on conflict(workspace_id,user_id,request_id) do update set status='running',lease_id=excluded.lease_id,last_error=null,finished_at=null`, [id, fresh.workspaceId, fresh.userId, c.id, input.requestId, hash, leaseId]);
     const leased = await tx.queryOne<{ revision: number }>(`update crm_mailbox_connections set sync_lease_id=$2::uuid,sync_lease_until=clock_timestamp()+interval '2 minutes',revision=revision+1 where id=$1::uuid and workspace_id=$3::uuid and user_id=$4::uuid and status='connected' and revision=$5 and (sync_lease_until is null or sync_lease_until<=clock_timestamp()) returning revision`, [c.id, leaseId, fresh.workspaceId, fresh.userId, c.revision]);
     if (!leased || leased.revision !== c.revision + 1) throw new CrmCommandError("MAIL_CONNECTION_CHANGED", "Postfachverbindung oder Abrufberechtigung hat sich geändert", 409);
-    return { completed: false as const, id, connection: { ...c, revision: leased.revision }, actor: fresh };
+    return { completed: false as const, id, connection: { ...c, revision: leased.revision }, actor: fresh, importStart };
   }, options);
   if (claim.completed) return claim.result;
   try {
     const c = claim.connection;
+    const recheckImportStart = async (tx: TenantTransaction) => {
+      if (await productionMailboxImportStart(tx, c.provider, c.id) !== claim.importStart) throw new CrmCommandError("MAIL_CONNECTION_CHANGED", "Der Startzeitpunkt des Postfachabrufs hat sich geändert.", 409);
+    };
     // The claim transaction can be delayed before or during COMMIT. Recheck
     // the row lock, current actor, lease and identity before provider I/O.
     await withCrmRead(session, async (tx, fresh) => {
       actor(fresh);
       await assertProductionMailboxDatabase(tx, c.provider);
+      await recheckImportStart(tx);
       const active = await tx.queryOne<{ tenantId: string | null; subject: string | null; accountId: string | null }>(`select to_jsonb(crm_mailbox_connections)->>'provider_tenant_id' as "tenantId",to_jsonb(crm_mailbox_connections)->>'provider_subject' as subject,to_jsonb(crm_mailbox_connections)->>'provider_account_id' as "accountId" from crm_mailbox_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid and status='connected' and revision=$4 and sync_lease_id=$5::uuid and sync_lease_until>clock_timestamp() for update`, [c.id, fresh.workspaceId, fresh.userId, c.revision, leaseId]);
       if (!active || c.provider === "microsoft" && (verifiedExternalMailboxMode() !== Boolean(active.tenantId) || active.tenantId !== (c.tenantId ?? null) || active.subject !== (c.subject ?? null) || active.accountId !== (c.accountId ?? null))) throw new CrmCommandError("MAIL_CONNECTION_CHANGED", "Postfachidentität oder Abrufberechtigung hat sich geändert", 409);
       await assertMailboxLeaseAfterLock(tx, { id: c.id, workspaceId: fresh.workspaceId, userId: fresh.userId, revision: c.revision, lease: leaseId });
@@ -217,9 +230,10 @@ export async function syncCrmMailbox(session: AppSession, input: { connectionId:
         return updated.revision;
       }, options);
     }
-    const page = await fetchMailboxPage({ provider: c.provider, accessToken, grantedScopes: renewed?.scopes ?? c.scopes, cursor: input.mode === "older" ? c.nextCursor : null, immutableIds: c.format === "immutable" }, transport);
+    const page = await fetchMailboxPage({ provider: c.provider, accessToken, grantedScopes: renewed?.scopes ?? c.scopes, cursor: input.mode === "older" ? c.nextCursor : null, immutableIds: c.format === "immutable", importStart: claim.importStart }, transport);
     return await withCrmRead(session, async (tx, fresh) => {
       await assertProductionMailboxDatabase(tx, c.provider);
+      await recheckImportStart(tx);
       actor(fresh); const active = await tx.queryOne<{ tenantId: string | null; subject: string | null; accountId: string | null }>(`select to_jsonb(crm_mailbox_connections)->>'provider_tenant_id' as "tenantId",to_jsonb(crm_mailbox_connections)->>'provider_subject' as subject,to_jsonb(crm_mailbox_connections)->>'provider_account_id' as "accountId" from crm_mailbox_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid and status='connected' and revision=$4 and sync_lease_id=$5::uuid and sync_lease_until>clock_timestamp() for update`, [c.id, fresh.workspaceId, fresh.userId, c.revision, leaseId]);
       if (!active) throw new CrmCommandError("MAIL_CONNECTION_CHANGED", "Verbindung geändert. Verspätete Nachrichten wurden nicht übernommen.", 409);
       if (c.provider === "microsoft" && (verifiedExternalMailboxMode() !== Boolean(active.tenantId) || active.tenantId !== (c.tenantId ?? null) || active.subject !== (c.subject ?? null) || active.accountId !== (c.accountId ?? null))) throw new CrmCommandError("MAIL_CONNECTION_CHANGED", "Postfachidentität hat sich geändert", 409);

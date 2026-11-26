@@ -8,7 +8,7 @@ function rows(v: unknown, max = 5000) { if (v === undefined) return []; if (!Arr
 const auth = (token: string, microsoft = false) => ({ Authorization: `Bearer ${token}`, Accept: "application/json", ...(microsoft ? { Prefer: 'IdType="ImmutableId", odata.maxpagesize=5' } : {}) });
 const historyId = (v: unknown) => { if (typeof v !== "string" || !/^\d{1,40}$/.test(v)) throw new MailboxProviderError("MAIL_INVALID_HISTORY_ID"); return v; };
 const metadataSelect = "id,conversationId,internetMessageId,internetMessageHeaders,subject,from,toRecipients,ccRecipients,receivedDateTime,parentFolderId";
-export async function fetchMailboxSyncPage(provider: MailboxProvider, token: string, checkpoint: MailboxSyncCheckpoint, transport = defaultTransport, inboxId?: string) {
+export async function fetchMailboxSyncPage(provider: MailboxProvider, token: string, checkpoint: MailboxSyncCheckpoint, transport = defaultTransport, inboxId?: string, importStart?: number | null) {
   const after = mailboxSyncPosition(checkpoint), changes: MailboxSyncChange[] = [];
   if (provider === "google") {
     if (!after.anchor && !after.historyCheckpoint) { const profile = await mailboxProviderJson("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: auth(token) }, transport, 65536); after.anchor = historyId(profile.historyId); }
@@ -28,14 +28,23 @@ export async function fetchMailboxSyncPage(provider: MailboxProvider, token: str
     assertMicrosoftMailboxCheckpoint(checkpoint, inboxId);
     if (checkpoint.queued.length) throw new MailboxCheckpointReviewRequired();
     const cursor = after.pendingCursor ?? after.deltaCheckpoint;
-    const url = cursor == null ? mailboxDeltaUrl(`https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$select=${metadataSelect}&$top=5`, inboxId) : mailboxDeltaContinuationUrl(cursor, inboxId, after.pendingCursor != null ? "next" : "delta");
+    const initial = new URL(`https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$select=${metadataSelect}&$top=5`);
+    if (importStart != null) {
+      initial.searchParams.set("$select", "id,receivedDateTime");
+      initial.searchParams.set("$filter", `receivedDateTime ge ${new Date(importStart).toISOString()}`);
+    }
+    const url = cursor == null ? mailboxDeltaUrl(initial.toString(), inboxId) : mailboxDeltaContinuationUrl(cursor, inboxId, after.pendingCursor != null ? "next" : "delta");
     const page = await mailboxProviderJson(url, { headers: auth(token, true) }, transport);
     // A partial or ambiguous response must not advance the durable checkpoint.
     // Graph returns a value array and exactly one opaque continuation link.
     const hasNext = Object.hasOwn(page, "@odata.nextLink"), hasDelta = Object.hasOwn(page, "@odata.deltaLink");
     if (!Array.isArray(page.value) || hasNext === hasDelta) throw new MailboxProviderError("MAIL_INVALID_RESPONSE");
     const continuation = mailboxDeltaContinuationUrl(page[hasNext ? "@odata.nextLink" : "@odata.deltaLink"], inboxId, hasNext ? "next" : "delta");
-    for (const row of rows(page.value, 500)) changes.push({ id: mailboxProviderId(row.id), ...(row["@removed"] ? { removed: true } : {}) });
+    for (const row of rows(page.value, 500)) {
+      const receivedAt = typeof row.receivedDateTime === "string" ? Date.parse(row.receivedDateTime) : NaN;
+      if (importStart != null && receivedAt < importStart) continue;
+      changes.push({ id: mailboxProviderId(row.id), ...(row["@removed"] ? { removed: true } : {}) });
+    }
     after.pendingCursor = hasNext ? continuation : null;
     if (after.pendingCursor) after.phase = after.deltaCheckpoint ? "history" : "bootstrap";
     else { after.deltaCheckpoint = continuation; after.phase = "ready"; }
@@ -72,10 +81,10 @@ export async function fetchMailboxMetadata(provider: MailboxProvider, token: str
   const timestamp = provider === "google" ? Number(raw.internalDate) : Date.parse(String(raw.receivedDateTime)); if (!Number.isFinite(timestamp)) throw new MailboxProviderError("MAIL_INVALID_DATE");
   return { providerId: mailboxProviderId(raw.id), threadId: typeof (raw.threadId || raw.conversationId) === "string" ? String(raw.threadId || raw.conversationId) : null, internetMessageId: provider === "google" ? header("message-id") || null : mailboxText(raw.internetMessageId, 2000) || null, inReplyTo: header("in-reply-to") || null, references: (header("references").match(/<[^<>\s]+>/g) || []).slice(0, 50), fromAddress, toAddresses, participants: [...new Set([...(fromAddress ? [fromAddress] : []), ...toAddresses, ...cc])].sort(), subject: mailboxText(provider === "google" ? header("subject") : raw.subject, 1000), receivedAt: new Date(timestamp).toISOString(), inInbox: provider === "google" ? googleLabels!.includes('INBOX') : microsoftInInbox };
 }
-export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string): Promise<MailboxImportedMessage> {
+export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string, importStart?: number | null): Promise<MailboxImportedMessage> {
   if (provider === "microsoft") {
     try {
-      return await fetchMicrosoftInboxContent({ accessToken: token, inboxId, messageId: id, immutableIds: true }, transport);
+      return await fetchMicrosoftInboxContent({ accessToken: token, inboxId, messageId: id, immutableIds: true, importStart }, transport);
     } catch (error) {
       // A concurrent move can make the detail or attachment route go away.
       // Keep the queued observation so the next run can check its new location.

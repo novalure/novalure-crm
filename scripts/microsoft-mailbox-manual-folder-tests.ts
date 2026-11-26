@@ -88,6 +88,44 @@ test("details and attachment metadata use verified folder; identity and folder m
   assert.equal(page.nextCursor, null);
 });
 
+test("a bounded manual read skips old listing results before requesting bodies on every page", async () => {
+  const start = "2026-11-25T12:00:00.000Z";
+  const old = "2026-11-25T11:59:59.999Z";
+  const nextPage = `${base}/mailFolders/${encoded}/messages?opaque=%2B%2F`;
+  for (const cursor of [null, nextPage]) {
+    const calls: string[] = [];
+    const page = await fetchMailboxPage({ ...input(cursor), importStart: Date.parse(start) }, async url => {
+      calls.push(url);
+      if (url === `${base}/mailFolders/inbox?$select=id`) return respond({ id: inbox });
+      if (calls.length === 2) {
+        if (cursor) assert.equal(url, cursor);
+        else {
+          const { searchParams } = new URL(url);
+          assert.equal(searchParams.get("$filter"), `receivedDateTime ge ${start}`);
+          assert.equal(searchParams.get("$select"), "id,receivedDateTime");
+        }
+        return respond({ value: [{ id: "old-private-message", receivedDateTime: old }, { id: "message-one", receivedDateTime: start }] });
+      }
+      assert.ok(url.startsWith(`${base}/mailFolders/${encoded}/messages/message-one?`));
+      return respond({ ...details, hasAttachments: false });
+    });
+    assert.deepEqual(page.messages.map(message => message.providerId), ["message-one"]);
+    assert.equal(calls.length, 3);
+  }
+});
+
+test("a stale bounded detail is rejected before attachment access", async () => {
+  const start = "2026-11-25T12:00:00.000Z";
+  const calls: string[] = [];
+  await assert.rejects(fetchMailboxPage({ ...input(), importStart: Date.parse(start) }, async url => {
+    calls.push(url);
+    if (url === `${base}/mailFolders/inbox?$select=id`) return respond({ id: inbox });
+    if (calls.length === 2) return respond({ value: [{ id: "message-one", receivedDateTime: start }] });
+    return respond({ ...details, receivedDateTime: "2026-11-25T11:59:59.999Z" });
+  }), { code: "MAIL_MICROSOFT_DETAIL_CHANGED" });
+  assert.equal(calls.length, 3);
+});
+
 test("a moved message, invalid folder, wrong detail ID or 404 fails the page before attachment fetch", async () => {
   for (const change of [{ parentFolderId: "other" }, { parentFolderId: inbox.toLowerCase() }, { parentFolderId: null }, { id: "wrong" }, { status: 404 }]) {
     const calls: string[] = [];

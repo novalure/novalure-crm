@@ -25,8 +25,21 @@ function databaseUnavailable() {
   return new CrmCommandError("MAIL_PRODUCTION_DATABASE_UNAVAILABLE", "Die Postfachverbindung wartet auf die geprüfte CRM-Datenbank.", 409);
 }
 
+export function isProductionMicrosoftMailbox(provider: MailboxProvider): boolean {
+  return provider === "microsoft" && process.env.MICROSOFT_MAILBOX_IDENTITY_MODE?.trim() === "verified-production";
+}
+
+export async function productionMailboxImportStart(tx: TenantTransaction, provider: MailboxProvider, connectionId: string): Promise<number | null> {
+  if (!isProductionMicrosoftMailbox(provider)) return null;
+  const row = await tx.queryOne<{ start: number }>(`select ceil(extract(epoch from activated_at)*1000)::double precision as start from crm_mailbox_auto_settings where connection_id=$1::uuid`, [connectionId]);
+  if (!row || !Number.isSafeInteger(row.start) || row.start <= 0 || row.start > 8.64e15) {
+    throw new CrmCommandError("MAIL_IMPORT_START_UNAVAILABLE", "Der Startzeitpunkt des Outlook-Abrufs ist nicht bestätigt.", 409);
+  }
+  return row.start;
+}
+
 export async function assertProductionMailboxDatabase(tx: TenantTransaction, provider: MailboxProvider) {
-  if (provider !== "microsoft" || process.env.MICROSOFT_MAILBOX_IDENTITY_MODE?.trim() !== "verified-production") return;
+  if (!isProductionMicrosoftMailbox(provider)) return;
   if (!productionPoolConfigured()) throw databaseUnavailable();
 
   const result = await tx.queryOne<{ ready: boolean }>(`
