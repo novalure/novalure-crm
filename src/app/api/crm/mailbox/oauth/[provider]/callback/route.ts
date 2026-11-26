@@ -4,6 +4,9 @@ import { parseSignedOAuthState } from "@/lib/integrations/calendar-oauth-state";
 import { mailboxOrigin } from "@/lib/integrations/mailbox-provider";
 import { finishCrmMailboxOAuth } from "@/lib/db/crm-mailbox-repository";
 export async function GET(request: Request, context: { params: Promise<{ provider: string }> }) {
+  // OAuth callbacks belong to the signed-state and human-session flow. A bearer
+  // credential is valid only at its dedicated integration endpoint.
+  if (request.headers.has("authorization")) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const target = new URL("/#communication", mailboxOrigin(request.url));
   try {
     const provider = mailboxProvider((await context.params).provider), url = new URL(request.url), state = url.searchParams.get("state"), parsed = parseSignedOAuthState(state, provider);
