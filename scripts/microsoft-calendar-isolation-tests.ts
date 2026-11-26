@@ -8,6 +8,7 @@ const moduleUrl = (path: string) => pathToFileURL(resolve(process.cwd(), path)).
 let workspaceToken: "missing" | "unavailable" | "connected" = "missing";
 let reads = 0;
 let connected = false;
+let calendarResponse: (() => Response) | null = null;
 mock.module(moduleUrl("src/lib/integrations/calendar-connections.ts"), {namedExports: {
   getCalendarAccessToken: async () => {
     reads++;
@@ -35,9 +36,11 @@ async function withGlobalCredentials(direct: boolean, run: (calls: string[]) => 
     calls.push(`${init?.method ?? "GET"} ${String(url)}`);
     if (String(url).includes("login.microsoftonline.com")) return Response.json({access_token:"synthetic-app-token"});
     if (init?.method === "DELETE") return new Response(null, {status:204});
+    if (calendarResponse && String(url).includes("/calendarView")) return calendarResponse();
     return Response.json(init?.method === "POST" ? {id:"synthetic-event"} : {value:[]});
   };
   try { await run(calls); } finally {
+    calendarResponse = null;
     globalThis.fetch = previousFetch;
     for (const [key,value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
@@ -51,8 +54,7 @@ for (const direct of [true, false]) for (const state of ["missing", "unavailable
       assert.equal((await calendar.syncMicrosoftCalendarEvent({...event,workspaceId})).status,"failed");
       assert.equal((await calendar.updateMicrosoftCalendarEvent({...event,eventId:"synthetic",workspaceId})).status,"failed");
       assert.equal((await calendar.deleteMicrosoftCalendarEvent({eventId:"synthetic",workspaceId})).status,"failed");
-      // The existing availability caller still treats [] as no busy events; see the separate release note.
-      assert.deepEqual(await calendar.listMicrosoftBusyTimes({timeMin:event.startsAt,timeMax:event.endsAt,workspaceId}), []);
+      await assert.rejects(calendar.listMicrosoftBusyTimes({timeMin:event.startsAt,timeMax:event.endsAt,workspaceId}), /calendar_availability_unavailable/);
       assert.equal(reads,4); assert.deepEqual(calls,[]);
     });
   });
@@ -61,6 +63,18 @@ test("an explicitly empty workspace cannot select ambient credentials", async ()
   await withGlobalCredentials(true, async calls => {
     reads=0; assert.equal((await calendar.syncMicrosoftCalendarEvent({...event,workspaceId:""})).status,"failed");
     assert.equal(reads,0); assert.deepEqual(calls,[]);
+  });
+});
+test("workspace availability distinguishes empty from HTTP failure, malformed or truncated responses", async () => {
+  await withGlobalCredentials(false, async () => {
+    workspaceToken="connected";
+    const query={workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",timeMin:event.startsAt,timeMax:event.endsAt};
+    for(const response of [()=>new Response('{}',{status:503}),()=>new Response('not json',{status:200}),()=>Response.json({}),()=>Response.json({value:[],"@odata.nextLink":"https://graph.microsoft.com/next"}),()=>Response.json({value:[{showAs:'busy',start:{dateTime:'invalid'},end:{dateTime:'invalid'}}]})]){
+      calendarResponse=response; await assert.rejects(calendar.listMicrosoftBusyTimes(query),/calendar_availability_unavailable/);
+    }
+    calendarResponse=()=>Response.json({value:[]}); assert.deepEqual(await calendar.listMicrosoftBusyTimes(query),[]);
+    calendarResponse=()=>Response.json({value:[{showAs:'busy',start:{dateTime:'2030-01-01T09:00:00',timeZone:'UTC'},end:{dateTime:'2030-01-01T09:30:00',timeZone:'UTC'}}]});
+    assert.deepEqual(await calendar.listMicrosoftBusyTimes(query),[{start:'2030-01-01T09:00:00.000Z',end:'2030-01-01T09:30:00.000Z'}]);
   });
 });
 test("a connected workspace uses its personal token and never the app token endpoint", async () => {

@@ -318,7 +318,10 @@ export async function listMicrosoftBusyTimes(input: {
   workspaceId?: string;
 }): Promise<Array<{ end: string; start: string }>> {
   const graph = await getGraphToken(input.workspaceId);
-  if (!graph) return [];
+  if (!graph) {
+    if (input.workspaceId !== undefined) throw new Error("calendar_availability_unavailable");
+    return [];
+  }
 
   const url = new URL(graph.calendarViewEndpoint);
   url.searchParams.set("startDateTime", input.timeMin);
@@ -332,17 +335,38 @@ export async function listMicrosoftBusyTimes(input: {
       Prefer: 'outlook.timezone="UTC"',
     },
   });
-  const data = (await response.json().catch(() => ({}))) as {
+  const data = (await response.json().catch(() => null)) as {
     value?: Array<{
       end?: { dateTime?: string; timeZone?: string };
       showAs?: string;
       start?: { dateTime?: string; timeZone?: string };
     }>;
-  };
+    "@odata.nextLink"?: unknown;
+  } | null;
 
-  if (!response.ok) return [];
+  if (input.workspaceId === undefined && !response.ok) return [];
+  if (input.workspaceId !== undefined && (!response.ok || !data || !Array.isArray(data.value) || data["@odata.nextLink"] != null)) throw new Error("calendar_availability_unavailable");
 
-  return (data.value ?? [])
+  // A partial/malformed provider response is not an empty calendar. The
+  // requested UTC preference is necessary to interpret offset-free times.
+  if (input.workspaceId !== undefined) {
+    const instant = (value: { dateTime?: string; timeZone?: string } | undefined) => {
+      if (!value || typeof value.dateTime !== "string" || (value.timeZone && value.timeZone.toUpperCase() !== "UTC")) throw new Error("calendar_availability_unavailable");
+      const date = new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value.dateTime) ? value.dateTime : `${value.dateTime}Z`);
+      if (!Number.isFinite(date.getTime())) throw new Error("calendar_availability_unavailable");
+      return date.toISOString();
+    };
+    return data!.value!.filter((event) => {
+      if (!event || typeof event !== "object" || typeof event.showAs !== "string") throw new Error("calendar_availability_unavailable");
+      return event.showAs !== "free";
+    }).map((event) => {
+      const start = instant(event.start), end = instant(event.end);
+      if (Date.parse(end) <= Date.parse(start)) throw new Error("calendar_availability_unavailable");
+      return {start,end};
+    });
+  }
+
+  return (data?.value ?? [])
     .filter((event) => event.showAs !== "free")
     .map((event) => ({
       end: event.end?.dateTime ? `${event.end.dateTime}Z` : "",
