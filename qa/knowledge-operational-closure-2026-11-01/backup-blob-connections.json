@@ -1,0 +1,45 @@
+{
+  "format": "crm-backup-production-blob-connections-v1",
+  "status": "NORMAL_OIDC_CONNECTIONS_CONFIGURED",
+  "observedAt": "2026-11-01T16:40:19.787Z",
+  "sourceStoreId": "store_vCn7LiyRocYNC8pM",
+  "targetStoreId": "store_Xq45pbZfYunmR6ah",
+  "sourceBackup": {
+    "connectionId": "spc_mFUHkGw3AuUfslt0",
+    "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+    "environments": [
+      "production"
+    ],
+    "envVarPrefix": "BACKUP_SOURCE_BLOB"
+  },
+  "targetBackup": {
+    "connectionId": "spc_rDycowIUHZ7rBFcQ",
+    "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+    "environments": [
+      "development",
+      "production"
+    ],
+    "envVarPrefix": "BLOB"
+  },
+  "existingCrm": {
+    "connectionId": "spc_kYVPVyeV690yocE2",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "environments": [
+      "production"
+    ],
+    "envVarPrefix": "NOVALURE_PRIVATE_BLOB"
+  },
+  "existingCrmConnectionIdentityEnvironmentAndPrefixPreserved": true,
+  "targetDevelopmentConnectionPreserved": true,
+  "skipReadWriteToken": true,
+  "productionCredentialsCopied": false,
+  "sourceGrantProviderReadOnlyClaimed": false,
+  "sourceAdapterOperations": [
+    "get",
+    "list"
+  ],
+  "productionEndpointChanged": false,
+  "fullBackupEnabled": false,
+  "cronEnabled": false,
+  "nativeResponseHandling": "Source POST succeeded with an empty response and was not repeated; target PATCH was subsequently applied once; both desired connections confirmed by readback"
+}

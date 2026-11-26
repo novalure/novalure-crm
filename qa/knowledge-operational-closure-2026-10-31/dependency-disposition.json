@@ -1,0 +1,60 @@
+{
+  "format": "knowledge-operational-dependency-disposition-v1",
+  "recordedAtUtc": "2026-10-31 21:24:14 UTC",
+  "failingAudit": {
+    "runId": 41242762596,
+    "jobId": 124659935519,
+    "command": "npm audit --omit=dev --audit-level=moderate",
+    "productionFindings": 8,
+    "moderate": 3,
+    "high": 5,
+    "cause": "Vulnerable Undici and root/nested Zod versions in the main baseline; not a registry/network failure."
+  },
+  "sourceFix": "e8c6673c2cc38960f335121abaac1b12730c5e74",
+  "productionAncestry": {
+    "base": "e8c6673c2cc38960f335121abaac1b12730c5e74",
+    "head": "6daf9b697cd8faef1c8166f16bf1853aaba3153a",
+    "status": "ahead",
+    "ahead": 25,
+    "behind": 0,
+    "mergeBase": "e8c6673c2cc38960f335121abaac1b12730c5e74"
+  },
+  "patchMethod": "The exact four unique-context hunks from the existing source fix applied to current main package files; both JSON files parsed. No copying of unrelated later dependency changes.",
+  "packageChanges": {
+    "undiciOverride": {
+      "before": "6.28.1",
+      "after": "6.29.1"
+    },
+    "rootResolvedZod": {
+      "before": "4.4.3",
+      "after": "4.6.7"
+    },
+    "scopedOverride": {
+      "@vercel/cli-config@0.2.7": {
+        "zod": "4.6.7"
+      }
+    },
+    "removedVulnerableNode": "node_modules/@vercel/cli-config/node_modules/zod@4.1.11",
+    "unchangedLockNodes": 649,
+    "updatedLockNodes": 2,
+    "removedLockNodes": 1
+  },
+  "preserved": {
+    "applicationSource": true,
+    "providerVersions": true,
+    "frameworkVersions": true,
+    "productionDeployment": true,
+    "authentication": true,
+    "tenantRls": true
+  },
+  "independentSourceReview": {
+    "agent": "publication_proposals",
+    "exactHunksApplyUniquely": true,
+    "jsonParses": true,
+    "patchedLockEqualsExistingFixLock": true,
+    "otherNodeValuesUnchanged": true,
+    "zodPeerRangesCompatible": true
+  },
+  "nativeValidation": "Use the normal Go-live quality gates workflow on the final PR head for npm ci, production audit and full regression outcomes. Source review is not a substitute for its execution.",
+  "productionMutationsPerformed": 0
+}

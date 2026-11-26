@@ -1,0 +1,42 @@
+{
+  "format": "authorized-combined-backup-private-index-readback-v1",
+  "observedAt": "2026-11-01T18:21:28.132Z",
+  "status": "PRIVATE_FULL_INDEX_READBACK_PASS",
+  "targetTokenRequestCount": 1,
+  "indexListPages": 1,
+  "targetControlReadCalls": 4,
+  "sourceRequests": 0,
+  "neonCalls": 0,
+  "storeWrites": 0,
+  "jobRetries": 0,
+  "credentialFilesWritten": 0,
+  "readerModuleSha256": "71b6fcee5febad9f955b73517aa0cd029330a2652012cdf535504b4b60a92797",
+  "backupId": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+  "snapshotId": "snap-ancient-hat-al16xd1i",
+  "isolatedBranchId": "br-late-bonus-alphwux4",
+  "manifestSha256": "eec51b47c3a1eedb68263952634f77f97ce087cff4dd52b9203607f3edf3468b",
+  "assetCount": 5,
+  "assetBytes": 44260,
+  "historicalReferenceCount": 2,
+  "verifiedFullIndexCount": 1,
+  "fullCommitMarkerVerified": true,
+  "manifestShaVerified": true,
+  "noIncompleteMarker": true,
+  "rootExpectedRecipeMatched": true,
+  "finishedAt": "2026-11-01T18:21:31.813Z",
+  "ownedEndpointCleanupReceipts": [
+    {
+      "id": "ep-fancy-dawn-al0gh7wn",
+      "branchId": "br-late-bonus-alphwux4",
+      "disabled": true,
+      "currentState": "idle"
+    }
+  ],
+  "retention": {
+    "mode": "PLAN_ONLY_NO_DELETIONS",
+    "candidateCount": 0,
+    "protectedLatestFull": "backup-802b8e81-ebfb-4609-939f-3e9fd4782070",
+    "deletions": 0
+  },
+  "sourceReceiptSha256": "c0425aa8d31535b6a7ccd2e32f83705fdf8b5605f4bec0ffefa81bd91083d794"
+}

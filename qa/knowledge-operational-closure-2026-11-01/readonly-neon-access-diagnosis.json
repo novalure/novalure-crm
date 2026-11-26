@@ -1,0 +1,64 @@
+{
+  "format": "crm-backup-readonly-neon-access-v1",
+  "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "productionApplicationChanged": false,
+  "neonMutations": 0,
+  "sourceSqlConnections": 0,
+  "blobRequests": 0,
+  "cronEnabled": false,
+  "fullBackupEnabled": false,
+  "credentialExported": false,
+  "deploymentId": "dpl_2MAUirQhzhcGsftFmBYwK3Wi1xwZ",
+  "httpStatus": 503,
+  "observedAt": "2026-11-01T18:06:10.804Z",
+  "status": "READ_ONLY_NEON_ACCESS_FAILED",
+  "keyMetadata": [
+    {
+      "key": "NEON_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "createdAt": 1793551321603,
+      "updatedAt": 1793551321603,
+      "createdAtUtc": "2026-11-01T16:42:01.603Z",
+      "updatedAtUtc": "2026-11-01T16:42:01.603Z"
+    }
+  ],
+  "result": {
+    "status": "ACCESS_FAILED",
+    "keyConfigured": true,
+    "checks": [
+      {
+        "resource": "PROJECT",
+        "httpStatus": 401,
+        "identityMatches": false
+      },
+      {
+        "resource": "BRANCH",
+        "httpStatus": 401,
+        "identityMatches": false
+      },
+      {
+        "resource": "ENDPOINT",
+        "httpStatus": 401,
+        "identityMatches": false
+      }
+    ],
+    "neonMutations": 0
+  },
+  "sourceReceiptSha256": "8775489e2e512a663dba4cc07d32f358c302e9cfe82fd4d03c308d45805ddf30",
+  "proofBoundaries": {
+    "separateLaterReadOnlyDiagnosis": true,
+    "exactProjectBranchEndpointGetsAllUnauthorized401": true,
+    "backupCallerPaused": true,
+    "fullBackupEnabled": false,
+    "cronEnabled": false,
+    "successfulManagementAuthenticationProven": false,
+    "earlier1800ExecutionProviderHttpStatusInferred": false,
+    "earlier1800ExecutionResponseRewritten": false,
+    "newRemoteOperationsForEvidencePreparation": 0,
+    "credentialValuesIncluded": false,
+    "interpretation": "At 18:06:10.804 UTC the separate backup-workload diagnosis received HTTP 401 from each exact project/branch/endpoint GET. The application wrapper returned HTTP 503. This proves failed native access at that later time; it does not establish the hidden Neon response of the earlier 18:00 execution."
+  }
+}

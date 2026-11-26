@@ -1,0 +1,21 @@
+{
+  "format": "crm-first-combined-backup-execution-v1",
+  "projectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+  "expectedSnapshotId": "snap-silent-shape-alvreahy",
+  "cronEnabled": false,
+  "credentialPrintedOrPersistedLocally": false,
+  "productionEndpointId": "ep-wandering-union-alem0781",
+  "sourceBranchId": "br-spring-night-alyu48yp",
+  "deploymentId": "dpl_GXFQ6g8yBAmFX6NDABDYUEcfYEZ6",
+  "deploymentUrl": "knowledge-ops-restore-20261101-5rhue9faf-novalure.vercel.app",
+  "httpStatus": 503,
+  "result": {
+    "status": "INCOMPLETE",
+    "scope": "FULL_DATABASE_AND_DATABASE_REFERENCED_PRIVATE_FILES",
+    "wholeApplicationBackup": false,
+    "enabled": true,
+    "code": "BACKUP_INCOMPLETE"
+  },
+  "observedAt": "2026-11-01T16:44:52.456Z",
+  "status": "INCOMPLETE_OR_BLOCKED_NO_RETRY"
+}

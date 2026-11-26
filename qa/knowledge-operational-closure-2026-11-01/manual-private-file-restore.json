@@ -1,0 +1,207 @@
+{
+  "format": "private-blob-five-asset-operator-restore-v1",
+  "observedAt": "2026-11-01T17:06:44.520Z",
+  "status": "FINAL_FIVE_ASSET_RESTORE_PASS",
+  "scopeAssetCount": 5,
+  "scopeBytes": 44260,
+  "sourceAuthorization": {
+    "kind": "temporary_operator_grant",
+    "connectionId": "spc_mFUHkGw3AuUfslt0",
+    "backupProjectId": "prj_bmEuDFXrLvSX2VXtt2GQ9Mbrfrlk",
+    "tokenEnvironment": "development",
+    "providerReadonlyGrant": false,
+    "requiresRootRollback": false,
+    "rootActivationConfirmed": true,
+    "rollbackPending": false,
+    "rollbackConfirmed": true,
+    "rollbackConfirmedAt": "2026-11-01T17:07:18.836Z"
+  },
+  "sourceStoreWrites": 0,
+  "sourcePutCalls": 0,
+  "sourceDeleteCalls": 0,
+  "sourceSdkReadCalls": 5,
+  "targetSdkPutCalls": 3,
+  "targetTokenRequestCount": 1,
+  "productionDatabaseWrites": 0,
+  "neonCalls": 0,
+  "jobRetries": 0,
+  "envRunCalls": 0,
+  "secretGetterCalls": 0,
+  "credentialFilesWritten": 0,
+  "operatorTokenClaims": {
+    "newBackupProjectMatch": true,
+    "teamMatch": true,
+    "developmentMatch": true,
+    "currentlyValid": true
+  },
+  "inventoryBefore": {
+    "exhaustive": true,
+    "totalObjectCount": 2,
+    "originalAssetCount": 2,
+    "originalAssetBytes": 21323,
+    "backupNamespaceObjectCount": 0,
+    "otherObjectCount": 0
+  },
+  "existingPdfGuard": {
+    "bothKnownHashesMatch": true,
+    "existingKeysNeverReput": true
+  },
+  "sourceVerified": {
+    "assetCount": 5,
+    "bytes": 44260,
+    "allMimeAndSizesMatch": true,
+    "bothSourcePdfsMatchUserHashes": true
+  },
+  "inventoryAfter": {
+    "exhaustive": true,
+    "totalObjectCount": 5,
+    "originalAssetCount": 5,
+    "originalAssetBytes": 44260,
+    "backupNamespaceObjectCount": 0,
+    "otherObjectCount": 0
+  },
+  "foreignObjectMetadataUnchanged": true,
+  "assetChecks": [
+    {
+      "assetId": "36510a74-dc15-4b6a-a5bd-45c44d400aa7",
+      "bytes": 20327,
+      "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+      "sourceTargetShaMatch": true,
+      "sizeMatch": true,
+      "exactKeyMatch": true,
+      "privateOriginMatch": true,
+      "anonymousStatus": 403,
+      "anonymousDenied": true
+    },
+    {
+      "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+      "bytes": 996,
+      "sha256": "67f9107c8362338fd6630e15c29c55ec840b8236c75ff3ebebc12a3ec9bf74cc",
+      "sourceTargetShaMatch": true,
+      "sizeMatch": true,
+      "exactKeyMatch": true,
+      "privateOriginMatch": true,
+      "anonymousStatus": 403,
+      "anonymousDenied": true
+    },
+    {
+      "assetId": "c9730956-1590-4b64-87b7-8fc19fedf69f",
+      "bytes": 6868,
+      "sha256": "14677678104dd339b7a0b836f69039d658488264cedfd4d225c498b12e69a2a8",
+      "sourceTargetShaMatch": true,
+      "sizeMatch": true,
+      "exactKeyMatch": true,
+      "privateOriginMatch": true,
+      "anonymousStatus": 403,
+      "anonymousDenied": true
+    },
+    {
+      "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+      "bytes": 953,
+      "sha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+      "sourceTargetShaMatch": true,
+      "sizeMatch": true,
+      "exactKeyMatch": true,
+      "privateOriginMatch": true,
+      "anonymousStatus": 403,
+      "anonymousDenied": true
+    },
+    {
+      "assetId": "e8209f86-93a1-4f0e-a455-e2aa65407b6a",
+      "bytes": 15116,
+      "sha256": "da5ab6148bb774f361322658410eda62ba067fafac80ae2c48bb4443b19a22ed",
+      "sourceTargetShaMatch": true,
+      "sizeMatch": true,
+      "exactKeyMatch": true,
+      "privateOriginMatch": true,
+      "anonymousStatus": 403,
+      "anonymousDenied": true
+    }
+  ],
+  "sourceTargetFiveAssetProof": "PASS",
+  "restoredAssetCount": 5,
+  "restoredBytes": 44260,
+  "localNumericArchiveFiles": 5,
+  "finishedAt": "2026-11-01T17:06:54.738Z",
+  "manualPrivateFileRestore": "PASS",
+  "operatorGrantRollback": {
+    "confirmed": true,
+    "confirmedAt": "2026-11-01T17:07:18.836Z",
+    "sourceConnectionEnvironments": [
+      "production"
+    ],
+    "originalCrmProductionConnectionPreserved": true,
+    "rootGrantReceiptSha256": "a206ce505344d33b64752cad454a02306f3647dacf8a297a4ad5ac4202df1b1b",
+    "freshDevelopmentAccessDenied": {
+      "format": "temporary-operator-source-development-revocation-check-v1",
+      "checkedAt": "2026-11-01T17:09:50.039Z",
+      "sourceSdkGetCalls": 1,
+      "bodyExported": false,
+      "bodyInterpreted": false,
+      "storeWrites": 0,
+      "credentialFilesWritten": 0,
+      "freshDevelopmentClaimsMatch": true,
+      "httpStatus": 403,
+      "expected403": true,
+      "permissionCode": "HTTP_403",
+      "status": "REVOCATION_DENIAL_PASS",
+      "finishedAt": "2026-11-01T17:09:50.852Z"
+    }
+  },
+  "sourceManifestProvenance": {
+    "snapshotId": "snap-quiet-rice-alihtu8r",
+    "snapshotAt": "2026-11-01T14:01:49Z",
+    "manifestSha256": "ab9fc80e34bc4f3c59441a95d4a47c68407bfb5401998b293afd22c316c3f72c",
+    "assetCount": 5,
+    "totalBytes": 44260,
+    "historicalKnowledgeVersionReferenceCount": 2
+  },
+  "localArchiveVerification": {
+    "fileCount": 5,
+    "totalBytes": 44260,
+    "allFileModes600": true,
+    "directoryMode700": true,
+    "allSourceArchiveHashesMatch": true,
+    "assets": [
+      {
+        "assetId": "38281e11-b877-44a5-8f9c-8303d37bf7b5",
+        "bytes": 996,
+        "sha256": "67f9107c8362338fd6630e15c29c55ec840b8236c75ff3ebebc12a3ec9bf74cc",
+        "archiveShaMatch": true,
+        "mode600": true
+      },
+      {
+        "assetId": "36510a74-dc15-4b6a-a5bd-45c44d400aa7",
+        "bytes": 20327,
+        "sha256": "204e5e6eab3b07da26cfa771106b09f212136d5275593a61ce5562cceddffda0",
+        "archiveShaMatch": true,
+        "mode600": true
+      },
+      {
+        "assetId": "c9730956-1590-4b64-87b7-8fc19fedf69f",
+        "bytes": 6868,
+        "sha256": "14677678104dd339b7a0b836f69039d658488264cedfd4d225c498b12e69a2a8",
+        "archiveShaMatch": true,
+        "mode600": true
+      },
+      {
+        "assetId": "e48e2909-09ef-4ef4-8598-ce582ea8519a",
+        "bytes": 953,
+        "sha256": "cba9ef0599553fee7e5c15e883f63d4c66423e872b3d0c2fc1c202418dada170",
+        "archiveShaMatch": true,
+        "mode600": true
+      },
+      {
+        "assetId": "e8209f86-93a1-4f0e-a455-e2aa65407b6a",
+        "bytes": 15116,
+        "sha256": "da5ab6148bb774f361322658410eda62ba067fafac80ae2c48bb4443b19a22ed",
+        "archiveShaMatch": true,
+        "mode600": true
+      }
+    ]
+  },
+  "normalApplicationTextDownloadHttp200Claimed": false,
+  "scheduledCombinedBackupFullJobProven": false,
+  "proofScope": "MANUAL_PRIVATE_FILE_RESTORE_ONLY",
+  "secretOrPrivatePathValuesIncluded": false
+}
