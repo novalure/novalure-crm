@@ -334,7 +334,7 @@ async function checkpointCommit(session:AppSession,claim:Claim,state:MailboxSync
         and crm_classification_allowed(p.workspace_id, p.data_classification, p.data_purpose)
       for share of c,p
     `, [fresh.workspaceId, claim.pilot.projectId, decision.contactId, outcome.meta!.fromAddress]);
-    if(!locked)continue;
+    if (!locked) throw new CrmCommandError('MAIL_PILOT_CONTACT_CHANGED', 'Der CRM-Kontakt konnte für diesen Abruf nicht bestätigt werden.', 409);
    }
    const review=assessMailboxObjectionReview({metadata:outcome.meta!,decision,message:outcome.content});
    if(review.state==='unavailable')throw new CrmCommandError('MAIL_REVIEW_SOURCE_CHANGED','Die persönliche Nachricht muss erneut im Postfach geprüft werden.',409);

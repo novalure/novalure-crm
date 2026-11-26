@@ -308,6 +308,12 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
       assert.equal(copies + decisions + checkpoints, 0);
       return;
     }
+    if (scenario === "contact disappeared at lock") {
+      await assert.rejects(run, { code: "MAIL_PILOT_CONTACT_CHANGED" });
+      assert.equal(contactLocks, 1);
+      assert.equal(copies + decisions + checkpoints, 0);
+      return;
+    }
     if (scenario === "database drift" || scenario === "wrong account" || scenario === "missing activation" || scenario === "project grant revoked") {
       const expected = { "database drift": "MAIL_PRODUCTION_DATABASE_UNAVAILABLE", "wrong account": "MAIL_PILOT_SCOPE_UNAVAILABLE", "missing activation": "MAIL_IMPORT_START_UNAVAILABLE", "project grant revoked": "PROJECT_FORBIDDEN" };
       await assert.rejects(run, { code: expected[scenario] });
@@ -324,6 +330,6 @@ for (const scenario of ["allowed", "address changed", "sender changed", "ambiguo
     assert.equal(decisions, saved);
     assert.equal(checkpoints, 1);
     assert.equal(approvals, ["ambiguous", "unapproved address"].includes(scenario) ? 1 : 2);
-    assert.equal(contactLocks, scenario === "contact disappeared at lock" || scenario === "allowed" ? 1 : 0);
+    assert.equal(contactLocks, scenario === "allowed" ? 1 : 0);
   }));
 }
