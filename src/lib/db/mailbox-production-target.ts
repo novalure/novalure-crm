@@ -1,6 +1,7 @@
 import "server-only";
-import { CrmCommandError, type TenantTransaction } from "@/lib/crm-command";
+import { assertCrmUuid, CrmCommandError, type TenantTransaction } from "@/lib/crm-command";
 import type { MailboxProvider } from "@/lib/crm-mailbox";
+import { normalizeMicrosoftMailboxGuid } from "@/lib/integrations/microsoft-oidc-identity";
 
 const productionPoolHost = "ep-wandering-union-alem0781-pooler.c-3.eu-central-1.aws.neon.tech";
 
@@ -27,6 +28,40 @@ function databaseUnavailable() {
 
 export function isProductionMicrosoftMailbox(provider: MailboxProvider): boolean {
   return provider === "microsoft" && process.env.MICROSOFT_MAILBOX_IDENTITY_MODE?.trim() === "verified-production";
+}
+
+export function assertProductionMailboxPilot(
+  provider: MailboxProvider,
+  session: { workspaceId: string; userId: string },
+  identity?: { tenantId: string | null; objectId: string | null },
+) {
+  if (!isProductionMicrosoftMailbox(provider)) return null;
+  try {
+    const raw = process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE ?? "";
+    if (!raw || raw.length > 8192) throw new Error();
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value) ||
+        Object.keys(value).sort().join() !== "actorId,contactIds,microsoftObjectId,microsoftTenantId,projectId,workspaceId") throw new Error();
+    const scope = value as Record<string, unknown>;
+    const workspaceId = assertCrmUuid(scope.workspaceId).toLowerCase();
+    const actorId = assertCrmUuid(scope.actorId).toLowerCase();
+    const projectId = assertCrmUuid(scope.projectId).toLowerCase();
+    const tenantId = normalizeMicrosoftMailboxGuid(scope.microsoftTenantId);
+    const objectId = normalizeMicrosoftMailboxGuid(scope.microsoftObjectId);
+    if (workspaceId !== session.workspaceId.toLowerCase() || actorId !== session.userId.toLowerCase() || !tenantId || !objectId ||
+        identity && (tenantId !== normalizeMicrosoftMailboxGuid(identity.tenantId) || objectId !== normalizeMicrosoftMailboxGuid(identity.objectId))) throw new Error();
+    if (!Array.isArray(scope.contactIds) || scope.contactIds.length < 1 || scope.contactIds.length > 100) throw new Error();
+    const contactIds = scope.contactIds.map(id => assertCrmUuid(id).toLowerCase()).sort();
+    if (new Set(contactIds).size !== contactIds.length) throw new Error();
+    return { workspaceId, actorId, projectId, tenantId, objectId, contactIds };
+  } catch {
+    throw new CrmCommandError("MAIL_PILOT_SCOPE_UNAVAILABLE", "Dieser persönliche Outlook-Test ist für den gewählten Umfang nicht verfügbar.", 403);
+  }
+}
+
+export function productionMailboxPilotAvailable(provider: MailboxProvider, session: { workspaceId: string; userId: string }) {
+  try { assertProductionMailboxPilot(provider, session); return true; }
+  catch { return false; }
 }
 
 export async function productionMailboxImportStart(tx: TenantTransaction, provider: MailboxProvider, connectionId: string): Promise<number | null> {

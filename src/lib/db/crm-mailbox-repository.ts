@@ -14,7 +14,7 @@ import { hasPersonalMailboxReviewSession } from "@/lib/db/mailbox-personal-revie
 import { currentTenantTransaction } from "./transaction-context";
 import { assertMailboxLeaseAfterLock } from "./crm-mailbox-lease-wall-clock";
 import { mailboxHostConfigurationUnavailable } from "../crm-mailbox-sync";
-import { assertProductionMailboxDatabase, isProductionMicrosoftMailbox, productionMailboxImportStart } from "./mailbox-production-target";
+import { assertProductionMailboxDatabase, assertProductionMailboxPilot, isProductionMicrosoftMailbox, productionMailboxImportStart, productionMailboxPilotAvailable } from "./mailbox-production-target";
 const returnTo = "/?mailbox=connected";
 const verifiedReturnTo = "/?mailbox=connected&verified_identity=v1";
 type Connection = { format?: string; tenantId?: string | null; subject?: string | null; accountId?: string | null; id: string; provider: MailboxProvider; accountLabel: string | null; status: string; scopes: string[]; access: string | null; refresh: string | null; expiresAt: string | null; revision: number; nextCursor: string | null };
@@ -41,24 +41,27 @@ export async function loadCrmMailbox(tx: TenantTransaction, session: AppSession,
   const rows = await tx.query<{ id:string; provider:MailboxProvider; accountLabel:string|null; status:string; scopes:unknown; verifiedMicrosoft:boolean; hasSubject:boolean; hasAccountId:boolean; checkPending:boolean }>(`select c.id,c.provider,c.account_label as "accountLabel",c.status,c.granted_scopes as scopes,c.expires_at as "expiresAt",c.last_synced_at as "lastSyncedAt",c.last_error as "lastError",c.next_cursor is not null as "hasOlder",c.revision,(to_jsonb(c)->>'provider_tenant_id') is not null as "verifiedMicrosoft",nullif(to_jsonb(c)->>'provider_subject','') is not null as "hasSubject",nullif(to_jsonb(c)->>'provider_account_id','') is not null as "hasAccountId",(c.sync_lease_until is not null or exists(select 1 from crm_mailbox_sync_runs r where r.connection_id=c.id and r.workspace_id=c.workspace_id and r.user_id=c.user_id and r.status='running')) as "checkPending" from crm_mailbox_connections c where c.workspace_id=$1::uuid and c.user_id=$2::uuid order by c.provider`, [session.workspaceId, session.userId]);
   let microsoftMode:boolean|null = null;
   if (rows.some(row => row.provider === "microsoft")) { try { microsoftMode = verifiedExternalMailboxMode(); } catch { /* A missing or contradictory configuration is not a verified connection. */ } }
-  const connections = rows.map(row => ({ ...row, presentation: mailboxConnectionPresentation({ ...row, microsoftBindingReady: microsoftMailboxBindingReady(microsoftMode,row.verifiedMicrosoft,row.hasSubject,row.hasAccountId) }) }));
+  const connections = rows.map(row => ({ ...row, pilotRestricted: isProductionMicrosoftMailbox(row.provider), pilotAvailable: productionMailboxPilotAvailable(row.provider, session), presentation: mailboxConnectionPresentation({ ...row, microsoftBindingReady: microsoftMailboxBindingReady(microsoftMode,row.verifiedMicrosoft,row.hasSubject,row.hasAccountId) }) }));
   let pageKey: { time:string; id:string } | null = null;
   if(page.before){try{const raw=JSON.parse(Buffer.from(page.before,'base64url').toString('utf8'));assertCrmUuid(raw.id);if(!Number.isFinite(Date.parse(raw.time)))throw new Error();pageKey=raw;}catch{throw new CrmCommandError('INVALID_CURSOR','Postfachseite prüfen');}}
   const messages = await tx.query<{id:string;receivedAt:string;preview:string}>(`select m.id,m.connection_id as "connectionId",m.subject,coalesce(to_jsonb(m)->>'source_status','in_inbox') as "sourceStatus",m.from_label as "fromLabel",m.from_address as "fromAddress",m.received_at as "receivedAt",left(m.body_text,200) as preview,m.body_truncated as "bodyTruncated",jsonb_array_length(m.attachments)::int as "attachmentCount",l.id as "linkId" from crm_mailbox_messages m left join crm_mailbox_links l on l.message_id=m.id and l.workspace_id=m.workspace_id and l.user_id=m.user_id where m.workspace_id=$1::uuid and m.user_id=$2::uuid and m.deleted_at is null and($3::timestamptz is null or(m.received_at,m.id)<($3::timestamptz,$4::uuid)) order by m.received_at desc,m.id desc limit 51`, [session.workspaceId, session.userId,pageKey?.time??null,pageKey?.id??null]);
   let detail: Record<string, unknown> | null = null;
-  if (messageId) { assertCrmUuid(messageId); detail = await tx.queryOne(`select m.id,m.revision,m.subject,coalesce(to_jsonb(m)->>'source_status','in_inbox') as "sourceStatus",m.from_label as "fromLabel",m.from_address as "fromAddress",m.to_addresses as "toAddresses",m.received_at as "receivedAt",m.body_text as "bodyText",m.body_truncated as "bodyTruncated",m.attachments,l.id as "linkId",l.project_id as "projectId",l.lead_id as "leadId",l.confirmed_reply as "confirmedReply",l.review_reason as "reviewReason" from crm_mailbox_messages m left join crm_mailbox_links l on l.message_id=m.id and l.workspace_id=m.workspace_id and l.user_id=m.user_id where m.id=$1::uuid and m.workspace_id=$2::uuid and m.user_id=$3::uuid and m.deleted_at is null`, [messageId, session.workspaceId, session.userId]); if (!detail) throw new CrmCommandError("NOT_FOUND", "Persönliche Nachricht nicht verfügbar", 404); }
+  if (messageId) { assertCrmUuid(messageId); detail = await tx.queryOne(`select m.id,m.revision,m.connection_id as "connectionId",m.subject,coalesce(to_jsonb(m)->>'source_status','in_inbox') as "sourceStatus",m.from_label as "fromLabel",m.from_address as "fromAddress",m.to_addresses as "toAddresses",m.received_at as "receivedAt",m.body_text as "bodyText",m.body_truncated as "bodyTruncated",m.attachments,l.id as "linkId",l.project_id as "projectId",l.lead_id as "leadId",l.confirmed_reply as "confirmedReply",l.review_reason as "reviewReason" from crm_mailbox_messages m left join crm_mailbox_links l on l.message_id=m.id and l.workspace_id=m.workspace_id and l.user_id=m.user_id where m.id=$1::uuid and m.workspace_id=$2::uuid and m.user_id=$3::uuid and m.deleted_at is null`, [messageId, session.workspaceId, session.userId]); if (!detail) throw new CrmCommandError("NOT_FOUND", "Persönliche Nachricht nicht verfügbar", 404); }
   const leads = session.permissions.includes("crm:write") ? await tx.query<{ id: string; projectId: string; contactId: string; label: string }>(`select l.id,l.project_id as "projectId",l.contact_id as "contactId",coalesce(nullif(c.name,''),'Anfrage ohne Namen')||' · '||p.name||' · '||coalesce(nullif(left(l.intent,80),''),l.source)||' · '||to_char(l.received_at,'YYYY-MM-DD HH24:MI') as label from leads l join contacts c on c.id=l.contact_id and c.workspace_id=l.workspace_id and c.project_id=l.project_id join projects p on p.id=l.project_id and p.workspace_id=l.workspace_id where l.workspace_id=$1::uuid and l.project_id is not null order by l.created_at desc limit 200`, [session.workspaceId]) : [];
   const runs = await tx.query(`select id,request_id as "requestId",connection_id as "connectionId",status,imported_count as "importedCount",last_error as "lastError",started_at as "startedAt",finished_at as "finishedAt" from crm_mailbox_sync_runs where workspace_id=$1::uuid and user_id=$2::uuid order by started_at desc limit 10`, [session.workspaceId, session.userId]);
   const auto = await (await import('./crm-mailbox-sync-repository')).loadMailboxAutoState(tx,session,page.decisionsBefore);
   const privateLinks=auto.ready?await tx.query<{messageId:string;status:string;label:string}>(`select d.message_id as "messageId",d.status,c.name as label from crm_mailbox_private_decisions d join leads l on l.workspace_id=d.workspace_id and l.project_id=d.project_id and l.id=d.lead_id join contacts c on c.workspace_id=l.workspace_id and c.project_id=l.project_id and c.id=l.contact_id where d.workspace_id=$1::uuid and d.user_id=$2::uuid and d.status in('suggested','filed') and d.message_id=any($3::uuid[])`,[session.workspaceId,session.userId,messages.map(row=>row.id)]):[];
   const shown=messages.slice(0,50).map(row=>({...row,privateLead:privateLinks.find(link=>link.messageId===row.id)??null})),last=shown.at(-1),nextPage=messages.length>50&&last?Buffer.from(JSON.stringify({time:last.receivedAt,id:last.id})).toString('base64url'):null;
-  return { connections, messages:shown,nextPage,auto, detail, leads, runs, providers: ["google", "microsoft"].map((provider) => ({ provider, configured: mailboxOAuthConfigured(provider as MailboxProvider) })), canAssign: session.permissions.includes("crm:write"), canSuppress: false, attachmentsStored: false, sent: false };
+  const providers = (["google", "microsoft"] as const).map(provider => ({ provider, configured: mailboxOAuthConfigured(provider) && productionMailboxPilotAvailable(provider, session) }));
+  const canAssign = session.permissions.includes("crm:write") && !connections.some(connection => connection.id === detail?.connectionId && connection.pilotRestricted);
+  return { connections, messages:shown,nextPage,auto, detail, leads, runs, providers, canAssign, canSuppress: false, attachmentsStored: false, sent: false };
 }
 export async function beginCrmMailboxOAuth(tx: TenantTransaction, session: AppSession, provider: MailboxProvider, requestUrl: string) {
   actor(session); if (!mailboxOAuthConfigured(provider)) throw new CrmCommandError("MAIL_NOT_CONFIGURED", "Postfach-OAuth ist noch nicht eingerichtet", 409);
   const verified = provider === "microsoft" && verifiedExternalMailboxMode();
   if (verified && !hasPersonalMailboxReviewSession(session)) throw new CrmCommandError("MAIL_PERSONAL_SESSION_REQUIRED", "Persönliche CRM-Anmeldung für das Postfach erforderlich", 403);
   await assertProductionMailboxDatabase(tx, provider);
+  assertProductionMailboxPilot(provider, session);
   if (verified) { const ready = await tx.queryOne<{ ready: boolean }>(`select count(*)=3 as ready from information_schema.columns where table_name='crm_mailbox_connections' and column_name=any($1::text[])`, [["provider_tenant_id", "provider_subject", "provider_account_id"]]); if (!ready?.ready) throw new CrmCommandError("MAIL_IDENTITY_MIGRATION_REQUIRED", "Die sichere Postfach-Identität ist noch nicht verfügbar", 409); }
   const signed = createSignedOAuthState({ provider, userId: session.userId, workspaceId: session.workspaceId, returnTo: verified ? verifiedReturnTo : returnTo });
   await tx.query(`delete from crm_mailbox_oauth_states where workspace_id=$1::uuid and user_id=$2::uuid and expires_at<now()-interval '1 day'`, [session.workspaceId, session.userId]);
@@ -71,6 +74,7 @@ export async function consumeCrmMailboxOAuth(tx: TenantTransaction, session: App
   const expectedReturnTo = verified ? verifiedReturnTo : returnTo;
   if (!parsed || parsed.userId !== session.userId || parsed.workspaceId !== session.workspaceId || parsed.returnTo !== expectedReturnTo) throw new CrmCommandError("MAIL_OAUTH_STATE", "Postfach-Verbindung erneut starten", 409);
   await assertProductionMailboxDatabase(tx, provider);
+  assertProductionMailboxPilot(provider, session);
   const params = [verified ? verifiedMailboxStateHash(session, state) : hashOAuthState(state), hashOAuthState(parsed.nonce), session.workspaceId, session.userId, provider];
   if (verified) {
     // The row lock must finish before checking the wall clock. Evaluating
@@ -93,6 +97,7 @@ export async function saveCrmMailboxConnection(tx: TenantTransaction, session: A
   if (provider === "microsoft" && verified && !hasVerifiedMicrosoftMailboxScopes(tokens.scopes)) throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Nur Postfach-Lesezugriff ist für diese Verbindung zulässig.", 409);
   if (verified && !hasPersonalMailboxReviewSession(session)) throw new CrmCommandError("MAIL_PERSONAL_SESSION_REQUIRED", "Persönliche CRM-Anmeldung für das Postfach erforderlich", 403);
   await assertProductionMailboxDatabase(tx, provider);
+  assertProductionMailboxPilot(provider, session, verified);
   const identitySchema = provider === "microsoft" ? await tx.queryOne<{ ready: boolean }>(`select count(*)=2 as ready from information_schema.columns where table_name='crm_mailbox_connections' and column_name=any($1::text[])`, [["provider_tenant_id", "provider_subject"]]) : null;
   if (verified && (!identitySchema?.ready || provider !== "microsoft")) throw new CrmCommandError("MAIL_IDENTITY_MIGRATION_REQUIRED", "Sichere Postfachidentität nicht verfügbar", 409);
   const extraColumns = verified ? ",provider_tenant_id,provider_subject,provider_account_id" : "";
@@ -109,12 +114,14 @@ export async function finishCrmMailboxOAuth(session: AppSession, provider: Mailb
     actor(fresh);
     if (!hasPersonalMailboxReviewSession(fresh) || !verifiedExternalMailboxMode()) throw new CrmCommandError("MAIL_PERSONAL_SESSION_REQUIRED", "Persönliche CRM-Anmeldung für das Postfach erforderlich", 403);
     await assertProductionMailboxDatabase(tx, provider);
+    assertProductionMailboxPilot(provider, fresh);
   }, options);
   // Recheck after each earlier network boundary before starting the next one.
   if (consumed.verifiedNonce) await revalidatePersonalSession();
   const verified = consumed.verifiedNonce ? await verifyIdentity({ flow: "authorization", idToken: tokens.idToken || "", clientId: microsoftMailboxClientId(), expectedNonce: consumed.verifiedNonce }) : undefined;
   if (consumed.verifiedNonce) {
     if (!verified) throw new CrmCommandError("MAIL_REAUTH_REQUIRED", "Postfachidentität konnte nicht bestätigt werden", 409);
+    assertProductionMailboxPilot(provider, session, verified);
     await revalidatePersonalSession();
   }
   const identity = await fetchMailboxAccountIdentity(provider, tokens.accessToken, transport);
@@ -122,6 +129,7 @@ export async function finishCrmMailboxOAuth(session: AppSession, provider: Mailb
   if (accountId === null || verified && !sameMicrosoftMailboxGuid(accountId, identity.accountId)) throw new CrmCommandError("MAIL_ACCOUNT_CHANGED", "Bestätigtes Microsoft-Konto stimmt nicht überein", 409);
   return withCrmRead(session, async (tx, fresh) => {
     await assertProductionMailboxDatabase(tx, provider);
+    assertProductionMailboxPilot(provider, fresh, verified);
     const schema = await tx.queryOne<{ ready: boolean }>(`select exists(select 1 from information_schema.columns where table_name='crm_mailbox_connections' and column_name='provider_account_id') as ready`);
     const verifiedSchema = provider === "microsoft" ? await tx.queryOne<{ ready: boolean }>(`select count(*)=2 as ready from information_schema.columns where table_name='crm_mailbox_connections' and column_name=any($1::text[])`, [["provider_tenant_id", "provider_subject"]]) : null;
     if (verified && (!schema?.ready || !verifiedSchema?.ready)) throw new CrmCommandError("MAIL_IDENTITY_MIGRATION_REQUIRED", "Sichere Postfachidentität nicht verfügbar", 409);
@@ -168,6 +176,7 @@ export async function syncCrmMailbox(session: AppSession, input: { connectionId:
     if (!c || c.status !== "connected" || !hasMailboxReadScope(c.provider, c.scopes)) throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Postfach erneut mit ausdrücklich erlaubtem Mail-Lesezugriff verbinden", 409);
     if (c.provider === "microsoft") { const mode = verifiedExternalMailboxMode(); if (mode !== Boolean(c.tenantId) || c.tenantId && (!c.subject || !c.accountId)) throw new CrmCommandError("MAIL_REAUTH_REQUIRED", "Postfachidentität muss erneut sicher verbunden werden", 409); if (mode && !hasVerifiedMicrosoftMailboxScopes(c.scopes)) throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Nur Postfach-Lesezugriff ist für diese Verbindung zulässig.", 409); }
     await assertProductionMailboxDatabase(tx, c.provider);
+    if (isProductionMicrosoftMailbox(c.provider)) throw new CrmCommandError("MAIL_PILOT_SCOPED_CHECK_REQUIRED", "Für diesen Outlook-Test steht der persönliche Kontaktabgleich zur Verfügung.", 409);
     const importStart = await productionMailboxImportStart(tx, c.provider, c.id);
     const prior = await tx.queryOne<{ id: string; status: string; hash: string; importedCount: number }>(`select id,status,request_hash as hash,imported_count as "importedCount" from crm_mailbox_sync_runs where workspace_id=$1::uuid and user_id=$2::uuid and request_id=$3::uuid for update`, [fresh.workspaceId, fresh.userId, input.requestId]);
     if (prior && prior.hash !== hash) throw new CrmCommandError("IDEMPOTENCY_CONFLICT", "Abrufkennung gehört zu einem anderen Vorgang", 409);
@@ -271,7 +280,11 @@ export async function associateCrmMailboxMessage(session: AppSession, input: Rec
   return executeCrmCommand(session, { ...metadata, operation: "mailbox.associate_reviewed_message", projectId, resourceId: messageId, capability: "workspace:operate", payload: input }, async (tx, context) => {
     actor(context.session); await assertProjectGrant(tx, context.session, projectId, true);
     if (input.reviewed !== true || typeof input.confirmedReply !== "boolean" || typeof input.reason !== "string" || input.reason.trim().length < 10 || input.reason.length > 1000) throw new CrmCommandError("MAIL_REVIEW_REQUIRED", "Zuordnung ausdrücklich prüfen und begründen", 409);
-    const message = await tx.queryOne(`select id from crm_mailbox_messages where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid and deleted_at is null for update`, [messageId, context.workspaceId, context.actorId]);
+    const message = await tx.queryOne<{connectionId:string}>(`select id,connection_id as "connectionId" from crm_mailbox_messages where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid and deleted_at is null for update`, [messageId, context.workspaceId, context.actorId]);
+    if (message && isProductionMicrosoftMailbox("microsoft")) {
+      const connection = await tx.queryOne<{provider:MailboxProvider}>(`select provider from crm_mailbox_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid`, [message.connectionId, context.workspaceId, context.actorId]);
+      if (!connection || isProductionMicrosoftMailbox(connection.provider)) throw new CrmCommandError("MAIL_PILOT_PRIVATE_REVIEW_ONLY", "Der Outlook-Test erlaubt die private Kontaktprüfung.", 409);
+    }
     const lead = await tx.queryOne<{ contactId: string }>(`select l.contact_id as "contactId" from leads l join contacts c on c.id=l.contact_id and c.workspace_id=l.workspace_id and c.project_id=l.project_id where l.id=$1::uuid and l.project_id=$2::uuid and l.workspace_id=$3::uuid for key share of l,c`, [leadId, projectId, context.workspaceId]);
     if (!message || !lead) throw new CrmCommandError("MAIL_TARGET_UNAVAILABLE", "Eigene Nachricht und aktuelle berechtigte Anfrage erforderlich", 403);
     const prior = await tx.queryOne<{ id: string }>(`select id from crm_mailbox_links where message_id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid`, [messageId, context.workspaceId, context.actorId]);

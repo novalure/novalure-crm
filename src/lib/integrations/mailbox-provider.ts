@@ -101,7 +101,7 @@ export function parseMicrosoftMailboxMessage(raw: Record<string, unknown>, attac
   return { providerId: mailboxProviderId(raw.id), threadId: typeof raw.conversationId === "string" ? mailboxProviderId(raw.conversationId) : null, internetMessageId: mailboxText(raw.internetMessageId, 2000) || null, subject: mailboxText(raw.subject, 1000), fromLabel: mailboxText(from.name || from.address, 1000), fromAddress: mailboxAddress(from.address), toAddresses: (Array.isArray(raw.toRecipients) ? raw.toRecipients.slice(0, 50) : []).map((item) => mailboxAddress(object(object(item).emailAddress).address)).filter((value): value is string => value !== null), receivedAt: received(raw.receivedDateTime), bodyText: content, bodyTruncated: !completeText || (bodyContent?.length ?? 0) > 65536, attachments: attachmentRows.slice(0, 50).map((row) => { const item = object(row); return metadataAttachment(item, item.id, item.name, item.contentType, item.size); }), senderIdentityVerified: false };
 }
 
-export async function fetchMicrosoftInboxContent(input: { accessToken: string; inboxId: unknown; messageId: string; immutableIds?: boolean; importStart?: number | null }, transport: MailboxTransport = defaultTransport) {
+export async function fetchMicrosoftInboxContent(input: { accessToken: string; inboxId: unknown; messageId: string; immutableIds?: boolean; importStart?: number | null; expectedSender?: string | null }, transport: MailboxTransport = defaultTransport) {
   let inboxId: string;
   try {
     inboxId = mailboxProviderId(input.inboxId);
@@ -117,6 +117,7 @@ export async function fetchMicrosoftInboxContent(input: { accessToken: string; i
   try { folderId = mailboxProviderId(detail.parentFolderId); } catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
   if (folderId !== inboxId) throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID");
   if (input.importStart != null && Date.parse(received(detail.receivedDateTime)) < input.importStart) throw new MailboxProviderError("MAIL_MICROSOFT_DETAIL_CHANGED");
+  if (input.expectedSender !== undefined && (!input.expectedSender || mailboxAddress(object(object(detail.from).emailAddress).address) !== input.expectedSender)) throw new MailboxProviderError("MAIL_MICROSOFT_DETAIL_CHANGED");
   const attachments = detail.hasAttachments === true ? await json(`${url}/attachments?$select=id,name,contentType,size,isInline&$top=50`, { headers: auth }, transport) : null;
   if (attachments?.["@odata.nextLink"]) throw new MailboxProviderError("MAIL_TOO_MANY_ATTACHMENTS");
   return parseMicrosoftMailboxMessage(detail, attachments ? array(attachments.value, 50) : []);

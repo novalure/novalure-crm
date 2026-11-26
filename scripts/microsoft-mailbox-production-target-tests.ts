@@ -22,6 +22,7 @@ const production = {
   MICROSOFT_MAILBOX_CLIENT_AUTH_METHOD: "vercel-oidc",
   MICROSOFT_MAILBOX_IDENTITY_MODE: "verified-production",
   MICROSOFT_MAILBOX_PRODUCTION_RELEASE_SHA: sha,
+  NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE: undefined,
   DATABASE_URL: "postgresql://novalure_app:synthetic@ep-wandering-union-alem0781-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
   OAUTH_STATE_SECRET: "synthetic-state-value-with-more-than-32-bytes",
   OAUTH_TOKEN_ENCRYPTION_KEY: "synthetic-encryption",
@@ -114,38 +115,24 @@ test("production does not generate a mailbox OAuth state on an unready or mismat
   });
 });
 
-for (const importStart of [Date.parse("2026-11-26T14:00:00Z"), null]) test(importStart ? "manual sync checks the database again after committing its lease" : "manual sync refuses a missing activation time before claiming or calling Microsoft", async () => {
+test("verified-production refuses broad manual imports before claiming or contacting Microsoft", async () => {
   await withProductionEnv({}, async () => {
     const workspaceId = randomUUID(), userId = randomUUID(), id = randomUUID();
     const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId } as AppSession;
-    let checkouts = 0;
-    let targetChecks = 0;
-    const pool = {
-      async connect() {
-        const checkout = ++checkouts;
-        return { release() {}, async query(sql: string) {
-          const query = sql.replace(/\s+/g, " ").trim();
-          if (query.includes("from pg_roles runtime_role")) return { rows: [{ safe: true }] };
-          if (query.startsWith("select set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
-          if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId: null }] };
-          if (["begin", "commit", "rollback"].includes(query)) return { rows: [], command: query.toUpperCase() };
-          if (query.includes("current_setting('neon.project_id'")) { targetChecks++; return { rows: [{ ready: checkout === 1 }] }; }
-          assert.equal(checkout, 1, "only the first checkout is trusted to access mailbox state");
-          if (query.startsWith("select id,provider,account_label")) return { rows: [{ id, provider: "microsoft", status: "connected", scopes: ["Mail.Read"], tenantId: randomUUID(), subject: "synthetic", accountId: randomUUID(), revision: 7 }] };
-          if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: importStart ? [{ start: importStart }] : [] };
-          assert.notEqual(importStart, null, "an unset activation must stop before the sync claim");
-          if (query.startsWith("select id,status,request_hash")) return { rows: [] };
-          if (query.startsWith("select coalesce(sync_lease_until")) return { rows: [{ busy: false }] };
-          if (query.startsWith("insert into crm_mailbox_sync_runs")) return { rows: [] };
-          if (query.startsWith("update crm_mailbox_connections set sync_lease_id")) return { rows: [{ revision: 8 }] };
-          assert.fail("unexpected synthetic query");
-        } };
-      },
-    } as unknown as TenantPool;
-    const noIo = async (): Promise<never> => { assert.fail("the second database must be checked before provider I/O"); };
-    await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool }, noIo, noIo, noIo), { code: importStart ? "MAIL_PRODUCTION_DATABASE_UNAVAILABLE" : "MAIL_IMPORT_START_UNAVAILABLE" });
-    assert.equal(checkouts, importStart ? 3 : 1); // claim, denied provider preflight, denied failure write
-    assert.equal(targetChecks, checkouts);
+    const pool = { async connect() { return { release() {}, async query(sql: string) {
+      const query = sql.replace(/\s+/g, " ").trim();
+      if (query.includes("from pg_roles runtime_role")) return { rows: [{ safe: true }] };
+      if (query.startsWith("select set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
+      if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId: null }] };
+      if (["begin", "commit", "rollback"].includes(query)) return { rows: [], command: query.toUpperCase() };
+      if (query.includes("current_setting('neon.project_id'")) return { rows: [{ ready: true }] };
+      if (query.startsWith("select id,provider,account_label")) return { rows: [{ id, provider: "microsoft", status: "connected", scopes: ["Mail.Read"], tenantId: randomUUID(), subject: "synthetic", accountId: randomUUID(), revision: 7 }] };
+      assert.fail("the restricted pilot must not write a generic import claim");
+    } }; } } as unknown as TenantPool;
+    const noIo = async (): Promise<never> => { assert.fail("broad manual imports must not call Microsoft"); };
+    for (const mode of ["latest", "older"] as const) {
+      await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode }, { pool }, noIo, noIo, noIo), { code: "MAIL_PILOT_SCOPED_CHECK_REQUIRED" });
+    }
   });
 });
 
@@ -154,6 +141,7 @@ test("first verified-production sync does not store old mail or unknown removals
   const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId, authIdentityId } as AppSession;
   const activation = "2026-11-26T14:00:00.000Z", old = "2026-11-26T13:59:59.999Z";
   const identity = { tenantId: randomUUID(), accountId: randomUUID(), subject: "synthetic-subject" };
+  process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE = JSON.stringify({ workspaceId, actorId:userId, projectId:randomUUID(), contactIds:[randomUUID()], microsoftTenantId:identity.tenantId, microsoftObjectId:identity.accountId });
   const label = "synthetic@example.invalid", access = protectMailboxToken(session, "microsoft", "synthetic", label);
   const inbox = "synthetic-inbox", graphUser = "https://graph.microsoft.com/v1.0/me";
   let revision = 3, policyRevision = 1;
@@ -164,7 +152,7 @@ test("first verified-production sync does not store old mail or unknown removals
     if (query.includes("set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
     if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId }] };
     if (query.includes("current_setting('neon.project_id'")) return { rows: [{ ready: true }] };
-    if (query.includes("to_regclass('public.crm_mailbox_auto_settings')")) return { rows: [{ ready: true }] };
+    if (query.includes("to_regclass('public.crm_mailbox_auto_settings')") || query.includes("crm_mailbox_contact_review_guard_ready")) return { rows: [{ ready: true }] };
     if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: [{ start: Date.parse(activation) }] };
     if (query.startsWith("select c.id,c.provider")) return { rows: [{ id, provider: "microsoft", ...identity, label, format: "immutable", access, refresh: null, scopes: ["Mail.Read"], expiresAt: new Date(Date.now() + 3_600_000).toISOString(), revision, policyRevision, identityId: authIdentityId, autoFile: false, contactReview: true, backfillReplaying: false, failures: 0, enabled: true, due: true, busy: false }] };
     if (query.startsWith("select to_jsonb(c)")) return { rows: [identity] };
@@ -194,3 +182,124 @@ test("first verified-production sync does not store old mail or unknown removals
   assert.equal(result.imported, 0);
   assert.equal(fetched.length, 5);
 }));
+
+test("only the explicit pilot actor may create a production authorization state", async () => {
+  const workspaceId = randomUUID(), userId = randomUUID();
+  const session = { authenticated: true, source: "cookie", role: "owner", productRole: "customer_owner", workspaceId, userId, authSessionId: randomUUID(), authIdentityId: randomUUID() } as AppSession;
+  const scope = { workspaceId, actorId: userId, projectId: randomUUID(), contactIds: [randomUUID()], microsoftTenantId: randomUUID(), microsoftObjectId: randomUUID() };
+  const settings = [undefined, JSON.stringify({ ...scope, actorId: randomUUID() }), JSON.stringify({ ...scope, contactIds: [scope.contactIds[0], scope.contactIds[0].toUpperCase()] })];
+  for (const value of settings) await withProductionEnv({ NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE: value }, async () => {
+    const tx = { async queryOne() { return { ready: true }; }, async query() { assert.fail("an invalid pilot created authorization state"); } } as unknown as TenantTransaction;
+    await assert.rejects(beginCrmMailboxOAuth(tx, session, "microsoft", input.requestUrl), { code: "MAIL_PILOT_SCOPE_UNAVAILABLE" });
+  });
+});
+
+for (const scenario of ["allowed", "address changed", "sender changed", "ambiguous", "database drift", "wrong account", "missing activation"] as const) {
+  test(`production pilot ${scenario} case checks scope before content and at the commit`, async () => withProductionEnv({}, async () => {
+    const workspaceId = randomUUID(), userId = randomUUID(), connectionId = randomUUID(), authIdentityId = randomUUID();
+    const projectId = randomUUID(), contactId = randomUUID(), unselectedContactId = randomUUID(), foreignProjectId = randomUUID();
+    const session = { authenticated: true, source: "database", role: "owner", productRole: "customer_owner", permissions: ["crm:read"], workspaceId, userId, authIdentityId } as AppSession;
+    const activation = "2026-11-26T14:00:00.000Z", received = "2026-11-26T14:01:00.000Z";
+    const identity = { tenantId: randomUUID(), accountId: randomUUID(), subject: "synthetic-subject" };
+    process.env.NOVALURE_MICROSOFT_MAILBOX_PILOT_SCOPE = JSON.stringify({ workspaceId, actorId: userId, projectId, contactIds: [contactId], microsoftTenantId: identity.tenantId, microsoftObjectId: scenario === "wrong account" ? randomUUID() : identity.accountId });
+    const label = "synthetic@example.invalid", approvedSender = "pilot@example.invalid", outsideSender = "unrelated@example.invalid";
+    const access = protectMailboxToken(session, "microsoft", "synthetic", label);
+    const graph = "https://graph.microsoft.com/v1.0/me", inbox = "synthetic-inbox";
+    let revision = 3, policyRevision = 1, providerCalls = 0, detailCalls = 0, copies = 0, decisions = 0, approvals = 0, checkpoints = 0, checkouts = 0;
+    const pool = { async connect() {
+      const checkout = ++checkouts;
+      return { release() {}, async query(sql: string, args: unknown[] = []) {
+        const query = sql.replace(/\s+/g, " ").trim();
+        if (["begin", "commit", "rollback"].includes(query)) return { rows: [], command: query.toUpperCase() };
+        if (query.includes("pg_roles runtime_role")) return { rows: [{ safe: true }] };
+        if (query.includes("set_config('app.tenant_id'")) return { rows: [{ workspaceId, actorId: userId }] };
+        if (query.includes("crm_lock_active_member")) return { rows: [{ role: "owner", productRole: "customer_owner", operatingModel: "self_service_customer", authIdentityId }] };
+        if (query.includes("current_setting('neon.project_id'")) return { rows: [{ ready: scenario !== "database drift" || checkout === 1 }] };
+        if (query.includes("to_regclass('public.crm_mailbox_auto_settings')") || query.includes("crm_mailbox_contact_review_guard_ready")) return { rows: [{ ready: true }] };
+        if (query.startsWith("select ceil(extract(epoch from activated_at)*1000)")) return { rows: scenario === "missing activation" ? [] : [{ start: Date.parse(activation) }] };
+        if (query.startsWith("select c.id,c.provider")) return { rows: [{ id: connectionId, provider: "microsoft", ...identity, label, format: "immutable", access, refresh: null, scopes: ["Mail.Read"], expiresAt: new Date(Date.now() + 3_600_000).toISOString(), revision, policyRevision, identityId: authIdentityId, autoFile: false, contactReview: true, backfillReplaying: false, failures: 0, enabled: true, due: true, busy: false }] };
+        if (query.startsWith("select to_jsonb(c)")) return { rows: [identity] };
+        if (query.startsWith("select revision from crm_mailbox_connections")) return { rows: [{ revision }] };
+        if (query.startsWith("update crm_mailbox_connections c set sync_lease_id")) return { rows: [{ revision: ++revision }] };
+        if (query.startsWith("update crm_mailbox_connections set provider_account_id")) { revision++; return { rows: [] }; }
+        if (query.startsWith("update crm_mailbox_auto_settings set status=")) return { rows: [{ revision: ++policyRevision }] };
+        if (query.startsWith("select m.deleted_at")) return { rows: [] };
+        if (query.includes('from contacts c where') && query.includes('lower(btrim(c.email))=$2')) {
+          assert.match(query, /crm_project_access/);
+          assert.match(query, /crm_classification_allowed/);
+          assert.match(query, /c.archived_at is null/);
+          assert.equal(args[0], workspaceId);
+          if (args[1] === outsideSender) return { rows: [{ contactId: unselectedContactId, projectId }] };
+          assert.equal(args[1], approvedSender);
+          approvals++;
+          if (scenario === "address changed" && detailCalls) return { rows: [] };
+          if (scenario === "ambiguous") return { rows: [{ contactId, projectId }, { contactId: unselectedContactId, projectId: foreignProjectId }] };
+          return { rows: [{ contactId, projectId }] };
+        }
+        if (query.startsWith("insert into crm_mailbox_messages")) {
+          assert.equal(scenario, "allowed");
+          assert.equal(args[3], "allowed-message");
+          copies++;
+          return { rows: [{ id: randomUUID() }] };
+        }
+        if (query.startsWith("insert into crm_mailbox_private_decisions")) {
+          assert.equal(scenario, "allowed");
+          assert.ok(args.includes("review"));
+          assert.ok(args.includes("exact_address_unique_contact_unverified_sender"));
+          assert.ok(args.includes(contactId));
+          assert.ok(args.includes(projectId));
+          assert.equal(JSON.stringify(args).includes(outsideSender), false);
+          decisions++;
+          return { rows: [] };
+        }
+        if (query.startsWith("insert into crm_mailbox_auto_checkpoints")) {
+          assert.equal(JSON.stringify(args).includes("outside-message"), false);
+          assert.equal(JSON.stringify(args).includes("allowed-message"), false);
+          checkpoints++;
+          return { rows: [] };
+        }
+        if (query.startsWith("select checkpoint from crm_mailbox_auto_checkpoints") || query.includes("contact_review_backfill_resume") || query.includes("to_regclass('public.crm_mailbox_cursor_recovery')") || query.startsWith("select id from crm_mailbox_private_decisions") || query.startsWith("delete from crm_mailbox_private_decisions")) return { rows: [] };
+        assert.fail("the restricted pilot executed an unexpected query");
+      } };
+    } } as unknown as TenantPool;
+    const run = runPersonalMailboxSync(session, connectionId, { pool, maxPages: 1, transport: async url => {
+      providerCalls++;
+      if (url === `${graph}?$select=id,mail,userPrincipalName`) return Response.json({ id: identity.accountId, mail: label });
+      if (url === `${graph}/mailFolders/inbox?$select=id`) return Response.json({ id: inbox });
+      if (url.startsWith(`${graph}/mailFolders/inbox/messages/delta`)) return Response.json({ value: [{ id: "outside-message", receivedDateTime: received }, { id: "allowed-message", receivedDateTime: received }], "@odata.deltaLink": `${graph}/mailFolders/inbox/messages/delta?$deltatoken=synthetic` });
+      if (url.startsWith(`${graph}/messages/`)) {
+        const path = new URL(url);
+        const id = path.pathname.split('/').at(-1);
+        assert.equal(path.searchParams.get('$select'), 'id,from,receivedDateTime,parentFolderId');
+        return Response.json({ id, from: { emailAddress: { address: id === 'allowed-message' ? approvedSender : outsideSender } }, receivedDateTime: received, parentFolderId: inbox });
+      }
+      if (url.startsWith(`${graph}/mailFolders/${inbox}/messages/allowed-message?`)) {
+        assert.ok(scenario === "allowed" || scenario === "address changed" || scenario === "sender changed");
+        detailCalls++;
+        return Response.json({ id: "allowed-message", subject: "Synthetic pilot", from: { emailAddress: { address: scenario === "sender changed" ? outsideSender : approvedSender } }, receivedDateTime: received, parentFolderId: inbox, body: { contentType: "text", content: "Synthetic private text" }, hasAttachments: scenario === "sender changed" });
+      }
+      assert.fail("an unrelated body, attachment, or unexpected provider endpoint was requested");
+    } });
+    if (scenario === "sender changed") {
+      await assert.rejects(run, { code: "MAIL_MICROSOFT_DETAIL_CHANGED" });
+      assert.equal(detailCalls, 1);
+      assert.equal(copies + decisions + checkpoints, 0);
+      return;
+    }
+    if (scenario === "database drift" || scenario === "wrong account" || scenario === "missing activation") {
+      await assert.rejects(run, { code: scenario === "database drift" ? "MAIL_PRODUCTION_DATABASE_UNAVAILABLE" : scenario === "wrong account" ? "MAIL_PILOT_SCOPE_UNAVAILABLE" : "MAIL_IMPORT_START_UNAVAILABLE" });
+      assert.equal(providerCalls, 0);
+      assert.equal(copies, 0);
+      assert.equal(checkpoints, 0);
+      return;
+    }
+    const result = await run;
+    const saved = scenario === "allowed" ? 1 : 0;
+    assert.equal(result.status, "current");
+    assert.equal(result.imported, saved);
+    assert.equal(copies, saved);
+    assert.equal(decisions, saved);
+    assert.equal(checkpoints, 1);
+    assert.equal(approvals, scenario === "ambiguous" ? 1 : 2);
+  }));
+}

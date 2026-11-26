@@ -5,7 +5,7 @@ import { assertCrmUuid, CrmCommandError, crmPayloadDigest, withCrmRead, type Ten
 import { hasMailboxReadScope, hasVerifiedMicrosoftMailboxScopes, type MailboxImportedMessage, type MailboxProvider } from "../crm-mailbox";
 import { assertMicrosoftMailboxCheckpoint, assertMicrosoftReadyCheckpoint, assertMicrosoftRecovery, MailboxCheckpointReviewRequired, contactBackfillCheckpoint, emptyMailboxCheckpoint, mailboxCursorResetAllowed, mailboxSyncCurrent, mailboxSyncFailureStatus, mailboxSyncPosition, microsoftCheckpointUsesContinuation, microsoftContactBackfillCheckpoint, microsoftRecoveryReplay, queueMicrosoftMailboxDecision, type MailboxMetadata, type MailboxSyncCheckpoint, type MailboxSyncDecision } from "../crm-mailbox-sync";
 import { exchangeMailboxToken, fetchMailboxAccountIdentity, MailboxProviderError, verifiedExternalMailboxMode, type MailboxTransport } from "../integrations/mailbox-provider";
-import { assertProductionMailboxDatabase, productionMailboxImportStart } from "./mailbox-production-target";
+import { assertProductionMailboxDatabase, assertProductionMailboxPilot, isProductionMicrosoftMailbox, productionMailboxImportStart } from "./mailbox-production-target";
 import { fetchMailboxInboxId, fetchMailboxKnownContent, fetchMailboxMetadata, fetchMailboxSyncPage, translateMailboxLegacyIds } from "../integrations/mailbox-sync-provider";
 import { protectMailboxToken, unprotectMailboxToken } from "./crm-mailbox-repository";
 import { MicrosoftIdentityError, sameMicrosoftMailboxGuid, verifyMicrosoftMailboxIdentity } from "../integrations/microsoft-oidc-identity";
@@ -16,7 +16,7 @@ import { hasPersonalMailboxReviewSession } from "./mailbox-personal-review-acces
 import { assertMailboxLeaseAfterLock } from "./crm-mailbox-lease-wall-clock";
 import { currentTenantTransaction } from "./transaction-context";
 type Options = TenantTransactionOptions & { transport?: MailboxTransport; maxPages?: number; budgetMs?: number; ignoreDue?: boolean; verifyIdentity?: typeof verifyMicrosoftMailboxIdentity; microsoftAuth?: typeof microsoftClientAuthFields };
-type Claim = { id: string; provider: MailboxProvider; tenantId: string | null; subject: string | null; label: string; accountId: string | null; format: string; access: string; refresh: string | null; scopes: string[]; expiresAt: string; revision: number; policyRevision: number; identityId: string; autoFile: boolean; contactReview: boolean; backfillReplaying: boolean; checkpoint: MailboxSyncCheckpoint; lease: string; failures: number; importStart: number | null };
+type Claim = { id: string; provider: MailboxProvider; tenantId: string | null; subject: string | null; label: string; accountId: string | null; format: string; access: string; refresh: string | null; scopes: string[]; expiresAt: string; revision: number; policyRevision: number; identityId: string; autoFile: boolean; contactReview: boolean; backfillReplaying: boolean; checkpoint: MailboxSyncCheckpoint; lease: string; failures: number; importStart: number | null; pilot: ReturnType<typeof assertProductionMailboxPilot> };
 type CursorRecovery = { phase:'baseline'|'verify'|'replay'; ceilingId:string|null; lastId:string|null; baseline:MailboxSyncCheckpoint|null };
 function requireMicrosoftBinding(provider: MailboxProvider, tenantId: string | null, subject: string | null, accountId: string | null) {
  if(provider==='microsoft' && (verifiedExternalMailboxMode() !== Boolean(tenantId) || tenantId && (!subject || !accountId))) throw new CrmCommandError('MAIL_REAUTH_REQUIRED','Postfachidentität muss erneut sicher verbunden werden',409);
@@ -30,23 +30,28 @@ export async function saveMailboxAutoSettings(tx: TenantTransaction, session: Ap
   const connection = await tx.queryOne<{ id: string; connected: boolean; provider: MailboxProvider; tenantId: string | null; subject: string | null; accountId: string | null; scopes:string[] }>(`select id,provider,granted_scopes as scopes,to_jsonb(crm_mailbox_connections)->>'provider_tenant_id' as "tenantId",to_jsonb(crm_mailbox_connections)->>'provider_subject' as subject,to_jsonb(crm_mailbox_connections)->>'provider_account_id' as "accountId",status='connected' as connected from crm_mailbox_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid for update`, [input.connectionId,session.workspaceId,session.userId]);
   const identity = await tx.queryOne<{ id: string }>(`select auth_identity_id as id from crm_lock_active_member($1::uuid,$2::uuid)`,[session.workspaceId,session.userId]);
   if (!connection || !identity?.id || input.enabled && !connection.connected) throw new CrmCommandError("MAIL_PERSONAL_CONSENT_REQUIRED", "Ein aktives persönlich verbundenes Konto ist erforderlich", 409);
+  const pilotRestricted = isProductionMicrosoftMailbox(connection.provider);
   if (input.enabled) {
     requireMicrosoftBinding(connection.provider, connection.tenantId, connection.subject, connection.accountId);
     if (connection.provider === "microsoft" && connection.tenantId && !hasVerifiedMicrosoftMailboxScopes(connection.scopes)) {
       throw new CrmCommandError("MAIL_SCOPE_REQUIRED", "Nur Postfach-Lesezugriff ist für diese Verbindung zulässig.", 409);
     }
     await assertProductionMailboxDatabase(tx, connection.provider);
+    if (assertProductionMailboxPilot(connection.provider, session, { tenantId: connection.tenantId, objectId: connection.accountId }) && (input.autoFile || input.contactReview !== true)) {
+      throw new CrmCommandError("MAIL_PILOT_CONTACT_REVIEW_REQUIRED", "Outlook kann für diesen Test nur zur privaten Kontaktprüfung aktiviert werden.", 409);
+    }
   }
+  const autoFile = pilotRestricted ? false : input.autoFile;
   const feature = await tx.queryOne<{ready:boolean}>(`select to_regprocedure('public.crm_mailbox_contact_review_guard_ready()') is not null as ready`);
-  if (input.contactReview === true && !feature?.ready) throw new CrmCommandError("MAIL_CONTACT_REVIEW_MIGRATION_REQUIRED", "Kontaktprüfung benötigt eine Datenbankaktualisierung", 409);
+  if ((!pilotRestricted && input.contactReview === true || pilotRestricted && input.enabled) && !feature?.ready) throw new CrmCommandError("MAIL_CONTACT_REVIEW_MIGRATION_REQUIRED", "Kontaktprüfung benötigt eine Datenbankaktualisierung", 409);
   const prior = await tx.queryOne<{ revision: number; contactReview: boolean }>(`select revision,coalesce((to_jsonb(s)->>'contact_review_enabled')::boolean,false) as "contactReview" from crm_mailbox_auto_settings s where connection_id=$1::uuid for update`,[input.connectionId]);
   if ((prior?.revision ?? 0) !== input.expectedRevision) throw new CrmCommandError("VERSION_CONFLICT", "Einstellungen wurden geändert. Ansicht neu laden.", 409);
-  const saved = await tx.queryOne(`insert into crm_mailbox_auto_settings(workspace_id,user_id,connection_id,identity_id,enabled,auto_file,status) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7) on conflict(workspace_id,user_id,connection_id) do update set identity_id=excluded.identity_id,enabled=excluded.enabled,auto_file=excluded.auto_file,status=case when excluded.enabled then 'catching_up' else 'disabled' end,next_run_at=now(),revision=crm_mailbox_auto_settings.revision+1,updated_at=now() returning revision,enabled,auto_file as "autoFile",status`,[session.workspaceId,session.userId,input.connectionId,identity.id,input.enabled,input.autoFile,input.enabled?'not_initialized':'disabled']);
+  const saved = await tx.queryOne(`insert into crm_mailbox_auto_settings(workspace_id,user_id,connection_id,identity_id,enabled,auto_file,status) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7) on conflict(workspace_id,user_id,connection_id) do update set identity_id=excluded.identity_id,enabled=excluded.enabled,auto_file=excluded.auto_file,status=case when excluded.enabled then 'catching_up' else 'disabled' end,next_run_at=now(),revision=crm_mailbox_auto_settings.revision+1,updated_at=now() returning revision,enabled,auto_file as "autoFile",status`,[session.workspaceId,session.userId,input.connectionId,identity.id,input.enabled,autoFile,input.enabled?'not_initialized':'disabled']);
   if (feature?.ready) {
-    const contactReview = input.contactReview ?? prior?.contactReview ?? false;
+    const contactReview = pilotRestricted ? input.enabled : input.contactReview ?? prior?.contactReview ?? false;
     // A previously checked inbox needs one complete rescan after contact opt-in;
     // never discard an in-flight delta page. Complete that page first below.
-    const newlyEnabled = contactReview && !prior?.contactReview;
+    const newlyEnabled = !pilotRestricted && contactReview && !prior?.contactReview;
     await tx.query(`update crm_mailbox_auto_settings set contact_review_enabled=$2,contact_review_backfill_pending=case when not $2 then false when $3 then exists(select 1 from crm_mailbox_auto_checkpoints where connection_id=$1::uuid and folder='inbox') else contact_review_backfill_pending end,revision=revision+1,updated_at=now() where connection_id=$1::uuid`,[input.connectionId,contactReview,newlyEnabled]);
   }
   // An opt-out takes the same row lock as every page commit and invalidates in-flight claims.
@@ -95,6 +100,10 @@ export async function loadContactMailboxReview(tx: TenantTransaction, session: A
 }
 export async function actOnMailboxPrivateDecision(tx:TenantTransaction,session:AppSession,input:{decisionId:string;action:'file_private'|'retry_private'}){
  personal(session);const id=assertCrmUuid(input.decisionId);const row=await tx.queryOne<{connectionId:string;providerId:string;status:string;projectId:string|null;leadId:string|null}>(`select connection_id as "connectionId",provider_id as "providerId",status,project_id as "projectId",lead_id as "leadId" from crm_mailbox_private_decisions where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid for update`,[id,session.workspaceId,session.userId]);if(!row)throw new CrmCommandError('NOT_FOUND','Eigener Prüfbeleg nicht verfügbar',404);
+ if(isProductionMicrosoftMailbox('microsoft')){
+  const connection=await tx.queryOne<{provider:MailboxProvider}>(`select provider from crm_mailbox_connections where id=$1::uuid and workspace_id=$2::uuid and user_id=$3::uuid`,[row.connectionId,session.workspaceId,session.userId]);
+  if(!connection||isProductionMicrosoftMailbox(connection.provider))throw new CrmCommandError('MAIL_PILOT_PRIVATE_REVIEW_ONLY','Der Outlook-Test erlaubt die private Kontaktprüfung.',409);
+ }
  if(input.action==='file_private'){
   const target=row.leadId?await tx.queryOne(`select id from leads where workspace_id=$1::uuid and project_id=$2::uuid and id=$3::uuid`,[session.workspaceId,row.projectId,row.leadId]):null;if(!target||!['suggested','filed'].includes(row.status))throw new CrmCommandError('MAIL_TARGET_UNAVAILABLE','Aktuelle eindeutige private Zuordnung erforderlich',409);
   await tx.query(`update crm_mailbox_private_decisions set status='filed',reason='personally_confirmed_private_filing',updated_at=now() where id=$1::uuid`,[id]);return {id,status:'filed',shared:false};
@@ -107,10 +116,19 @@ export async function actOnMailboxPrivateDecision(tx:TenantTransaction,session:A
  await tx.query(`insert into crm_mailbox_auto_checkpoints(workspace_id,user_id,connection_id,checkpoint) values($1::uuid,$2::uuid,$3::uuid,$4::jsonb) on conflict(workspace_id,user_id,connection_id,folder) do update set checkpoint=excluded.checkpoint,updated_at=now()`,[session.workspaceId,session.userId,row.connectionId,JSON.stringify(state)]);await tx.query(`update crm_mailbox_auto_settings set next_run_at=now(),status='catching_up',revision=revision+1,updated_at=now() where connection_id=$1::uuid`,[row.connectionId]);return {id,status:'queued',shared:false};
 }
 type Lead = { leadId: string; projectId: string; contactId: string };
+function visibleMailboxContacts(tx: TenantTransaction, workspaceId: string, address: string) {
+ return tx.query<{contactId:string;projectId:string|null}>(`select c.id as "contactId",c.project_id as "projectId" from contacts c where c.workspace_id=$1::uuid and c.archived_at is null and lower(btrim(c.email))=$2 and crm_classification_allowed(c.workspace_id,c.data_classification,c.data_purpose) and (c.project_id is null or exists(select 1 from projects p where p.workspace_id=c.workspace_id and p.id=c.project_id and crm_classification_allowed(p.workspace_id,p.data_classification,p.data_purpose))) and (crm_project_access(c.workspace_id,c.project_id,false) or (c.project_id is null and c.owner_user_id=nullif(current_setting('app.actor_id',true),'')::uuid)) limit 3`,[workspaceId,address]);
+}
 async function decide(tx: TenantTransaction, session: AppSession, claim: Claim, meta: MailboxMetadata): Promise<MailboxSyncDecision> {
   const result=(status:MailboxSyncDecision['status'],reason:string,lead?:Lead,automatic=false):MailboxSyncDecision=>({status,reason,leadId:lead?.leadId??null,projectId:lead?.projectId??null,contactId:lead?.contactId??null,automatic});
   const prior=await tx.queryOne<{deleted:boolean; leadId:string|null;projectId:string|null;contactId:string|null}>(`select m.deleted_at is not null as deleted,coalesce(l.lead_id,d.lead_id) as "leadId",coalesce(l.project_id,d.project_id) as "projectId",coalesce(l.contact_id,d.contact_id) as "contactId" from crm_mailbox_messages m left join crm_mailbox_links l on l.workspace_id=m.workspace_id and l.user_id=m.user_id and l.message_id=m.id left join crm_mailbox_private_decisions d on d.workspace_id=m.workspace_id and d.user_id=m.user_id and d.message_id=m.id and d.status='filed' where m.connection_id=$1::uuid and m.provider_id=$2`,[claim.id,meta.providerId]);
   if(prior?.deleted)return result('ignored','locally_erased');
+  if(claim.pilot){
+    const matches=meta.fromAddress?await visibleMailboxContacts(tx,session.workspaceId,meta.fromAddress):[];
+    const contact=matches[0];
+    if(matches.length!==1||contact.projectId!==claim.pilot.projectId||!claim.pilot.contactIds.includes(contact.contactId))return result('ignored','unknown_sender_no_content_import');
+    return {status:'known',reason:'exact_address_unique_contact_unverified_sender',leadId:null,projectId:contact.projectId,contactId:contact.contactId,automatic:false};
+  }
   if(prior?.leadId){const current=await tx.queryOne<Lead>(`select id as "leadId",project_id as "projectId",contact_id as "contactId" from leads where workspace_id=$1::uuid and id=$2::uuid and project_id=$3::uuid`,[session.workspaceId,prior.leadId,prior.projectId]);return current?result('known','existing_personal_association_preserved',current,true):result('review','lead_permission_changed');}
   const candidates=meta.fromAddress?await tx.query<Lead>(`select l.id as "leadId",l.project_id as "projectId",l.contact_id as "contactId" from leads l join contacts c on c.workspace_id=l.workspace_id and c.project_id=l.project_id and c.id=l.contact_id where l.workspace_id=$1::uuid and lower(btrim(c.email))=$2 and l.project_id is not null and l.status not in('Verloren','Abgeschlossen','Archiviert') limit 3`,[session.workspaceId,meta.fromAddress]):[];
   const thread=meta.threadId?await tx.query<Lead & {fromAddress:string|null;toAddresses:string[];internetMessageId:string|null}>(`select distinct l.lead_id as "leadId",l.project_id as "projectId",l.contact_id as "contactId",m.from_address as "fromAddress",m.to_addresses as "toAddresses",m.internet_message_id as "internetMessageId" from crm_mailbox_messages m join crm_mailbox_links l on l.workspace_id=m.workspace_id and l.user_id=m.user_id and l.message_id=m.id join leads lead on lead.workspace_id=l.workspace_id and lead.project_id=l.project_id and lead.id=l.lead_id where m.connection_id=$1::uuid and m.thread_id=$2 and m.deleted_at is null limit 21`,[claim.id,meta.threadId]):[];
@@ -121,7 +139,7 @@ async function decide(tx: TenantTransaction, session: AppSession, claim: Claim, 
   // Contact-only suggestions require the dedicated guard migration. The exact
   // address is a hint, never proof of sender identity or a campaign reply.
   const contactSchema=await tx.queryOne<{ready:boolean}>(`select to_regprocedure('public.crm_mailbox_contact_review_guard_ready()') is not null as ready`);
-  const contacts=claim.contactReview&&contactSchema?.ready&&meta.fromAddress?await tx.query<{contactId:string;projectId:string|null}>(`select c.id as "contactId",c.project_id as "projectId" from contacts c where c.workspace_id=$1::uuid and c.archived_at is null and lower(btrim(c.email))=$2 and crm_classification_allowed(c.workspace_id,c.data_classification,c.data_purpose) and (c.project_id is null or exists(select 1 from projects p where p.workspace_id=c.workspace_id and p.id=c.project_id and crm_classification_allowed(p.workspace_id,p.data_classification,p.data_purpose))) and (crm_project_access(c.workspace_id,c.project_id,false) or (c.project_id is null and c.owner_user_id=nullif(current_setting('app.actor_id',true),'')::uuid)) limit 3`,[session.workspaceId,meta.fromAddress]):[];
+  const contacts=claim.contactReview&&contactSchema?.ready&&meta.fromAddress?await visibleMailboxContacts(tx,session.workspaceId,meta.fromAddress):[];
   if(contacts.length>1)return result('review','multiple_authorized_contacts');
   const target=thread[0]||candidates[0];if(refLeads.some(row=>row.leadId!==target?.leadId)||thread[0]&&candidates[0]&&thread[0].leadId!==candidates[0].leadId)return result('review','contradictory_thread_or_reply_headers');
   if(thread.length){const known=new Set(thread.flatMap(row=>[...(row.fromAddress?[row.fromAddress]:[]),...row.toAddresses]));if(meta.participants.some(address=>!known.has(address))||!meta.fromAddress||!known.has(meta.fromAddress))return result('review','new_thread_participant');return result('known','reviewed_thread_same_participants',thread[0],claim.autoFile);}
@@ -134,6 +152,8 @@ async function verify(tx:TenantTransaction,session:AppSession,claim:Claim){
   const row=await tx.queryOne<{tenantId:string|null;subject:string|null;accountId:string|null}>(`select to_jsonb(c)->>'provider_tenant_id' as "tenantId",to_jsonb(c)->>'provider_subject' as subject,c.provider_account_id as "accountId" from crm_mailbox_connections c join crm_mailbox_auto_settings s on s.connection_id=c.id and s.workspace_id=c.workspace_id and s.user_id=c.user_id join workspace_users u on u.workspace_id=s.workspace_id and u.id=s.user_id where c.id=$1::uuid and c.workspace_id=$2::uuid and c.user_id=$3::uuid and c.status='connected' and c.revision=$4 and c.sync_lease_id=$5::uuid and c.sync_lease_until>clock_timestamp() and s.enabled and s.revision=$6 and s.identity_id=$7::uuid and u.auth_identity_id=s.identity_id and u.status='active' and crm_mailbox_delegated_identity(c.workspace_id,c.user_id)=s.identity_id for update of c,s`,[claim.id,session.workspaceId,session.userId,claim.revision,claim.lease,claim.policyRevision,claim.identityId]);
   if(!row)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Persönliche Freigabe oder Verbindung geändert. Verspäteter Import wurde verworfen.',409);
   requireMicrosoftBinding(claim.provider,row.tenantId,row.subject,row.accountId);if(row.tenantId!==claim.tenantId||row.subject!==claim.subject||row.accountId!==claim.accountId)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Postfachidentität hat sich geändert',409);
+  const pilot=assertProductionMailboxPilot(claim.provider,session,{tenantId:row.tenantId,objectId:row.accountId});
+  if(JSON.stringify(pilot)!==JSON.stringify(claim.pilot))throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Der Outlook-Testumfang hat sich geändert.',409);
   if(await productionMailboxImportStart(tx,claim.provider,claim.id)!==claim.importStart)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Der Startzeitpunkt des Postfachabrufs hat sich geändert.',409);
   await assertMailboxLeaseAfterLock(tx,{id:claim.id,workspaceId:session.workspaceId,userId:session.userId,revision:claim.revision,lease:claim.lease});
 }
@@ -156,19 +176,25 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
  personal(session);assertCrmUuid(connectionId);if(currentTenantTransaction())throw new CrmCommandError('MAIL_SYNC_NESTED_TRANSACTION','Postfachabgleich benötigt eigene kurze Transaktionen',409);const lease=randomUUID(),started=Date.now(),maxPages=Math.max(1,Math.min(5,options.maxPages??5)),budget=Math.max(1000,Math.min(30000,options.budgetMs??30000));
  const claim=await withCrmRead(session,async(tx,fresh)=>{
   if(!await mailboxSyncSchemaReady(tx))throw new CrmCommandError('MAIL_SYNC_MIGRATION_REQUIRED','Automatischer Eingang benötigt Datenbankaktualisierung',409);
-  const c=await tx.queryOne<Omit<Claim,'checkpoint'|'lease'|'importStart'> & {busy:boolean;due:boolean;enabled:boolean}>(`select c.id,c.provider,to_jsonb(c)->>'provider_tenant_id' as "tenantId",to_jsonb(c)->>'provider_subject' as subject,c.account_label as label,c.provider_account_id as "accountId",c.provider_id_format as format,c.access_token_encrypted as access,c.refresh_token_encrypted as refresh,c.granted_scopes as scopes,c.expires_at::text as "expiresAt",c.revision,s.revision as "policyRevision",s.identity_id as "identityId",s.auto_file as "autoFile",coalesce((to_jsonb(s)->>'contact_review_enabled')::boolean,false) as "contactReview",coalesce((to_jsonb(s)->>'contact_review_backfill_replaying')::boolean,false) as "backfillReplaying",s.failure_count as failures,s.enabled,s.next_run_at<=now() as due,c.sync_lease_until>now() as busy from crm_mailbox_connections c join crm_mailbox_auto_settings s on s.connection_id=c.id and s.workspace_id=c.workspace_id and s.user_id=c.user_id join workspace_users u on u.workspace_id=s.workspace_id and u.id=s.user_id where c.id=$1::uuid and c.workspace_id=$2::uuid and c.user_id=$3::uuid and c.status='connected' and s.identity_id=u.auth_identity_id and u.status='active' for update of c,s`,[connectionId,fresh.workspaceId,fresh.userId]);
+  const c=await tx.queryOne<Omit<Claim,'checkpoint'|'lease'|'importStart'|'pilot'> & {busy:boolean;due:boolean;enabled:boolean}>(`select c.id,c.provider,to_jsonb(c)->>'provider_tenant_id' as "tenantId",to_jsonb(c)->>'provider_subject' as subject,c.account_label as label,c.provider_account_id as "accountId",c.provider_id_format as format,c.access_token_encrypted as access,c.refresh_token_encrypted as refresh,c.granted_scopes as scopes,c.expires_at::text as "expiresAt",c.revision,s.revision as "policyRevision",s.identity_id as "identityId",s.auto_file as "autoFile",coalesce((to_jsonb(s)->>'contact_review_enabled')::boolean,false) as "contactReview",coalesce((to_jsonb(s)->>'contact_review_backfill_replaying')::boolean,false) as "backfillReplaying",s.failure_count as failures,s.enabled,s.next_run_at<=now() as due,c.sync_lease_until>now() as busy from crm_mailbox_connections c join crm_mailbox_auto_settings s on s.connection_id=c.id and s.workspace_id=c.workspace_id and s.user_id=c.user_id join workspace_users u on u.workspace_id=s.workspace_id and u.id=s.user_id where c.id=$1::uuid and c.workspace_id=$2::uuid and c.user_id=$3::uuid and c.status='connected' and s.identity_id=u.auth_identity_id and u.status='active' for update of c,s`,[connectionId,fresh.workspaceId,fresh.userId]);
   if(!c?.enabled||!c.due&&!options.ignoreDue)return null;if(c.busy)return null;requireMicrosoftBinding(c.provider,c.tenantId,c.subject,c.accountId);if(!hasMailboxReadScope(c.provider,c.scopes)||c.provider==='microsoft'&&c.tenantId&&!hasVerifiedMicrosoftMailboxScopes(c.scopes)||fresh.authIdentityId!==c.identityId)throw new CrmCommandError('MAIL_PERSONAL_CONSENT_REQUIRED','Aktuelle persönliche Identitätsbindung und Mail-Leserecht erforderlich',403);
   await assertProductionMailboxDatabase(tx, c.provider);
+  const pilot=assertProductionMailboxPilot(c.provider,fresh,{tenantId:c.tenantId,objectId:c.accountId});
+  if(pilot){
+   const feature=await tx.queryOne<{ready:boolean}>(`select to_regprocedure('public.crm_mailbox_contact_review_guard_ready()') is not null as ready`);
+   if(!feature?.ready||!c.contactReview||c.autoFile||c.backfillReplaying)throw new CrmCommandError('MAIL_PILOT_CONTACT_REVIEW_REQUIRED','Outlook benötigt die private Kontaktprüfung.',409);
+  }
   const importStart=await productionMailboxImportStart(tx,c.provider,c.id);
   const checkpoint=await tx.queryOne<{checkpoint:MailboxSyncCheckpoint}>(`select checkpoint from crm_mailbox_auto_checkpoints where connection_id=$1::uuid and folder='inbox'`,[connectionId]);
   const leased=await tx.queryOne<{revision:number}>(`update crm_mailbox_connections c set sync_lease_id=$2::uuid,sync_lease_until=clock_timestamp()+interval '2 minutes',revision=revision+1 where c.id=$1::uuid and c.workspace_id=$3::uuid and c.user_id=$4::uuid and c.status='connected' and c.revision=$5 and (c.sync_lease_until is null or c.sync_lease_until<=clock_timestamp()) and exists(select 1 from crm_mailbox_auto_settings s join workspace_users u on u.workspace_id=s.workspace_id and u.id=s.user_id where s.connection_id=c.id and s.workspace_id=c.workspace_id and s.user_id=c.user_id and s.enabled and s.revision=$6 and s.identity_id=$7::uuid and (s.next_run_at<=clock_timestamp() or $8::boolean) and u.status='active' and u.auth_identity_id=s.identity_id and crm_mailbox_delegated_identity(c.workspace_id,c.user_id)=s.identity_id) returning c.revision`,[connectionId,lease,fresh.workspaceId,fresh.userId,c.revision,c.policyRevision,c.identityId,Boolean(options.ignoreDue)]);
   if(!leased||leased.revision!==c.revision+1)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Persönliche Freigabe oder Verbindung geändert. Postfach erneut prüfen.',409);
-  return {...c,revision:leased.revision,checkpoint:checkpoint?.checkpoint??emptyMailboxCheckpoint(),lease,importStart};
+  return {...c,revision:leased.revision,checkpoint:checkpoint?.checkpoint??emptyMailboxCheckpoint(),lease,importStart,pilot};
  },options);
  if(!claim)return {status:'quiet',imported:0};
  let count=0,pages=0,renewed:Awaited<ReturnType<typeof exchangeMailboxToken>>|null=null,inboxId:string|undefined,microsoftDeltaExpired=false;
  try{
   if(claim.provider==='microsoft')assertMicrosoftMailboxCheckpoint(claim.checkpoint);
+  if(claim.pilot&&claim.checkpoint.queued.length)throw new MailboxCheckpointReviewRequired();
   // Do not start provider I/O based only on an earlier transaction snapshot.
   // Revocation can still race after this check because network I/O must not
   // hold the user's database locks open.
@@ -215,21 +241,28 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
   }
   let state=claim.checkpoint,freshMicrosoftFinalCursor:string|null=null;
   while(pages<maxPages&&Date.now()-started<budget){
-   if(!state.queued.length){let page:Awaited<ReturnType<typeof fetchMailboxSyncPage>>;const usedMicrosoftCursor=claim.provider==='microsoft'&&microsoftCheckpointUsesContinuation(state,inboxId);try{page=await fetchMailboxSyncPage(claim.provider,token,state,options.transport,inboxId,claim.importStart);}catch(error){if(usedMicrosoftCursor&&error instanceof MailboxProviderError&&error.status===410)microsoftDeltaExpired=true;throw error;}state={...state,queued:page.changes,afterQueue:page.after};if(!page.changes.length)state={...page.after,queued:[],afterQueue:null};await checkpointCommit(session,claim,state,[],options);if(claim.provider==='microsoft'&&page.after.phase==='ready')freshMicrosoftFinalCursor=page.after.deltaCheckpoint;pages++;if(!state.queued.length&&state.phase==='ready')break;if(!state.queued.length)continue;}
-   const changes=state.queued.slice(0,5),outcomes:Outcome[]=[];
+   if(!state.queued.length){let page:Awaited<ReturnType<typeof fetchMailboxSyncPage>>;const usedMicrosoftCursor=claim.provider==='microsoft'&&microsoftCheckpointUsesContinuation(state,inboxId);try{page=await fetchMailboxSyncPage(claim.provider,token,state,options.transport,inboxId,claim.importStart);}catch(error){if(usedMicrosoftCursor&&error instanceof MailboxProviderError&&error.status===410)microsoftDeltaExpired=true;throw error;}state={...state,queued:page.changes,afterQueue:page.after};if(!page.changes.length)state={...page.after,queued:[],afterQueue:null};if(!claim.pilot||!page.changes.length)await checkpointCommit(session,claim,state,[],options);if(claim.provider==='microsoft'&&page.after.phase==='ready')freshMicrosoftFinalCursor=page.after.deltaCheckpoint;pages++;if(!state.queued.length&&state.phase==='ready')break;if(!state.queued.length)continue;}
+   // The pilot commits a whole bounded page; unrelated provider identifiers
+   // must not be written into a durable pending queue between admission checks.
+   if(claim.pilot&&state.queued.length>20)throw new MailboxProviderError('MAIL_PROVIDER_UNAVAILABLE');
+   const changes=claim.pilot?state.queued:state.queued.slice(0,5),outcomes:Outcome[]=[];
    let handled=0;for(const change of changes){
     if(Date.now()-started>=budget)break;handled++;
     let withinImportWindow=claim.importStart===null;
     // Delta removal is a source hint, not a CRM deletion. A message may already
     // have returned to Inbox by the time this page is handled; verify its current
     // folder instead of letting delivery order undo a later known association.
-    try{const meta=await fetchMailboxMetadata(claim.provider,token,change.id,options.transport,inboxId);if(!meta){outcomes.push({id:change.id,source:'source_missing'});continue;}if(claim.importStart!==null&&Date.parse(meta.receivedAt)<claim.importStart)continue;withinImportWindow=true;if(!meta.inInbox){outcomes.push({id:change.id,source:'left_inbox'});continue;}
+    try{const meta=await fetchMailboxMetadata(claim.provider,token,change.id,options.transport,inboxId,{senderOnly:Boolean(claim.pilot)});if(!meta){outcomes.push({id:change.id,source:'source_missing'});continue;}if(claim.importStart!==null&&Date.parse(meta.receivedAt)<claim.importStart)continue;withinImportWindow=true;if(!meta.inInbox){outcomes.push({id:change.id,source:'left_inbox'});continue;}
      const decision=await withCrmRead(session,async(tx,fresh)=>{await verify(tx,fresh,claim);return decide(tx,fresh,claim,meta);},options);
-     const content=decision.status==='known'?await fetchMailboxKnownContent(claim.provider,token,meta.providerId,options.transport,inboxId,claim.importStart):undefined;
+     if(claim.pilot&&decision.status!=='known')continue;
+     const content=decision.status==='known'?await fetchMailboxKnownContent(claim.provider,token,meta.providerId,options.transport,inboxId,claim.importStart,claim.pilot?meta.fromAddress:undefined):undefined;
+     if(claim.pilot&&content)meta.subject=content.subject;
      if(content&&content.providerId!==meta.providerId)throw new MailboxProviderError('MAIL_MESSAGE_ID_CHANGED');outcomes.push({id:meta.providerId,meta,decision,content});
-    }catch(error){if(!withinImportWindow||error instanceof CrmCommandError||error instanceof MailboxProviderError&&(/AUTH|RATE_LIMIT|UNAVAILABLE|REAUTH|SCOPE/.test(error.code)||['MAIL_INVALID_FOLDER_ID','MAIL_INVALID_GMAIL_LABEL_IDS','MAIL_GMAIL_DETAIL_CHANGED','MAIL_MICROSOFT_DETAIL_CHANGED'].includes(error.code)||claim.provider==='google'&&['MAIL_INVALID_RESPONSE','MAIL_RESPONSE_TOO_LARGE','MAIL_CHECKPOINT_EXPIRED'].includes(error.code)))throw error;outcomes.push({id:change.id,quarantine:error instanceof MailboxProviderError?error.code:'MAIL_INVALID_MESSAGE'});}
+    }catch(error){if(claim.pilot||!withinImportWindow||error instanceof CrmCommandError||error instanceof MailboxProviderError&&(/AUTH|RATE_LIMIT|UNAVAILABLE|REAUTH|SCOPE/.test(error.code)||['MAIL_INVALID_FOLDER_ID','MAIL_INVALID_GMAIL_LABEL_IDS','MAIL_GMAIL_DETAIL_CHANGED','MAIL_MICROSOFT_DETAIL_CHANGED'].includes(error.code)||claim.provider==='google'&&['MAIL_INVALID_RESPONSE','MAIL_RESPONSE_TOO_LARGE','MAIL_CHECKPOINT_EXPIRED'].includes(error.code)))throw error;outcomes.push({id:change.id,quarantine:error instanceof MailboxProviderError?error.code:'MAIL_INVALID_MESSAGE'});}
    }
-   const rest=state.queued.slice(handled);state=rest.length?{...state,queued:rest}: {...state.afterQueue!,queued:[],afterQueue:null};count+=await checkpointCommit(session,claim,state,outcomes,options);if(rest.length)pages++;if(!state.queued.length&&state.phase==='ready')break;
+   const rest=state.queued.slice(handled);
+   if(claim.pilot&&rest.length)throw new MailboxProviderError('MAIL_PROVIDER_UNAVAILABLE');
+   state=rest.length?{...state,queued:rest}: {...state.afterQueue!,queued:[],afterQueue:null};count+=await checkpointCommit(session,claim,state,outcomes,options);if(rest.length)pages++;if(!state.queued.length&&state.phase==='ready')break;
   }
   const current=mailboxSyncCurrent(claim.provider,state,freshMicrosoftFinalCursor);
   if(current&&recovery?.phase==='baseline'){
@@ -290,6 +323,7 @@ async function checkpointCommit(session:AppSession,claim:Claim,state:MailboxSync
    if(review.state==='unavailable')throw new CrmCommandError('MAIL_REVIEW_SOURCE_CHANGED','Die persönliche Nachricht muss erneut im Postfach geprüft werden.',409);
    messageId=await saveContent(tx,fresh,claim,outcome.content,outcome.meta!);if(messageId)count++;
   }
+  if(claim.pilot&&!messageId)continue;
   await decisionRecord(tx,fresh,claim,outcome.id,messageId?(decision.leadId?(decision.automatic?'filed':'suggested'):'review'):decision.status==='ignored'?'ignored':'review',decision.reason,outcome.meta,decision.status==='known'&&messageId?decision:undefined,messageId);
  }
  await tx.query(`insert into crm_mailbox_auto_checkpoints(workspace_id,user_id,connection_id,checkpoint) values($1::uuid,$2::uuid,$3::uuid,$4::jsonb) on conflict(workspace_id,user_id,connection_id,folder) do update set checkpoint=excluded.checkpoint,updated_at=now()`,[fresh.workspaceId,fresh.userId,claim.id,JSON.stringify(state)]);

@@ -52,7 +52,7 @@ export async function fetchMailboxSyncPage(provider: MailboxProvider, token: str
   return { changes, after };
 }
 export async function fetchMailboxInboxId(token: string, transport = defaultTransport) { const folder = await mailboxProviderJson('https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id', { headers: auth(token, true) }, transport, 65536); return mailboxProviderId(folder.id); }
-export async function fetchMailboxMetadata(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string): Promise<MailboxMetadata | null> {
+export async function fetchMailboxMetadata(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string, options: { senderOnly?: boolean } = {}): Promise<MailboxMetadata | null> {
   const messageId = encodeURIComponent(mailboxProviderId(id));
   let microsoftInboxId: string | null = null;
   if (provider === "microsoft") {
@@ -60,7 +60,7 @@ export async function fetchMailboxMetadata(provider: MailboxProvider, token: str
     catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
   }
   let raw: Record<string, unknown>;
-  try { raw = await mailboxProviderJson(provider === "google" ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&fields=id,threadId,labelIds,internalDate,payload(headers)` : `https://graph.microsoft.com/v1.0/me/messages/${messageId}?$select=${metadataSelect}`, { headers: auth(token, provider === "microsoft") }, transport); }
+  try { raw = await mailboxProviderJson(provider === "google" ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References&fields=id,threadId,labelIds,internalDate,payload(headers)` : `https://graph.microsoft.com/v1.0/me/messages/${messageId}?$select=${options.senderOnly ? "id,from,receivedDateTime,parentFolderId" : metadataSelect}`, { headers: auth(token, provider === "microsoft") }, transport); }
   catch (error) { if (error instanceof MailboxProviderError && error.status === 404) return null; if (provider === "google" && !(error instanceof MailboxProviderError)) throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE"); throw error; }
   // Check Gmail labels before any other field can produce a quarantined error.
   const googleLabels = provider === "google" ? gmailMessageLabels(raw.labelIds) : null;
@@ -81,10 +81,10 @@ export async function fetchMailboxMetadata(provider: MailboxProvider, token: str
   const timestamp = provider === "google" ? Number(raw.internalDate) : Date.parse(String(raw.receivedDateTime)); if (!Number.isFinite(timestamp)) throw new MailboxProviderError("MAIL_INVALID_DATE");
   return { providerId: mailboxProviderId(raw.id), threadId: typeof (raw.threadId || raw.conversationId) === "string" ? String(raw.threadId || raw.conversationId) : null, internetMessageId: provider === "google" ? header("message-id") || null : mailboxText(raw.internetMessageId, 2000) || null, inReplyTo: header("in-reply-to") || null, references: (header("references").match(/<[^<>\s]+>/g) || []).slice(0, 50), fromAddress, toAddresses, participants: [...new Set([...(fromAddress ? [fromAddress] : []), ...toAddresses, ...cc])].sort(), subject: mailboxText(provider === "google" ? header("subject") : raw.subject, 1000), receivedAt: new Date(timestamp).toISOString(), inInbox: provider === "google" ? googleLabels!.includes('INBOX') : microsoftInInbox };
 }
-export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string, importStart?: number | null): Promise<MailboxImportedMessage> {
+export async function fetchMailboxKnownContent(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string, importStart?: number | null, expectedSender?: string | null): Promise<MailboxImportedMessage> {
   if (provider === "microsoft") {
     try {
-      return await fetchMicrosoftInboxContent({ accessToken: token, inboxId, messageId: id, immutableIds: true, importStart }, transport);
+      return await fetchMicrosoftInboxContent({ accessToken: token, inboxId, messageId: id, immutableIds: true, importStart, expectedSender }, transport);
     } catch (error) {
       // A concurrent move can make the detail or attachment route go away.
       // Keep the queued observation so the next run can check its new location.
