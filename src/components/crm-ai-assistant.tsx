@@ -175,9 +175,3 @@ export function CrmAiAssistant({ workspaceId, projectId, language }: { workspace
     </>}
   </section>;
 }
-
-
-
-
-
-

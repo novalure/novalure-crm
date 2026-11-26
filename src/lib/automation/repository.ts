@@ -304,4 +304,3 @@ export async function controlAutomationEnrollment(tx: TenantTransaction, session
   await tx.execute(`update crm_automation_enrollments set status=$3,stop_reason=$4,due_at=now(),updated_at=now() where workspace_id=$1::uuid and id=$2::uuid`, [session.workspaceId, input.id, input.retry ? "running" : "stopped", input.retry ? null : "manual_stop"]);
   return { id: input.id, status: input.retry ? "running" : "stopped" };
 }
-

@@ -92,5 +92,3 @@ try {
   });
   assert.deepEqual(errors, []); await writeFile(path.join(output, "results.json"), JSON.stringify({ syntheticApi: true, databaseIntegration: false, results, browserErrors: errors }, null, 2));
 } finally { await context.close(); await browser.close(); await new Promise(resolve => server.close(resolve)); }
-
-
