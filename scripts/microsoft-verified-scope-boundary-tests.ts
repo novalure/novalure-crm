@@ -18,7 +18,7 @@ async function withEnvironment(config: Record<string, string>, work: () => Promi
 }
 const verifiedConfig = { MICROSOFT_MAILBOX_CLIENT_ID: "synthetic-mail", MICROSOFT_MAILBOX_CLIENT_AUTH_METHOD: "client-secret", MICROSOFT_MAILBOX_CLIENT_SECRET: "synthetic-secret", MICROSOFT_MAILBOX_IDENTITY_MODE: "verified-preview", NOVALURE_APP_ORIGIN: "https://synthetic.example.invalid", VERCEL: "1", VERCEL_ENV: "preview" };
 function transport(scope: unknown): MailboxTransport {
-  return async () => Response.json({ access_token: "synthetic-token", expires_in: 3600, token_type: "Bearer", ...(scope === undefined ? {} : { scope }) });
+  return async () => Response.json({ access_token: "synthetic-token", id_token: "synthetic-id", expires_in: 3600, token_type: "Bearer", ...(scope === undefined ? {} : { scope }) });
 }
 
 test("verified scopes accept only bounded read-only Microsoft and OpenID permissions", () => {

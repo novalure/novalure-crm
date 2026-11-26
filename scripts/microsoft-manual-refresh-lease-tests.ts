@@ -112,6 +112,24 @@ for (const scenario of refreshFailures) test(`verified manual refresh handles ${
   assert.equal(f.refresh, reauthorize ? null : "OLD_REFRESH");
 });
 
+for (const idToken of [undefined, "", " \t"] as const) test(`verified manual refresh without a usable ID token retains the connection (${JSON.stringify(idToken)})`, async () => {
+  const f = fixture("normal");
+  let calls = 0;
+  const transport: MailboxTransport = async (url) => {
+    calls++;
+    assert.equal(url, `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`);
+    return Response.json({ access_token: "UNVERIFIED_ACCESS", refresh_token: "UNVERIFIED_REFRESH", id_token: idToken, expires_in: 3600, scope: "Mail.Read" });
+  };
+  await assert.rejects(syncCrmMailbox(session, { connectionId: id, requestId: randomUUID(), mode: "latest" }, { pool: f.pool }, transport, async () => assert.fail("missing token must not be passed to the verifier"), auth), { code: "MAIL_PROVIDER_UNAVAILABLE", status: 503 });
+  assert.equal(calls, 1);
+  assert.equal(f.status, "connected");
+  assert.equal(f.lastError, "MAIL_PROVIDER_UNAVAILABLE");
+  assert.equal(f.access, "OLD_ACCESS");
+  assert.equal(f.refresh, "OLD_REFRESH");
+  assert.equal(f.writes, 0);
+  assert.equal(f.pages, 0);
+});
+
 test("manual sync keeps unknown AUTH-named failure fail-closed", async () => {
   const f=fixture("normal");let calls=0;
   const transport:MailboxTransport=async()=>{calls++;throw Object.assign(new Error("synthetic"),{code:"MAIL_UNKNOWN_AUTH_FAILURE"});};

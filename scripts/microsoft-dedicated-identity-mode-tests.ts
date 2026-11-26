@@ -130,7 +130,7 @@ test("verified authorization requires a nonce and verified exchanges bind their 
     const transport: MailboxTransport = async url => {
       providerCalls++;
       assert.equal(url, "https://login.microsoftonline.com/55555555-5555-4555-8555-555555555555/oauth2/v2.0/token");
-      return Response.json({ access_token: "synthetic", expires_in: 3600, scope: "Mail.Read User.Read", token_type: "Bearer" });
+      return Response.json({ access_token: "synthetic", id_token: "synthetic-id", expires_in: 3600, scope: "Mail.Read User.Read", token_type: "Bearer" });
     };
     await assert.rejects(exchangeMailboxToken({ provider: "microsoft", refreshToken: "synthetic" }, transport, auth), /MAIL_OAUTH_CONFIG/);
     await assert.rejects(exchangeMailboxToken({ provider: "microsoft", refreshToken: "synthetic", verifiedMicrosoftAuthority: "not-a-tenant" }, transport, auth), /MAIL_OAUTH_CONFIG/);

@@ -57,8 +57,8 @@ test("automatic legacy sync rejects missing explicit exception before any write 
   } finally { if (previous === undefined) delete process.env.MICROSOFT_MAILBOX_ALLOW_LEGACY; else process.env.MICROSOFT_MAILBOX_ALLOW_LEGACY = previous; }
 });
 
-for (const mode of ["configuration", "scope", "unknown-auth", "entra-client", "entra-expired"] as const) test(`automatic sync handles ${mode} without relaxing other auth failures`, async () => {
-  const verified = mode === "entra-client" || mode === "entra-expired";
+for (const mode of ["configuration", "scope", "unknown-auth", "entra-client", "entra-expired", "entra-missing-id-token"] as const) test(`automatic sync handles ${mode} without relaxing other auth failures`, async () => {
+  const verified = mode.startsWith("entra-");
   const binding = { tenantId: verified ? workspaceId : null, subject: verified ? "synthetic-subject" : null, accountId };
   let revision=3,policyRevision=4,leaseId:string|null=null,status="connected",policyStatus="",lastError="",providerCalls=0;
   let access=protectMailboxToken(session,"microsoft","SYNTHETIC_ACCESS",session.email),refresh=protectMailboxToken(session,"microsoft","SYNTHETIC_REFRESH",session.email);
@@ -92,6 +92,7 @@ for (const mode of ["configuration", "scope", "unknown-auth", "entra-client", "e
     if (mode === "scope") return Response.json({ access_token: "synthetic-new", refresh_token: "synthetic-new-refresh", expires_in: 3600, scope: "Calendar.Read" });
     if (verified) {
       assert.equal(url, `https://login.microsoftonline.com/${workspaceId}/oauth2/v2.0/token`);
+      if (mode === "entra-missing-id-token") return Response.json({ access_token: "unverified-access", refresh_token: "unverified-refresh", expires_in: 3600, scope: "Mail.Read" });
       return Response.json(mode === "entra-client"
         ? { error: "invalid_client", error_codes: [7000215] }
         : { error: "invalid_grant", error_codes: [50173] }, { status: 400 });
@@ -104,9 +105,9 @@ for (const mode of ["configuration", "scope", "unknown-auth", "entra-client", "e
   if (verified) Object.assign(process.env, verifiedEnv);
   try {
     await assert.rejects(runPersonalMailboxSync(session,id,{pool,transport,microsoftAuth,ignoreDue:true}));
-    const requiresReauth=mode!=="configuration"&&mode!=="entra-client";
+    const requiresReauth=mode==="scope"||mode==="unknown-auth"||mode==="entra-expired";
     assert.equal(policyStatus,requiresReauth?"reauthorization_required":"delayed");assert.equal(status,requiresReauth?"reauthorization_required":"connected");
-    assert.equal(lastError,({configuration:"MAIL_OAUTH_NOT_CONFIGURED",scope:"MAIL_SCOPE_REQUIRED","unknown-auth":"MAIL_UNKNOWN_AUTH_FAILURE","entra-client":"MAIL_PROVIDER_UNAVAILABLE","entra-expired":"MAIL_REAUTH_REQUIRED"})[mode]);
+    assert.equal(lastError,({configuration:"MAIL_OAUTH_NOT_CONFIGURED",scope:"MAIL_SCOPE_REQUIRED","unknown-auth":"MAIL_UNKNOWN_AUTH_FAILURE","entra-client":"MAIL_PROVIDER_UNAVAILABLE","entra-expired":"MAIL_REAUTH_REQUIRED","entra-missing-id-token":"MAIL_PROVIDER_UNAVAILABLE"})[mode]);
     assert.equal(access,requiresReauth?null:priorAccess);assert.equal(refresh,requiresReauth?null:priorRefresh);
     assert.equal(providerCalls,mode==="configuration"?0:1);
     if(requiresReauth){const priorCalls=providerCalls;assert.equal((await runPersonalMailboxSync(session,id,{pool,transport,microsoftAuth,ignoreDue:true})).status,"quiet");assert.equal(providerCalls,priorCalls);}

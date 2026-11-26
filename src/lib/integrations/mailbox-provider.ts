@@ -295,7 +295,13 @@ export async function exchangeMailboxToken(input: { provider: MailboxProvider; c
       (!refreshToken || /[\s\u0000-\u001f\u007f]/u.test(refreshToken))) {
     throw new MailboxProviderError("MAIL_REFRESH_GRANT_REQUIRED");
   }
-  return { accessToken: result.access_token, refreshToken, idToken: typeof result.id_token === "string" ? result.id_token : null, scopes, expiresAt: new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() };
+  const idToken = typeof result.id_token === "string" ? result.id_token : null;
+  // A successful OIDC refresh can omit the ID token. Without a fresh identity
+  // proof, defer the sync and retain the existing encrypted credentials.
+  if (verifiedMicrosoftRefresh && (result.id_token == null || idToken?.trim() === "")) {
+    throw new MailboxProviderError("MAIL_PROVIDER_UNAVAILABLE");
+  }
+  return { accessToken: result.access_token, refreshToken, idToken, scopes, expiresAt: new Date(Date.now() + Number(result.expires_in) * 1000).toISOString() };
 }
 export async function fetchMailboxAccountLabel(provider: MailboxProvider, token: string, transport: MailboxTransport = defaultTransport) {
   const result = await json(provider === "google" ? "https://gmail.googleapis.com/gmail/v1/users/me/profile" : "https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName", { headers: headers(token) }, transport, 65536);
