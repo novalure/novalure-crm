@@ -1,15 +1,7 @@
 {
+  "buildCommand": "npm run build -- --webpack",
   "git": {
     "deploymentEnabled": {
-      "main": false,
-      "codex/universal-booking": false,
-      "codex/studio-preview-crm-handoff": false,
-      "codex/knowledge-center-package2-20261019": false,
-      "codex/knowledge-center-completion-20261019": false,
-      "codex/evelyn-crm-design-c-integration": false,
-      "codex/knowledge-center-package3-20261019": false,
-      "codex/evelyn-crm-package4-integration": true,
-      "codex/knowledge-operational-closure-20261031": true,
       "codex/shared-learning-package4-20261102": false,
       "codex/continuous-operation-20261029-crm": false,
       "codex/shared-behavior-studio-adapter-20261027": false,
@@ -18,11 +10,20 @@
       "codex/shared-behavior-package3-20261026": false,
       "codex/shared-behavior-package2-20261026": false,
       "codex/shared-behavior-foundation-20261026": false,
+      "main": false,
+      "codex/universal-booking": false,
+      "codex/studio-preview-crm-handoff": false,
+      "codex/knowledge-center-package2-20261019": false,
+      "codex/knowledge-center-completion-20261019": false,
+      "codex/evelyn-crm-design-c-integration": false,
+      "codex/knowledge-center-package3-20261019": false,
+      "codex/evelyn-crm-package4-integration": true,
       "codex/expose-release-20261125-heic-7e9f2c": false,
-      "codex/crm-agent-main-integration-20261127": false,
-      "codex/crm-no-effect-20261127": false,
+      "codex/knowledge-operational-closure-20261031": true,
       "codex/crm-outlook-main-integration-20261126": false,
       "codex/crm-outlook-sync-recovery-20261127": false,
+      "codex/crm-agent-main-integration-20261127": false,
+      "codex/crm-no-effect-20261127": false,
       "codex/crm-a1-reader-integration-20261127": false
     }
   },
@@ -71,6 +72,5 @@
       "path": "/api/cron/mailbox-sync",
       "schedule": "*/2 * * * *"
     }
-  ],
-  "buildCommand": "npm run build -- --webpack"
+  ]
 }
