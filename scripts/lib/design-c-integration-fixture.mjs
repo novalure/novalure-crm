@@ -75,6 +75,8 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       // Current browser acceptance needs the additive personal-language table;
       // predecessor-only database tests keep their original schema by default.
       ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),
+      // Current booking navigation also runs the shared private unit loader.
+      ...(bookingSetup ? ["186_property_unit_details.sql"] : []),
     ]) {
       if (bookingSetup && filename === "108_universal_booking.sql") {
         const { reviewedNumber108Coexistence } = await import("../db-migrate.mjs");
