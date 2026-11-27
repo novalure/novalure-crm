@@ -7,14 +7,18 @@ const origin = "http://127.0.0.1:3000";
 const pathname = "/api/public/website-sales/enquiry";
 const qaHost = "ep-synthetic-candidate-123-pooler.eu-west-2.aws.neon.tech";
 const productionHost = "ep-synthetic-production-456-pooler.eu-west-2.aws.neon.tech";
-function profile(): NodeJS.ProcessEnv {
+const package4Ref = "refs/heads/codex/evelyn-crm-package4-integration";
+const outlookRef = "refs/heads/codex/crm-outlook-main-integration-20261126";
+const workflowPath = "novalure/novalure-crm/.github/workflows/livegang-e2e.yml";
+
+function profile(ref = package4Ref): NodeJS.ProcessEnv {
   const url = `postgresql://novalure_app:synthetic-only@${qaHost}/neondb?sslmode=verify-full&channel_binding=require`;
   return {
     NODE_ENV: "test",
     STUDIO_ENQUIRY_CANDIDATE_ENABLED: "1", NOVALURE_QA_PROFILE: "isolated-candidate", CI: "true", GITHUB_ACTIONS: "true",
     GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REPOSITORY: "novalure/novalure-crm",
-    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/codex/evelyn-crm-package4-integration",
-    GITHUB_REF: "refs/heads/codex/evelyn-crm-package4-integration", GITHUB_SHA: "a".repeat(40),
+    GITHUB_WORKFLOW_REF: `${workflowPath}@${ref}`,
+    GITHUB_REF: ref, GITHUB_SHA: "a".repeat(40),
     GITHUB_RUN_ID: "1234567", GITHUB_RUN_ATTEMPT: "2", NOVALURE_QA_RUN_PREFIX: "GOLIVETEST_1234567_2",
     NOVALURE_APP_ORIGIN: origin, NOVALURE_QA_BASE_URL: origin,
     DATABASE_URL: url, NOVALURE_QA_DATABASE_URL: url, NOVALURE_QA_DATABASE_HOST: qaHost,
@@ -31,12 +35,32 @@ function profile(): NodeJS.ProcessEnv {
 const request = (url = origin + pathname, method = "POST") => ({ url, method });
 
 test("only the complete local Actions profile yields public target coordinates", () => {
-  assert.deepEqual(studioEnquiryCandidateBinding(profile()), {
-    host: qaHost, name: "neondb", role: "novalure_app", project: "synthetic-candidate-123", branch: "br-synthetic-candidate-123",
-  });
-  assert.equal(studioEnquiryCandidateRequestAllowed(request(), profile()), true);
+  for (const ref of [package4Ref, outlookRef]) {
+    const env = profile(ref);
+    assert.deepEqual(studioEnquiryCandidateBinding(env), {
+      host: qaHost, name: "neondb", role: "novalure_app", project: "synthetic-candidate-123", branch: "br-synthetic-candidate-123",
+    }, ref);
+    assert.equal(studioEnquiryCandidateRequestAllowed(request(), env), true, ref);
+  }
   const optionalOwner = profile(); delete optionalOwner.NOVALURE_QA_MIGRATION_DATABASE_HOST;
   assert.ok(studioEnquiryCandidateBinding(optionalOwner));
+});
+
+test("only the exact workflow on the selected candidate branch can activate the profile", () => {
+  const outlook = profile(outlookRef);
+  outlook.GITHUB_WORKFLOW_REF = `${workflowPath}@${package4Ref}`;
+  assert.equal(studioEnquiryCandidateBinding(outlook), null);
+
+  const package4 = profile(package4Ref);
+  package4.GITHUB_WORKFLOW_REF = `${workflowPath}@${outlookRef}`;
+  assert.equal(studioEnquiryCandidateBinding(package4), null);
+
+  const wrongWorkflow = profile(outlookRef);
+  wrongWorkflow.GITHUB_WORKFLOW_REF = `novalure/novalure-crm/.github/workflows/other.yml@${outlookRef}`;
+  assert.equal(studioEnquiryCandidateBinding(wrongWorkflow), null);
+
+  const foreign = profile("refs/heads/codex/crm-outlook-main-integration-20261127");
+  assert.equal(studioEnquiryCandidateBinding(foreign), null);
 });
 
 test("NextRequest loopback normalization retains the exact original candidate Host", () => {
