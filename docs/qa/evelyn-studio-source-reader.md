@@ -27,3 +27,57 @@ The protected Sales command provides the signed `sourceGrantId` with its already
 Preview additionally requires `CRM_STUDIO_SOURCE_PREVIEW_ENABLED=1`, the unique native CRM deployment hostname and a separately registered exact Preview deployment/SHA with a separate capability. The sender uses its real Evelyn Vercel Preview OIDC identity with audience `urn:novalure:crm:studio-source:preview:prj_R32Okl6AHijTohvuKmryuTLjWMsk`. The receiver checks the Long Fog pooled endpoint and the native database project `long-fog-84900593`, branch `br-summer-mountain-bh7w67e3`, database `neondb`, and `novalure_app`. Preview cannot use a Production grant or authorize a Production Sales effect.
 
 Use protected synthetic data only. Record the isolated creation and cleanup of a production-shaped accepted fixture separately. Its false flag is the protocol shape under test and does not establish a production customer transfer. A genuine Preview intake keeps its true synthetic marker and must be excluded from the feed. Keep fixed scope negatives, grant revocation, ordered completion around activation, restart on a saved cursor and exact projected values in the affected evidence. Keep the native Preview and production readbacks separate.
+
+## Retiring an owned Preview fixture
+
+`migrations/staged/evelyn_studio_source_qa_retirement.sql` is a separate additive,
+LongFog-only stage. The previous eight stages remain unchanged. Its installer
+must be the existing non-login, non-privileged SOURCE metadata owner; it rejects
+a changed original matcher or a second wrapping. It preserves the old Preview
+matcher as an owner-only implementation. The public matcher retains the original
+authentication and grant locks, then rejects an exactly retired tuple.
+
+The normal Preview SOURCE reader requires this stage and fails closed without
+it. Retirement is considered before ordered candidate selection and its limit.
+Production uses its unchanged SQL and does not require the QA-only schema.
+Activation, sequence and signed cursor functions are unchanged. An empty page
+still returns `nextCursor:null`; keep the existing saved position.
+
+There is no runtime write route or runtime table access. The existing direct
+database operator may call `crm_retire_studio_source_qa(plan)` only as the real
+`neondb_owner` session and role on native LongFog. Its existing SELECT and audit
+INSERT authority is checked; no human identity, cookie or MFA session is assumed.
+It binds only the fixed tenant locally for the existing SOURCE-owner receipt
+policy; it does not install or impersonate an application actor.
+The stage grants only that operator EXECUTE for this write and the tenant runtime
+EXECUTE for a narrow boolean retirement predicate.
+
+The strict plan contains `tuple` (operationId, workspaceId, crmProjectId, revision,
+payloadHash, leadId, submissionId, sourceSeq as a decimal string, acceptedAt at
+the original database precision), `originalGrant` (id, deploymentId, revision),
+`qaRunPrefix`, `provenanceSha256`, `authoritySha256`, `hostScopeDecisionSha256`,
+`hostScopeDecision: "RETIRE_OWN_QA_NO_PENDING_PROMOTION"`, and `receiver`
+(the admitted deploymentId and revision). Root must verify those referenced
+source/host/scope decisions and the native receiver before submitting a plan.
+Hashes or a literal decision alone do not prove a host position. An UNKNOWN
+host position does not authorize executing retirement.
+
+The operator call uses the existing shared QA/media locks and locks the grant
+registry against concurrent registration. All active SOURCE grants must be gone.
+The exact accepted tuple, its revoked original Preview grant and matching owned
+QA markers in the original Lead and Submission are checked. Customer records
+without this independently verified fixture lineage cannot use this path.
+
+One statement atomically appends an `audit_logs` action with `actor_user_id=NULL`
+and server-derived DATABASE_OPERATOR identity, followed by an immutable retirement
+record. The insert guard checks the audit's current transaction as well as its
+exact action, tuple and plan. An identical plan returns the original audit UUID;
+a changed plan holds. UPDATE, DELETE and TRUNCATE are forbidden, including for
+the metadata owner. Original transfer, snapshot, Lead, Submission, grant and
+existing audit records are preserved.
+
+Install the additive schema before binding the new Preview build. Applying the
+stage creates no retirement, grant or activation. A rollback retains its ledger;
+before returning to a reader without retirement support, revoke the owned active
+QA SOURCE grants and stop that consumer. Do not re-enable the old reader against
+retired events with a new grant, erase history, or reset flags, cutoff or cursor.

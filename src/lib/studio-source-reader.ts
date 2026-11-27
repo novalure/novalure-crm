@@ -183,6 +183,14 @@ const sourceSql = `
   (select count(*) > $6::integer from candidates) as "hasMore", g.grant_id as "sourceGrantId"
   from gate g`;
 
+// The same protected Preview endpoint uses additive QA retirement metadata.
+// Keep the Production SQL and its schema requirements unchanged.
+const previewSourceSql = sourceSql.replace(
+  "    order by t.source_seq limit ($6::integer + 1)",
+  `    and not public.crm_studio_source_qa_retired(t.workspace_id,t.operation_id,t.revision,t.payload_hash,t.lead_id,t.submission_id)
+    order by t.source_seq limit ($6::integer + 1)`,
+);
+
 export async function readStudioSource(request: Request, options: ReaderOptions = {}): Promise<Response> {
   const env = options.env ?? process.env;
   if (env.CRM_STUDIO_SOURCE_ENABLED !== "1") return Response.json({ code: "STUDIO_SOURCE_DISABLED" }, { status: 503, headers });
@@ -208,7 +216,12 @@ export async function readStudioSource(request: Request, options: ReaderOptions 
       const [stage] = await queryRows<{ ready: boolean }>(
         "select to_regprocedure('public.crm_studio_source_position(text,uuid,text,text,text,text,bigint)') is not null as ready");
       if (!stage?.ready) throw new Error("STUDIO_SOURCE_STAGE_REQUIRED");
-      return queryRows<PageRow>(sourceSql, [
+      if (receiver.profile === "preview") {
+        const [retirement] = await queryRows<{ ready: boolean }>(
+          "select to_regprocedure('public.crm_studio_source_qa_retired(uuid,uuid,integer,text,uuid,uuid)') is not null and to_regprocedure('public.crm_studio_preview_source_transfer_matches_before_qa_retirement(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid)') is not null as ready");
+        if (!retirement?.ready) throw new Error("STUDIO_SOURCE_QA_RETIREMENT_STAGE_REQUIRED");
+      }
+      return queryRows<PageRow>(receiver.profile === "preview" ? previewSourceSql : sourceSql, [
         receiver.profile, receiver.deploymentId, receiver.revision, credentialDigest, cursor, limit,
         claims?.issuer ?? null, claims?.audience ?? null, claims?.projectId ?? null, claims?.ownerId ?? null,
         claims?.subject ?? null, CRM_MACHINE_WORKSPACE_ID, claims?.environment ?? null,
