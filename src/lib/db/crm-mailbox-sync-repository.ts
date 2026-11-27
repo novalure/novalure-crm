@@ -18,6 +18,26 @@ import { currentTenantTransaction } from "./transaction-context";
 type Options = TenantTransactionOptions & { transport?: MailboxTransport; maxPages?: number; budgetMs?: number; ignoreDue?: boolean; verifyIdentity?: typeof verifyMicrosoftMailboxIdentity; microsoftAuth?: typeof microsoftClientAuthFields };
 type Claim = { id: string; provider: MailboxProvider; tenantId: string | null; subject: string | null; label: string; accountId: string | null; format: string; access: string; refresh: string | null; scopes: string[]; expiresAt: string; revision: number; policyRevision: number; identityId: string; autoFile: boolean; contactReview: boolean; backfillReplaying: boolean; checkpoint: MailboxSyncCheckpoint; lease: string; failures: number; importStart: number | null; pilot: ReturnType<typeof assertProductionMailboxPilot> };
 type CursorRecovery = { phase:'baseline'|'verify'|'replay'; ceilingId:string|null; lastId:string|null; baseline:MailboxSyncCheckpoint|null };
+type MailboxSyncFailureStage = "account" | "inbox" | "auxiliary" | "delta" | "metadata" | "commit" | "finish";
+const rawMailboxFailureCodes = new Set(["INVALID_MAIL_CURSOR", "INVALID_MAIL_MESSAGE_ID", "MAIL_INVALID_DELTA_CURSOR"]);
+const typedMailboxFailureCode = /^(?:MAIL_[A-Z0-9_]{1,56}|UNSAFE_PROVIDER_URL|FORBIDDEN|UNAUTHENTICATED|IDENTITY_MISMATCH|SESSION_REVOKED|DATA_CONTEXT_REQUIRED|DATA_SCOPE_DENIED|PROJECT_FORBIDDEN|TENANT_MISMATCH)$/;
+
+function logMailboxSyncFailure(stage: MailboxSyncFailureStage, error: unknown) {
+  let code = "MAIL_SYNC_FAILED";
+  let sqlState: string | undefined;
+  if (error instanceof CrmCommandError || error instanceof MailboxProviderError) {
+    if (typedMailboxFailureCode.test(error.code)) code = error.code;
+  } else if (error instanceof MailboxCheckpointReviewRequired) {
+    code = "MAIL_CHECKPOINT_REVIEW_REQUIRED";
+  } else if (error instanceof Error) {
+    if (rawMailboxFailureCodes.has(error.message)) code = error.message;
+    else if ("severity" in error && typeof error.severity === "string" &&
+      "code" in error && typeof error.code === "string" && /^[0-9A-Z]{5}$/.test(error.code)) sqlState = error.code;
+  }
+  // The runtime associates this event with its request. Keep mailbox and cursor data out of the log.
+  console.warn(JSON.stringify({ event: "crm_mailbox_sync_failure", stage, code, sqlState }));
+}
+
 function requireMicrosoftBinding(provider: MailboxProvider, tenantId: string | null, subject: string | null, accountId: string | null) {
  if(provider==='microsoft' && (verifiedExternalMailboxMode() !== Boolean(tenantId) || tenantId && (!subject || !accountId))) throw new CrmCommandError('MAIL_REAUTH_REQUIRED','Postfachidentität muss erneut sicher verbunden werden',409);
 }
@@ -193,15 +213,21 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
   const leased=await tx.queryOne<{revision:number}>(`update crm_mailbox_connections c set sync_lease_id=$2::uuid,sync_lease_until=clock_timestamp()+interval '2 minutes',revision=revision+1 where c.id=$1::uuid and c.workspace_id=$3::uuid and c.user_id=$4::uuid and c.status='connected' and c.revision=$5 and (c.sync_lease_until is null or c.sync_lease_until<=clock_timestamp()) and exists(select 1 from crm_mailbox_auto_settings s join workspace_users u on u.workspace_id=s.workspace_id and u.id=s.user_id where s.connection_id=c.id and s.workspace_id=c.workspace_id and s.user_id=c.user_id and s.enabled and s.revision=$6 and s.identity_id=$7::uuid and (s.next_run_at<=clock_timestamp() or $8::boolean) and u.status='active' and u.auth_identity_id=s.identity_id and crm_mailbox_delegated_identity(c.workspace_id,c.user_id)=s.identity_id) returning c.revision`,[connectionId,lease,fresh.workspaceId,fresh.userId,c.revision,c.policyRevision,c.identityId,Boolean(options.ignoreDue)]);
   if(!leased||leased.revision!==c.revision+1)throw new CrmCommandError('MAIL_CONNECTION_CHANGED','Persönliche Freigabe oder Verbindung geändert. Postfach erneut prüfen.',409);
   return {...c,revision:leased.revision,checkpoint:checkpoint?.checkpoint??emptyMailboxCheckpoint(),lease,importStart,pilot};
- },options);
+ },options).catch(error=>{logMailboxSyncFailure("account",error);throw error;});
  if(!claim)return {status:'quiet',imported:0};
  let count=0,pages=0,renewed:Awaited<ReturnType<typeof exchangeMailboxToken>>|null=null,inboxId:string|undefined,microsoftDeltaExpired=false;
+ let stage: MailboxSyncFailureStage = "auxiliary";
+ const finishSync = (status: string, error: string | null, retryAfter?: number, pauseForReview = false) => {
+  stage = "finish";
+  return finish(session, claim, status, error, options, retryAfter, pauseForReview);
+ };
  try{
   if(claim.provider==='microsoft')assertMicrosoftMailboxCheckpoint(claim.checkpoint);
   if(claim.pilot&&claim.checkpoint.queued.length)throw new MailboxCheckpointReviewRequired();
   // Do not start provider I/O based only on an earlier transaction snapshot.
   // Revocation can still race after this check because network I/O must not
   // hold the user's database locks open.
+  stage = "account";
   await withCrmRead(session,async(tx,fresh)=>verify(tx,fresh,claim),options);
   let token=unprotectMailboxToken(session,claim.provider,claim.access,claim.label);
   const expectedIdentity=claim.tenantId&&claim.accountId&&claim.subject?{tenantId:claim.tenantId,objectId:claim.accountId,subject:claim.subject}:null;
@@ -211,15 +237,19 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
   const accountMatches=expectedIdentity?sameMicrosoftMailboxGuid(identity.accountId,expectedIdentity.objectId):!claim.accountId||identity.accountId===claim.accountId;
   if(identity.label!==claim.label||!accountMatches)throw new MailboxProviderError('MAIL_ACCOUNT_CHANGED');
   const storedAccountId=expectedIdentity?.objectId??identity.accountId;
+  stage = "commit";
   await withFencedWrite(session,claim,options,async(tx,fresh,claim)=>{await tx.query(`update crm_mailbox_connections set provider_account_id=$2,revision=revision+1,access_token_encrypted=coalesce($3,access_token_encrypted),refresh_token_encrypted=coalesce($4,refresh_token_encrypted),expires_at=coalesce($5::timestamptz,expires_at),granted_scopes=coalesce($6::jsonb,granted_scopes) where id=$1::uuid`,[claim.id,storedAccountId,renewed?protectMailboxToken(fresh,claim.provider,renewed.accessToken,claim.label):null,renewed?protectMailboxToken(fresh,claim.provider,renewed.refreshToken,claim.label):null,renewed?.expiresAt??null,renewed?JSON.stringify(renewed.scopes):null]);claim.accountId=storedAccountId;claim.revision++;});
   if(claim.provider==='microsoft'&&claim.format!=='immutable'){
+   stage = "auxiliary";
    const legacy=await withCrmRead(session,async(tx,fresh)=>{await verify(tx,fresh,claim);return tx.query<{id:string;providerId:string}>(`select id,provider_id as "providerId" from crm_mailbox_messages where connection_id=$1::uuid and provider_id_format='legacy' and ($2::double precision is null or received_at>=to_timestamp($2/1000.0)) order by id limit 20`,[claim.id,claim.importStart]);},options);
    const aliases=legacy.length?await translateMailboxLegacyIds(token,legacy.map(row=>row.providerId),options.transport):[];
    const done=await withFencedWrite(session,claim,options,async(tx,fresh,claim)=>{for(const alias of aliases){const old=legacy.find(row=>row.providerId===alias.oldId)!;await tx.query(`insert into crm_mailbox_id_aliases(workspace_id,user_id,connection_id,old_id,immutable_id,message_id) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6::uuid) on conflict do nothing`,[fresh.workspaceId,fresh.userId,claim.id,alias.oldId,alias.newId,old.id]);await tx.query(`update crm_mailbox_messages set provider_id=$2,provider_id_format='immutable',revision=revision+1 where id=$1::uuid`,[old.id,alias.newId]);}
     const remaining=await tx.queryOne(`select id from crm_mailbox_messages where connection_id=$1::uuid and provider_id_format='legacy' and ($2::double precision is null or received_at>=to_timestamp($2/1000.0)) limit 1`,[claim.id,claim.importStart]);if(!remaining){await tx.query(`update crm_mailbox_connections set provider_id_format='immutable',revision=revision+1 where id=$1::uuid`,[claim.id]);claim.revision++;claim.format='immutable';}return !remaining;});
-   if(!done){await finish(session,claim,'identity_migration',null,options);return {status:'identity_migration',imported:0};}
+   if(!done){await finishSync('identity_migration',null);return {status:'identity_migration',imported:0};}
   }
+  stage = "inbox";
   inboxId=claim.provider==='microsoft'?await fetchMailboxInboxId(token,options.transport):undefined;
+  stage = "auxiliary";
   if(claim.provider==='microsoft')assertMicrosoftMailboxCheckpoint(claim.checkpoint,inboxId);
   const auxiliary=await withCrmRead(session,async(tx,fresh)=>{
    await verify(tx,fresh,claim);
@@ -234,22 +264,45 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
    const batch=await withCrmRead(session,async(tx,fresh)=>{await verify(tx,fresh,claim);return tx.query<{id:string;providerId:string}>(`select id,provider_id as "providerId" from crm_mailbox_messages where connection_id=$1::uuid and deleted_at is null and $2::uuid is not null and id<=$2::uuid and ($3::uuid is null or id>$3::uuid) and ($4::double precision is null or received_at>=to_timestamp($4/1000.0)) order by id limit 5`,[claim.id,recovery.ceilingId,recovery.lastId,claim.importStart]);},options);
    if(batch.length){
     const outcomes:Outcome[]=[];let lastId:string|null=null;
+    stage = "metadata";
     for(const item of batch){if(Date.now()-started>=budget)break;await withCrmRead(session,async(tx,fresh)=>verify(tx,fresh,claim),options);const meta=await fetchMailboxMetadata(claim.provider,token,item.providerId,options.transport,inboxId);outcomes.push({id:item.providerId,source:!meta?'source_missing':meta.inInbox?'in_inbox':'left_inbox'});lastId=item.id;}
-    if(lastId)await checkpointCommit(session,claim,claim.checkpoint,outcomes,options,lastId);
+    if(lastId){
+     stage = "commit";
+     await checkpointCommit(session,claim,claim.checkpoint,outcomes,options,lastId);
+    }
    }else{
     if(!recovery.baseline)throw new CrmCommandError('MAIL_RECOVERY_INVALID','Postfachabgleich benötigt persönliche Prüfung',409);
     const replay=claim.provider==='microsoft'?microsoftRecoveryReplay(claim.checkpoint,recovery.baseline,inboxId):{...recovery.baseline,queued:claim.checkpoint.queued,afterQueue:claim.checkpoint.queued.length?mailboxSyncPosition(recovery.baseline):null};
+    stage = "commit";
     await withFencedWrite(session,claim,options,async(tx,_fresh,claim)=>{await tx.query(`update crm_mailbox_auto_checkpoints set checkpoint=$2::jsonb,updated_at=now() where connection_id=$1::uuid and folder='inbox'`,[claim.id,JSON.stringify(replay)]);await tx.query(`update crm_mailbox_cursor_recovery set phase='replay',updated_at=now() where connection_id=$1::uuid and phase='verify'`,[claim.id]);});
    }
-   const status=await finish(session,claim,'catching_up',null,options);return {status,imported:0,pages:0};
+   const status=await finishSync('catching_up',null);return {status,imported:0,pages:0};
   }
   let state=claim.checkpoint,freshMicrosoftFinalCursor:string|null=null;
   while(pages<maxPages&&Date.now()-started<budget){
-   if(!state.queued.length){let page:Awaited<ReturnType<typeof fetchMailboxSyncPage>>;const usedMicrosoftCursor=claim.provider==='microsoft'&&microsoftCheckpointUsesContinuation(state,inboxId);try{page=await fetchMailboxSyncPage(claim.provider,token,state,options.transport,inboxId,claim.importStart,{productionPilot:Boolean(claim.pilot)});}catch(error){if(usedMicrosoftCursor&&error instanceof MailboxProviderError&&error.status===410)microsoftDeltaExpired=true;throw error;}state={...state,queued:page.changes,afterQueue:page.after};if(!page.changes.length)state={...page.after,queued:[],afterQueue:null};if(!claim.pilot||!page.changes.length)await checkpointCommit(session,claim,state,[],options);if(claim.provider==='microsoft'&&page.after.phase==='ready')freshMicrosoftFinalCursor=page.after.deltaCheckpoint;pages++;if(!state.queued.length&&state.phase==='ready')break;if(!state.queued.length)continue;}
+   stage = "delta";
+   if(!state.queued.length){
+    let page: Awaited<ReturnType<typeof fetchMailboxSyncPage>>;
+    const usedMicrosoftCursor=claim.provider==='microsoft'&&microsoftCheckpointUsesContinuation(state,inboxId);
+    try{page=await fetchMailboxSyncPage(claim.provider,token,state,options.transport,inboxId,claim.importStart,{productionPilot:Boolean(claim.pilot)});}
+    catch(error){if(usedMicrosoftCursor&&error instanceof MailboxProviderError&&error.status===410)microsoftDeltaExpired=true;throw error;}
+    state={...state,queued:page.changes,afterQueue:page.after};
+    if(!page.changes.length)state={...page.after,queued:[],afterQueue:null};
+    if(!claim.pilot||!page.changes.length){
+     stage = "commit";
+     await checkpointCommit(session,claim,state,[],options);
+    }
+    if(claim.provider==='microsoft'&&page.after.phase==='ready')freshMicrosoftFinalCursor=page.after.deltaCheckpoint;
+    pages++;
+    if(!state.queued.length&&state.phase==='ready')break;
+    if(!state.queued.length)continue;
+   }
    // The pilot commits a whole bounded page; unrelated provider identifiers
    // must not be written into a durable pending queue between admission checks.
+   stage = "delta";
    if(claim.pilot&&state.queued.length>20)throw new MailboxProviderError('MAIL_PROVIDER_UNAVAILABLE');
    const changes=claim.pilot?state.queued:state.queued.slice(0,5),outcomes:Outcome[]=[];
+   stage = "metadata";
    let handled=0;for(const change of changes){
     if(Date.now()-started>=budget)break;handled++;
     let withinImportWindow=claim.importStart===null;
@@ -266,12 +319,15 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
    }
    const rest=state.queued.slice(handled);
    if(claim.pilot&&rest.length)throw new MailboxProviderError('MAIL_PROVIDER_UNAVAILABLE');
+   stage = "commit";
    state=rest.length?{...state,queued:rest}: {...state.afterQueue!,queued:[],afterQueue:null};count+=await checkpointCommit(session,claim,state,outcomes,options);if(rest.length)pages++;if(!state.queued.length&&state.phase==='ready')break;
   }
+  stage = "auxiliary";
   const current=mailboxSyncCurrent(claim.provider,state,freshMicrosoftFinalCursor);
+  stage = "commit";
   if(current&&recovery?.phase==='baseline'){
    await withFencedWrite(session,claim,options,async(tx,_fresh,claim)=>{await tx.query(`update crm_mailbox_cursor_recovery set phase='verify',baseline_checkpoint=$2::jsonb,updated_at=now() where connection_id=$1::uuid and phase='baseline'`,[claim.id,JSON.stringify(state)]);});
-   const status=await finish(session,claim,'catching_up',null,options);return {status,imported:count,pages};
+   const status=await finishSync('catching_up',null);return {status,imported:count,pages};
   }
   if(current&&recovery?.phase==='replay')await withFencedWrite(session,claim,options,async(tx,_fresh,claim)=>{await tx.query(`delete from crm_mailbox_cursor_recovery where connection_id=$1::uuid and phase='replay'`,[claim.id]);});
   const backfill=current?await withFencedWrite(session,claim,options,async(tx,_fresh,claim)=>{
@@ -281,14 +337,27 @@ export async function runPersonalMailboxSync(session:AppSession,connectionId:str
    await tx.query(`update crm_mailbox_auto_checkpoints set checkpoint=$2::jsonb,updated_at=now() where connection_id=$1::uuid and folder='inbox'`,[claim.id,JSON.stringify(next.checkpoint)]);
    await tx.query(`update crm_mailbox_auto_settings set contact_review_backfill_pending=$2,contact_review_backfill_resume=$3::jsonb,contact_review_backfill_replaying=$4,revision=revision+1,updated_at=now() where connection_id=$1::uuid`,[claim.id,next.pending,next.resume?JSON.stringify(next.resume):null,policy?.resume!=null]);claim.policyRevision++;return true;
   }):false;
-  const status=await finish(session,claim,current&&!backfill?'current':'catching_up',null,options);return {status,imported:count,pages};
- }catch(error){const code=error instanceof CrmCommandError||error instanceof MailboxProviderError?error.code:'MAIL_SYNC_FAILED';
-  if(error instanceof MailboxCheckpointReviewRequired){await finish(session,claim,'review','MAIL_CHECKPOINT_REVIEW_REQUIRED',options,undefined,true);return {status:'review',imported:count,pages};}
-  if(error instanceof MailboxProviderError&&mailboxCursorResetAllowed(claim.provider,error.status,microsoftDeltaExpired)){
-   let startedRecovery:boolean;try{startedRecovery=await startCursorRecovery(session,claim,options,inboxId);}catch(recoveryError){if(recoveryError instanceof MailboxCheckpointReviewRequired){await finish(session,claim,'review','MAIL_CHECKPOINT_REVIEW_REQUIRED',options,undefined,true);return {status:'review',imported:count,pages};}throw recoveryError;}
-   if(!startedRecovery){await finish(session,claim,'review','MAIL_BACKFILL_DELTA_EXPIRED',options);return {status:'review',imported:count};}
-   await finish(session,claim,'catching_up','MAIL_CHECKPOINT_RESET',options);return {status:'catching_up',imported:count};}
-  await finish(session,claim,mailboxSyncFailureStatus(code),code,options,error instanceof MailboxProviderError?error.retryAfterSeconds:undefined).catch(()=>undefined);throw error;
+  const status=await finishSync(current&&!backfill?'current':'catching_up',null);return {status,imported:count,pages};
+ }catch(error){
+  logMailboxSyncFailure(stage,error);
+  const code=error instanceof CrmCommandError||error instanceof MailboxProviderError?error.code:'MAIL_SYNC_FAILED';
+  try {
+   if(error instanceof MailboxCheckpointReviewRequired){await finishSync('review','MAIL_CHECKPOINT_REVIEW_REQUIRED',undefined,true);return {status:'review',imported:count,pages};}
+   if(error instanceof MailboxProviderError&&mailboxCursorResetAllowed(claim.provider,error.status,microsoftDeltaExpired)){
+    stage = "auxiliary";
+    let startedRecovery:boolean;
+    try{startedRecovery=await startCursorRecovery(session,claim,options,inboxId);}
+    catch(recoveryError){if(recoveryError instanceof MailboxCheckpointReviewRequired){await finishSync('review','MAIL_CHECKPOINT_REVIEW_REQUIRED',undefined,true);return {status:'review',imported:count,pages};}throw recoveryError;}
+    if(!startedRecovery){await finishSync('review','MAIL_BACKFILL_DELTA_EXPIRED');return {status:'review',imported:count};}
+    await finishSync('catching_up','MAIL_CHECKPOINT_RESET');return {status:'catching_up',imported:count};
+   }
+  } catch (recoveryError) {
+   logMailboxSyncFailure(stage,recoveryError);
+   throw recoveryError;
+  }
+  await finishSync(mailboxSyncFailureStatus(code),code,error instanceof MailboxProviderError?error.retryAfterSeconds:undefined)
+   .catch(finishError=>logMailboxSyncFailure("finish",finishError));
+  throw error;
  }
 }
 type Outcome={id:string;source?:'in_inbox'|'left_inbox'|'source_missing';quarantine?:string;meta?:MailboxMetadata;decision?:MailboxSyncDecision;content?:MailboxImportedMessage};

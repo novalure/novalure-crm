@@ -11,9 +11,34 @@ import { hasMailboxReadScope, mailboxConnectionPresentationLabel, mailboxPresent
 type Props = { workspaceId: string; language: string;initialMessageId?:string };
 
 type Detail = { sourceStatus?:string; id: string; revision:number; subject: string; fromLabel: string; fromAddress: string | null; receivedAt: string; bodyText: string; bodyTruncated: boolean; attachments: MailboxAttachment[]; linkId: string | null; confirmedReply: boolean | null; reviewReason: string | null };
-type State = { nextPage:string|null; auto:MailboxAutoState; connections: { id: string; provider: MailboxProvider; accountLabel: string; status: string; presentation:MailboxConnectionPresentation; scopes: string[]; lastSyncedAt: string | null; lastError: string | null; hasOlder: boolean; pilotRestricted?: boolean; pilotAvailable?: boolean }[]; messages: { sourceStatus?:string; privateLead?:{status:string;label:string}|null; id: string; connectionId: string; subject: string; fromLabel: string; fromAddress: string | null; receivedAt: string; preview: string; attachmentCount: number; linkId: string | null }[]; detail: Detail | null; leads: { id: string; projectId: string; contactId: string; label: string }[]; runs: { id: string; requestId: string; status: string; importedCount: number; lastError: string | null; startedAt: string }[]; providers: { provider: MailboxProvider; configured: boolean }[]; canAssign: boolean; canSuppress:boolean };
+type State = { nextPage:string|null; auto:MailboxAutoState; connections: { id: string; provider: MailboxProvider; accountLabel: string; status: string; presentation:MailboxConnectionPresentation; scopes: string[]; lastSyncedAt: string | null; lastError: string | null; hasOlder: boolean; revision: number; checkPending: boolean; pilotRestricted?: boolean; pilotAvailable?: boolean }[]; messages: { sourceStatus?:string; privateLead?:{status:string;label:string}|null; id: string; connectionId: string; subject: string; fromLabel: string; fromAddress: string | null; receivedAt: string; preview: string; attachmentCount: number; linkId: string | null }[]; detail: Detail | null; leads: { id: string; projectId: string; contactId: string; label: string }[]; runs: { id: string; requestId: string; status: string; importedCount: number; lastError: string | null; startedAt: string }[]; providers: { provider: MailboxProvider; configured: boolean }[]; canAssign: boolean; canSuppress:boolean };
+type AutoSyncAttempt = { connectionId: string; connectionRevision: number; policyRevision: number };
+type PendingMailboxCommand = { key: string; correlation: string; body: string; autoSync: AutoSyncAttempt | null };
+type AutoSyncSnapshot = {
+  connections: Pick<State["connections"][number], "id" | "revision" | "checkPending" | "lastError">[];
+  auto: { ready: boolean; settings: Pick<MailboxAutoState["settings"][number], "connectionId" | "revision" | "lastError">[] };
+};
 const button = "min-h-11 rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50";
 const input = "mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm";
+
+export function mailboxAutoSyncReadback(fresh: AutoSyncSnapshot, attempt: AutoSyncAttempt) {
+  const connection = fresh.connections.find((row) => row.id === attempt.connectionId);
+  const policy = fresh.auto.settings.find((row) => row.connectionId === attempt.connectionId);
+  if (connection?.checkPending === true) return "pending";
+  if (connection?.checkPending !== false || !fresh.auto.ready || !policy ||
+      !Number.isSafeInteger(connection.revision) || !Number.isSafeInteger(policy.revision) ||
+      connection.revision <= attempt.connectionRevision || policy.revision <= attempt.policyRevision) return "unconfirmed";
+  return connection.lastError || policy.lastError ? "interrupted" : "refreshed";
+}
+
+export function MailboxRecoveryControls({ busy, de, retryAvailable, onRetry, onReload }: {
+  busy: boolean; de: boolean; retryAvailable: boolean; onRetry: () => void; onReload: () => void;
+}) {
+  return <div className="flex flex-wrap gap-2">
+    {retryAvailable ? <button className={button} disabled={busy} onClick={onRetry}>{de ? "Gleichen Vorgang erneut prüfen" : "Retry the same action"}</button> : null}
+    <button className={button} disabled={busy} onClick={onReload}>{de ? "Gespeicherten Stand prüfen" : "Check saved state"}</button>
+  </div>;
+}
 
 export function ConnectedCommunicationWorkspace(props: Props) { return <Communication key={`${props.workspaceId}:${props.initialMessageId??""}`} {...props} />; }
 
@@ -25,12 +50,13 @@ function Communication({ workspaceId, language,initialMessageId }: Props) {
 
   const [before,setBefore]=useState<string|null>(null),[decisionsBefore,setDecisionsBefore]=useState<string|null>(null);
 
-  const [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false), [unconfirmedAction, setUnconfirmedAction] = useState<"auto_sync" | "legacy" | null>(null), [notice, setNotice] = useState("");
+  const uncertain = unconfirmedAction !== null;
 
-  const busyRef = useRef(false), viewFence = useRef(createMailboxViewFence()), pending = useRef<{ key: string; correlation: string; body: string } | null>(null);
+  const busyRef = useRef(false), viewFence = useRef(createMailboxViewFence()), pending = useRef<PendingMailboxCommand | null>(null);
   const endpoint = `${base}${selected?`&messageId=${encodeURIComponent(selected)}`:""}${before?`&before=${encodeURIComponent(before)}`:""}${decisionsBefore?`&decisionsBefore=${encodeURIComponent(decisionsBefore)}`:""}`;
 
-  const load = useCallback(async () => { const response = await fetch(endpoint, { cache: "no-store" }), result = await response.json() as { data?: State; error?: string }; if (!response.ok || !result.data) throw new Error(result.error || (de ? "Postfachansicht nicht verfügbar" : "Mailbox view unavailable")); return result.data; }, [endpoint, de]);
+  const load = useCallback(async () => { const response = await fetch(endpoint, { cache: "no-store" }), result = await response.json() as { data?: State; error?: string; persisted?: boolean }; if (!response.ok || !result.data || result.persisted !== true) throw new Error(result.error || (de ? "Postfachansicht nicht verfügbar" : "Mailbox view unavailable")); return result.data; }, [endpoint, de]);
 
   useEffect(() => {
     let alive = true;
@@ -70,21 +96,68 @@ function Communication({ workspaceId, language,initialMessageId }: Props) {
   async function reload() {
 
     if (busyRef.current) return; busyRef.current = true; setBusy(true); const ticket = viewFence.current.begin();
-    try { const fresh = await load(); if (!viewFence.current.isCurrent(ticket)) return; setState(fresh); const attempt = pending.current; if (attempt) { const run = fresh.runs.find((item) => item.requestId === attempt.key); if (run && run.status !== "running") { pending.current = null; setUncertain(false); setNotice(run.status === "succeeded" ? (de ? "Import wurde bestätigt." : "Import was confirmed.") : (de ? "Der Abruf ist beendet. Ein neuer Versuch ist möglich." : "The fetch has ended. You can try again.")); } } }
+    try {
+      const fresh = await load();
+      if (!viewFence.current.isCurrent(ticket)) return;
+      setState(fresh);
+      const attempt = pending.current;
+      if (attempt?.autoSync) {
+        const outcome = mailboxAutoSyncReadback(fresh, attempt.autoSync);
+        if (outcome === "pending" || outcome === "unconfirmed") {
+          setNotice(outcome === "pending" ?
+            (de ? "Ein Abruf läuft noch. Prüfe den gespeicherten Stand erneut." : "A check is still in progress. Check the saved state again.") :
+            (de ? "Der Abrufausgang ist noch nicht bestätigt. Prüfe den gespeicherten Stand erneut." : "The check outcome is still unconfirmed. Check the saved state again."));
+          return;
+        }
+        pending.current = null;
+        setUnconfirmedAction(null);
+        setNotice(outcome === "interrupted" ?
+          (de ? "Der gespeicherte Postfachstand zeigt einen unterbrochenen Abruf." : "The saved mailbox state shows an interrupted check.") :
+          (de ? "Gespeicherter Postfachstand geladen." : "Saved mailbox state loaded."));
+      } else if (attempt) {
+        const run = fresh.runs.find((item) => item.requestId === attempt.key);
+        if (run && run.status !== "running") {
+          pending.current = null;
+          setUnconfirmedAction(null);
+          setNotice(run.status === "succeeded" ? (de ? "Import wurde bestätigt." : "Import was confirmed.") : (de ? "Der Abruf ist beendet. Ein neuer Versuch ist möglich." : "The fetch has ended. You can try again."));
+        }
+      }
+    }
     catch (error) { if (viewFence.current.isCurrent(ticket)) { viewFence.current.invalidate(); setState(null); setNotice(error instanceof Error ? error.message : "Reload unavailable"); } } finally { busyRef.current = false; setBusy(false); }
   }
 
   async function command(body?: Record<string, unknown>) {
 
-    if (busyRef.current || (!pending.current && !body)) return; busyRef.current = true; setBusy(true); setNotice(""); const ticket = viewFence.current.begin();
-    const attempt = pending.current ?? { key: crypto.randomUUID(), correlation: crypto.randomUUID(), body: JSON.stringify(body) }; pending.current = attempt; let committed = false;
+    if (busyRef.current || pending.current?.autoSync || (!pending.current && !body)) return;
+    let autoSync: AutoSyncAttempt | null = null;
+    if (!pending.current && body?.action === "auto_sync") {
+      const connection = state?.connections.find((row) => row.id === body.connectionId);
+      const policy = state?.auto.settings.find((row) => row.connectionId === body.connectionId);
+      if (connection?.checkPending !== false || !policy ||
+          !Number.isSafeInteger(connection.revision) || !Number.isSafeInteger(policy.revision)) {
+        setNotice(de ? "Prüfe zuerst den gespeicherten Postfachstand." : "Check the saved mailbox state first.");
+        return;
+      }
+      autoSync = { connectionId: connection.id, connectionRevision: connection.revision, policyRevision: policy.revision };
+    }
+    busyRef.current = true; setBusy(true); setNotice(""); const ticket = viewFence.current.begin();
+    const attempt = pending.current ?? { key: crypto.randomUUID(), correlation: crypto.randomUUID(), body: JSON.stringify(body), autoSync }; pending.current = attempt; let committed = false;
 
-    try { const response = await csrfFetch(base, { method: "POST", headers: { "content-type": "application/json", "idempotency-key": attempt.key, "x-correlation-id": attempt.correlation }, body: attempt.body }), result = await response.json() as { persisted?: boolean; error?: string; code?: string; data?: { importedCount?: number } }; if (!response.ok) { if (response.status < 500 && result.code !== "MAIL_SYNC_BUSY") { pending.current = null; setUncertain(false); } throw new Error(result.error || (de ? "Vorgang nicht bestätigt" : "Action not confirmed")); } if (!result.persisted) throw new Error(de ? "Speicherung nicht bestätigt" : "Save not confirmed"); committed = true; const actual = JSON.parse(attempt.body) as { action: string }; pending.current = null; setUncertain(false);
+    try { const response = await csrfFetch(base, { method: "POST", headers: { "content-type": "application/json", "idempotency-key": attempt.key, "x-correlation-id": attempt.correlation }, body: attempt.body }), result = await response.json() as { persisted?: boolean; error?: string; code?: string; data?: { importedCount?: number } }; if (!response.ok) { if (response.status < 500 && result.code !== "MAIL_SYNC_BUSY") { pending.current = null; setUnconfirmedAction(null); } throw new Error(result.error || (de ? "Vorgang nicht bestätigt" : "Action not confirmed")); } if (!result.persisted) throw new Error(de ? "Speicherung nicht bestätigt" : "Save not confirmed"); committed = true; const actual = JSON.parse(attempt.body) as { action: string }; pending.current = null; setUnconfirmedAction(null);
 
       if (actual.action === "erase") { setSelected(""); const response = await fetch(base, { cache: "no-store" }), refreshed = await response.json() as { data?: State }; if (viewFence.current.isCurrent(ticket) && response.ok && refreshed.data) setState(refreshed.data); }
       else { const fresh = await load(); if (viewFence.current.isCurrent(ticket)) setState(fresh); }
-      if (viewFence.current.isCurrent(ticket)) setNotice(actual.action === "sync" ? de ? `${result.data?.importedCount ?? 0} neue private Kopien gespeichert. Anhänge sind nur Metadaten und bleiben ungeöffnet.` : `${result.data?.importedCount ?? 0} new private copies saved. Attachments are metadata only and remain unopened.` : de ? "Gespeichert." : "Saved.");
-    } catch (error) { viewFence.current.invalidate(); if (pending.current) setUncertain(true); setState(null); setNotice(committed ? (de ? "Gespeichert. Ansicht bitte erneut laden." : "Saved. Please reload the view.") : error instanceof Error ? error.message : "Action not confirmed"); }
+      if (viewFence.current.isCurrent(ticket)) setNotice(actual.action === "sync" ? de ? `${result.data?.importedCount ?? 0} neue private Kopien gespeichert. Anhänge sind nur Metadaten und bleiben ungeöffnet.` : `${result.data?.importedCount ?? 0} new private copies saved. Attachments are metadata only and remain unopened.` : actual.action === "auto_sync" ? (de ? "Gespeicherter Postfachstand geladen." : "Saved mailbox state loaded.") : de ? "Gespeichert." : "Saved.");
+    } catch (error) {
+      viewFence.current.invalidate();
+      if (pending.current) setUnconfirmedAction(attempt.autoSync ? "auto_sync" : "legacy");
+      setState(null);
+      setNotice(pending.current?.autoSync ?
+        (de ? "Abrufausgang nicht bestätigt. Prüfe den gespeicherten Stand." : "The check outcome is unconfirmed. Check the saved state.") :
+        committed && attempt.autoSync ?
+          (de ? "Postfachstand konnte nicht geladen werden. Prüfe den gespeicherten Stand." : "The mailbox state could not be loaded. Check the saved state.") :
+          committed ? (de ? "Gespeichert. Ansicht bitte erneut laden." : "Saved. Please reload the view.") : error instanceof Error ? error.message : "Action not confirmed");
+    }
     finally { busyRef.current = false; setBusy(false); }
 
   }
@@ -95,7 +168,7 @@ function Communication({ workspaceId, language,initialMessageId }: Props) {
 
     {notice ? <p role="status" className="rounded-xl bg-stone-100 p-3 text-sm">{notice}</p> : null}
 
-    <div className="flex flex-wrap gap-2">{uncertain ? <button className={button} disabled={busy} onClick={() => void command()}>{de ? "Gleichen Vorgang erneut prüfen" : "Retry the same action"}</button> : null}<button className={button} disabled={busy} onClick={() => void reload()}>{de ? "Gespeicherten Stand prüfen" : "Check saved state"}</button></div>
+    <MailboxRecoveryControls busy={busy} de={de} retryAvailable={unconfirmedAction === "legacy"} onRetry={() => void command()} onReload={() => void reload()} />
 
     {!state ? <p>{notice ? (de ? "Postfachstatus derzeit nicht bestätigt." : "Mailbox status is currently unconfirmed.") : (de ? "Persönliche Postfachansicht wird geladen …" : "Loading personal mailbox …")}</p> : <>
       <div className="grid gap-3 sm:grid-cols-2">{state.providers.map(({ provider, configured }) => <div key={provider} className="rounded-xl border border-stone-200 p-4"><h3 className="font-semibold">{provider === "google" ? "Google / Gmail" : "Microsoft / Outlook"}</h3><p className="mt-2 text-sm text-slate-600">{configured ? de ? "Separate persönliche Zustimmung für Mail-Lesezugriff. Es wird keine Versandberechtigung angefordert." : "Separate personal consent for reading mail. Sending permission is not requested." : de ? "OAuth-Anwendung und Mail-Rücksprungadresse müssen für diesen Anbieter eingerichtet werden." : "Configure the OAuth application and mailbox callback address for this provider."}</p><button className={`${button} mt-3`} disabled={disabled || !configured} onClick={() => void connect(provider)}>{de ? "Eigenes Postfach verbinden" : "Connect your mailbox"}</button></div>)}</div>

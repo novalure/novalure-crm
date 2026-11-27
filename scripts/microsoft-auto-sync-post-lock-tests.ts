@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { DatabaseError } from "@neondatabase/serverless";
 import type { AppSession } from "../src/lib/auth/session";
 import type { TenantPool, TenantTransaction } from "../src/lib/db/tenant-client";
 import { assertMailboxLeaseAfterLock } from "../src/lib/db/crm-mailbox-lease-wall-clock";
@@ -181,15 +182,19 @@ for (const verified of [false, true]) test(`automatic token work preserves the $
   assert.ok(currentLease); assert.equal(providerCalls,1); assert.equal(committedTokenWrite,false); assert.ok(rollbacks>=1);
 });
 
-for (const mode of ["lease-expired", "policy-denied", "commit-fails", "success", "pause"] as const) test(`automatic finish fences synthetic transaction: ${mode}`, async () => {
+for (const mode of ["lease-expired", "policy-denied", "commit-fails", "success", "pause"] as const) test(`automatic finish fences synthetic transaction: ${mode}`, async (t) => {
   let revision=3, policyRevision=4, leaseId:string|null=null, expired=false, settingsCommitted=false, snapshotPolicy=policyRevision, snapshotSettings=false, rollbackCount=0, finalGuardSeen=false;
   const queries:string[]=[];
+  const sensitiveCommitFailure = Object.assign(new DatabaseError("synthetic private inbox URL, cursor and token", 0, "error"), {
+    severity: "ERROR", code: "23514", detail: `synthetic private value: ${id}`,
+  });
+  const warning = mode === "commit-fails" ? t.mock.method(console, "warn", () => {}) : null;
   const access=protectMailboxToken(session,"microsoft","SYNTHETIC_ACCESS",session.email),refresh=protectMailboxToken(session,"microsoft","SYNTHETIC_REFRESH",session.email);
   const pool={async connect(){return {release(){},async query(sql:string,args:unknown[]=[]){
     const q=sql.replace(/\s+/g," ").trim().toLowerCase();queries.push(q.slice(0,100));
     if(q.includes("from pg_roles runtime_role"))return {rows:[{safe:true}]};
     if(q==="begin"){snapshotPolicy=policyRevision;snapshotSettings=settingsCommitted;return {rows:[],command:"BEGIN"};}
-    if(q==="commit"){if(mode==="commit-fails"&&settingsCommitted)throw new Error("synthetic commit failure");return {rows:[],command:"COMMIT"};}
+    if(q==="commit"){if(mode==="commit-fails"&&settingsCommitted)throw sensitiveCommitFailure;return {rows:[],command:"COMMIT"};}
     if(q==="rollback"){policyRevision=snapshotPolicy;settingsCommitted=snapshotSettings;rollbackCount++;return {rows:[],command:"ROLLBACK"};}
     if(q.includes("set_config('app.tenant_id'"))return {rows:[{workspaceId,actorId:userId}]};
     if(q.includes("crm_lock_active_member"))return {rows:[{role:"owner",productRole:"customer_owner",operatingModel:"self_service_customer",authIdentityId:identityId}]};
@@ -208,6 +213,10 @@ for (const mode of ["lease-expired", "policy-denied", "commit-fails", "success",
   const transport:MailboxTransport=async()=>new Response("unavailable",{status:503});
   if(mode==="pause")assert.equal((await runPersonalMailboxSync(session,id,{pool,transport,ignoreDue:true})).status,"review");
   else await assert.rejects(runPersonalMailboxSync(session,id,{pool,transport,ignoreDue:true}),/MAIL_PROVIDER_UNAVAILABLE/);
+  if (warning) assert.deepEqual(warning.mock.calls.map(call => call.arguments), [
+    [JSON.stringify({ event: "crm_mailbox_sync_failure", stage: "account", code: "MAIL_PROVIDER_UNAVAILABLE" })],
+    [JSON.stringify({ event: "crm_mailbox_sync_failure", stage: "finish", code: "MAIL_SYNC_FAILED", sqlState: "23514" })],
+  ]);
   assert.equal(finalGuardSeen,mode!=="policy-denied",queries.join("\n"));
   const committed=mode==="success"||mode==="pause";
   assert.equal(settingsCommitted,committed);assert.equal(policyRevision,committed?5:4);

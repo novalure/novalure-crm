@@ -24,6 +24,24 @@ test("Graph inbox delta accepts documented path and OData forms only for the cur
   for (const value of [path, odata, quoted]) assert.throws(() => mailboxDeltaUrl(value, "another-folder"), /MAIL_INVALID_DELTA_CURSOR/);
 });
 
+test("Graph OData continuations retain well-known Inbox aliases and exact bound opaque folder IDs", () => {
+  for (const folder of ["inbox", "Inbox", "%69nbox"]) {
+    const cursor = `${root}/mailFolders('${folder}')/messages/delta?$skiptoken=opaque%2Bstate%3D`;
+    assert.equal(mailboxDeltaContinuationUrl(cursor, inbox, "next"), cursor);
+    assert.equal(mailboxDeltaContinuationUrl(cursor.replaceAll("'", "%27"), inbox, "next"), cursor.replaceAll("'", "%27"));
+  }
+  const slashId = "AQMkSYNTHETIC/a+b==";
+  for (const folder of [slashId, encodeURIComponent(slashId)]) {
+    const cursor = `${root}/mailFolders('${folder}')/messages/delta?$deltatoken=opaque%2Fstate`;
+    assert.equal(mailboxDeltaContinuationUrl(cursor, slashId, "delta"), cursor);
+    assert.throws(() => mailboxDeltaContinuationUrl(cursor, "AQMkSYNTHETIC/another==", "delta"), /MAIL_INVALID_DELTA_CURSOR/);
+    assert.throws(() => mailboxDeltaContinuationUrl(cursor, undefined, "delta"), /MAIL_INVALID_DELTA_CURSOR/);
+  }
+  for (const folder of ["sentitems", "archive", "inbox/other", "InboxOther", "AQMkSYNTHETIC/other=="]) {
+    assert.throws(() => mailboxDeltaContinuationUrl(`${root}/mailFolders('${folder}')/messages/delta?$skiptoken=opaque`, inbox, "next"), /MAIL_INVALID_DELTA_CURSOR/);
+  }
+});
+
 test("Graph delta rejects non-inbox and hostile destinations before transport", () => {
   const rejected = [
     `https://attacker.invalid/v1.0/me/mailFolders/${inbox}/messages/delta`,

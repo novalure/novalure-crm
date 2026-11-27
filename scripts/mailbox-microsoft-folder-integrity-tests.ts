@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {fetchMailboxKnownContent,fetchMailboxMetadata} from '../src/lib/integrations/mailbox-sync-provider';
+import {emptyMailboxCheckpoint} from '../src/lib/crm-mailbox-sync';
+import {fetchMailboxInboxId,fetchMailboxKnownContent,fetchMailboxMetadata,fetchMailboxSyncPage} from '../src/lib/integrations/mailbox-sync-provider';
 import {MailboxProviderError, type MailboxTransport} from '../src/lib/integrations/mailbox-provider';
 
 const inbox='synthetic-inbox-id';
@@ -12,6 +13,18 @@ const message=(parentFolderId: unknown)=>({
 });
 const respond=(value: unknown)=>new Response(JSON.stringify(value),{headers:{'content-type':'application/json'}});
 const invalidFolder=(error:unknown)=>error instanceof MailboxProviderError && error.code==='MAIL_INVALID_FOLDER_ID';
+
+test('invalid Graph inbox identity and continuation have typed, bounded errors',async()=>{
+ await assert.rejects(fetchMailboxInboxId('SYNTHETIC',async()=>respond({id:'synthetic malformed folder id'})),invalidFolder);
+ let calls=0;
+ const transport:MailboxTransport=async()=>{
+  calls++;
+  return respond({value:[],'@odata.nextLink':'synthetic malformed cursor'});
+ };
+ await assert.rejects(fetchMailboxSyncPage('microsoft','SYNTHETIC',emptyMailboxCheckpoint(),transport,inbox),
+  (error:unknown)=>error instanceof MailboxProviderError && error.code==='MAIL_INVALID_DELTA_CURSOR' && error.status===undefined);
+ assert.equal(calls,1);
+});
 
 test('Microsoft marks folder movement only for valid, case-sensitive parent and inbox IDs',async()=>{
  const run=(parent:unknown)=>fetchMailboxMetadata('microsoft','SYNTHETIC',messageId,async()=>respond(message(parent)),inbox);

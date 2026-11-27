@@ -100,9 +100,12 @@ export function mailboxDeltaUrl(value: unknown, inboxId?: string): string {
   // segment or OData key. Only the ID independently read for /me/inbox using
   // this same access token is accepted; a link must never select the folder.
   const segment = url.pathname.match(/^\/v1\.0\/me\/mailFolders\/([^/]+)\/messages\/delta$/i)?.[1]
-    ?? url.pathname.match(/^\/v1\.0\/me\/mailFolders\((?:'|%27)([^/'()]+)(?:'|%27)\)\/messages\/delta$/i)?.[1];
+    ?? url.pathname.match(/^\/v1\.0\/me\/mailFolders\((?:'|%27)([^'()]+)(?:'|%27)\)\/messages\/delta$/i)?.[1];
   let folder = "";
   try { if (segment) folder = decodeURIComponent(segment); } catch { throw new Error("MAIL_INVALID_DELTA_CURSOR"); }
+  // The fixed Inbox alias is also valid as an OData key. Opaque folder IDs
+  // may contain slashes there, but still require the independently read ID.
+  if (folder.toLowerCase() === "inbox") return value;
   if (!inboxId || !folder || folder !== inboxId) throw new Error("MAIL_INVALID_DELTA_CURSOR");
   return value;
 }
