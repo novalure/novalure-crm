@@ -303,11 +303,14 @@ test(`native staged ${profile} SOURCE preserves activation and sealed progress t
         create table audit_logs(id uuid primary key default gen_random_uuid(),workspace_id uuid not null,project_id uuid,
           actor_user_id uuid,action text not null,entity_type text not null,entity_id uuid,before jsonb,after jsonb,
           created_at timestamptz not null default now());
+        create table tasks(id uuid primary key,workspace_id uuid not null,metadata jsonb not null default '{}',
+          title text,updated_at timestamptz not null default now());
         alter table audit_logs enable row level security;
         alter table audit_logs force row level security;
         grant usage on schema public to neondb_owner;
         grant select on leads,form_submissions to studio_source_fixture_owner;
-        grant insert,select on audit_logs to neondb_owner;
+        grant insert,select,update on audit_logs to neondb_owner;
+        grant select on workspace_users,tasks to neondb_owner;
         create policy source_qa_operator_audit on audit_logs to neondb_owner
           using (workspace_id='${websiteSalesWorkspaceId}'::uuid and project_id='${studioEnquiryCrmProject}'::uuid and actor_user_id is null)
           with check (workspace_id='${websiteSalesWorkspaceId}'::uuid and project_id='${studioEnquiryCrmProject}'::uuid and actor_user_id is null);`);
@@ -315,13 +318,61 @@ test(`native staged ${profile} SOURCE preserves activation and sealed progress t
         .match(/create or replace function crm_reject_immutable_mutation\(\)[\s\S]*?end \$\$;/)?.[0];
       const auditImmutable = (await readFile("migrations/060_tenant_rls_pilot_prepare.sql", "utf8"))
         .match(/create or replace function reject_audit_logs_mutation\(\)[\s\S]*?\$function\$;/)?.[0];
+      const manager = (await readFile("migrations/080_crm_command_safety.sql", "utf8"))
+        .match(/create or replace function crm_workspace_manager\(p_workspace uuid\)[\s\S]*?\$\$;/)?.[0];
+      const automationSql = await readFile("migrations/154_automation_graph.sql", "utf8");
+      const automationDefinitions = ["crm_automation_erasure_owner", "crm_automation_redact_task_audit",
+        "crm_automation_task_audit_immutable_guard", "crm_automation_erase_exposure"].map(name => {
+        const sql = automationSql.match(new RegExp(`create function (?:public\\.)?${name}\\([\\s\\S]*?\\$\\$;`))?.[0];
+        assert.ok(sql, `use the actual migration154 ${name} definition`);
+        return sql;
+      });
+      const trackingGuard = automationDefinitions[2];
+      const nativeAuditTriggers = automationSql.match(/drop trigger audit_logs_append_only_guard on audit_logs;[\s\S]*?create trigger audit_logs_tracking_redaction_guard[^;]*;/)?.[0];
       assert.ok(immutable && auditImmutable, "use the actual existing append-only guards");
+      assert.ok(manager && nativeAuditTriggers, "use the actual 080 manager and migration154 split audit triggers");
       await admin.query(immutable);
       await admin.query(auditImmutable);
+      await admin.query(manager);
+      for (const sql of automationDefinitions) await admin.query(sql);
+      await admin.query(`alter function reject_audit_logs_mutation() owner to neondb_owner;
+        alter function crm_workspace_manager(uuid) owner to neondb_owner;
+        alter function crm_automation_erasure_owner() owner to neondb_owner;
+        alter function crm_automation_redact_task_audit(jsonb) owner to neondb_owner;
+        alter function crm_automation_task_audit_immutable_guard() owner to neondb_owner;
+        alter function crm_automation_erase_exposure(uuid,uuid) owner to neondb_owner;
+        revoke all on function crm_automation_erasure_owner(),crm_automation_redact_task_audit(jsonb),
+          crm_automation_task_audit_immutable_guard(),crm_automation_erase_exposure(uuid,uuid) from public`);
       await admin.query(`create trigger audit_logs_append_only_guard before update or delete or truncate on audit_logs
         for each statement execute function reject_audit_logs_mutation();
         grant execute on function crm_reject_immutable_mutation() to studio_source_fixture_owner`);
       const stageSql = await readFile("migrations/staged/evelyn_studio_source_qa_retirement.sql", "utf8");
+      await owner.query("begin");
+      try { await owner.query(stageSql); }
+      finally { await owner.query("rollback"); }
+      assert.equal((await admin.query("select to_regclass('public.crm_studio_source_qa_retirements') as ledger")).rows[0].ledger, null,
+        "the equally strict legacy58 guard is accepted only in a rolled-back installation probe");
+      await admin.query(nativeAuditTriggers);
+      assert.deepEqual((await admin.query(`select t.tgname as name,t.tgtype::integer as type,
+        encode(sha256(convert_to(replace(p.prosrc,E'\\r\\n',E'\\n'),'UTF8')),'hex') as hash
+        from pg_trigger t join pg_proc p on p.oid=t.tgfoid where t.tgrelid='audit_logs'::regclass and not t.tgisinternal
+        order by t.tgname`)).rows, [
+        { name: "audit_logs_append_only_guard", type: 42, hash: "81ca78a4e1b86a8c3709bb571a1a43c8c513d95e1947da3a1ff9e756861502d0" },
+        { name: "audit_logs_tracking_redaction_guard", type: 19, hash: "aaeab129c90973c79b599fef190f8f9a7703fcf01a1656f88acd4e36f9f77b84" },
+      ], "the positive fixture matches the actual native154 trigger shapes and normalized function bodies");
+      const rejectedInstallation = async () => {
+        await owner.query("begin");
+        try { await assert.rejects(owner.query(stageSql), /STUDIO_QA_RETIREMENT_INSTALLER_BOUNDARY/); }
+        finally { await owner.query("rollback"); }
+      };
+      await admin.query("alter table audit_logs disable trigger audit_logs_tracking_redaction_guard");
+      try { await rejectedInstallation(); }
+      finally { await admin.query("alter table audit_logs enable trigger audit_logs_tracking_redaction_guard"); }
+      const alteredTrackingGuard = trackingGuard.replace("message='audit_logs is append-only'", "message='audit_logs guard body changed'");
+      assert.notEqual(alteredTrackingGuard, trackingGuard);
+      await admin.query(alteredTrackingGuard.replace("create function", "create or replace function"));
+      try { await rejectedInstallation(); }
+      finally { await admin.query(trackingGuard.replace("create function", "create or replace function")); }
       const matcher = "public.crm_studio_preview_source_transfer_matches(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid)";
       for (const [drift, restore] of [
         ["security invoker", "security definer"],
@@ -403,6 +454,21 @@ test(`native staged ${profile} SOURCE preserves activation and sealed progress t
         [{ session_user: "neondb_owner", current_user: "neondb_owner" }]);
       assert.deepEqual((await operator.query("select nullif(current_setting('app.tenant_id',true),'') as tenant, nullif(current_setting('app.actor_id',true),'') as actor")).rows,
         [{ tenant: null, actor: null }], "the technical operator begins without an application-user context");
+      await admin.query("insert into tasks(id,workspace_id,metadata,title) values($1,$2,'{\"automationTrackingErased\":true}','Synthetic tracking task')",
+        [first, websiteSalesWorkspaceId]);
+      await operator.query("begin");
+      try {
+        await operator.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)",
+          [websiteSalesWorkspaceId, "6122a6da-e7f4-47fa-bc55-e296bb01af62"]);
+        assert.deepEqual((await operator.query("select crm_automation_erasure_owner() as erasure_owner,crm_workspace_manager($1) as manager", [websiteSalesWorkspaceId])).rows,
+          [{ erasure_owner: true, manager: true }], "the actual154 owner/manager path is active in this disposable fixture");
+        const taskAudit = (await operator.query(`insert into audit_logs(workspace_id,project_id,actor_user_id,action,entity_type,entity_id,before,after)
+          values($1,$2,null,'test.task','task',$3,'{"title":"Synthetic before"}','{"title":"Synthetic after"}') returning id`,
+          [websiteSalesWorkspaceId, studioEnquiryCrmProject, first])).rows[0].id;
+        await operator.query("update audit_logs set before=crm_automation_redact_task_audit(before),after=crm_automation_redact_task_audit(after) where id=$1", [taskAudit]);
+        assert.deepEqual((await operator.query("select before,after from audit_logs where id=$1", [taskAudit])).rows,
+          [{ before: { title: "Nachfassaufgabe" }, after: { title: "Nachfassaufgabe" } }], "actual154 still permits its existing exact task-only redaction");
+      } finally { await operator.query("rollback"); }
       const originals = async () => (await admin.query(`select
         (select to_jsonb(t) from studio_enquiry_transfers t where operation_id=$1) as transfer,
         (select to_jsonb(l) from leads l where id=(select lead_id from studio_enquiry_transfers where operation_id=$1)) as lead,
@@ -492,6 +558,16 @@ test(`native staged ${profile} SOURCE preserves activation and sealed progress t
         after: { actor: { type: "DATABASE_OPERATOR", sessionUser: "neondb_owner", databaseRole: "neondb_owner" }, decision: "OWN_SOURCE_QA_RETIRED", plan } });
       const retirement = (await admin.query("select operator_session,operator_role,audit_reference,plan from crm_studio_source_qa_retirements where operation_id=$1", [first])).rows[0];
       assert.deepEqual(retirement, { operator_session: "neondb_owner", operator_role: "neondb_owner", audit_reference: auditReference, plan });
+      await operator.query("begin");
+      try {
+        await operator.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)",
+          [websiteSalesWorkspaceId, "6122a6da-e7f4-47fa-bc55-e296bb01af62"]);
+        assert.deepEqual((await operator.query(`select crm_automation_erasure_owner() as erasure_owner,crm_workspace_manager($1) as manager,
+          exists(select 1 from tasks where id=$2 and workspace_id=$1 and metadata->>'automationTrackingErased'='true') as tracked_task`,
+          [websiteSalesWorkspaceId, first])).rows, [{ erasure_owner: true, manager: true, tracked_task: true }]);
+        await assert.rejects(operator.query("update audit_logs set before=crm_automation_redact_task_audit(before),after=crm_automation_redact_task_audit(after) where id=$1", [auditReference]),
+          /append-only/, "even the actual authorized154 task-redaction path cannot update a non-task retirement audit");
+      } finally { await operator.query("rollback"); }
       for (const sql of [
         "update crm_studio_source_qa_retirements set retired_at=clock_timestamp()",
         "delete from crm_studio_source_qa_retirements", "truncate crm_studio_source_qa_retirements",

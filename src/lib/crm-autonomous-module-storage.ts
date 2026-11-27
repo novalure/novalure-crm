@@ -3,7 +3,7 @@ import { CrmCommandError, assertExpectedVersion, type TenantTransaction } from "
 import { executeOfferCommand } from "./db/offer-repositories";
 import { runPropertySalesCommand } from "./db/property-sales-repositories";
 import { savePropertyViewingInTransaction } from "./db/property-sales-repositories";
-import { type AutonomousModuleEntity, type AutonomousModuleRequest } from "./crm-autonomous-module-contract";
+import { autonomousModuleLeadTypeCondition, type AutonomousModuleEntity, type AutonomousModuleRequest } from "./crm-autonomous-module-contract";
 import { parseOfferContent } from "./offer-workflow";
 import { createHash } from "node:crypto";
 
@@ -21,8 +21,8 @@ const definitions:Record<AutonomousModuleEntity,Definition>={
  Developer:{table:"organizations",fields:{name:"name",organizationType:"type",lifecycleStage:"lifecycle_stage",website:"domain"},condition:"type='Bauträger'"},
  Project:{table:"projects",fields:{name:"name",projectType:"type",status:"status",description:"setup_defaults->>'description'"}},
  Unit:{table:"property_units",fields:{unitNumber:"unit_number",floor:"floor",rooms:"rooms",livingAreaSqm:"area_sqm",status:"status",priceCents:"case when price_cents>0 and metadata->'priceConfirmation'->>'sourceReference' is not null and metadata->'priceConfirmation'->>'priceCents'=price_cents::text then price_cents else null end"}},
- BuyerLead:{table:"leads",fields:{contactId:"contact_id",type:"type",status:"status",score:"score",buyerProfile:"buyer_profile",source:"source"}},
- Qualification:{table:"leads",fields:{buyerLeadId:"id",budgetFrom:"buyer_profile->'budgetFrom'",budgetTo:"buyer_profile->'budgetTo'",financingStatus:"buyer_profile->>'financingStatus'",desiredLocation:"buyer_profile->>'desiredLocation'",mustHaveCriteria:"buyer_profile->'mustHaveCriteria'",niceToHaveCriteria:"buyer_profile->'niceToHaveCriteria'",purchaseTimeline:"buyer_profile->>'purchaseTimeline'",propertyType:"buyer_profile->>'propertyType'",useCase:"buyer_profile->>'useCase'"}},
+ BuyerLead:{table:"leads",fields:{contactId:"contact_id",type:"type",status:"status",score:"score",buyerProfile:"buyer_profile",source:"source"},condition:autonomousModuleLeadTypeCondition("BuyerLead")!},
+ Qualification:{table:"leads",fields:{buyerLeadId:"id",budgetFrom:"buyer_profile->'budgetFrom'",budgetTo:"buyer_profile->'budgetTo'",financingStatus:"buyer_profile->>'financingStatus'",desiredLocation:"buyer_profile->>'desiredLocation'",mustHaveCriteria:"buyer_profile->'mustHaveCriteria'",niceToHaveCriteria:"buyer_profile->'niceToHaveCriteria'",purchaseTimeline:"buyer_profile->>'purchaseTimeline'",propertyType:"buyer_profile->>'propertyType'",useCase:"buyer_profile->>'useCase'"},condition:autonomousModuleLeadTypeCondition("Qualification")!},
  Offer:{table:"crm_offers",fields:{title:"(select r.content->>'subject' from crm_offer_revisions r where r.workspace_id=t.workspace_id and r.offer_id=t.id and r.revision=t.revision)",content:"(select r.content from crm_offer_revisions r where r.workspace_id=t.workspace_id and r.offer_id=t.id and r.revision=t.revision)",status:"status",version:"version"}},
  Task:{table:"tasks",fields:{title:"title",description:"metadata->>'description'",dueAt:"due_at",priority:"priority",status:"status",contactId:"contact_id",leadId:"lead_id"}},
  Appointment:{table:"calendar_events",fields:{title:"title",startsAt:"starts_at",endsAt:"ends_at",status:"status",contactId:"contact_id",leadId:"lead_id",note:"metadata->>'notes'"}},
@@ -108,7 +108,7 @@ export async function writeAutonomousModule(tx:TenantTransaction,session:AppSess
  if(grant.entity==="Qualification"&&request.operation==="Update"){
   requireRelations(grant,["unitId","contactId"]);const idempotencyKey=nativeKey(grant,request);
   await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`crm-command:${grant.workspace_id}:${idempotencyKey}`]);
-  const current=await tx.queryOne<{profile:Record<string,unknown>;qualification:Record<string,unknown>;contactId:string}>("select buyer_profile as profile,sales_qualification as qualification,contact_id as \"contactId\" from leads where id=$1 and workspace_id=$2 and project_id=$3 and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales' for update",[grant.source_id,grant.workspace_id,grant.project_id]);if(!current||current.contactId!==grant.related_resources.contactId)denied("RELATION_NOT_ASSIGNED");
+  const current=await tx.queryOne<{profile:Record<string,unknown>;qualification:Record<string,unknown>;contactId:string}>(`select buyer_profile as profile,sales_qualification as qualification,contact_id as "contactId" from leads where id=$1 and workspace_id=$2 and project_id=$3 and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales' and (${autonomousModuleLeadTypeCondition("Qualification")}) for update`,[grant.source_id,grant.workspace_id,grant.project_id]);if(!current||current.contactId!==grant.related_resources.contactId)denied("RELATION_NOT_ASSIGNED");
   const payload={...current.profile,...current.qualification,...p,leadId:grant.source_id,desiredUnitId:grant.related_resources.unitId,
    priority:current.qualification.priority??"medium",sourceReference:`Registered CRM assignment ${grant.id}`};
   const result=await runPropertySalesCommand(session,{action:"qualification.save",projectId:grant.project_id,expectedVersion:request.expectedVersion!,idempotencyKey,correlationId:request.correlationId,payload});return {replayed:result.replayed};

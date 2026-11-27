@@ -5,6 +5,15 @@ export const autonomousModuleContract = "crm-autonomous-access-v2";
 export const autonomousModuleMaximumBytes = 131072;
 export const autonomousModuleEntities = ["Contact","Company","Developer","Project","Unit","BuyerLead","Qualification","Offer","Task","Appointment","Viewing","Reservation","Sale","Communication","ApprovalReference"] as const;
 export type AutonomousModuleEntity = typeof autonomousModuleEntities[number];
+/** V2 source subtypes. Service-v1 keeps its separate, stricter projection. */
+export const autonomousModuleLeadTypes = Object.freeze({
+  BuyerLead: Object.freeze(["Käufer"]),
+  Qualification: Object.freeze(["Käufer", "Investor"]),
+});
+export function autonomousModuleLeadTypeCondition(entity: AutonomousModuleEntity): string | null {
+  const types = entity === "BuyerLead" || entity === "Qualification" ? autonomousModuleLeadTypes[entity] : null;
+  return types ? `type in (${types.map(type => `'${type}'`).join(",")})` : null;
+}
 export const autonomousModuleOperations = ["DescribeAssignment","Read","Create","Update","PrepareOffer","PrepareReservation","SendOffer","ConfirmReservation","ConfirmSale"] as const;
 export type AutonomousModuleOperation = typeof autonomousModuleOperations[number];
 export type AutonomousModuleRequest = Readonly<{ contractVersion: typeof autonomousModuleContract; operation: AutonomousModuleOperation;

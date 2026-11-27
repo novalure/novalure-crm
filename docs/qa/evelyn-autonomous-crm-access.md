@@ -333,6 +333,27 @@ An individual department name confers no record authority. The protected registr
 rejects department/field combinations outside that policy. Runtime cannot create
 or alter an assignment, choose an administrator role or provision its own key.
 
+For V2, `BuyerLead` accepts only `Käufer`; `Qualification` accepts `Käufer` and
+`Investor`, matching its delegated native qualification command. Existing typed
+sources must be registered with `registerAutonomousCrmAccessFromOperator` on a
+dedicated idle connection authenticated as the actual original `leads` owner.
+It owns one transaction, SHARE-locks the exact source/workspace/project/internal
+classification and purpose, then uses `SET LOCAL ROLE` for the actual protected
+registry owner. The metadata-only registration entry rejects these existing
+sources; it accepts no caller-supplied source proof. No new SQL helper, table
+grant or role membership is installed. Current runtime predicates recheck the
+type for reads, descriptions, updates and receipt readback after later type drift.
+New BuyerLead records still use the fixed `Käufer` creation default. Service-v1
+keeps its separate existing contract.
+The operator needs existing `SET` authority for that actual registry owner;
+`INHERIT true / SET false` alone is insufficient. The wrapper checks the real
+permission and rolls back with `AUTONOMOUS_REGISTRAR_ROLE_UNAVAILABLE` otherwise.
+It never adds membership or relaxes the non-BYPASS owner check. The audited
+native SET-false baseline needs the existing Root operator's separately admitted,
+temporary SET lease on its own membership edge, followed by exact restoration.
+That lease stays outside this wrapper and must be bound to the actual native
+registration plan. Local composition tests do not establish that admission.
+
 All 15 existing CRM entity kinds have minimized assigned-record reads. Named
 metadata commands cover contacts, companies/developers, project descriptions,
 unit descriptions, lead provenance, tasks, internal calendar entries and timeline

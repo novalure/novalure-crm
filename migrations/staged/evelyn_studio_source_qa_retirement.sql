@@ -2,9 +2,38 @@
 set local lock_timeout = '5s';
 set local statement_timeout = '2min';
 do $guard$
-declare r pg_roles;
+declare r pg_roles; audit_reject_function boolean; audit_statement_guard boolean; audit_update_guard boolean;
 begin
   select * into strict r from pg_roles where rolname=current_user;
+  select exists(select 1 from pg_proc p where p.oid=to_regprocedure('public.reject_audit_logs_mutation()')
+    and pg_get_userbyid(p.proowner)='neondb_owner' and not p.prosecdef and p.prokind='f'
+    and p.prorettype='pg_catalog.trigger'::regtype and not p.proretset
+    and p.prolang=(select oid from pg_language where lanname='plpgsql')
+    and p.proconfig=array['search_path=pg_catalog, public, pg_temp']
+    and encode(sha256(convert_to(replace(p.prosrc,E'\r\n',E'\n'),'UTF8')),'hex')='81ca78a4e1b86a8c3709bb571a1a43c8c513d95e1947da3a1ff9e756861502d0')
+    into audit_reject_function;
+  select exists(select 1 from pg_trigger where tgrelid=to_regclass('public.audit_logs') and not tgisinternal
+    and tgname='audit_logs_append_only_guard' and tgenabled in ('O','A') and tgtype in (42,58)
+    and tgfoid=to_regprocedure('public.reject_audit_logs_mutation()') and tgattr::text='' and tgqual is null
+    and tgnargs=0 and octet_length(tgargs)=0 and tgconstraint=0 and not tgdeferrable and not tginitdeferred)
+    into audit_statement_guard;
+  -- Migration154 keeps DELETE/TRUNCATE unconditional and permits UPDATE only
+  -- for authorized task redaction. Our literal non-task audit cannot take it.
+  select exists(select 1 from pg_trigger where tgrelid=to_regclass('public.audit_logs') and not tgisinternal
+    and tgname='audit_logs_append_only_guard' and tgenabled in ('O','A') and tgtype=58
+    and tgfoid=to_regprocedure('public.reject_audit_logs_mutation()') and tgattr::text='' and tgqual is null
+    and tgnargs=0 and octet_length(tgargs)=0 and tgconstraint=0 and not tgdeferrable and not tginitdeferred)
+    or (exists(select 1 from pg_trigger where tgrelid=to_regclass('public.audit_logs') and not tgisinternal
+      and tgname='audit_logs_tracking_redaction_guard' and tgenabled in ('O','A') and tgtype=19
+      and tgfoid=to_regprocedure('public.crm_automation_task_audit_immutable_guard()') and tgattr::text='' and tgqual is null
+      and tgnargs=0 and octet_length(tgargs)=0 and tgconstraint=0 and not tgdeferrable and not tginitdeferred)
+    and exists(select 1 from pg_proc p where p.oid=to_regprocedure('public.crm_automation_task_audit_immutable_guard()')
+      and pg_get_userbyid(p.proowner)='neondb_owner' and not p.prosecdef and p.prokind='f'
+      and p.prorettype='pg_catalog.trigger'::regtype and not p.proretset
+      and p.prolang=(select oid from pg_language where lanname='plpgsql')
+      and p.proconfig=array['search_path=pg_catalog, public']
+      and encode(sha256(convert_to(replace(p.prosrc,E'\r\n',E'\n'),'UTF8')),'hex')='aaeab129c90973c79b599fef190f8f9a7703fcf01a1656f88acd4e36f9f77b84'))
+    into audit_update_guard;
   if r.rolcanlogin or r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication
     or pg_has_role('novalure_app',r.oid,'MEMBER') or pg_has_role('novalure_tenant_app',r.oid,'MEMBER')
     or current_database()<>'neondb' or current_setting('neon.project_id',true) is distinct from 'long-fog-84900593'
@@ -14,8 +43,7 @@ begin
     or to_regprocedure('public.crm_reject_immutable_mutation()') is null
     or not has_function_privilege(current_user,'public.crm_reject_immutable_mutation()','EXECUTE')
     or to_regclass('public.audit_logs') is null
-    or not exists(select 1 from pg_trigger where tgrelid='public.audit_logs'::regclass and not tgisinternal
-      and tgenabled in ('O','A') and tgtype=58 and tgfoid=to_regprocedure('public.reject_audit_logs_mutation()'))
+    or not audit_reject_function or not audit_statement_guard or not audit_update_guard
     or to_regclass('public.crm_studio_source_qa_retirements') is not null
     or to_regprocedure('public.crm_studio_preview_source_transfer_matches_before_qa_retirement(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid)') is not null
     or not exists(select 1 from pg_proc where oid=to_regprocedure('public.crm_studio_preview_source_transfer_matches(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid)')

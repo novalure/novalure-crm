@@ -7,6 +7,7 @@ import { CRM_PERSONAL_SOURCE } from "./crm-autonomous-personal-auth";
 import departmentPolicy from "../../config/crm-department-access-policy.json";
 import { autonomousModuleContract, autonomousModuleEntities, autonomousModuleFields, autonomousModuleWriteFields,
   autonomousModuleOperations, autonomousModuleScope, type AutonomousModuleEntity } from "./crm-autonomous-module-contract";
+import { autonomousModuleLeadTypes } from "./crm-autonomous-module-contract";
 
 export const autonomousCrmDepartments = [
   "EVELYN_CEO", "BUSINESS_DEVELOPMENT", "SALES", "MARKETING_ADS", "WEBSITE_STUDIO", "REAL_ESTATE_OPERATIONS",
@@ -28,10 +29,7 @@ type BootstrapConnection = {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 };
 
-/** Host-only bootstrap using an existing protected migration-owner connection.
- * No HTTP route exposes this function. It receives public key material only.
- * Call only after the exact target, source and applicable deployment gates pass. */
-export async function registerAutonomousCrmAccess(connection: BootstrapConnection, input: AutonomousCrmRegistration) {
+function validateRegistration(input: AutonomousCrmRegistration) {
   if (input.sourceProfile !== undefined && !["PRODUCTION", "FRANZ_PERSONAL"].includes(input.sourceProfile)) throw new Error("AUTONOMOUS_REGISTRATION_INVALID");
   const source = input.sourceProfile === "FRANZ_PERSONAL" ? CRM_PERSONAL_SOURCE : {
     identityId: "EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY", environment: CRM_MACHINE_ENVIRONMENT,
@@ -63,8 +61,20 @@ export async function registerAutonomousCrmAccess(connection: BootstrapConnectio
     if(kind==="SUBAGENT"?!parent:kind!=="DEPARTMENT"||parent!==null)throw new Error("AUTONOMOUS_REGISTRATION_INVALID");
     if(parent)assertCrmUuid(parent);
   }
-  await connection.query("begin");
-  try {
+  return { source, moduleConfig };
+}
+
+function requiresTypedSource(input: AutonomousCrmRegistration) {
+  return input.module?.lifecycleMode === "EXISTING" && (input.entity === "BuyerLead" || input.entity === "Qualification");
+}
+// This capability never crosses the host-only module boundary. It can only be
+// minted after the same real connection has locked the current source row.
+const sourceLocked = Symbol("autonomous-typed-source-locked");
+
+async function registerInTransaction(connection: BootstrapConnection, input: AutonomousCrmRegistration,
+  validation: ReturnType<typeof validateRegistration>, sourceAdmission?: symbol) {
+    if (requiresTypedSource(input) && sourceAdmission !== sourceLocked) throw new Error("AUTONOMOUS_TYPED_SOURCE_READER_REQUIRED");
+    const { source, moduleConfig } = validation;
     const owner = (await connection.query(`select count(*)=2 and bool_and(c.relowner=r.oid) as owns_registration,
       r.rolsuper,r.rolbypassrls,current_user as registrar from pg_roles r cross join pg_class c join pg_namespace n on n.oid=c.relnamespace
       where r.rolname=current_user and n.nspname='public' and c.relname in ('crm_autonomous_workloads','crm_autonomous_access_grants')
@@ -115,9 +125,67 @@ export async function registerAutonomousCrmAccess(connection: BootstrapConnectio
     if (!grant || crmPayloadDigest(observed) !== crmPayloadDigest(expected)) throw new Error("AUTONOMOUS_GRANT_CONFLICT");
     const bound = (await connection.query("select id from public.crm_lock_autonomous_access_grant($1,$2)", [input.workloadId, input.grantId])).rows[0];
     if (!bound) throw new Error("AUTONOMOUS_SCOPE_NOT_GRANTED");
-    await connection.query("commit");
     return Object.freeze({ grantId: input.grantId, workloadId: input.workloadId, status: "REGISTERED" as const,
       departmentId: input.departmentId, agentId: input.agentId, taskId: input.taskId });
+}
+
+/** Metadata-only bootstrap. Existing typed leads require the actual operator
+ * reader below; a caller-supplied assertion or proof cannot authorize them. */
+export async function registerAutonomousCrmAccess(connection: BootstrapConnection, request: AutonomousCrmRegistration) {
+  const input = structuredClone(request);
+  const validation = validateRegistration(input);
+  if (requiresTypedSource(input)) throw new Error("AUTONOMOUS_TYPED_SOURCE_READER_REQUIRED");
+  await connection.query("begin");
+  try {
+    const receipt = await registerInTransaction(connection, input, validation);
+    await connection.query("commit");
+    return receipt;
+  } catch (error) {
+    await connection.query("rollback");
+    throw error;
+  }
+}
+
+/** Host-only typed registration on the existing original source-owner client.
+ * Owns one transaction: read/SHARE-lock as the real original owner, then switch
+ * locally to the actual non-BYPASS registry owner. No new grants or helper SQL.
+ * Call on a dedicated, idle operator connection, never inside another BEGIN. */
+export async function registerAutonomousCrmAccessFromOperator(connection: BootstrapConnection, request: AutonomousCrmRegistration) {
+  const input = structuredClone(request);
+  const validation = validateRegistration(input);
+  if (!requiresTypedSource(input)) throw new Error("AUTONOMOUS_TYPED_SOURCE_REQUIRED");
+  await connection.query("begin");
+  try {
+    const operator = (await connection.query(`select current_user as actor,session_user as session_actor,
+      c.relowner=r.oid as owns_source from pg_roles r cross join pg_class c
+      where r.rolname=current_user and c.oid='public.leads'::regclass`)).rows[0];
+    if (!operator?.owns_source || operator.actor !== operator.session_actor ||
+        ["public", "novalure_app", "novalure_tenant_app"].includes(String(operator.actor))) {
+      throw new Error("AUTONOMOUS_SOURCE_OPERATOR_REQUIRED");
+    }
+    const types = autonomousModuleLeadTypes[input.entity as keyof typeof autonomousModuleLeadTypes];
+    const lead = (await connection.query(`select id,type from public.leads where id=$1::uuid
+      and workspace_id=$2::uuid and project_id=$3::uuid and data_classification='NOVALURE_INTERNAL'
+      and data_purpose='crm_sales' and type=any($4::text[]) for share`,
+    [input.sourceId, CRM_MACHINE_WORKSPACE_ID, input.projectId, [...types]])).rows[0];
+    if (!lead) throw new Error("AUTONOMOUS_SOURCE_TYPE_DENIED");
+    const owners = (await connection.query(`select r.rolname as registrar,count(*)::integer as owned_tables,
+      r.rolsuper,r.rolbypassrls from pg_class c join pg_namespace n on n.oid=c.relnamespace
+      join pg_roles r on r.oid=c.relowner where n.nspname='public'
+      and c.relname in('crm_autonomous_workloads','crm_autonomous_access_grants')
+      group by r.oid,r.rolname,r.rolsuper,r.rolbypassrls`)).rows;
+    const owner = owners[0];
+    if (owners.length !== 1 || owner?.owned_tables !== 2 || owner.rolsuper || owner.rolbypassrls ||
+        !/^[a-z_][a-z0-9_]{0,62}$/.test(String(owner.registrar)) ||
+        ["public", "novalure_app", "novalure_tenant_app"].includes(String(owner.registrar))) {
+      throw new Error("AUTONOMOUS_BOOTSTRAP_OWNER_REQUIRED");
+    }
+    const role = (await connection.query("select pg_has_role(session_user,$1::name,'SET') as allowed", [owner.registrar])).rows[0];
+    if (role?.allowed !== true) throw new Error("AUTONOMOUS_REGISTRAR_ROLE_UNAVAILABLE");
+    await connection.query(`set local role "${owner.registrar}"`);
+    const receipt = await registerInTransaction(connection, input, validation, sourceLocked);
+    await connection.query("commit");
+    return receipt;
   } catch (error) {
     await connection.query("rollback");
     throw error;

@@ -3,10 +3,11 @@ import {createHash,generateKeyPairSync,randomUUID,sign,type KeyObject} from "nod
 import {readFile} from "node:fs/promises";
 import {after,before,test} from "node:test";
 import {setTimeout as delay} from "node:timers/promises";
+import pg from "pg";
 import {startLocalSalesDb,applySalesSchema} from "./lib/local-sales-db.mjs";
 import {handleAutonomousCrmModules,autonomousModuleDelegationDomain,autonomousModuleReconciliationDomain} from "../src/lib/crm-autonomous-modules";
 import {autonomousModuleContract,autonomousModuleFields,type AutonomousModuleEntity} from "../src/lib/crm-autonomous-module-contract";
-import {registerAutonomousCrmAccess,autonomousCrmDepartments,type AutonomousCrmRegistration} from "../src/lib/crm-autonomous-registration";
+import {registerAutonomousCrmAccess,registerAutonomousCrmAccessFromOperator,autonomousCrmDepartments,type AutonomousCrmRegistration} from "../src/lib/crm-autonomous-registration";
 import {crmPayloadDigest} from "../src/lib/crm-command";
 import {CRM_MACHINE_AUDIENCE,CRM_MACHINE_ISSUER,CRM_MACHINE_OWNER_ID,CRM_MACHINE_PROJECT_ID,CRM_MACHINE_SUBJECT,CRM_MACHINE_WORKSPACE_ID,type CrmMachineAuthOptions} from "../src/lib/crm-machine-auth";
 import type {TenantPool} from "../src/lib/db/tenant-client";
@@ -36,7 +37,7 @@ function registration(entity:AutonomousModuleEntity,sourceId:string,overrides:Pa
  return {workloadId:workload,workloadActorId:actor,grantId:randomUUID(),actorId:actor,projectId:project,sourceId,taskId:mission,departmentId:"SALES",agentId:"synthetic.sales.worker",entity,scopes:[`crm.${names[entity]}.read`],publicKey:key.publicKey.export({format:"der",type:"spki"}).toString("base64url"),authorityReference:"SYNTHETIC module integration acceptance",expiresAt:null,
  module:{contractVersion:autonomousModuleContract,readFields:autonomousModuleFields[entity].filter(f=>f!=="version"),writeFields:[],relatedResources:{},lifecycleMode:"EXISTING"},...overrides};
 }
-async function provision(r:AutonomousCrmRegistration){const c=await db.admin.connect();try{await c.query("set role autonomous_modules_installer");return await registerAutonomousCrmAccess(c,r);}finally{await c.query("reset role");c.release();}}
+async function provision(r:AutonomousCrmRegistration){const c=await db.admin.connect();try{if(r.module?.lifecycleMode==="EXISTING"&&(r.entity==="BuyerLead"||r.entity==="Qualification"))return await registerAutonomousCrmAccessFromOperator(c,r);await c.query("set role autonomous_modules_installer");return await registerAutonomousCrmAccess(c,r);}finally{await c.query("reset role");c.release();}}
 before(async()=>{
  db=await startLocalSalesDb();await applySalesSchema(db,{maxMigrationNumber:90});
  await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'SYNTHETIC module workspace','novalure_internal','novalure_internal') on conflict(id) do update set operating_model='novalure_internal',customer_type='novalure_internal'",[CRM_MACHINE_WORKSPACE_ID]);
@@ -275,6 +276,146 @@ test("signed receipt-only recovery never creates a missing effect and cannot bec
  assert.equal((await db.admin.query("select count(*) from crm_command_receipts where idempotency_key=$1",[b.idempotencyKey])).rows[0].count,"1");
  const id=randomUUID(),create=registration("Task",id,{scopes:["crm.tasks.read","crm.tasks.create"],module:{contractVersion:autonomousModuleContract,readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode:"CREATE"}});await provision(create);
  const intent=body("Create",{title:"SYNTHETIC not yet created"});assert.equal((await reconcile(create.grantId,intent)).status,404);assert.equal((await db.admin.query("select count(*) from tasks where id=$1",[id])).rows[0].count,"0");
+});
+
+const qualificationPatch={budgetFrom:100,budgetTo:200,financingStatus:"offen",purchaseTimeline:"SYNTHETIC 12 months",useCase:"Eigennutzung",desiredLocation:"SYNTHETIC Vienna"};
+async function typedLead(type:string){
+ const id=randomUUID();await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,type,source,buyer_profile) values($1,$2,$3,$4,$5,'Manual',$6::jsonb)",[id,CRM_MACHINE_WORKSPACE_ID,project,contact,type,JSON.stringify({budgetFrom:100,budgetTo:200})]);return id;
+}
+function typedRegistration(entity:"BuyerLead"|"Qualification",id:string){
+ const patch=entity==="BuyerLead"?{source:"SYNTHETIC typed source"}:qualificationPatch;
+ return registration(entity,id,{scopes:[`crm.${entity==="BuyerLead"?"leads":"qualifications"}.read`,`crm.${entity==="BuyerLead"?"leads":"qualifications"}.write`],module:{contractVersion:autonomousModuleContract,readFields:[...autonomousModuleFields[entity]],writeFields:Object.keys(patch),relatedResources:entity==="Qualification"?{contactId:contact,unitId:unit}:{},lifecycleMode:"EXISTING"}});
+}
+async function typedState(id:string,grantId:string){
+ return (await db.admin.query(`select (select to_jsonb(l) from leads l where id=$1) as lead,
+  (select count(*)::int from crm_command_receipts where workspace_id=$2) as receipts,
+  (select count(*)::int from audit_logs where workspace_id=$2) as audits,
+  (select count(*)::int from crm_domain_events where workspace_id=$2) as domain_events,
+  (select count(*)::int from crm_autonomous_access_events where grant_id=$3) as access_events,
+  (select count(*)::int from buyer_search_profiles where workspace_id=$2) as buyer_profiles,
+  (select count(*)::int from tasks where workspace_id=$2) as tasks`,[id,CRM_MACHINE_WORKSPACE_ID,grantId])).rows[0];
+}
+
+test("typed V2 registration uses the actual source owner and rejects metadata-only or nonreading callers",async()=>{
+ const id=await typedLead("Käufer"),r=typedRegistration("BuyerLead",id),c=await db.admin.connect();
+ try{
+  await c.query("set role autonomous_modules_installer");
+  assert.equal((await c.query("select has_table_privilege(current_user,'public.leads','SELECT') as allowed")).rows[0].allowed,false);
+  await assert.rejects(registerAutonomousCrmAccess(c,r),/AUTONOMOUS_TYPED_SOURCE_READER_REQUIRED/);
+  await assert.rejects(registerAutonomousCrmAccessFromOperator(c,r),/AUTONOMOUS_SOURCE_OPERATOR_REQUIRED/);
+  assert.equal((await c.query("select current_user as actor")).rows[0].actor,"autonomous_modules_installer");
+  await c.query("reset role");
+  assert.equal((await c.query("select count(*)::int as n from crm_autonomous_access_grants where id=$1",[r.grantId])).rows[0].n,0);
+  await registerAutonomousCrmAccessFromOperator(c,r);
+  const role=(await c.query("select current_user as actor,session_user as original")).rows[0];assert.equal(role.actor,role.original);
+  assert.equal((await call(r.grantId)).status,200);
+  const mutable={...typedRegistration("BuyerLead",id)},wrongSource=await typedLead("Verkäufer");
+  const pending=registerAutonomousCrmAccessFromOperator(c,mutable);mutable.sourceId=wrongSource;await pending;
+  assert.equal((await c.query("select source_id from crm_autonomous_access_grants where id=$1",[mutable.grantId])).rows[0].source_id,id,"admission uses its own source snapshot");
+ }finally{await c.query("reset role");c.release();}
+});
+
+test("wrong lead types cannot commit a workload or grant through typed registration",async()=>{
+ for(const entity of ["BuyerLead","Qualification"] as const)for(const type of ["Verkäufer","Bauträger","Makler","SYNTHETIC_OTHER",...(entity==="BuyerLead"?["Investor"]:[])]){
+  const id=await typedLead(type),r={...typedRegistration(entity,id),workloadId:randomUUID()},c=await db.admin.connect();
+  try{
+   await assert.rejects(registerAutonomousCrmAccessFromOperator(c,r),/AUTONOMOUS_SOURCE_TYPE_DENIED/,`${entity}:${type}`);
+   const state=(await c.query("select (select count(*)::int from crm_autonomous_workloads where id=$1) as workloads,(select count(*)::int from crm_autonomous_access_grants where id=$2) as grants,current_user as actor,session_user as original",[r.workloadId,r.grantId])).rows[0];
+   assert.equal(state.workloads,0);assert.equal(state.grants,0);assert.equal(state.actor,state.original);
+  }finally{c.release();}
+ }
+});
+
+test("typed registration rejects source tuple drift and rolls back the role switch on later metadata failure",async()=>{
+ const id=await typedLead("Käufer"),r=typedRegistration("BuyerLead",id),c=await db.admin.connect();
+ try{
+  await assert.rejects(registerAutonomousCrmAccessFromOperator(c,{...r,projectId:foreignProject}),/AUTONOMOUS_SOURCE_TYPE_DENIED/);
+  const foreignActor=randomUUID();
+  await assert.rejects(registerAutonomousCrmAccessFromOperator(c,{...r,actorId:foreignActor}));
+  const role=(await c.query("select current_user as actor,session_user as original")).rows[0];assert.equal(role.actor,role.original);
+  assert.equal((await c.query("select count(*)::int as n from crm_autonomous_access_grants where id=$1",[r.grantId])).rows[0].n,0);
+ }finally{c.release();}
+});
+
+test("source SHARE lock survives the metadata role switch until the same real registration commit",async()=>{
+ await provision(registration("Task",task));
+ const id=await typedLead("Käufer"),r=typedRegistration("BuyerLead",id),c=await db.admin.connect(),blocker=await db.admin.connect(),changer=await db.admin.connect();
+ let pending:ReturnType<typeof registerAutonomousCrmAccessFromOperator>|undefined,changing:Promise<unknown>|undefined;
+ const waitLock=async(pid:number)=>{for(let i=0;i<150;i++){if((await db.admin.query("select wait_event_type from pg_stat_activity where pid=$1",[pid])).rows[0]?.wait_event_type==="Lock")return;await delay(10);}assert.fail("real transaction did not wait for the expected lock");};
+ try{
+  await blocker.query("begin");await blocker.query("select id from crm_autonomous_workloads where id=$1 for update",[workload]);
+  const pid=(await c.query("select pg_backend_pid() as pid")).rows[0].pid;pending=registerAutonomousCrmAccessFromOperator(c,r);await waitLock(pid);
+  assert.equal((await db.admin.query("select count(*)::int as n from crm_autonomous_access_grants where id=$1",[r.grantId])).rows[0].n,0,"grant remains uncommitted");
+  await changer.query("begin");const changerPid=(await changer.query("select pg_backend_pid() as pid")).rows[0].pid;
+  changing=changer.query("update leads set type='Verkäufer' where id=$1",[id]);await waitLock(changerPid);
+  await blocker.query("rollback");assert.equal((await pending).status,"REGISTERED");await changing;
+  await changer.query("rollback");
+  const role=(await c.query("select current_user as actor,session_user as original")).rows[0];assert.equal(role.actor,role.original);
+  assert.equal((await call(r.grantId)).status,200);
+ }finally{await blocker.query("rollback");await pending?.catch(()=>{});await changing?.catch(()=>{});await changer.query("rollback");c.release();blocker.release();changer.release();}
+});
+
+test("allowed V2 lead subtypes stay usable and type drift stops describe/read/write and receipt replay without effects",async()=>{
+ const availableUnit=randomUUID();
+ await db.admin.query("insert into property_units(id,workspace_id,project_id,unit_number,price_cents,status) values($1,$2,$3,'SYNTHETIC type-bound qualification',12300,'available')",[availableUnit,CRM_MACHINE_WORKSPACE_ID,project]);
+ for(const entity of ["BuyerLead","Qualification"] as const)for(const allowedType of entity==="BuyerLead"?["Käufer"]:["Käufer","Investor"]){
+  const id=await typedLead(allowedType),base=typedRegistration(entity,id);
+  const r=entity==="Qualification"?{...base,module:{...base.module!,relatedResources:{contactId:contact,unitId:availableUnit}}}:base;
+  await provision(r);
+  const before=await call(r.grantId);assert.equal(before.status,200,JSON.stringify(before.body));
+  const patch=entity==="BuyerLead"?{source:"SYNTHETIC typed changed"}:qualificationPatch;
+  const command=body("Update",patch,before.body.data.version),success=await call(r.grantId,command);assert.equal(success.status,200,`${entity}:${allowedType}:${JSON.stringify(success.body)}`);
+  assert.equal((await call(r.grantId,command)).body.replayed,true);
+  for(const type of ["Verkäufer","Bauträger","Makler","SYNTHETIC_OTHER",...(entity==="BuyerLead"?["Investor"]:[])]){
+   await db.admin.query("update leads set type=$2 where id=$1",[id,type]);const baseline=await typedState(id,r.grantId);
+   for(const request of [body("DescribeAssignment"),body(),body("Update",patch,Number(baseline.lead.version)),command]){
+    const denied=await call(r.grantId,request);assert.equal(denied.status,403,`${entity}:${type}:${request.operation}:${JSON.stringify(denied.body)}`);
+   }
+   assert.equal((await reconcile(r.grantId,command)).status,403);
+   assert.deepEqual(await typedState(id,r.grantId),baseline,"no lead/profile/task/version/audit/receipt/SUCCESS/domain-event effect");
+  }
+ }
+});
+
+test("real nonsuper source owner requires the Root self-edge SET lease and restores the exact native-style topology",async()=>{
+ const id=await typedLead("Käufer"),r={...typedRegistration("BuyerLead",id),workloadId:randomUUID()};
+ const role="typed_no_set_"+randomUUID().replaceAll("-","").slice(0,12);
+ const original=(await db.admin.query("select pg_get_userbyid(relowner) as owner from pg_class where oid='public.leads'::regclass")).rows[0].owner;
+ assert.match(original,/^[a-z_][a-z0-9_]*$/);
+ let reader:pg.Client|undefined;
+ try{
+  // Local disposable fixture only. qa_admin models the existing native cloud
+  // grantor; the real nonsuper source-owner login manages only its own edge.
+  await db.admin.query(`create role ${role} login inherit nosuperuser nocreatedb createrole noreplication bypassrls`);
+  await db.admin.query(`grant autonomous_modules_installer to ${role} with admin true,inherit false,set false`);
+  await db.admin.query(`alter table leads owner to ${role}`);
+  reader=new pg.Client({host:"127.0.0.1",port:db.port,user:role,database:"postgres"});await reader.connect();
+  await reader.query(`grant autonomous_modules_installer to ${role} with admin false,inherit true,set false granted by current_user`);
+  const edges=async()=> (await reader!.query("select pg_get_userbyid(grantor) as grantor,admin_option,inherit_option,set_option from pg_auth_members where roleid='autonomous_modules_installer'::regrole and member=$1::regrole order by grantor",[role])).rows;
+  const originalEdges=await edges();assert.equal(originalEdges.length,2);
+  assert.deepEqual(originalEdges.find(e=>e.grantor===original),{grantor:original,admin_option:true,inherit_option:false,set_option:false});
+  assert.deepEqual(originalEdges.find(e=>e.grantor===role),{grantor:role,admin_option:false,inherit_option:true,set_option:false});
+  const capabilities=(await reader.query("select current_user as actor,session_user as original,r.rolsuper,pg_has_role(current_user,'autonomous_modules_installer','USAGE') as inherited,pg_has_role(current_user,'autonomous_modules_installer','SET') as can_set from pg_roles r where rolname=current_user")).rows[0];
+  assert.equal(capabilities.actor,role);assert.equal(capabilities.original,role);assert.equal(capabilities.rolsuper,false);assert.equal(capabilities.inherited,true);assert.equal(capabilities.can_set,false);
+  await assert.rejects(registerAutonomousCrmAccessFromOperator(reader,r),/AUTONOMOUS_REGISTRAR_ROLE_UNAVAILABLE/);
+  const current=(await reader.query("select current_user as actor,session_user as original")).rows[0];assert.equal(current.actor,role);assert.equal(current.original,role);
+  const counts=(await db.admin.query("select (select count(*)::int from crm_autonomous_workloads where id=$1) as workloads,(select count(*)::int from crm_autonomous_access_grants where id=$2) as grants",[r.workloadId,r.grantId])).rows[0];
+  assert.equal(counts.workloads,0);assert.equal(counts.grants,0);
+  // Existing Root caller capability, deliberately outside the product wrapper.
+  try{
+   await reader.query(`grant autonomous_modules_installer to ${role} with admin false,inherit true,set true granted by current_user`);
+   assert.equal((await reader.query("select pg_has_role(current_user,'autonomous_modules_installer','SET') as allowed")).rows[0].allowed,true);
+   assert.equal((await registerAutonomousCrmAccessFromOperator(reader,{...r,workloadId:workload})).status,"REGISTERED");
+   const actor=(await reader.query("select current_user as actor,session_user as original,rolsuper from pg_roles where rolname=current_user")).rows[0];
+   assert.equal(actor.actor,role);assert.equal(actor.original,role);assert.equal(actor.rolsuper,false);
+  }finally{
+   await reader.query(`grant autonomous_modules_installer to ${role} with admin false,inherit true,set false granted by current_user`);
+  }
+  assert.deepEqual(await edges(),originalEdges,"both original grantor edges restored exactly");
+  const later={...r,grantId:randomUUID(),workloadId:randomUUID()};
+  await assert.rejects(registerAutonomousCrmAccessFromOperator(reader,later),/AUTONOMOUS_REGISTRAR_ROLE_UNAVAILABLE/);
+  assert.equal((await db.admin.query("select count(*)::int as n from crm_autonomous_access_grants where id=$1",[later.grantId])).rows[0].n,0);
+ }finally{await reader?.end();await db.admin.query(`alter table leads owner to "${original}"`);await db.admin.query(`drop role if exists ${role}`);}
 });
 
 export function autonomousPairedFixture(){return {db,registration,provision,body,auth,signature,call,reconcile,owner,ids:{actor,workload,project,mission,task,contact,company,lead,unit,workspace:CRM_MACHINE_WORKSPACE_ID}};}
