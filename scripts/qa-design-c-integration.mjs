@@ -9,6 +9,7 @@ import path from "node:path";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { createTextPdf } from "./lib/knowledge-document-fixtures.ts";
+import { getStudioNavigationPreferenceKey } from "../src/lib/studio-navigation.ts";
 import {
   seedDesignCIntegration,
   seedDesignCReaderRows,
@@ -426,11 +427,12 @@ async function verifyOperationalReaders() {
       operatorPage.on("response", listener);
       operatorPage.on("request", requestListener);
       try {
-        await operatorPage
-          .locator(
-            "[data-crm-sidebar] [data-crm-nav-item][aria-label='KI-Bots']",
-          )
-          .click();
+        const botsGroup = operatorPage.locator("[data-crm-sidebar]")
+          .getByRole("button", { name: "Wissen & KI", exact: true });
+        await botsGroup.click();
+        if (await botsGroup.getAttribute("data-crm-nav-target") !== "bots") {
+          await operatorPage.locator("[data-crm-section-entry='bots']").click();
+        }
         await expect(
           operatorPage.getByRole("navigation", {
             name: "Bot-Arbeitsbereich",
@@ -991,7 +993,12 @@ async function open(
 
 async function chooseProfile(page, profile) {
   // Initial hash/profile hydration can reset the focused sidebar. Perform the
-  // actual toggle and observe its state before operating its conditional form.
+  // actual toggle and confirm React saved the choice, beyond the DOM value.
+  const key = getStudioNavigationPreferenceKey(
+    "novalure-crm-navigation-preset-v1",
+    accounts.operator.userId,
+    profile === "novalureStudio" ? accounts.studio.workspaceId : accounts.operator.workspaceId,
+  );
   await expect(async () => {
     const sidebar = page.locator("[data-crm-sidebar]");
     if ((await sidebar.getAttribute("data-collapsed")) === "true")
@@ -999,9 +1006,10 @@ async function chooseProfile(page, profile) {
     await expect(sidebar).toHaveAttribute("data-collapsed", "false", {
       timeout: 1500,
     });
-    const select = page.locator("[data-crm-profile-card] select");
+    const select = sidebar.locator("[data-crm-profile-select]");
     await select.selectOption(profile, { timeout: 1500 });
     await expect(select).toHaveValue(profile, { timeout: 1500 });
+    assert.equal(await page.evaluate(storageKey => localStorage.getItem(storageKey), key), profile);
   }).toPass({ timeout: 15000, intervals: [100, 250, 500] });
 }
 
@@ -1024,10 +1032,10 @@ async function themeAndLayout(page) {
   );
   assert.equal(
     styles.sidebar,
-    "rgb(23, 29, 48)",
-    "Actual CRM navigation must use Design C navy",
+    "rgb(30, 79, 194)",
+    "Actual CRM navigation must use the branded blue",
   );
-  assert(styles.accent, "Design C token sheet must be present");
+  assert.equal(styles.accent, "#2d68f0", "Design C must use the branded primary accent");
   assert(
     styles.document <= styles.viewport + 1,
     `Horizontal overflow: ${JSON.stringify(styles)}`,
@@ -1225,7 +1233,11 @@ async function runIntegration() {
   );
   await step(
     "Operator chooses its existing authorized internal navigation profile",
-    () => chooseProfile(operatorPage, "novalureInternal"),
+    async () => {
+      await chooseProfile(operatorPage, "novalureInternal");
+      await open(operatorPage, accounts.operator.workspaceId);
+      await expect(operatorPage.locator("[data-crm-profile-select]")).toHaveValue("novalureInternal");
+    },
     true,
   );
   if (workspaceOnly) {
@@ -1303,13 +1315,16 @@ async function runIntegration() {
     "Every operator navigation button retains Design C and the booking link returns to the CRM calendar",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
-      const nav = operatorPage.locator("[data-crm-sidebar] [data-crm-nav]");
+      const nav = operatorPage.locator("[data-crm-sidebar]");
+      await expect(nav.getByRole("button", { name: "Übersicht", exact: true })).toBeVisible();
+      await expect(nav.getByRole("link", { name: "Terminbuchung", exact: true })).toBeVisible();
       const entries = await nav
         .locator("[data-crm-nav-item]")
         .evaluateAll((elements) =>
           elements.map((element) => ({
             label: element.getAttribute("aria-label") || element.textContent.trim(),
             tag: element.tagName.toLowerCase(),
+            group: element.getAttribute("data-crm-nav-group"),
             href: element.getAttribute("href"),
           })),
         );
@@ -1318,7 +1333,7 @@ async function runIntegration() {
         "Expected real role-authorized CRM navigation",
       );
       assert.deepEqual(entries.filter(entry => entry.tag === "a"), [
-        { label: "Terminbuchung", tag: "a", href: "/booking" },
+        { label: "Terminbuchung", tag: "a", group: null, href: "/booking" },
       ], "The authorized operator has exactly the explicit booking-page link");
       const visited = [];
       const bookingNavigation = [];
@@ -1352,7 +1367,7 @@ async function runIntegration() {
           throw new Error(`${phase}: ${JSON.stringify(bookingNavigation)}`);
         }
       }
-      for (const { label, tag, href } of entries) {
+      for (const { label, tag, group, href } of entries) {
         if (tag === "a") {
           assert.equal(href, "/booking");
           for (let roundTrip = 1; roundTrip <= 3; roundTrip++) {
@@ -1385,6 +1400,18 @@ async function runIntegration() {
         ).toHaveAttribute("aria-current", "page");
         await themeAndLayout(operatorPage);
         visited.push({ label, hash: new URL(operatorPage.url()).hash });
+        assert.ok(group, `Navigation group is missing for ${label}`);
+        const tabs = operatorPage.locator(`[data-crm-section-group="${group}"]`);
+        const sectionIds = await tabs.locator("[data-crm-section-entry]").evaluateAll(
+          (elements) => elements.map((element) => element.getAttribute("data-crm-section-entry")),
+        );
+        for (const sectionId of sectionIds) {
+          const tab = tabs.locator(`[data-crm-section-entry="${sectionId}"]`);
+          await tab.click();
+          await expect(tab).toHaveAttribute("aria-current", "page");
+          await themeAndLayout(operatorPage);
+          visited.push({ label: await tab.innerText(), hash: new URL(operatorPage.url()).hash });
+        }
       }
       return { visited, bookingNavigation };
     },
@@ -1393,10 +1420,11 @@ async function runIntegration() {
   await step(
     "Authorized search uses a native modal and never reveals another tenant",
     async () => {
-      await open(operatorPage, accounts.operator.workspaceId);
+      await open(operatorPage, accounts.operator.workspaceId, "contacts");
       await expect(operatorPage.locator("[data-crm-eyebrow]")).toHaveText(
         "Alle Projekte",
       );
+      await expect(operatorPage.locator("[data-crm-content]")).toContainText("Synthetic developer representative");
       const trigger = operatorPage.getByRole("button", {
         name: "CRM durchsuchen",
         exact: true,
@@ -1407,39 +1435,32 @@ async function runIntegration() {
         name: "CRM durchsuchen",
         exact: true,
       });
-      await expect(dialog).toBeVisible();
-      assert(
-        await dialog.evaluate(
-          (element) =>
-            element instanceof HTMLDialogElement && element.matches(":modal"),
-        ),
-      );
-      const query = dialog.getByRole("searchbox", {
-        name: "CRM durchsuchen",
-        exact: true,
-      });
-      await query.fill("SYNTHETIC FOREIGN");
-      await expect(dialog.locator("[data-crm-search-results]")).toHaveText(
-        "Keine passenden Ergebnisse im geladenen Bereich.",
-      );
-      await query.fill("Synthetic developer representative");
-      await expect(
-        dialog.getByRole("button", {
-          name: "Synthetic developer representative",
-          exact: true,
-        }),
-      ).toBeVisible();
-      for (let index = 0; index < 5; index++) {
-        await operatorPage.keyboard.press("Tab");
+      try {
+        await expect(dialog).toBeVisible();
         assert(
           await dialog.evaluate(
-            (element) =>
-              element.contains(document.activeElement) ||
-              document.activeElement === document.body,
+            (element) => element instanceof HTMLDialogElement && element.matches(":modal"),
           ),
         );
+        const query = dialog.getByRole("searchbox", { name: "CRM durchsuchen", exact: true });
+        await query.fill("SYNTHETIC FOREIGN");
+        await expect(dialog.locator("[data-crm-search-results]")).toHaveText(
+          "Keine passenden Ergebnisse im geladenen Bereich.",
+        );
+        await query.fill("Synthetic developer representative");
+        await expect(dialog.getByRole("button", {
+          name: "Synthetic developer representative",
+          exact: true,
+        })).toBeVisible();
+        for (let index = 0; index < 5; index++) {
+          await operatorPage.keyboard.press("Tab");
+          assert(await dialog.evaluate((element) =>
+            element.contains(document.activeElement) || document.activeElement === document.body,
+          ));
+        }
+      } finally {
+        if (await dialog.isVisible()) await operatorPage.keyboard.press("Escape");
       }
-      await operatorPage.keyboard.press("Escape");
       await expect(dialog).not.toBeVisible();
       await expect(trigger).toBeFocused();
     },
@@ -1549,6 +1570,13 @@ async function runIntegration() {
     "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId, "contacts");
+      const content = operatorPage.locator("[data-crm-content]");
+      const refresh = operatorPage
+        .locator("[data-crm-header]")
+        .getByRole("button", { name: "Aktualisieren", exact: true });
+      await expect(content).toContainText("Synthetic developer representative");
+      await expect(refresh).toBeEnabled();
+      const testHeader = "x-synthetic-core-fallback";
       const handler = async (route) => {
         const response = await route.fetch();
         const payload = await response.json();
@@ -1564,26 +1592,19 @@ async function runIntegration() {
             name: "SYNTHETIC UNTRUSTED FALLBACK SENTINEL",
           },
         ];
-        await route.fulfill({ response, json: payload });
+        await route.fulfill({ response, headers: { [testHeader]: "1", "cache-control": "no-store" }, json: payload });
       };
       await operatorPage.route("**/api/crm/core**", handler);
       try {
-        const refresh = operatorPage
-          .locator("[data-crm-header]")
-          .getByRole("button", { name: "Aktualisieren", exact: true });
         await Promise.all([
           operatorPage.waitForResponse(
-            (response) => new URL(response.url()).pathname === "/api/crm/core",
+            (response) => new URL(response.url()).pathname === "/api/crm/core" && response.headers()[testHeader] === "1",
           ),
           refresh.click(),
         ]);
         await expect(refresh).toBeEnabled();
-        await expect(
-          operatorPage.locator("[data-crm-content]"),
-        ).not.toContainText("SYNTHETIC UNTRUSTED FALLBACK SENTINEL");
-        await expect(
-          operatorPage.locator("[data-crm-content]"),
-        ).not.toContainText("Synthetic developer representative");
+        await expect(content).not.toContainText("SYNTHETIC UNTRUSTED FALLBACK SENTINEL");
+        await expect(content).not.toContainText("Synthetic developer representative");
         await operatorPage
           .locator("[data-crm-sidebar] [data-crm-nav-item]")
           .first()
@@ -1599,7 +1620,9 @@ async function runIntegration() {
             "Unknown data was presented as a numeric business result",
           );
       } finally {
-        await operatorPage.unroute("**/api/crm/core**", handler);
+        // Page routes are scenario-local. The context-level network guard
+        // remains active, and this cleanup waits for any in-flight handler.
+        await operatorPage.unrouteAll({ behavior: "wait" });
         await open(operatorPage, accounts.operator.workspaceId);
       }
     },
@@ -1695,9 +1718,9 @@ async function runIntegration() {
       await expect(
         customerPage.locator("[data-crm-content]"),
       ).not.toContainText(/FOREIGN PRIVATE|SECOND PROJECT CONTACT/);
-      const navText = await customerPage
-        .locator("[data-crm-sidebar] [data-crm-nav]")
-        .innerText();
+      const navText = (await customerPage
+        .locator("[data-crm-sidebar] [data-crm-nav], [data-crm-section-tabs]")
+        .allTextContents()).join(" ");
       assert(
         !/Mandantenverwaltung|Customer Access|Kundenzugänge|Managed Service|Novalure Studio/.test(
           navText,
