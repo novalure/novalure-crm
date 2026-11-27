@@ -61,7 +61,9 @@ export type LeadStatus =
   | "Übergabe"
   | "Archiviert";
 
-export type Region = "Wien" | "Steiermark" | "Tirol" | "Salzburg" | "Oberösterreich" | "Niederösterreich" | "Kärnten" | "Burgenland" | "Vorarlberg";
+export type AustriaRegion = "Wien" | "Steiermark" | "Tirol" | "Salzburg" | "Oberösterreich" | "Niederösterreich" | "Kärnten" | "Burgenland" | "Vorarlberg";
+/** Regions belong to a country; foreign regions must survive a round trip unchanged. */
+export type Region = AustriaRegion | (string & {});
 
 export type PropertyType = "Wohnung" | "Haus" | "Neubau" | "Zinshaus" | "Gewerbe" | "Grundstück" | "Portfolio";
 
@@ -485,6 +487,7 @@ export type SellerListing = {
   sellerLeadId: ID;
   title: string;
   address: string;
+  countryCode?: "AT" | "DE" | "ES" | "IE";
   region: Region;
   objectType: PropertyType;
   areaSqm: number;
@@ -665,11 +668,28 @@ export type PropertyBuilding = {
   floors: number;
 };
 
-export type PropertyUnit = {
+/** Unknown details are null; zero is an explicitly recorded value. */
+export type PropertyUnitDetails = {
+  balconyAreaSqm: number | null;
+  terraceAreaSqm: number | null;
+  gardenAreaSqm: number | null;
+  loggiaAreaSqm: number | null;
+  roofTerraceAreaSqm: number | null;
+  undergroundParkingCount: number | null;
+  carportCount: number | null;
+  outdoorParkingCount: number | null;
+  investorPriceCents: number | null;
+  bedrooms: number | null;
+  heatingYear: number | null;
+};
+
+export type PropertyUnit = Partial<PropertyUnitDetails> & {
   version?: number;
   id: ID;
   workspaceId: ID;
   projectId: ID;
+  /** Read-only projection of the persisted metadata relation; project alone is not ownership. */
+  sellerListingId?: ID;
   buildingId: ID;
   unitNumber: string;
   floor: number;
@@ -784,6 +804,8 @@ export type PipelineStage = {
 };
 
 export type Task = {
+  actionType?: "task" | "callback" | "follow_up";
+  origin?: "automation" | "crm";
   version?: number;
   syntheticTest?: boolean;
   id: ID;
@@ -843,7 +865,7 @@ export type CalendarEvent = {
   startsAt: string;
   endsAt: string;
   location: "Teams" | "Google Meet" | "Vor Ort" | "Telefon" | "Extern";
-  status: "geplant" | "vorbereiten" | "bestätigt" | "nachfassen";
+  status: "geplant" | "vorbereiten" | "bestätigt" | "nachfassen" | "abgesagt";
   preparation: string[];
   outcomeGoal: string;
   notes?: string;
@@ -944,7 +966,7 @@ export type NewsletterTemplate = {
   workspaceId: ID;
   name: string;
   category: "Projektupdate" | "Bewertung" | "Investment" | "Reaktivierung";
-  language: LanguageCode;
+  language: LanguageCode | "es";
   status: "bereit" | "entwurf";
   subjectPattern: string;
   previewPattern: string;
@@ -1082,7 +1104,7 @@ export type NewsletterSuppression = {
   id: ID;
   workspaceId: ID;
   email: string;
-  reason: "unsubscribe" | "bounce" | "complaint" | "manual";
+  reason: "unsubscribe" | "bounce" | "complaint" | "manual" | "provider_suppression";
   source: string;
   capturedAt: string;
 };

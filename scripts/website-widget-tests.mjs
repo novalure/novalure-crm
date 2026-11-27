@@ -46,6 +46,12 @@ function browser({ language = "en", siteKey = key, src = "https://crm.example.in
 const started = { body: { sessionId: "11111111-1111-4111-8111-111111111111", sessionToken: "opaque_session_token_12345678901234567890", status: "active", mode: "training", widget: { assistantName: "<img onerror=alert(1)>" } } };
 const answered = { body: { contractVersion: "website-answer-v1", answerStatus: "grounded", answer: "<script>alert(1)</script> Approved answer", citations: [{ title: "<img src=x onerror=alert(1)>", sourceId: "source", versionId: "version" }] } };
 const submit = async state => { state.find("textarea").value = "What does the website cost?"; await state.find("form").listeners.submit({ preventDefault() {} }); };
+test("optional operational reason preserves website-answer-v1 rendering and never invents citations", async () => {
+  const state = browser({ responses: [started, { body: { contractVersion: "website-answer-v1", answerStatus: "temporarily_unavailable", operationalReason: "budget_limit", answer: "The answer allowance is currently exhausted. Please contact the team directly.", citations: [] } }] });
+  state.byClass("launcher").listeners.click(); await submit(state);
+  assert.match(state.byClass("log").textContent, /answer allowance is currently exhausted/);
+  assert.equal(state.requests.length, 2); assert.equal(state.nodes.filter(node => node.attributes.class === "citations").length, 0);
+});
 const embedPresentation = {
   "data-assistant-name": "SYNTHETIC Hanna",
   "data-brand-name": "SYNTHETIC company",

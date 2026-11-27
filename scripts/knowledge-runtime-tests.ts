@@ -27,7 +27,8 @@ const retrieve = (extra: Partial<Parameters<typeof searchPersistedKnowledge>[0]>
 
 before(async () => {
   db = await startLocalSalesDb();
-  await applySalesSchema(db);
+  // Reproducible integration target for the metered runtime; unrelated in-flight migrations are separate releases.
+  await applySalesSchema(db, { maxMigrationNumber: 146 });
   options = { pool: db.pool as unknown as NonNullable<TenantTransactionOptions["pool"]> };
   // The generic sales fixture omits pre-existing bot-runtime table privileges.
   // Grant only this disposable role the tables needed for the complete chat test.
@@ -214,11 +215,12 @@ test("prior assistant knowledge is omitted from provider payload after assignmen
     globalThis.fetch = async (url, init) => {
       assert.equal(String(url), "https://synthetic-model.invalid/v1/chat/completions");
       payloads.push(JSON.parse(String(init?.body)));
-      return Response.json({ choices: [{ message: { content: "Synthetic generic response" } }] });
+      return Response.json({ choices: [{ message: { content: "Synthetic generic response" } }], usage: { prompt_tokens: 100, completion_tokens: 20 } });
     };
     for (const enabled of [true, false]) {
       await db.admin.query("update knowledge_center_entitlements set enabled=$2 where workspace_id=$1", [workspaceId, enabled]);
-      await withCrmRead(session, () => runBotChat({ language: "de", session, payload: { botId: botA, conversationId: conversationA, channel: "webchat", prompt: "syntheticstone", strictKnowledge: false, customerFacing: false, testMode: true } }), options);
+      const providerSession = { ...session, source: "database" as const };
+      await withCrmRead(providerSession, () => runBotChat({ language: "de", session: providerSession, payload: { botId: botA, conversationId: conversationA, channel: "webchat", prompt: "syntheticstone", strictKnowledge: false, customerFacing: false, testMode: true } }, options), options);
     }
     assert.equal(payloads.length, 2);
     for (const payload of payloads) {

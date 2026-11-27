@@ -1,0 +1,11 @@
+import {resolveWorkspaceScopedSession} from '@/lib/auth/session';
+import {CrmCommandError,crmCommandErrorResponse,crmRequestMetadata} from '@/lib/crm-command';
+import {readWebExposeBrandAssets,uploadWebExposeBrandAsset,revokeWebExposeBrandAsset} from '@/lib/db/web-expose-brand-repository';
+import {readWebExposeUploadForm} from '@/lib/web-expose-media-validation';
+const headers={'Cache-Control':'private, no-store'};
+export async function GET(request:Request){const auth=await resolveWorkspaceScopedSession(request,{permission:'crm:read'});if(!auth.ok)return auth.response;try{return Response.json({assets:await readWebExposeBrandAssets(auth.session)},{headers});}catch(error){return crmCommandErrorResponse(error);}}
+export async function POST(request:Request){const auth=await resolveWorkspaceScopedSession(request,{permission:'crm:write',capability:'settings:manage'});if(!auth.ok)return auth.response;try{
+ const metadata=crmRequestMetadata(request,{});
+ if(request.headers.get('content-type')?.startsWith('multipart/form-data')){let data:FormData;try{data=await readWebExposeUploadForm(request);}catch(error){throw new CrmCommandError('INVALID_ARTWORK',error instanceof Error&&error.message==='UPLOAD_TOO_LARGE'?'Firmenasset bis 4 MB hochladen.':'Firmenbild konnte nicht gelesen werden.',error instanceof Error&&error.message==='UPLOAD_TOO_LARGE'?413:400);}if([...data.keys()].some(key=>!['file','purpose','reviewed'].includes(key))||[...data.keys()].some(key=>data.getAll(key).length!==1))throw new CrmCommandError('INVALID_FILE','Firmenbildanfrage enthält unbekannte oder doppelte Angaben.');const file=data.get('file'),purpose=data.get('purpose');if(!(file instanceof File)||!['logo','letterhead'].includes(String(purpose)))throw new CrmCommandError('INVALID_FILE','Firmenbild auswählen.');return Response.json(await uploadWebExposeBrandAsset(auth.session,{file,purpose:purpose as 'logo'|'letterhead',reviewed:data.get('reviewed')==='true'},metadata),{headers});}
+ const input=await request.json();if(input.action!=='revoke')throw new CrmCommandError('INVALID_ACTION','Aktion prüfen.');return Response.json(await revokeWebExposeBrandAsset(auth.session,input.id,input.expectedRevision,metadata),{headers});
+ }catch(error){return crmCommandErrorResponse(error);}}

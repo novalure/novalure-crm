@@ -186,7 +186,16 @@ test("shell persists history and all five audited drafts have no first-project f
   ];
   for (const fileName of draftComponents) {
     const source = await readFile(new URL(`../src/components/${fileName}`, import.meta.url), "utf8");
-    assert.doesNotMatch(source, /projects\[0\]/, `${fileName} must not default to projects[0]`);
+    let draftSource = source;
+    if (fileName === "task-command-center.tsx") {
+      // This derives a workspace ID for legacy callers; it must not select a
+      // project for a draft. The main CRM always supplies its active workspace.
+      const workspaceFallback = /const scopedWorkspaceId = workspaceId \?\? projects\[0\]\?\.workspaceId \?\? tasks\[0\]\?\.workspaceId \?\? "";/;
+      assert.match(source, workspaceFallback);
+      assert.match(shell, /<TaskCommandCenter\s+workspaceId=\{activeWorkspace\.id\}/);
+      draftSource = source.replace(workspaceFallback, "");
+    }
+    assert.doesNotMatch(draftSource, /projects\[0\]/, `${fileName} must not default to projects[0]`);
     assert.match(source, /activeProjectId/, `${fileName} must receive the canonical active project`);
     assert.match(source, /<option value="">/, `${fileName} must expose an empty required selection`);
   }

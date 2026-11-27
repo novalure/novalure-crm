@@ -1,0 +1,17 @@
+HEIC/HEIF image conversion
+
+This application uses libheif 1.23.7 and libde265 1.1.3 under the GNU
+Lesser General Public License, version 3 or later. The accompanying LICENSE,
+THIRD-PARTY-NOTICES.md and README.md contain copyright notices, license texts,
+dependencies and upstream source references for the linked components.
+
+The application-specific decoder source, source manifest and build instructions
+are provided as primary.cpp, SOURCE-MANIFEST.md and build-primary.sh in this
+directory. The unmodified, pinned npm
+package used for relinking is @ai-ecoverse/wasm-libheif@1.23.7-1 (SHA-256 of
+the package tarball: 281a3d13d6589ee85a3e0f66928da79874dc31e5b3a912a8533925833bbff307).
+The decoder files are separately served at /heic-decoder/primary.js and
+/heic-decoder/primary.wasm. Replace both together with a compatible rebuild.
+
+EXPERIMENTAL STATUS: Rebuilding against a modified library and complete legal
+and patent compliance have not yet been independently established.

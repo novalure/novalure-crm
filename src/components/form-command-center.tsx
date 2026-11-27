@@ -27,6 +27,7 @@ import { getFormCommandCenterCopy, getLocale, type LanguageCode } from "@/lib/i1
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FormCommandCenterProps = {
+  focusFormId?: string;
   contacts: Contact[];
   events: CalendarEvent[];
   funnels: Funnel[];
@@ -497,6 +498,7 @@ function formatPercent(value: number, language: LanguageCode) {
 }
 
 export function FormCommandCenter({
+  focusFormId,
   contacts,
   events,
   funnels,
@@ -595,7 +597,7 @@ export function FormCommandCenter({
         setPersistenceSource(payload.source);
         const normalizedForms = payload.forms.map((form) => ensureFormStructure(form, copy));
         setForms(normalizedForms);
-        setSelectedFormId(normalizedForms[0]?.id ?? "");
+        setSelectedFormId(normalizedForms.find(form => form.id === focusFormId)?.id ?? normalizedForms[0]?.id ?? "");
       } catch {
         if (!cancelled) setPersistenceSource("fallback");
       }
@@ -606,7 +608,7 @@ export function FormCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [copy, loadAttempt]);
+  }, [copy, loadAttempt, focusFormId]);
 
   useEffect(() => {
     if (!isFormEditorMode) return;

@@ -144,7 +144,7 @@ function emptyKnowledge(): KnowledgeQueryResult {
 export async function retrieveKnowledgeForSavedChannel(
   session: AppSession,
   input: Readonly<{ assistantId: string; channel: KnowledgeChannel; query: string; maxResults?: number }>,
-  options: TenantTransactionOptions = {},
+  options: TenantTransactionOptions & Readonly<{ strictOperationalErrors?: boolean }> = {},
 ): Promise<KnowledgeQueryResult> {
   knowledgeId(input.assistantId, "assistantId");
   const query = knowledgeText(input.query, "query", assistantKnowledgeLimits.queryCharacters);
@@ -161,7 +161,10 @@ export async function retrieveKnowledgeForSavedChannel(
       botId: input.assistantId, channel: input.channel, query,
       limit: Math.min(requested, input.channel === "voice" ? assistantKnowledgeLimits.voiceResults : requested),
     }, { ...options, statementTimeoutMs: Math.min(options.statementTimeoutMs ?? assistantKnowledgeLimits.statementTimeoutMs, assistantKnowledgeLimits.statementTimeoutMs) });
-    if (Date.now() - started > assistantKnowledgeLimits.deadlineMs) return { ...result, grounded: false, matches: [] };
+    if (Date.now() - started > assistantKnowledgeLimits.deadlineMs) {
+      if (options.strictOperationalErrors) throw new KnowledgeCenterError("KNOWLEDGE_UNAVAILABLE", "Knowledge retrieval is temporarily unavailable.", 503);
+      return { ...result, grounded: false, matches: [] };
+    }
     let remaining = assistantKnowledgeLimits.totalExcerptCharacters;
     const matches: KnowledgeQueryResult["matches"] = [];
     for (const match of result.matches) {
@@ -177,8 +180,13 @@ export async function retrieveKnowledgeForSavedChannel(
     }
     return { ...result, matches, grounded: matches.length > 0 };
   } catch (error) {
-    if (error instanceof KnowledgeCenterError && ["ENTITLEMENT_REQUIRED", "LIMIT_EXCEEDED"].includes(error.code)) return emptyKnowledge();
-    if (error && typeof error === "object" && "code" in error && ["57014", "55P03"].includes(String(error.code))) return emptyKnowledge();
+    // External webchat callers distinguish operational failure from missing
+    // facts. Preserve the existing internal bot/voice safe-handoff contract.
+    if (!options.strictOperationalErrors && error instanceof KnowledgeCenterError && ["ENTITLEMENT_REQUIRED", "LIMIT_EXCEEDED"].includes(error.code)) return emptyKnowledge();
+    if (error && typeof error === "object" && "code" in error && ["57014", "55P03"].includes(String(error.code))) {
+      if (!options.strictOperationalErrors) return emptyKnowledge();
+      throw new KnowledgeCenterError("KNOWLEDGE_UNAVAILABLE", "Knowledge retrieval is temporarily unavailable.", 503);
+    }
     throw error;
   }
 }
@@ -193,7 +201,7 @@ export async function retrieveAssistantKnowledge(
   // A historical telephone grant never implicitly grants voice access.
   const result = await retrieveKnowledgeForSavedChannel(session, {
     ...input, channel: input.channel === "telephony" ? "voice" : "webchat",
-  }, options);
+  }, { ...options, strictOperationalErrors: input.channel === "webchat" });
   return {
     answerStatus: result.grounded ? "grounded" : "insufficient_knowledge",
     fallback: result.grounded ? null : assistantKnowledgeFallback,

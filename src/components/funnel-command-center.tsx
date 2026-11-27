@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FunnelBlueprintDesigner } from "@/components/funnel-blueprint-designer";
+import { FunnelBlueprintDesigner, type FunnelDesignerSaved } from "@/components/funnel-blueprint-designer";
 import { FunnelRenderer } from "@/components/funnel-renderer";
 import { buildFunnelBlueprint } from "@/lib/funnel-builder-adapter";
 import type { Funnel, FunnelStep, Lead, Project, WorkspaceUser } from "@/lib/crm-types";
@@ -24,8 +24,13 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { resolveFunnelCreationContext } from "@/lib/funnel-creation-context";
 
 type FunnelCommandCenterProps = {
+  activeProjectId?: string | null;
+  currentUserId?: string;
+  onChanged?: () => Promise<void>;
+  focusFunnelId?: string;
   funnels: Funnel[];
   language: LanguageCode;
   leads: Lead[];
@@ -195,10 +200,6 @@ function formatPercent(value: number, language: LanguageCode) {
   }).format(value);
 }
 
-function isUuid(value: string | undefined | null) {
-  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
-}
-
 function getFunnelLiveReadiness(blueprint: FunnelBlueprint, funnel: EditableFunnel) {
   const formFields = collectFunnelFormFields(blueprint);
   const blockers: string[] = [];
@@ -225,7 +226,6 @@ function getFunnelLiveReadiness(blueprint: FunnelBlueprint, funnel: EditableFunn
 
   return {
     blockers: Array.from(new Set(blockers)),
-    publicTokenAvailable: isUuid(funnel.id),
     status,
   };
 }
@@ -354,7 +354,7 @@ function normalizeStep(step: FunnelStep, index: number, text: FunnelCommandCente
   };
 }
 
-function createFunnel({
+export function createFunnel({
   text,
   project,
   user,
@@ -362,10 +362,10 @@ function createFunnel({
 }: {
   text: FunnelCommandCenterText;
   project: Project;
-  user?: WorkspaceUser;
+  user: WorkspaceUser;
   workspaceId: string;
 }): EditableFunnel {
-  const id = `funnel_new_${new Date().getTime()}`;
+  const id = crypto.randomUUID();
 
   return {
     id,
@@ -379,7 +379,7 @@ function createFunnel({
     visits: 0,
     leads: 0,
     conversionRate: 0,
-    ownerUserId: user?.id,
+    ownerUserId: user.id,
     adaptationBrief: text.defaults.adaptationPrompt,
     templateUseCase: "Immobilien Käufer",
     brandPreset: text.defaults.brandPreset,
@@ -387,7 +387,7 @@ function createFunnel({
     customDomain: "",
     mobileFirstMode: true,
     headerMode: "Logo",
-    landingPageBlocks: ["Hero", "Projektvideo", "Testimonials", "Kalender"],
+    landingPageBlocks: ["Hero"],
     designerHeroTitle: text.defaults.newFunnelGoal,
     designerHeroSubtitle: text.defaults.newFunnelSubtitle,
     designerCtaLabel: text.defaults.designerCtaLead,
@@ -407,7 +407,7 @@ function createFunnel({
     emailSequence: text.defaults.emailSequenceAppointment,
     messageCondition: text.defaults.messageCondition,
     messageDelay: text.defaults.messageDelay,
-    replySender: "Novalure Sales",
+    replySender: user.name,
     crmStage: "Lead Inbox",
     followUp: text.defaults.newFunnelFollowUp,
     leadDestination: "Lead Inbox",
@@ -426,7 +426,7 @@ function createFunnel({
     winningRule: text.defaults.winningRule,
     workspaceAccess: "Intern",
     statusTemplate: text.statusTemplateOptions[0],
-    notificationRecipients: "Franz, Sales Graz",
+    notificationRecipients: user.email || user.name,
     leadQualityRule: text.leadQualityRules[1],
     triggerLeadInbox: true,
     triggerTask: true,
@@ -434,30 +434,10 @@ function createFunnel({
   };
 }
 
-function createDefaultSteps(funnel: EditableFunnel, text: FunnelCommandCenterText): EditableStep[] {
+export function createDefaultSteps(funnel: EditableFunnel, text: FunnelCommandCenterText): EditableStep[] {
   return [
     {
       ...createStep(funnel, 0, text),
-      name: text.defaults.entryStepName,
-      type: "Auswahlfrage",
-      question: text.defaults.entryStepQuestion,
-      options: [...text.defaults.entryStepOptions],
-      score: 12,
-      crmField: "interest",
-      analyticsEvent: "funnel_start",
-    },
-    {
-      ...createStep(funnel, 1, text),
-      name: text.defaults.qualifyStepName,
-      type: "Auswahlfrage",
-      question: text.defaults.qualifyStepQuestion,
-      options: [...text.defaults.qualifyStepOptions],
-      score: 18,
-      crmField: "timeline",
-      analyticsEvent: "step_view",
-    },
-    {
-      ...createStep(funnel, 2, text),
       name: text.defaults.contactStepName,
       type: "Kontaktformular",
       channel: "Website",
@@ -496,8 +476,15 @@ function createStep(funnel: EditableFunnel, index: number, text: FunnelCommandCe
   };
 }
 
-export function FunnelCommandCenter({
+export function FunnelCommandCenter(props: FunnelCommandCenterProps) {
+  return <FunnelCommandContent key={`${props.projects[0]?.workspaceId ?? props.funnels[0]?.workspaceId ?? ""}:${props.activeProjectId ?? "all"}:${props.currentUserId ?? ""}:${props.focusFunnelId ?? ""}`} {...props} />;
+}
+function FunnelCommandContent({
+  activeProjectId,
+  currentUserId,
+  onChanged,
   funnels,
+  focusFunnelId,
   language,
   leads,
   projectLabel,
@@ -507,10 +494,10 @@ export function FunnelCommandCenter({
 }: FunnelCommandCenterProps) {
   const text = getFunnelCommandCenterCopy(language);
   const [activeView, setActiveView] = useState<FunnelView>("all");
-  const [activeTab, setActiveTab] = useState<BuilderTab>("overview");
+  const [activeTab, setActiveTab] = useState<BuilderTab>(focusFunnelId ? "editor" : "overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [localFunnelIds, setLocalFunnelIds] = useState<string[]>([]);
-  const [selectedFunnelId, setSelectedFunnelId] = useState(funnels[0]?.id ?? "");
+  const [selectedFunnelId, setSelectedFunnelId] = useState(funnels.find(item => item.id === focusFunnelId)?.id ?? funnels[0]?.id ?? "");
   const [editedFunnels, setEditedFunnels] = useState<Record<string, EditableFunnel>>(() =>
     Object.fromEntries(funnels.map((funnel) => [funnel.id, normalizeFunnel(funnel, text)])),
   );
@@ -536,20 +523,25 @@ export function FunnelCommandCenter({
   ]);
   const [notice, setNotice] = useState<string>(text.draftNotice);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [designerSaved,setDesignerSaved]=useState<Record<string,{status:Funnel["status"];baseline?:Funnel}>>({});
+  const [creationProjectId, setCreationProjectId] = useState("");
+  const currentActor = users.find(row => row.id === currentUserId && row.status === "active");
+  const creationProjects = projects.filter(row => row.workspaceId === currentActor?.workspaceId && row.status !== "Archiviert");
+  const creation = resolveFunnelCreationContext({ activeProjectId, chosenProjectId: creationProjectId || null, currentUserId, projects, users });
+  const creationNotice = creation.ok ? "" : language === "de" ? ({ actor_missing: "Deine aktuelle Teamzuordnung wird noch geladen oder ist nicht mehr aktiv.", creation_forbidden: "Deine Rolle darf keine Funnels anlegen oder veröffentlichen.", project_required: "Wähle das Projekt für den neuen Funnel.", project_unavailable: "Das gewählte Projekt ist nicht in deinem aktuellen Arbeitsbereich verfügbar." }[creation.reason]) : ({ actor_missing: "Your current team membership is loading or no longer active.", creation_forbidden: "Your role cannot create or publish funnels.", project_required: "Choose the project for the new funnel.", project_unavailable: "The selected project is unavailable in your current workspace." }[creation.reason]);
   const sourceFunnels = useMemo(
-    () => [
+    () => [...new Map([
+      ...localFunnelIds.map(id=>editedFunnels[id]).filter((funnel):funnel is EditableFunnel=>Boolean(funnel)),
       ...funnels,
-      ...localFunnelIds
-        .map((id) => editedFunnels[id])
-        .filter((funnel): funnel is EditableFunnel => Boolean(funnel)),
-    ],
+    ].map(funnel=>[funnel.id,funnel] as const)).values()],
     [editedFunnels, funnels, localFunnelIds],
   );
 
   const decoratedFunnels = useMemo(
     () =>
       sourceFunnels.map((funnel) => {
-        const editable = editedFunnels[funnel.id] ?? normalizeFunnel(funnel, text);
+        const draft=editedFunnels[funnel.id]??normalizeFunnel(funnel,text),canonical=funnels.find(row=>row.id===funnel.id),confirmed=designerSaved[funnel.id];
+        const editable={...draft,status:confirmed?(canonical===confirmed.baseline?confirmed.status:canonical?.status??confirmed.status):draft.status,visits:canonical?.visits??draft.visits,leads:canonical?.leads??draft.leads,conversionRate:canonical?.conversionRate??draft.conversionRate};
         const project = projects.find((item) => item.id === editable.projectId);
         const owner = editable.ownerUserId ? users.find((item) => item.id === editable.ownerUserId) : undefined;
         const funnelSteps = editedSteps[editable.id] ?? [];
@@ -559,7 +551,7 @@ export function FunnelCommandCenter({
 
         return { funnel: editable, project, owner, steps: funnelSteps, bottleneck };
       }),
-    [editedFunnels, editedSteps, projects, sourceFunnels, text, users],
+    [designerSaved, editedFunnels, editedSteps, funnels, projects, sourceFunnels, text, users],
   );
 
   const filteredFunnels = decoratedFunnels.filter((item) => {
@@ -687,13 +679,9 @@ export function FunnelCommandCenter({
   }
 
   function createNewFunnel() {
-    const project = projects.find((item) => item.name === projectLabel) ?? projects[0];
-    const owner = users[0];
-    const workspaceId = funnels[0]?.workspaceId ?? project?.workspaceId ?? "ws_novalure";
-
-    if (!project) return;
-
-    const funnel = createFunnel({ text, project, user: owner, workspaceId });
+    if (!creation.ok) { setNotice(creationNotice); return; }
+    const { project, user, workspaceId } = creation;
+    const funnel = createFunnel({ text, project, user, workspaceId });
     const funnelSteps = createDefaultSteps(funnel, text);
     setEditedFunnels((current) => ({ ...current, [funnel.id]: funnel }));
     setEditedSteps((current) => ({ ...current, [funnel.id]: funnelSteps }));
@@ -736,13 +724,28 @@ export function FunnelCommandCenter({
     setMonitor((current) => [{ label, detail, status }, ...current].slice(0, 8));
   }
 
+  function handleDesignerSaved(saved:FunnelDesignerSaved){
+    if(!projects.some(project=>project.id===saved.blueprint.projectId&&project.workspaceId===saved.blueprint.workspaceId))return;
+    const originalId=saved.blueprint.id;
+    setEditedFunnels(current=>{const existing=current[originalId]??current[saved.funnelId];if(!existing)return current;const next={...current};delete next[originalId];next[saved.funnelId]={...existing,id:saved.funnelId,name:saved.blueprint.name,goal:saved.blueprint.goal,status:saved.status};return next;});
+    setDesignerSaved(current=>({...current,[saved.funnelId]:{status:saved.status,baseline:funnels.find(funnel=>funnel.id===saved.funnelId)}}));
+    setLocalFunnelIds(current=>[...new Set(current.map(id=>id===originalId?saved.funnelId:id))]);
+    setSelectedFunnelId(saved.funnelId);
+    setNotice(language==='de'?'Gespeicherter Veröffentlichungsstand übernommen.':'Saved publication status updated.');
+    void onChanged?.().catch(()=>setNotice(language==='de'?'Der Funnel ist gespeichert. Die Zähler konnten noch nicht aktualisiert werden; bitte die Ansicht erneut aktualisieren.':'The funnel is saved. Counts could not be refreshed yet; please refresh the view.'));
+  }
+  async function returnFromDesigner(){
+    try{await onChanged?.();}catch{setNotice(language==='de'?'Der gespeicherte Funnel bleibt erhalten. Die Zähler konnten noch nicht aktualisiert werden.':'The saved funnel is retained. Counts could not be refreshed yet.');}
+    setActiveTab('overview');
+  }
+
   async function saveDraft() {
     if (!selected || draftSaving) return;
     const originalId = selected.funnel.id;
     setDraftSaving(true);
 
     try {
-      const response = await csrfFetch("/api/crm/funnels", {
+      const response = await csrfFetch(`/api/crm/funnels?workspaceId=${encodeURIComponent(selected.funnel.workspaceId)}`, {
         body: JSON.stringify({ funnel: selected.funnel, steps: selectedSteps }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -815,8 +818,11 @@ export function FunnelCommandCenter({
 
   if (!selected) {
     return (
-      <section className="rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600">
-        {text.noFunnels}
+      <section className="grid gap-4 rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600">
+        <div><h3 className="text-xl font-semibold text-slate-950">{language === "de" ? "Deinen ersten Funnel anlegen" : "Create your first funnel"}</h3><p className="mt-2">{language === "de" ? "Starte mit einem Kontaktformular. Entwurf, geprüfte Veröffentlichung und Anfragen sind mit demselben Projekt verbunden." : "Start with a contact form. The draft, reviewed publication and enquiries stay connected to the same project."}</p></div>
+        {!activeProjectId && creationProjects.length > 1 ? <label className="grid max-w-md gap-2 font-semibold">{language === "de" ? "Projekt für den neuen Funnel" : "Project for the new funnel"}<select className="min-h-11 rounded-lg border border-stone-300 bg-white px-3" value={creationProjectId} onChange={event => setCreationProjectId(event.target.value)}><option value="">{language === "de" ? "Projekt auswählen" : "Select a project"}</option>{creationProjects.map(project => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label> : null}
+        {creation.ok ? <p>{creation.project.name}</p> : <p role="status">{creationNotice}</p>}
+        <button type="button" className="min-h-11 justify-self-start rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40" disabled={!creation.ok} onClick={createNewFunnel}>{text.createFunnel}</button>
       </section>
     );
   }
@@ -824,24 +830,24 @@ export function FunnelCommandCenter({
   if (isDesignerMode && selectedBlueprint) {
     return (
       <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
-        <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+        <header className="shrink-0 border-b border-stone-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <button
                 className="shrink-0 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
-                onClick={() => setActiveTab("overview")}
+                onClick={() => { void returnFromDesigner(); }}
                 type="button"
               >
                 {backToFunnelsLabel}
               </button>
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                <p className="sr-only">
                   {editorModeLabel}
                 </p>
-                <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">
+                <h3 className="break-words text-base font-semibold text-slate-950">
                   {selected.funnel.name}
                 </h3>
-                <p className="mt-1 break-words text-xs text-stone-600">
+                <p className="hidden break-words text-xs text-stone-600 2xl:block">
                   {selected.project?.name ?? projectLabel} · {getCrmLeadTypeLabel(selected.funnel.audience, language)} · {getCrmSourceLabel(selected.funnel.entryChannel, language)}
                 </p>
               </div>
@@ -865,12 +871,13 @@ export function FunnelCommandCenter({
             </div>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
+        <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
           <FunnelBlueprintDesigner
             initialBlueprint={selectedBlueprint}
             key={selectedBlueprint.id}
             language={language}
             onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
+            onSaved={handleDesignerSaved}
             variant="immersive"
           />
         </div>
@@ -911,8 +918,10 @@ export function FunnelCommandCenter({
             </p>
           </div>
           <div className="grid min-w-0 gap-3 xl:min-w-[360px]">
+            {!activeProjectId && creationProjects.length > 1 ? <label className="grid gap-2 text-sm font-semibold">{language === "de" ? "Projekt für den neuen Funnel" : "Project for the new funnel"}<select className="min-h-11 rounded-lg border border-stone-300 bg-white px-3" value={creationProjectId} onChange={event => setCreationProjectId(event.target.value)}><option value="">{language === "de" ? "Projekt auswählen" : "Select a project"}</option>{creationProjects.map(project => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label> : null}
             <button
-              className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+              className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+              disabled={!creation.ok}
               onClick={createNewFunnel}
               type="button"
             >
@@ -1108,7 +1117,7 @@ export function FunnelCommandCenter({
                         }
                       </p>
                       <p className="mt-1 break-words text-sm">
-                        {text.overview.publicToken}: {selectedReadiness.publicTokenAvailable ? text.overview.publicTokenAvailable : text.overview.publicTokenMissing}
+                        {language === "de" ? "Live-Link und Veröffentlichungsstand im Designer prüfen." : "Check the live link and publication status in the designer."}
                       </p>
                     </div>
                     <span className="rounded-md bg-white px-3 py-2 text-xs font-semibold">
@@ -1247,6 +1256,7 @@ export function FunnelCommandCenter({
                   key={selectedBlueprint.id}
                   language={language}
                   onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
+            onSaved={handleDesignerSaved}
                 />
               ) : null}
             </div>

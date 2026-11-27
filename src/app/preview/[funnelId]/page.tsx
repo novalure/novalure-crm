@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FunnelRenderer } from "@/components/funnel-renderer";
-import { findFunnelBlueprint } from "@/lib/funnel-builder-adapter";
-import { funnelSteps, funnels, projects, users } from "@/lib/crm-source";
-import { getStoredFunnel } from "@/lib/funnel-store";
+import {getStoredFunnel,getPublishedFunnel,publicFunnelBlueprint} from "@/lib/funnel-store";
+import {headers} from "next/headers";
+import {getSessionFromHeaders} from "@/lib/auth/session";
 import type { FunnelDevice } from "@/lib/funnel-schema";
 import { getFunnelDeviceLabel, getFunnelPreviewCopy, resolveLanguage } from "@/lib/i18n";
 
@@ -20,15 +20,17 @@ function normalizeDevice(value: string | undefined): FunnelDevice {
 export default async function FunnelPreviewPage({ params, searchParams }: PreviewPageProps) {
   const { funnelId } = await params;
   const query = await searchParams;
-  const stored = await getStoredFunnel(funnelId);
-  const fallback = findFunnelBlueprint(funnelId, { funnels, projects, steps: funnelSteps, users });
-  const blueprint = stored?.blueprint ?? fallback;
+  const mode = query.mode === "live" ? "live" : "test";
+  const session = mode === "test" ? await getSessionFromHeaders(await headers()) : null;
+  const stored = session ? await getStoredFunnel(funnelId,session) : null;
+  const published = mode === "live" ? await getPublishedFunnel(funnelId,query.token??"") : null;
+  const blueprint = published ? publicFunnelBlueprint(published.blueprint) : stored?.blueprint;
 
   if (!blueprint) notFound();
 
-  const device = normalizeDevice(query.device);
-  const mode = query.mode === "live" ? "live" : "test";
   const language = resolveLanguage(query.lang);
+  if (mode === "live") return <main className="novalure-funnel-live-page min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-8"><FunnelRenderer blueprint={blueprint} language={language} mode="live" /></main>;
+  const device = normalizeDevice(query.device);
   const copy = getFunnelPreviewCopy(language);
 
   return (
@@ -52,7 +54,7 @@ export default async function FunnelPreviewPage({ params, searchParams }: Previe
               className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                 item === device ? "border-slate-950 bg-slate-950 text-white" : "border-stone-300 bg-white text-slate-950"
               }`}
-              href={`/preview/${blueprint.id}?device=${item}&mode=${mode}&lang=${language}&token=${query.token ?? "local"}`}
+              href={`/preview/${blueprint.id}?device=${item}&mode=${mode}&lang=${language}&token=${encodeURIComponent(query.token ?? "")}`}
               key={item}
             >
               {getFunnelDeviceLabel(item, language)}

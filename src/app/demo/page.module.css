@@ -1,0 +1,107 @@
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr);
+  align-items: start;
+  gap: clamp(32px, 6vw, 88px);
+  width: min(100%, 1160px);
+  margin: 0 auto;
+  padding: clamp(56px, 9vw, 112px) clamp(20px, 5vw, 64px);
+}
+
+.overview h1 {
+  margin: 8px 0 18px;
+  font-size: clamp(38px, 6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+  font-weight: 700;
+}
+
+.eyebrow {
+  color: #1e4fc2;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intro {
+  max-width: 36rem;
+  color: #6f6a63;
+  font-size: clamp(17px, 2vw, 21px);
+}
+
+.agendaTitle {
+  margin-top: 30px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.agenda {
+  margin-top: 8px;
+  padding-left: 1.2em;
+  list-style: disc;
+}
+
+.agenda li + li {
+  margin-top: 6px;
+}
+
+.agenda li::marker {
+  color: #2d68f0;
+}
+
+.contact {
+  min-width: 0;
+  padding: clamp(22px, 4vw, 38px);
+  border: 1px solid #e3ded5;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.contact h2 {
+  margin-bottom: 10px;
+  font-size: clamp(23px, 3vw, 30px);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.contact p {
+  color: #6f6a63;
+}
+
+.contact .button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 22px;
+  padding: 10px 18px;
+  border-radius: 9px;
+  color: #fff;
+  background: #2d68f0;
+  font-weight: 700;
+}
+
+.contact .button:hover {
+  background: #1e4fc2;
+}
+
+.hint {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.contact .email {
+  display: inline-block;
+  margin-top: 10px;
+  color: #1e4fc2;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 740px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

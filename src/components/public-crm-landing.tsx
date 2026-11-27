@@ -1,5 +1,6 @@
-import { Fragment, type CSSProperties, type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import localFont from "next/font/local";
+import Image from "next/image";
 import Link from "next/link";
 import { CookieConsentButton, type CookieConsentButtonCopy } from "@/components/cookie-consent-button";
 import { NovalureWordmark } from "@/components/novalure-wordmark";
@@ -80,15 +81,13 @@ const figtree = localFont({
 });
 
 type PublicCrmLandingProps = {
-  auditHref: string;
-  basePath: "/" | "/login";
   copy: LegacyLandingCopy;
   language: PublicLanguageCode;
   legalCopy: LegalCopy;
   pageCopy: PublicCopy;
 };
 
-type IconName = "calendar" | "chart" | "check" | "clock" | "document" | "key" | "lock" | "shield" | "user";
+type IconName = "calendar" | "chart" | "check" | "document" | "lock" | "shield" | "user";
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const common = {
@@ -104,16 +103,6 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       <svg {...common}>
         <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.12" />
         <path d="m8 12.2 2.5 2.5L16.5 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-      </svg>
-    );
-  }
-
-  if (name === "clock") {
-    return (
-      <svg {...common}>
-        <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.12" />
-        <path d="M12 7v5h4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
-        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
       </svg>
     );
   }
@@ -141,15 +130,6 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       <svg {...common}>
         <circle cx="12" cy="8" r="4" fill="currentColor" opacity="0.15" />
         <path d="M5 20c.7-4.1 3.3-6.2 7-6.2s6.3 2.1 7 6.2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-      </svg>
-    );
-  }
-
-  if (name === "key") {
-    return (
-      <svg {...common}>
-        <circle cx="8" cy="10" r="5" fill="currentColor" opacity="0.14" />
-        <path d="M12 13.5 20 21m-3-3 2-2m-5-1 2-2M8 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
       </svg>
     );
   }
@@ -217,8 +197,7 @@ function getLanguageSwitchLabels(language: PublicLanguageCode, pageCopy: PublicC
   };
 }
 
-function LanguageSwitch({ basePath, language, pageCopy }: {
-  basePath: "/" | "/login";
+function LanguageSwitch({ language, pageCopy }: {
   language: PublicLanguageCode;
   pageCopy: PublicCopy;
 }) {
@@ -232,7 +211,7 @@ function LanguageSwitch({ basePath, language, pageCopy }: {
           {language === option.code ? (
             <span aria-current="page">{option.shortLabel}</span>
           ) : (
-            <Link aria-label={labels.labels[option.code]} href={withPublicLanguage(basePath, option.code)}>
+            <Link aria-label={labels.labels[option.code]} href={withPublicLanguage("/", option.code)}>
               {option.shortLabel}
             </Link>
           )}
@@ -251,40 +230,35 @@ function SectionHeading({ children, eyebrow }: { children: ReactNode; eyebrow: s
   );
 }
 
-function LeadCard({ content }: { content: ReturnType<typeof getPublicCrmLandingV2Copy>["leadCard"] }) {
+type ProjectCopy = ReturnType<typeof getPublicCrmLandingV2Copy>["project"];
+
+function ProjectUnitCard({ content }: { content: ProjectCopy }) {
+  const { card, note, title } = content;
+
   return (
-    <figure aria-label={content.note} className={styles.leadCardFigure}>
-      <div className={styles.reminderBadge}><Icon name="clock" size={16} />{content.reminder}</div>
-      <div className={styles.leadCard}>
-        <div className={styles.leadCardTop}>
-          <span>{content.type}</span>
-          <strong>{content.status}</strong>
-        </div>
-        <h2>{content.title}</h2>
-        <p className={styles.leadReceived}>{content.received}</p>
-        <dl className={styles.leadRows}>
-          {content.rows.map(([label, value], index) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd className={index === 3 ? styles.nextAction : undefined}>
-                {index === 3 ? <Icon name="clock" size={14} /> : null}{value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <div aria-hidden="true" className={styles.progressSegments}>
-          {[0, 1, 2, 3, 4].map((segment) => <span className={segment < 3 ? styles.progressActive : undefined} key={segment} />)}
-        </div>
-        <div className={styles.progressLabels}><span>{content.firstStage}</span><span>{content.progress}</span><span>{content.lastStage}</span></div>
-        <figcaption>{content.note}</figcaption>
+    <figure className={`${styles.unitCardFigure} ${styles.unitCard}`}>
+      <div className={styles.unitCardTop}>
+        <span>{card.label}</span>
+        <strong>{card.status}</strong>
       </div>
+      <p className={styles.unitCardTitle}>{title}</p>
+      <p className={styles.unitName}>{card.unit}</p>
+      <dl className={styles.unitRows}>
+        {card.rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <figcaption>{note}</figcaption>
     </figure>
   );
 }
 
-function ProblemCard({ body, icon, title }: { body: string; icon: IconName; title: string }) {
+function FeatureCard({ body, icon, title }: { body: string; icon: IconName; title: string }) {
   return (
-    <article className={styles.problemCard}>
+    <article className={styles.featureCard}>
       <span className={styles.iconSquare}><Icon name={icon} /></span>
       <h3>{title}</h3>
       <p>{body}</p>
@@ -301,8 +275,6 @@ function CheckList({ items }: { items: readonly string[] }) {
 }
 
 export function PublicCrmLanding({
-  auditHref,
-  basePath,
   copy: legacyCopy,
   language,
   legalCopy,
@@ -314,13 +286,17 @@ export function PublicCrmLanding({
   const loginHref = withPublicLanguage("/login", language);
   const cookieHref = withPublicLanguage("/cookies", language);
   const privacyHref = withPublicLanguage("/privacy", language);
+  const developerHref = withPublicLanguage("/bautraeger", language);
+  const brokerHref = withPublicLanguage("/makler", language);
+  const featuresHref = withPublicLanguage("/funktionen", language);
+  const demoHref = withPublicLanguage("/demo", language);
   const navItems = [
-    { href: "#preview", label: copy.nav.preview },
-    { href: "#audit", label: copy.nav.audit },
-    { href: "#faq", label: copy.nav.faq },
+    { href: developerHref, label: copy.nav.developers },
+    { href: brokerHref, label: copy.nav.brokers },
+    { href: featuresHref, label: copy.nav.features },
   ] as const;
-  const problemIcons: readonly IconName[] = ["clock", "user", "chart", "calendar"];
-  const privacyIcons: readonly IconName[] = ["key", "shield", "document"];
+  const featureIcons = ["document", "user", "calendar", "chart"] as const;
+  const inventoryCounts = [24, 14, 6, 4] as const;
 
   return (
     <div
@@ -333,18 +309,18 @@ export function PublicCrmLanding({
         <div className={styles.headerInner}>
           <Brand language={language} />
           <nav aria-label="Novalure CRM" className={styles.desktopNav}>
-            {navItems.map((item) => <a href={item.href} key={item.href}>{item.label}</a>)}
+            {navItems.map((item) => <Link href={item.href} key={item.href}>{item.label}</Link>)}
           </nav>
           <div className={styles.desktopActions}>
-            <LanguageSwitch basePath={basePath} language={language} pageCopy={pageCopy} />
+            <LanguageSwitch language={language} pageCopy={pageCopy} />
             <a className={styles.loginLink} href={loginHref}><Icon name="lock" size={16} />{copy.nav.login}</a>
-            <a className={styles.navCta} href={auditHref}>{copy.nav.auditCta}</a>
+            <Link className={styles.navCta} href={demoHref}>{copy.nav.demo}</Link>
           </div>
           <div className={styles.mobileActions}>
-            <LanguageSwitch basePath={basePath} language={language} pageCopy={pageCopy} />
+            <LanguageSwitch language={language} pageCopy={pageCopy} />
             <PublicCrmMobileMenu
-              auditHref={auditHref}
-              auditLabel={copy.nav.auditCta}
+              auditHref={demoHref}
+              auditLabel={copy.nav.demo}
               closeLabel={copy.nav.menuClose}
               items={navItems}
               loginHref={loginHref}
@@ -358,86 +334,77 @@ export function PublicCrmLanding({
       <main className={styles.content}>
         <section className={styles.hero}>
           <div className={styles.heroCopy}>
+            <p className={styles.heroEyebrow}>{copy.hero.eyebrow}</p>
             <h1>{copy.hero.title} <span>{copy.hero.titleAccent}</span></h1>
             <p className={styles.heroDescription}>{copy.hero.description}</p>
             <div className={styles.heroButtons}>
-              <a className={styles.primaryButton} href={auditHref}>{copy.hero.primaryCta}</a>
-              <a className={styles.secondaryButton} href="#preview">{copy.hero.secondaryCta}</a>
+              <Link className={styles.primaryButton} href={demoHref}>{copy.nav.demo}</Link>
+              <a className={styles.secondaryButton} href="#example-project">{copy.hero.exampleCta}</a>
             </div>
             <p className={styles.accessLine}><Icon name="lock" size={17} />{copy.hero.accessLine}</p>
-            <div className={styles.regionPills}>
-              {copy.hero.regions.map((region) => <span key={region}>{region}</span>)}
-            </div>
           </div>
-          <LeadCard content={copy.leadCard} />
+          <ProjectUnitCard content={copy.project} />
         </section>
 
-        <section className={styles.section} id="problem">
-          <SectionHeading eyebrow={copy.problem.eyebrow}>{copy.problem.title}</SectionHeading>
-          <div className={styles.problemGrid}>
-            {copy.problem.cards.map((card, index) => (
-              <ProblemCard body={card.body} icon={problemIcons[index] ?? "clock"} key={card.title} title={card.title} />
-            ))}
-          </div>
-          <figure className={styles.funnelFigure}>
-            <figcaption>{copy.problem.funnelCaption}</figcaption>
-            <div className={styles.funnelRows}>
-              {copy.problem.funnel.map((row, index) => (
-                <div className={styles.funnelRow} key={row.label}>
-                  <span>{row.label}</span>
-                  <div aria-hidden="true"><i style={{ "--bar-width": `${row.value}%`, "--bar-opacity": String(1 - index * 0.2) } as CSSProperties} /></div>
-                  <strong>{row.value}&nbsp;%</strong>
+        <section className={styles.section} id="example-project">
+          <span className={styles.legacyAnchor} id="preview" />
+          <SectionHeading eyebrow={copy.project.eyebrow}>{copy.project.title}</SectionHeading>
+          <p className={styles.sectionDescription}>{copy.project.description}</p>
+          <div className={styles.previewShell}>
+            <h3 className={styles.inventoryTitle}>{copy.project.inventoryTitle}</h3>
+            <dl className={styles.inventoryStats}>
+              {copy.project.inventoryLabels.map((label, index) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{inventoryCounts[index]}</dd>
                 </div>
               ))}
-            </div>
-            <p>{copy.problem.funnelNote}</p>
-          </figure>
+            </dl>
+            <ol className={styles.projectSteps} role="list">
+              {copy.project.steps.map((step, index) => (
+                <li key={step.title}>
+                  <span aria-hidden="true">{index + 1}</span>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
         </section>
 
-        <section className={styles.section} id="preview">
-          <SectionHeading eyebrow={copy.preview.eyebrow}>{copy.preview.title}</SectionHeading>
-          <p className={styles.sectionDescription}>{copy.preview.description}</p>
-          <div className={styles.previewShell}>
-            <div className={styles.previewLayout}>
-              <figure className={styles.pipelineFigure}>
-                <figcaption>{copy.preview.pipelineCaption}</figcaption>
-                <div className={styles.pipelineGrid}>
-                  {copy.preview.columns.map((column) => (
-                    <div className={styles.pipelineColumn} key={column.title}>
-                      <div className={styles.pipelineColumnHeader}><span>{column.title}</span><strong>{column.cards.length}</strong></div>
-                      <div className={styles.pipelineCards}>
-                        {column.cards.map((card) => (
-                          <div className={styles.pipelineCard} key={`${card.source}-${card.title}`}>
-                            <span>{card.source}</span><strong>{card.title}</strong><small>{card.action}</small>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </figure>
-              <figure className={styles.inboxFigure}>
-                <figcaption>{copy.preview.inboxCaption}</figcaption>
-                <div className={styles.inboxList}>
-                  {copy.preview.inbox.map((item) => (
-                    <div className={styles.inboxRow} key={`${item.time}-${item.title}`}>
-                      <time>{item.time}</time>
-                      <div><strong>{item.title}</strong><span>{item.status}</span></div>
-                      <b>{item.owner}</b>
-                    </div>
-                  ))}
-                </div>
-              </figure>
+        <section className={styles.section} id="features">
+          <SectionHeading eyebrow={copy.features.eyebrow}>{copy.features.title}</SectionHeading>
+          <div className={styles.featureGrid}>
+            {copy.features.items.map((item, index) => (
+              <FeatureCard body={item.body} icon={featureIcons[index] ?? "document"} key={item.title} title={item.title} />
+            ))}
+          </div>
+          <div className={styles.sectionAction}>
+            <Link className={styles.secondaryButton} href={featuresHref}>{copy.features.cta}</Link>
+          </div>
+        </section>
+
+        <section className={styles.section} id="web-expose">
+          <SectionHeading eyebrow={copy.analytics.eyebrow}>{copy.analytics.title}</SectionHeading>
+          <p className={styles.sectionDescription}>{copy.analytics.description}</p>
+          <figure className={styles.analyticsFigure}>
+            <Image
+              alt={copy.analytics.imageAlt}
+              height={388}
+              src="/landing-assets/web-expose-analytics.webp"
+              unoptimized
+              width={1496}
+            />
+            <figcaption>{copy.analytics.imageCaption}</figcaption>
+          </figure>
+          <div className={styles.analyticsLists}>
+            <div>
+              <h3><Icon name="chart" size={21} />{copy.analytics.measuresTitle}</h3>
+              <CheckList items={copy.analytics.measures} />
             </div>
-            <div className={styles.privacyLists}>
-              <div>
-                <h3><Icon name="check" size={21} />{copy.preview.visibleTitle}</h3>
-                <CheckList items={copy.preview.visible} />
-              </div>
-              <div className={styles.protectedList}>
-                <h3><Icon name="shield" size={21} />{copy.preview.protectedTitle}</h3>
-                <CheckList items={copy.preview.protected} />
-              </div>
+            <div className={styles.analyticsContext}>
+              <h3><Icon name="shield" size={21} />{copy.analytics.contextTitle}</h3>
+              <CheckList items={copy.analytics.context} />
             </div>
           </div>
         </section>
@@ -445,41 +412,16 @@ export function PublicCrmLanding({
         <section className={styles.section} id="audiences">
           <SectionHeading eyebrow={copy.audiences.eyebrow}>{copy.audiences.title}</SectionHeading>
           <div className={styles.audienceGrid}>
-            {copy.audiences.items.map((item) => (
-              <article className={styles.audienceCard} key={item.title}>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-                <div><span>{copy.audiences.resultLabel}</span><strong>{item.result}</strong></div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className={styles.section} id="audit">
-          <SectionHeading eyebrow={copy.audit.eyebrow}>{copy.audit.title}</SectionHeading>
-          <div className={styles.auditSteps}>
-            {copy.audit.steps.map((step, index) => (
-              <article key={step.title}>
-                <span>{index + 1}</span><h3>{step.title}</h3><p>{step.body}</p>
-              </article>
-            ))}
-          </div>
-          <div className={styles.auditOutcome}>
-            <h3>{copy.audit.outcomesTitle}</h3>
-            <CheckList items={copy.audit.outcomes} />
-            <a className={styles.primaryButton} href={auditHref}>{copy.audit.cta}</a>
-          </div>
-        </section>
-
-        <section className={styles.section} id="privacy">
-          <SectionHeading eyebrow={copy.privacy.eyebrow}>{copy.privacy.title}</SectionHeading>
-          <div className={styles.privacyGrid}>
-            {copy.privacy.items.map((item, index) => (
-              <article key={item.title}>
-                <span><Icon name={privacyIcons[index] ?? "shield"} size={23} /></span>
-                <h3>{item.title}</h3><p>{item.body}</p>
-              </article>
-            ))}
+            <article className={`${styles.audienceCard} ${styles.developerCard}`}>
+              <h3>{copy.audiences.developers.title}</h3>
+              <p>{copy.audiences.developers.body}</p>
+              <Link href={developerHref}>{copy.audiences.developers.cta} <span aria-hidden="true">→</span></Link>
+            </article>
+            <article className={styles.audienceCard}>
+              <h3>{copy.audiences.brokers.title}</h3>
+              <p>{copy.audiences.brokers.body}</p>
+              <Link href={brokerHref}>{copy.audiences.brokers.cta} <span aria-hidden="true">→</span></Link>
+            </article>
           </div>
         </section>
 
@@ -496,9 +438,10 @@ export function PublicCrmLanding({
         </section>
 
         <section className={styles.finalCta} id="contact">
+          <span className={styles.legacyAnchor} id="audit" />
           <h2>{copy.finalCta.title}</h2>
           <p>{copy.finalCta.description}</p>
-          <a className={styles.primaryButton} href={auditHref}>{copy.finalCta.cta}</a>
+          <Link className={styles.primaryButton} href={demoHref}>{copy.nav.demo}</Link>
         </section>
       </main>
 

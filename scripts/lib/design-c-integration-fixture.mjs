@@ -19,7 +19,11 @@ import {
  * production-predecessor test. Every pinned migration runs unchanged; these
  * local role names satisfy its real guard without weakening production SQL.
  */
-export async function startDesignCIntegrationDatabase({ accountLanguagePreference = false, bookingSetup = false } = {}) {
+export async function startDesignCIntegrationDatabase({
+  accountLanguagePreference = false,
+  bookingSetup = false,
+  currentBrowser = false,
+} = {}) {
   const cluster = await startLocalSalesDb();
   let owner, bootstrap, runtime;
   try {
@@ -75,6 +79,26 @@ export async function startDesignCIntegrationDatabase({ accountLanguagePreferenc
       // Current browser acceptance needs the additive personal-language table;
       // predecessor-only database tests keep their original schema by default.
       ...(accountLanguagePreference ? ["110_account_ui_language_preference.sql"] : []),
+      // Integrated browser pages exercise these real modules. The older
+      // predecessor fixtures retain their pinned schema by default.
+      ...(currentBrowser ? [
+        "146_ai_credit_billing.sql",
+        "152_ai_billing_admin.sql",
+        "153_ai_billing_runtime_acl.sql",
+        "154_automation_graph.sql",
+        "155_web_expose.sql",
+        "157_newsletter_workspace.sql",
+        "161_crm_notification_preferences.sql",
+        "163_web_expose_resources.sql",
+        "165_automation_mail.sql",
+        "168_crm_integrations.sql",
+        "175_web_expose_templates.sql",
+        "176_newsletter_schedules.sql",
+        "184_web_expose_brand_layout.sql",
+      ] : []),
+      // Current booking navigation also runs the shared private unit loader.
+      ...(bookingSetup ? ["186_property_unit_details.sql"] : []),
+      ...(currentBrowser ? ["188_crm_ai_assistant.sql"] : []),
     ]) {
       if (bookingSetup && filename === "108_universal_booking.sql") {
         const { reviewedNumber108Coexistence } = await import("../db-migrate.mjs");

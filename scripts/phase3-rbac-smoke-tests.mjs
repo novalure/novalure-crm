@@ -165,6 +165,22 @@ test("write routes require server-side technical permission and product access g
   assert.match(tasksRoute, /export const POST = withCrmSalesWrite\(postHandler\)/);
   assert.match(wrapper, /tasks: \{ table: "tasks", entity: "task", capability: "workspace:operate" \}/);
   assert.match(readText("src/lib/crm-command.ts"), /hasProductCapability\(freshSession\.productRole, input\.capability\)/);
-  assert.match(newsletterRoute, /requirePermissionAndProductCapability\(request, "newsletter:send", "newsletter:send"\)/);
-  assert.match(newsletterRoute, /evaluateOutboundConsent/);
+  // The legacy endpoint delegates to the versioned workspace endpoint; verify
+  // authorization and consent at the layers that now enforce them.
+  const mailingRoute = readText("src/app/api/crm/newsletter/route.ts");
+  const mailingRepo = readText("src/lib/db/newsletter-workspace-repository.ts");
+  assert.match(newsletterRoute, /POST as writeSavedMailings/);
+  assert.match(newsletterRoute, /export const POST = writeSavedMailings/);
+  assert.match(mailingRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "workspace:operate" \}\)/);
+  assert.match(mailingRoute, /sendNewsletterBatch\(auth\.session, input, metadata\)/);
+  assert.match(mailingRepo, /session\.permissions\.includes\("newsletter:send"\) && hasProductCapability\(session\.productRole, "newsletter:send"\) && !session\.serviceIdentity/);
+  const approveStart = mailingRepo.indexOf("export async function approveNewsletter(");
+  const batchStart = mailingRepo.indexOf("export async function sendNewsletterBatch(");
+  const testSendStart = mailingRepo.indexOf("export async function sendNewsletterTest(");
+  assert.ok(approveStart >= 0 && batchStart > approveStart && testSendStart > batchStart);
+  const approve = mailingRepo.slice(approveStart, batchStart);
+  const batch = mailingRepo.slice(batchStart, testSendStart);
+  assert.match(approve, /requireSend\(fresh\)/);
+  assert.match(batch, /requireSend\(fresh\)/);
+  assert.match(batch, /evaluateOutboundConsent\(\{ session: fresh/);
 });

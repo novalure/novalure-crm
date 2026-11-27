@@ -400,8 +400,26 @@ export type PropertyUnitBoardScope = {
   label: string;
   originAssetId?: string;
   projectId?: string;
+  /** undefined permits project inventory; [] explicitly means this object has no assigned units. */
   unitIds?: string[];
 };
+
+export function createPropertyUnitBoardScope(asset: PropertyAssetSummary | undefined): PropertyUnitBoardScope | undefined {
+  if (!asset) return undefined;
+  const projectInventory = asset.kind === "project" && Boolean(asset.projectId);
+  return {
+    key: `${asset.id}:${projectInventory ? `project:${asset.projectId}` : asset.unitIds.join("|") || "empty"}`,
+    label: asset.title,
+    originAssetId: asset.id,
+    projectId: asset.projectId,
+    unitIds: projectInventory ? undefined : [...asset.unitIds],
+  };
+}
+
+export function isUnitInPropertyBoardScope(unit: PropertyUnit, scope: PropertyUnitBoardScope | null | undefined, focusedIds?: ReadonlySet<string>) {
+  if (scope?.projectId && unit.projectId !== scope.projectId) return false;
+  return scope?.unitIds === undefined || (focusedIds ?? new Set(scope.unitIds)).has(unit.id);
+}
 
 export type PropertyUnitObjectScope = {
   originAssetId?: string;
@@ -555,7 +573,7 @@ export function buildPropertyAssets(input: {
   units: PropertyUnit[];
 }): PropertyAssetSummary[] {
   const projectById = new Map(input.projects.map((project) => [project.id, project]));
-  const unitById = new Map(input.units.map((unit) => [unit.id, unit]));
+  const buildingById = new Map(input.buildings.map((building) => [building.id, building]));
   const unitsByProject = groupBy(input.units, (unit) => unit.projectId);
   const buildingsByProject = groupBy(input.buildings, (building) => building.projectId);
   const reservationsByProject = groupBy(input.reservations, (reservation) => reservation.projectId);
@@ -564,18 +582,22 @@ export function buildPropertyAssets(input: {
   const mediaByProperty = groupBy(input.propertyMedia ?? [], (item) => item.propertyId);
   const textBlocksByProperty = groupBy(input.propertyTextBlocks ?? [], (item) => item.propertyId);
   const assets: PropertyAssetSummary[] = [];
+  const assignedUnitIdsByListing = new Map<string, Set<string>>();
 
   for (const listing of input.sellerListings) {
-    const listingUnits = listing.unitId
-      ? [unitById.get(listing.unitId)].filter((unit): unit is PropertyUnit => Boolean(unit))
-      : listing.projectId
-        ? unitsByProject.get(listing.projectId) ?? []
-        : [];
+    // Same saved relation used by exposé, inquiry and booking repositories.
+    // A project is a container, not an implicit ownership relation.
+    const listingUnits = (unitsByProject.get(listing.projectId) ?? []).filter((unit) =>
+      unit.workspaceId === listing.workspaceId && (unit.id === listing.unitId || unit.sellerListingId === listing.id));
     const listingUnitIds = new Set(listingUnits.map((unit) => unit.id));
+    assignedUnitIdsByListing.set(listing.id, listingUnitIds);
     const projectReservations = listing.projectId ? reservationsByProject.get(listing.projectId) ?? [] : [];
-    const listingReservations = listing.unitId
-      ? projectReservations.filter((reservation) => listingUnitIds.has(reservation.unitId))
-      : projectReservations;
+    const listingReservations = projectReservations.filter((reservation) =>
+      reservation.workspaceId === listing.workspaceId && listingUnitIds.has(reservation.unitId));
+    const listingBuildingIds = new Set(listingUnits.flatMap((unit) => {
+      const building = buildingById.get(unit.buildingId);
+      return building?.workspaceId === listing.workspaceId && building.projectId === listing.projectId ? [building.id] : [];
+    }));
     const listingCostItems = costItemsByProperty.get(listing.id) ?? [];
     const listingDocuments = documentsByProperty.get(listing.id) ?? [];
     const listingMedia = mediaByProperty.get(listing.id) ?? [];
@@ -596,7 +618,7 @@ export function buildPropertyAssets(input: {
       availableFrom: listing.availableFrom,
       availableFromText: listing.availableFromText,
       availableUnits: listingUnits.filter((unit) => unit.status === "available").length,
-      buildingCount: listing.projectId ? buildingsByProject.get(listing.projectId)?.length ?? 0 : 0,
+      buildingCount: listingBuildingIds.size,
       channelPriceVisibility: listing.channelPriceVisibility,
       contactLabel: listing.contactName || listing.contactEmail || listing.contactPhone || listing.ownerContactId || listing.sellerLeadId,
       costItemCount: listingCostItems.length,
@@ -617,7 +639,7 @@ export function buildPropertyAssets(input: {
       mandateId: listing.mandateId,
       monthlyCostsGross: listing.monthlyCostsGross,
       portalMappingStatus: listing.portalMappingStatus,
-      price: unitValue,
+      price: listingUnits.length ? unitValue : undefined,
       priceVisibility,
       projectId: listing.projectId,
       projectName: projectById.get(listing.projectId)?.name ?? "Ohne Projekt",
@@ -656,17 +678,21 @@ export function buildPropertyAssets(input: {
     input.sellerListings
       .filter((listing) => {
         if (!listing.projectId) return false;
-        const projectUnits = unitsByProject.get(listing.projectId) ?? [];
-        return !listing.unitId || (projectUnits.length === 1 && projectUnits[0]?.id === listing.unitId);
+        const project = projectById.get(listing.projectId);
+        if (project?.workspaceId !== listing.workspaceId) return false;
+        const projectUnits = (unitsByProject.get(listing.projectId) ?? []).filter((unit) => unit.workspaceId === listing.workspaceId);
+        const assignedUnitIds = assignedUnitIdsByListing.get(listing.id);
+        return projectUnits.length > 0 && projectUnits.every((unit) => assignedUnitIds?.has(unit.id));
       })
       .map((listing) => listing.projectId)
       .filter(Boolean),
   );
   for (const project of input.projects) {
-    const projectUnits = unitsByProject.get(project.id) ?? [];
+    const projectUnits = (unitsByProject.get(project.id) ?? []).filter((unit) => unit.workspaceId === project.workspaceId);
     if (projectIdsCoveredByListing.has(project.id)) continue;
-    const projectReservations = reservationsByProject.get(project.id) ?? [];
-    const projectBuildings = buildingsByProject.get(project.id) ?? [];
+    const projectUnitIds = new Set(projectUnits.map((unit) => unit.id));
+    const projectReservations = (reservationsByProject.get(project.id) ?? []).filter((reservation) => reservation.workspaceId === project.workspaceId && projectUnitIds.has(reservation.unitId));
+    const projectBuildings = (buildingsByProject.get(project.id) ?? []).filter((building) => building.workspaceId === project.workspaceId);
     const value = projectUnits.reduce((sum, unit) => sum + unit.priceCents / 100, 0);
     const area = projectUnits.reduce((sum, unit) => sum + unit.areaSqm, 0);
 

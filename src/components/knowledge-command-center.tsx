@@ -19,6 +19,7 @@ import { getKnowledgeLifecycleCopy, knowledgeMonitoringError } from "@/lib/knowl
 import { KnowledgeLifecyclePanel } from "@/components/knowledge-lifecycle-panel";
 import { KnowledgeMonitoringPanel } from "@/components/knowledge-monitoring-panel";
 import { KnowledgeMaintenancePanel } from "@/components/knowledge-maintenance-panel";
+import { SharedLearningPanel } from "@/components/shared-learning-panel";
 import { WebsiteIntegrationPanel } from "@/components/website-integration-panel";
 import { getWebsiteIntegrationCopy } from "@/lib/integrations/website-integration-copy";
 import {
@@ -2147,6 +2148,7 @@ function KnowledgeCenterContent({
           )}
         </>
       ) : null}
+      <SharedLearningPanel key={snapshot?.workspace.id ?? workspaceId ?? "session"} scopedPath={scopedPath} />
     </section>
   );
 }

@@ -633,7 +633,7 @@ export async function persistWebsiteFormSubmission(input: {
   const leadType = websiteSalesMetadata ? "Website Sales" : normalizeLeadType(lookup.funnelAudience);
   const assignedOwnerId = form.ownerMode === "user" && isUuid(lookup.ownerUserId) ? lookup.ownerUserId : null;
 
-  const contactId = await upsertContact({
+  const contactResolution = await upsertContact({
     answers,
     consentLabel: consent.marketing && !form.doubleOptIn ? "Opt-in" : "Nur CRM",
     email,
@@ -649,6 +649,7 @@ export async function persistWebsiteFormSubmission(input: {
     websiteSalesMetadata,
     workspaceId: lookup.workspaceId,
   });
+  const contactId = contactResolution.id;
 
   const lead = form.crmTarget === "contact"
     ? null
@@ -691,6 +692,7 @@ export async function persistWebsiteFormSubmission(input: {
           score >= 70,
           JSON.stringify({
             answers,
+            contactResolution: { status: contactResolution.status, identityVerified: false },
             businessLine: websiteSalesMetadata?.businessLine,
             consent,
             formId: lookup.id,
@@ -758,7 +760,10 @@ export async function persistWebsiteFormSubmission(input: {
       )
     : null;
 
-  if (contactId && consent.privacy) {
+  // A public address match is not proof of identity or new consent authority.
+  // Preserve the submitted evidence on this enquiry instead of altering an
+  // existing contact or creating a new global consent grant for that contact.
+  if (contactId && consent.privacy && !contactResolution.reusedExisting) {
     await queryOne(
       `
         insert into consent_records (workspace_id, contact_id, project_id, channel, status, source, metadata)
@@ -777,7 +782,7 @@ export async function persistWebsiteFormSubmission(input: {
     );
   }
 
-  if (contactId && consent.marketing) {
+  if (contactId && consent.marketing && !contactResolution.reusedExisting) {
     await queryOne(
       `
         insert into consent_records (workspace_id, contact_id, project_id, channel, status, source, metadata)
@@ -978,7 +983,7 @@ export async function persistWebsiteFormSubmission(input: {
           workspaceId: lookup.workspaceId,
         })
       : null,
-    consent.marketing && (form.template === "newsletter" || form.actions.newsletterList)
+    consent.marketing && !contactResolution.reusedExisting && (form.template === "newsletter" || form.actions.newsletterList)
       ? writeCrmAnalyticsEvent({
           channel: "email",
           contactId,
@@ -1033,64 +1038,33 @@ async function upsertContact(input: {
   websiteSalesMetadata: Record<string, unknown> | null;
   workspaceId: string;
 }) {
-  // Contact identity is project-scoped by design. Reusing a same-email contact
-  // from another project would silently enrich a resource outside the form's
-  // registry-bound project and violate the public ingestion boundary.
-  const existing = input.email || input.phone
-    ? await queryOne<IdRow>(
-        `
-          select id
-          from contacts
-          where workspace_id = $1
-            and project_id is not distinct from $4::uuid
-            and (
-              ($2::text <> '' and lower(email) = lower($2))
-              or ($3::text <> '' and phone = $3)
-            )
-          order by updated_at desc
-          limit 1
-        `,
+  // A public submission may suggest a match, never change existing master data.
+  // Keep the registry-bound tenant/project scope, serialize shared identifiers,
+  // and do not choose arbitrarily when email and phone identify different rows.
+  const keys = [
+    ...(input.email ? [`public-form-contact:${input.workspaceId}:${input.projectId ?? "none"}:email:${input.email.trim().toLowerCase()}`] : []),
+    ...(input.phone ? [`public-form-contact:${input.workspaceId}:${input.projectId ?? "none"}:phone:${input.phone.trim()}`] : []),
+  ].sort();
+  for (const key of keys) {
+    await queryOne("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+  }
+  const matches = input.email || input.phone
+    ? await queryRows<IdRow>(
+        `select id from contacts
+         where workspace_id = $1
+           and project_id is not distinct from $4::uuid
+           and (($2::text <> '' and lower(email) = lower($2))
+             or ($3::text <> '' and phone = $3))
+         order by id limit 2 for share`,
         [input.workspaceId, input.email, input.phone, input.projectId],
       )
-    : null;
-
-  if (existing) {
-    const updated = await queryOne<IdRow>(
-      `
-        update contacts
-        set
-          owner_user_id = coalesce(owner_user_id, $3::uuid),
-          name = coalesce(nullif($5, ''), name),
-          role = $6,
-          source = $7,
-          intent = $8,
-          consent_label = $9,
-          email = coalesce(nullif($10, ''), email),
-          phone = coalesce(nullif($11, ''), phone),
-          metadata = metadata || $12::jsonb,
-          updated_at = now()
-        where workspace_id = $1 and id = $2
-          and project_id is not distinct from $4::uuid
-        returning id
-      `,
-      [
-        input.workspaceId,
-        existing.id,
-        input.ownerUserId,
-        input.projectId,
-        input.name,
-        input.leadType,
-        input.source,
-        input.intent,
-        input.consentLabel,
-        input.email,
-        input.phone,
-        JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata }),
-      ],
-    );
-    if (!updated) throw new Error("Contact project scope changed during submission");
-    return updated.id;
+    : [];
+  if (matches.length === 1) {
+    return { id: matches[0].id, reusedExisting: true, status: "unverified_unique_match" as const };
   }
+  // Conflicting matches remain untouched. Retain the incoming identity as a
+  // separate reviewable contact, rather than merging two existing customers.
+  const resolutionStatus = matches.length > 1 ? "ambiguous_match_review_required" : "new_contact";
 
   const contact = await queryOne<IdRow>(
     `
@@ -1111,11 +1085,11 @@ async function upsertContact(input: {
       input.consentLabel,
       input.email,
       input.phone,
-      JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata }),
+      JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata, contactResolution: { status: resolutionStatus, identityVerified: false } }),
     ],
   );
 
-  return contact?.id ?? null;
+  return { id: contact?.id ?? null, reusedExisting: false, status: resolutionStatus };
 }
 
 function getWebsiteSalesMetadata(input: {

@@ -16,6 +16,7 @@ import {
 } from "@/lib/i18n";
 import { productRoles, type ProductRole } from "@/lib/product-model";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { RoleActionExplanation } from "@/components/role-action-explanation";
 
 type CustomerAccessCockpitProps = {
   activeProjectId?: string;
@@ -886,6 +887,7 @@ function PersistedCustomerAccessCockpit({
                   </select>
                 </label>
               </div>
+              <RoleActionExplanation role={inviteDraft.role} productRole={inviteDraft.productRole} language={language}/>
               <button
                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 disabled={saveState === "loading"}
@@ -965,6 +967,7 @@ function PersistedCustomerAccessCockpit({
                   </select>
                 </label>
               </div>
+              <RoleActionExplanation role={userDraft.role} productRole={userDraft.productRole} language={language}/>
               <button
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:opacity-60"
                 disabled={saveState === "loading" || !userDraft.userId}

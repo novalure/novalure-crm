@@ -1,0 +1,50 @@
+name: libheif
+builder: host
+# renovate: datasource=github-releases depName=strukturag/libheif extractVersion=^v(?<version>.*)$
+version: "1.23.7"
+npm: "@ai-ecoverse/wasm-libheif"
+summary: "libheif HEIF/HEIC/AVIF decoder (libde265 HEVC, dav1d AV1) with heif-convert and heif-info"
+source:
+  url: "https://github.com/strukturag/libheif/archive/refs/tags/v{{version}}.tar.gz"
+  sha256: "90e389caad285ca4946461d56d1c115e56bcbb5141d9038050282af91064fbc7"
+sources:
+  libde265:
+    version: "1.1.3"
+    url: "https://github.com/strukturag/libde265/releases/download/v1.1.3/libde265-1.1.3.tar.gz"
+    sha256: "554228bd17788c99a7e63b37ab5634722190e6e2bf60c1dcb01cef328e133905"
+  dav1d:
+    version: "1.5.4"
+    url: "https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz"
+    sha256: "686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5"
+  meson:
+    version: "1.12.1"
+    url: "https://files.pythonhosted.org/packages/source/m/meson/meson-1.12.1.tar.gz"
+    sha256: "ab0a6ca09f8ef70c564c8241fb5a23957886a0b53fb58412b5e07eaf07dba743"
+dependencies:
+  build:
+    - "@ai-ecoverse/wasm-zlib@1.3.1-4"
+    - "@ai-ecoverse/wasm-libjpeg-turbo@3.1.2-4"
+    - "@ai-ecoverse/wasm-libpng@1.6.59-3"
+  host: []
+  run: []
+about:
+  homepage: https://github.com/ai-ecoverse/homescoop/tree/main/packages/libheif
+  license: LGPL-3.0-or-later AND MIT AND BSD-2-Clause
+  notes: |
+    homescoop#304. Optional package, never in a base set: it contains an
+    HEVC decoder (libde265), and HEVC is patent-encumbered. libheif and
+    libde265 are LGPL-3.0-or-later, so the package stays relinkable: the
+    static libheif.a, libde265.a and libdav1d.a, their headers and .pc
+    files, and the heif-dec / heif-info application objects ship in lib/,
+    include/ and share/libheif/relink (see README). dav1d decodes AVIF.
+    No encoders (no x265, no aom), no plugin loading, no threads. The
+    examples (heif-dec, heif-info) are MIT; heif-convert is heif-dec.
+    1.23.6-2: the relink kit's js/ holds every --js-library of the link
+    flags, not just slicc-writev.js (homescoop#398: main's CLI flags also
+    name slicc-linkat.js and slicc-uname.js, so relink.sh failed on a
+    rebuild); relink-check checks that ldflags.txt names only files in the
+    kit (no build-host path). heif-dec and heif-info link at -O2 (the
+    libraries stay -O3): at -O3 emcc minified the wasm's import and export
+    names, so check-slicc-cred (homescoop#459) could not see the slicc
+    credential library, nor slicc-kernel the slicc_* exports. Rebuilt with
+    main's slicc shims (credentials, linkat, uname).

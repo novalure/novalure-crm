@@ -1,10 +1,102 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rmdir, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import path from "node:path";
 import { applySalesSchema, LocalSalesPool, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { candidateFixtureScope, reserveCandidateWorkspaces, seedCandidateIntegration } from "./lib/qa-public-form-fixture.mjs";
+
+test("public candidate namespace is attempt-stable and an uncertain claim is never retried on the runner", async () => {
+  const first = candidateFixtureScope("GOLIVETEST_1234567_1");
+  assert.deepEqual(first, candidateFixtureScope("GOLIVETEST_1234567_1"));
+  assert.notEqual(first.own.workspace, first.foreign.workspace);
+  assert.notEqual(first.marker, candidateFixtureScope("GOLIVETEST_1234567_2").marker);
+  assert.notEqual(first.own.workspace, candidateFixtureScope("GOLIVETEST_1234568_1").own.workspace);
+  assert.throws(() => candidateFixtureScope("GOLIVETEST_other"), /QA_CANDIDATE_RUN_SCOPE_INVALID/);
+
+  const runner = await mkdtemp(path.join(tmpdir(), "crm-candidate-runner-"));
+  let calls = 0;
+  const pool = { async query() { calls++; throw new Error("unconfirmed commit outcome"); } };
+  try {
+    await assert.rejects(reserveCandidateWorkspaces(pool, first, runner), /QA_CANDIDATE_RUN_RESERVATION_UNCONFIRMED/);
+    await assert.rejects(reserveCandidateWorkspaces(pool, first, runner), /QA_CANDIDATE_RUN_ALREADY_USED/);
+    assert.equal(calls, 1);
+  } finally {
+    await unlink(path.join(runner, "novalure-public-candidate-" + first.marker + ".once"));
+    await rmdir(runner);
+  }
+});
+
+test("public candidate claims are atomic and conflict updates stay within their fixture on PostgreSQL", { timeout: 60_000 }, async () => {
+  const db = await startLocalSalesDb();
+  try {
+    await db.admin.query(`create table public.workspaces (
+      id uuid primary key, name text not null, operating_model text not null, public_key text unique
+    );
+    create table public.external_integrations (
+      id uuid primary key default gen_random_uuid(), public_site_key text unique not null,
+      workspace_id uuid not null, project_id uuid not null, form_id uuid not null,
+      integration_type text, status text, mode text, allowed_origins text[], capabilities text[],
+      configuration jsonb, metadata jsonb
+    );
+    create table public.external_integration_widget_configs (
+      integration_id uuid primary key, workspace_id uuid not null, brand_name text, assistant_name text,
+      enabled_capabilities text[], lead_capture_enabled boolean, chat_enabled boolean
+    );`);
+
+    const runners = ["run-a", "run-b", "run-c"].map((name) => path.join(db.directory, name));
+    await Promise.all(runners.map((directory) => mkdir(directory)));
+    const priorId = randomUUID();
+    await db.admin.query("insert into workspaces values ($1,'SYNTHETIC Candidate prior','self_service_customer','qa-prior')", [priorId]);
+    const scope = candidateFixtureScope("GOLIVETEST_1234567_1");
+    const race = await Promise.allSettled(runners.slice(0, 2).map((directory) => reserveCandidateWorkspaces(db.admin, scope, directory)));
+    assert.equal(race.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(race.find((result) => result.status === "rejected")?.reason.message, "QA_CANDIDATE_RUN_ALREADY_USED");
+    assert.deepEqual((await db.admin.query("select id from workspaces order by id")).rows.map((row) => row.id),
+      [priorId, scope.own.workspace, scope.foreign.workspace].sort());
+
+    const collision = candidateFixtureScope("GOLIVETEST_1234567_2");
+    await db.admin.query("insert into workspaces values ($1,'FOREIGN TEST','self_service_customer',$2)",
+      [randomUUID(), collision.foreign.key]);
+    await assert.rejects(reserveCandidateWorkspaces(db.admin, collision, runners[2]), /QA_CANDIDATE_RUN_ALREADY_USED/);
+    assert.equal((await db.admin.query("select 1 from workspaces where id=$1", [collision.own.workspace])).rowCount, 0);
+    assert.deepEqual((await db.admin.query("select name,public_key from workspaces where id=$1", [priorId])).rows,
+      [{ name: "SYNTHETIC Candidate prior", public_key: "qa-prior" }]);
+
+    const fixture = { workspace: scope.own.workspace, project: randomUUID(), form: randomUUID() };
+    const key = "nov_pk_" + fixture.form.replaceAll("-", "");
+    const origin = "http://127.0.0.1:3000";
+    await seedCandidateIntegration(db.admin, fixture, key, origin);
+    await seedCandidateIntegration(db.admin, fixture, key, origin);
+    const snapshot = async () => (await db.admin.query(`select i.*,w.workspace_id as widget_workspace,
+      w.chat_enabled from external_integrations i join external_integration_widget_configs w on w.integration_id=i.id
+      where i.public_site_key=$1`, [key])).rows;
+    const original = await snapshot();
+    assert.equal(original.length, 1);
+    for (const changed of [{ workspace: scope.foreign.workspace }, { project: randomUUID() }, { form: randomUUID() }]) {
+      await assert.rejects(seedCandidateIntegration(db.admin, { ...fixture, ...changed }, key, "https://foreign.example.invalid"),
+        /QA_CANDIDATE_INTEGRATION_SCOPE_CONFLICT/);
+      assert.deepEqual(await snapshot(), original);
+    }
+
+    await db.admin.query("update external_integration_widget_configs set workspace_id=$1,chat_enabled=false",
+      [scope.foreign.workspace]);
+    const collisionSnapshot = await snapshot();
+    const client = await db.admin.connect();
+    try {
+      await client.query("begin");
+      await assert.rejects(seedCandidateIntegration(client, fixture, key, "https://unexpected.example.invalid"),
+        /QA_CANDIDATE_WIDGET_SCOPE_CONFLICT/);
+    } finally {
+      try { await client.query("rollback"); } finally { client.release(); }
+    }
+    assert.deepEqual(await snapshot(), collisionSnapshot);
+  } finally {
+    await db.stop();
+  }
+});
 
 async function nativePgTool(name, args) {
   const executable = process.env.CRM_QA_PG_BIN

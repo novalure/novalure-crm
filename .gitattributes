@@ -11,3 +11,9 @@ qa/knowledge-center-completion-2026-10-19/typecheck.log whitespace=-blank-at-eof
 qa/knowledge-center-package3-2026-10-19/build.txt whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
 qa/knowledge-center-package3-2026-10-19/lint.txt whitespace=-blank-at-eof
 qa/knowledge-center-package3-2026-10-19/typecheck.txt whitespace=-blank-at-eof
+
+# Preserve the shipped HEIC upstream notices and unified patch context bytes.
+public/third-party/heic-decoder/THIRD-PARTY-NOTICES.md whitespace=-blank-at-eol
+public/third-party/heic-decoder/upstream-build/emscripten-decode.patch whitespace=-blank-at-eol
+public/third-party/heic-decoder/upstream-build/heif-dec-write-errors.patch whitespace=-blank-at-eol,-blank-at-eof
+public/third-party/heic-decoder/upstream-build/no-embind.patch whitespace=-blank-at-eol

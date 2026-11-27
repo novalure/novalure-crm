@@ -1,0 +1,11 @@
+--- a/libheif/api/libheif/heif.cc
++++ b/libheif/api/libheif/heif.cc
+@@ -20,7 +20,7 @@
+ 
+ #include "heif.h"
+ 
+-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_STANDALONE_WASM__)
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_STANDALONE_WASM__) && !defined(HOMESCOOP_NO_EMBIND)
+ #include "api_structs.h"
+ #include "heif_emscripten.h"
+ #endif

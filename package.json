@@ -8,11 +8,21 @@
     "npm": ">=11 <12"
   },
   "scripts": {
+    "test:microsoft-calendar-isolation": "node --conditions=react-server --experimental-test-module-mocks --import tsx --test scripts/microsoft-calendar-isolation-tests.ts scripts/microsoft-calendar-route-isolation-tests.ts scripts/microsoft-booking-availability-tests.ts && node --conditions=react-server --import tsx --test scripts/microsoft-client-auth-tests.ts",
+    "test:mailbox-deployment-boundary": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/microsoft-mailbox-production-target-tests.ts scripts/microsoft-dedicated-identity-mode-tests.ts scripts/microsoft-mailbox-client-separation-tests.ts scripts/microsoft-verified-scope-boundary-tests.ts scripts/mailbox-visible-state-tests.ts scripts/mailbox-oauth-session-binding-tests.ts scripts/build-metadata-tests.ts",
+    "test:microsoft-federated": "npm run test:microsoft-calendar-isolation && npm run test:mailbox-deployment-boundary && node --test scripts/mailbox-release-lineage-tests.mjs && node --conditions=react-server --experimental-test-module-mocks --import tsx --test scripts/mailbox-read-pilot-http-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/mailbox-assertion-availability-tests.ts scripts/mailbox-provider-deadline-tests.ts scripts/mailbox-delta-bound-inbox-tests.ts scripts/mailbox-microsoft-folder-integrity-tests.ts scripts/mailbox-checkpoint-auxiliary-tests.ts scripts/mailbox-contact-backfill-tests.ts scripts/microsoft-auto-sync-post-lock-tests.ts scripts/microsoft-mailbox-manual-folder-tests.ts scripts/microsoft-manual-refresh-lease-tests.ts scripts/microsoft-mailbox-body-completeness-tests.ts scripts/projectless-personal-mail-hints-tests.ts scripts/gmail-label-sync-flow-tests.ts scripts/gmail-label-integrity-tests.ts scripts/mailbox-objection-review-tests.ts scripts/microsoft-oidc-identity-tests.ts && node --import tsx --test scripts/mailbox-coverage-ui-tests.tsx scripts/mailbox-checkpoint-review-ui-tests.tsx scripts/mailbox-visible-state-ui-tests.tsx scripts/microsoft-mailbox-body-warning-ui-tests.tsx scripts/projectless-personal-mail-hints-ui-tests.tsx",
+    "test:crm-assistant": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-ai-assistant-tests.ts scripts/crm-ai-assistant-guard-tests.ts",
+    "qa:crm-assistant": "node scripts/crm-ai-assistant-ui-tests.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
+    "test:livelisted": "node scripts/run-livelisted-checks.mjs",
+    "test:ai-billing": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/ai-credit-billing-tests.ts scripts/ai-billing-http-tests.ts scripts/ai-billing-model-tests.ts scripts/ai-billing-admin-http-tests.ts scripts/ai-billing-runtime-acl-tests.ts",
+    "test:ai-billing:runtime-acl": "node --conditions=react-server --import tsx --test scripts/ai-billing-runtime-acl-tests.ts",
+    "qa:ai-billing-ui": "node scripts/ai-billing-ui-tests.mjs",
+    "ai:bookings": "node --import tsx scripts/manage-ai-bookings.ts",
     "ci:toolchain": "node scripts/check-toolchain.mjs",
     "ci:qa-target": "node scripts/qa-target-guard.mjs",
     "qa:studio-sales:preflight": "node scripts/studio-sales-qa-preflight.mjs",
@@ -101,12 +111,12 @@
     "test:booking:setup": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-setup-tests.ts scripts/booking-travel-tests.ts scripts/booking-travel-service-tests.ts",
     "test:booking:messages": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-template-tests.ts scripts/booking-message-tests.ts scripts/booking-message-production-tests.ts",
     "test:booking:language": "node --import tsx --test --test-concurrency=1 scripts/crm-language-preference-tests.ts && node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-language-preference-db-tests.ts",
-    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts",
+    "test:booking:channels": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/booking-channel-tests.ts scripts/booking-channel-authorization-tests.ts scripts/booking-channel-adapter-tests.ts scripts/booking-public-ui-contract-tests.ts scripts/studio-booking-offer-tests.ts",
     "qa:booking:public-ui": "node --import tsx scripts/booking-public-ui-browser.mjs",
     "qa:booking:reminder-scheduler": "node scripts/qa-booking-reminder-scheduler.mjs",
     "test:knowledge-assistant-quota": "node --conditions=react-server --import tsx --test scripts/knowledge-connected-assistant-quota-tests.ts",
     "test:customer-onboarding": "node --conditions=react-server --import tsx --test scripts/customer-workspace-provisioning-tests.ts",
-    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
+    "test:website-self-service": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/website-integration-management-tests.ts scripts/website-chat-tests.ts scripts/native-assistant-late-authority-tests.ts && node --import tsx --test scripts/website-integration-ui-tests.ts && node --test scripts/website-widget-tests.mjs && node scripts/website-integration-browser-tests.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -115,11 +125,12 @@
     "@tiptap/starter-kit": "3.31.4",
     "@types/react-grid-layout": "^1.3.6",
     "@vercel/blob": "2.8.0",
-    "@vercel/oidc": "3.8.8",
-    "ai": "^7.0.148",
+    "@vercel/oidc": "4.0.6",
+    "dompurify": "3.4.17",
     "html2canvas": "^1.4.1",
+    "jose": "^5.10.0",
     "jspdf": "^4.2.1",
-    "next": "16.4.2",
+    "next": "16.4.5",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.4.299",
     "pdfkit": "0.20.2",
@@ -130,7 +141,8 @@
     "saxes": "6.0.0",
     "server-only": "0.0.1",
     "sharp": "0.35.5",
-    "yauzl": "3.4.0"
+    "yauzl": "3.4.0",
+    "ai": "^7.0.148"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
@@ -142,7 +154,7 @@
     "@types/react-dom": "^19",
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
     "tsx": "4.23.13",
     "typescript": "^5"
@@ -152,6 +164,9 @@
     "undici": "6.29.1",
     "@vercel/cli-config@0.2.7": {
       "zod": "4.6.7"
+    },
+    "@vercel/blob": {
+      "@vercel/oidc": "$@vercel/oidc"
     }
   }
 }

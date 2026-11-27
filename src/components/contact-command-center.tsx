@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultTaskDueInput, taskLocalDateTimeToInstant } from "@/lib/task-due";
 import { useEffect, useMemo, useState } from "react";
 import {
   CRM_LEAD_SOURCES,
@@ -32,6 +33,8 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
+import { ActivityTimeline } from "@/components/activity-timeline";
+import { ContactMailboxReviewNotice, ContactProjectlessMailHints } from "@/components/contact-projectless-mail-hints";
 
 type ContactCommandCenterProps = {
   activeProjectId: string | null;
@@ -43,6 +46,7 @@ type ContactCommandCenterProps = {
   language: LanguageCode;
   leads: Lead[];
   onContactsChanged?: () => Promise<void> | void;
+  onOpenCommunication?: (messageId: string) => void;
   organizations: Organization[];
   projects: Project[];
   relationships: ContactRelationship[];
@@ -53,6 +57,7 @@ type ContactCommandCenterProps = {
   timeline: ContactTimelineItem[];
   users: WorkspaceUser[];
   workspaceId: string;
+  timeZone?: string;
 };
 
 type ContactView = "all" | "hot" | "missingData" | "missingConsent" | "duplicates";
@@ -121,22 +126,8 @@ type ContactLeadDraft = {
 const leadTypeOptions: LeadType[] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
 const leadStatusOptions: LeadStatus[] = ["Neu", "Qualifizieren", "Termin offen", "Übergabe", "Archiviert"];
 
-function toDateTimeLocalInput(date: Date) {
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function createContactTaskDraft(contact: Contact): ContactTaskDraft {
-  const due = new Date();
-  due.setDate(due.getDate() + 1);
-  due.setHours(9, 0, 0, 0);
-
-  return {
-    description: contact.intent,
-    due: toDateTimeLocalInput(due),
-    priority: "Normal",
-    title: `${contact.name}: Follow-up`,
-  };
+function createContactTaskDraft(contact: Contact, timeZone: string): ContactTaskDraft {
+  return { description: contact.intent, due: defaultTaskDueInput(new Date(), timeZone), priority: "Normal", title: `${contact.name}: Follow-up` };
 }
 
 function createContactLeadDraft(contact: Contact): ContactLeadDraft {
@@ -184,13 +175,6 @@ const lifecycleStyles = {
   Partner: "bg-amber-50 text-amber-800",
 } as const;
 
-const outcomeStyles = {
-  offen: "bg-blue-50 text-blue-800",
-  erledigt: "bg-emerald-50 text-emerald-800",
-  risiko: "bg-red-50 text-red-800",
-  info: "bg-stone-100 text-stone-700",
-} as const;
-
 const qualityStyles = {
   ok: "border-emerald-200 bg-emerald-50 text-emerald-900",
   warning: "border-amber-200 bg-amber-50 text-amber-900",
@@ -207,6 +191,7 @@ export function ContactCommandCenter({
   language,
   leads,
   onContactsChanged,
+  onOpenCommunication,
   organizations,
   projects,
   relationships,
@@ -216,6 +201,7 @@ export function ContactCommandCenter({
   timeline,
   users,
   workspaceId,
+  timeZone = "Europe/Vienna",
 }: ContactCommandCenterProps) {
   const copy = getContactCommandCenterCopy(language);
   const relatedCopy = {
@@ -289,11 +275,6 @@ export function ContactCommandCenter({
     : [];
   const selectedTasks = selectedContact
     ? tasks.filter((task) => task.contactId === selectedContact.id)
-    : [];
-  const selectedTimeline = selectedContact && relatedDataAvailable
-    ? timeline
-        .filter((item) => item.contactId === selectedContact.id)
-        .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
     : [];
   const contactOwner = selectedContact?.ownerUserId
     ? users.find((user) => user.id === selectedContact.ownerUserId)
@@ -485,7 +466,6 @@ export function ContactCommandCenter({
     company: relatedCopy.organization,
     consent: relatedCopy.consent,
     relationships: relatedCopy.relationships,
-    timeline: relatedCopy.timeline,
   };
   const relatedTabMessage = relatedDataAvailable ? undefined : relatedTabMessages[activeDetailTab];
 
@@ -634,7 +614,7 @@ export function ContactCommandCenter({
     if (nextAction === "task") {
       setPostCreateAction("task");
       setPostCreateContact(persistedContact);
-      setPostCreateTaskDraft(createContactTaskDraft(persistedContact));
+      setPostCreateTaskDraft(createContactTaskDraft(persistedContact, timeZone));
       setPostCreateLeadDraft(null);
       showFeedback("success", copy.taskFlowDescription);
     } else if (nextAction === "lead") {
@@ -660,12 +640,14 @@ export function ContactCommandCenter({
 
     setPostCreateSaving(true);
     try {
+      const dueAt = postCreateTaskDraft.due ? taskLocalDateTimeToInstant(postCreateTaskDraft.due, timeZone) : null;
+      if(postCreateTaskDraft.due && !dueAt) throw new Error(language === "de" ? "Fälligkeit existiert in dieser Zeitzone nicht." : "The due time does not exist in this timezone.");
       const response = await csrfFetch("/api/crm/tasks", {
         body: JSON.stringify({
           task: {
             contactId: postCreateContact.id,
             description: postCreateTaskDraft.description.trim() || undefined,
-            due: postCreateTaskDraft.due ? new Date(postCreateTaskDraft.due).toISOString() : "",
+            due: dueAt?.toISOString() ?? "",
             priority: postCreateTaskDraft.priority,
             projectId: postCreateContact.projectId,
             status: "open",
@@ -1346,6 +1328,8 @@ export function ContactCommandCenter({
                 ) : null}
               </div>
 
+              <ContactMailboxReview key={`${workspaceId}:${selectedContact.id}`} contactId={selectedContact.id} workspaceId={workspaceId} language={language} onOpenCommunication={onOpenCommunication} />
+
               <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {contactDetailTabs.map((tab) => (
@@ -1356,7 +1340,7 @@ export function ContactCommandCenter({
                           : "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50"
                       }`}
                       key={tab.id}
-                      onClick={() => setActiveDetailTab(tab.id)}
+                      onClick={() => { setActiveDetailTab(tab.id); if (tab.id === "timeline") requestAnimationFrame(() => document.getElementById("contact-activity-history")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}
                       type="button"
                     >
                       {tab.label}{!relatedDataAvailable && relatedTabMessages[tab.id] ? ` · ${relatedCopy.unavailable}` : ""}
@@ -1753,33 +1737,7 @@ export function ContactCommandCenter({
             </article>
           </section>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <h4 className="text-lg font-semibold">{copy.timeline}</h4>
-            <div className="mt-4 space-y-3">
-              {selectedTimeline.map((item) => (
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={item.id}>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-semibold">{item.title}</p>
-                      <p className="mt-1 break-words text-sm text-stone-600">{item.detail}</p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                        outcomeStyles[item.outcome]
-                      }`}
-                    >
-                      {item.channel}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {!relatedDataAvailable ? <p className="text-sm text-stone-500" role="status">{relatedCopy.timeline}</p> : selectedTimeline.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-stone-300 p-4 text-sm text-stone-500">
-                  {copy.noTimeline}
-                </div>
-              ) : null}
-            </div>
-          </article>
+          <div id="contact-activity-history"><ActivityTimeline workspaceId={workspaceId} contactId={selectedContact.id} projectId={selectedContact.projectId || undefined} language={language} timeZone={timeZone} canWrite={canWriteContacts} /></div>
         </section>
         </section>
       ) : (
@@ -1806,4 +1764,26 @@ export function ContactCommandCenter({
       )}
     </section>
   );
+}
+
+function ContactMailboxReview({contactId,workspaceId,language,onOpenCommunication}:{contactId:string;workspaceId:string;language:LanguageCode;onOpenCommunication?:(messageId:string)=>void}) {
+  const [state,setState]=useState<{status:"loading"|"ready"|"unavailable";items:{id:string;subject:string;receivedAt:string}[];source?:"personal_imported_address_match";hasMore?:boolean;canBlock?:boolean}>({status:"loading",items:[]});
+  const de=language==="de";
+  useEffect(()=>{
+    const abort=new AbortController();
+    const query=new URLSearchParams({workspaceId,contactId});
+    fetch(`/api/crm/mailbox?${query}`,{signal:abort.signal,cache:"no-store"})
+      .then(async response=>{if(!response.ok)throw new Error("unavailable");return response.json() as Promise<{data:{available:boolean;items:{id:string;subject:string;receivedAt:string}[];source?:"personal_imported_address_match";hasMore?:boolean;canBlock?:boolean}}>})
+      .then(result=>{if(!abort.signal.aborted)setState({status:result.data.available?"ready":"unavailable",items:result.data.items,source:result.data.source,hasMore:result.data.hasMore,canBlock:result.data.canBlock});})
+      .catch(()=>{if(!abort.signal.aborted)setState({status:"unavailable",items:[]});});
+    return ()=>abort.abort();
+  },[workspaceId,contactId]);
+  if(state.status!=="ready")return <ContactMailboxReviewNotice status={state.status} language={language}/>;
+  if(!state.items.length&&state.source!=="personal_imported_address_match")return null;
+  if(state.source==="personal_imported_address_match") return <ContactProjectlessMailHints items={state.items} hasMore={Boolean(state.hasMore)} language={language} onOpenCommunication={onOpenCommunication}/>;
+  return <section className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4" aria-label={de?"Persönliche Postfachhinweise":"Personal mailbox suggestions"}>
+    <h5 className="text-sm font-semibold">{de?"Persönliche Postfachhinweise":"Personal mailbox suggestions"}</h5>
+    <p className="mt-1 text-sm text-stone-700">{de?"Die Absenderadresse passt zu diesem Kontakt. Bitte Identität und Zusammenhang persönlich prüfen.":"The sender address matches this contact. Please review the identity and context personally."}</p>
+    <ul className="mt-2 space-y-2 text-sm">{state.items.map(item=><li key={item.id} className="break-words"><span>{item.subject|| (de?"Nachricht ohne Betreff":"Message without subject")} · {new Date(item.receivedAt).toLocaleDateString(de?"de-IE":"en-IE")}</span>{onOpenCommunication&&<button type="button" className="ml-2 min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold" onClick={()=>onOpenCommunication(item.id)}>{de?"Nachricht prüfen":"Review message"}</button>}</li>)}</ul>
+  </section>;
 }

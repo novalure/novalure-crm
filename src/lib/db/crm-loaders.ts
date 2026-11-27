@@ -1,3 +1,4 @@
+import { UNIT_DETAIL_SELECT, mapUnitDetails } from "@/lib/property-unit-details";
 import type {
   AppSession,
 } from "@/lib/auth/session";
@@ -386,7 +387,7 @@ type PropertyBuildingRow = {
   workspaceId: string;
 };
 
-type PropertyUnitRow = {
+type PropertyUnitRow = Record<string, unknown> & {
   version?: number | string;
   areaSqm: number | string;
   buildingId: string | null;
@@ -397,6 +398,7 @@ type PropertyUnitRow = {
   priceCents: number | string;
   projectId: string;
   reservationId: string | null;
+  sellerListingId: string | null;
   rooms: number | string;
   status: string;
   unitNumber: string;
@@ -1892,11 +1894,13 @@ async function loadPropertyUnitsForAssetSummaries(
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
+      pu.metadata ->> 'sellerListingId' as "sellerListingId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
@@ -2386,11 +2390,13 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
+      pu.metadata ->> 'sellerListingId' as "sellerListingId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
@@ -2406,6 +2412,7 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
 
 function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
   return {
+    ...mapUnitDetails(row),
     version: row.version === undefined ? undefined : Number(row.version),
     areaSqm: Number(row.areaSqm ?? 0),
     buildingId: row.buildingId ?? "",
@@ -2416,6 +2423,7 @@ function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
     priceCents: Number(row.priceCents ?? 0),
     projectId: row.projectId,
     reservationId: row.reservationId ?? undefined,
+    sellerListingId: row.sellerListingId ?? undefined,
     rooms: Number(row.rooms ?? 0),
     status: normalizePropertyUnitStatus(row.status),
     unitNumber: row.unitNumber,
@@ -2501,11 +2509,13 @@ export async function loadPaginatedPropertyUnits(
       pu.floor,
       pu.rooms,
       pu.area_sqm as "areaSqm",
+      ${UNIT_DETAIL_SELECT},
       pu.price_cents as "priceCents",
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
+      pu.metadata ->> 'sellerListingId' as "sellerListingId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
@@ -3099,6 +3109,8 @@ export async function loadTasks(workspaceId: string): Promise<Task[]> {
   );
 
   return rows.map((row) => ({
+    origin: typeof row.metadata?.automationId === "string" ? "automation" : "crm",
+    actionType: row.metadata?.actionType === "callback" || row.metadata?.actionType === "follow_up" ? row.metadata.actionType : "task",
     version: Number(row.version),
     syntheticTest: (row.metadata?.websiteSales as { syntheticTest?: unknown } | undefined)?.syntheticTest === true,
     description: typeof row.metadata?.description === "string" ? row.metadata.description : undefined,
@@ -3222,6 +3234,7 @@ function normalizeCalendarLocation(value: string): CalendarEvent["location"] {
 }
 
 function normalizeCalendarStatus(value: string): CalendarEvent["status"] {
+  if(value==="abgesagt")return "abgesagt";
   if (value === "vorbereiten") return "vorbereiten";
   if (value === "bestätigt" || value === "besta\u0065tigt") return "bestätigt";
   if (value === "nachfassen") return "nachfassen";

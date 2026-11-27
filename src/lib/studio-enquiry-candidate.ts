@@ -1,6 +1,9 @@
 const candidateOrigin = "http://127.0.0.1:3000";
-const candidateRef = "refs/heads/codex/evelyn-crm-package4-integration";
-const candidateWorkflow = `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${candidateRef}`;
+const allowedCandidateRefs = [
+  "refs/heads/codex/evelyn-crm-package4-integration",
+  "refs/heads/codex/crm-outlook-main-integration-20261126",
+];
+const candidateWorkflowPath = "novalure/novalure-crm/.github/workflows/livegang-e2e.yml";
 const enquiryPath = "/api/public/website-sales/enquiry";
 
 export type StudioEnquiryCandidateBinding = {
@@ -18,10 +21,11 @@ function neonHost(value: string | undefined) {
 
 /** A local Actions-only test profile; these environment checks are not signed caller identity. */
 export function studioEnquiryCandidateBinding(env: NodeJS.ProcessEnv = process.env): StudioEnquiryCandidateBinding | null {
+  const candidateRef = env.GITHUB_REF;
   if (env.STUDIO_ENQUIRY_CANDIDATE_ENABLED !== "1" || env.NOVALURE_QA_PROFILE !== "isolated-candidate" ||
       env.CI !== "true" || env.GITHUB_ACTIONS !== "true" || env.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
-      env.GITHUB_REPOSITORY !== "novalure/novalure-crm" || env.GITHUB_WORKFLOW_REF !== candidateWorkflow ||
-      env.GITHUB_REF !== candidateRef || !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || "") ||
+      env.GITHUB_REPOSITORY !== "novalure/novalure-crm" || !candidateRef || !allowedCandidateRefs.includes(candidateRef) ||
+      env.GITHUB_WORKFLOW_REF !== `${candidateWorkflowPath}@${candidateRef}` || !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || "") ||
       !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID || "") || !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ATTEMPT || "") ||
       Object.keys(env).some(key => key === "VERCEL" || key.startsWith("VERCEL_")) ||
       env.NOVALURE_APP_ORIGIN !== candidateOrigin || env.NOVALURE_QA_BASE_URL !== candidateOrigin ||

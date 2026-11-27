@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { SellerListing } from "@/lib/crm-types";
 import type { PropertyDraftStore } from "@/lib/property-draft-store";
 import {
-  PROPERTY_EXPOSE_MAX_FLOORPLANS, PROPERTY_EXPOSE_MAX_IMAGES, PROPERTY_EXPOSE_MAX_PDF_BYTES,
+  PROPERTY_EXPOSE_MAX_FLOORPLANS, PROPERTY_EXPOSE_MAX_IMAGES, PROPERTY_EXPOSE_MAX_PDF_BYTES, selectPropertyExposePhotos,
   type PropertyExposeMediaChoice, type PropertyExposeOptions, type PropertyExposeResponse,
   type PropertyExposeSource, type PropertyExposeState, type PropertyExposeVersion,
 } from "@/lib/property-expose";
@@ -294,14 +294,14 @@ function PropertyExposeForm({ listing, workspaceId, language, draftStore, draftU
         <fieldset disabled={locked} className="grid gap-4"><legend className="mb-3 font-semibold">{de ? "Vorlage und sichtbare Angaben" : "Template and visible information"}</legend>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <label className={labelClass}>{de ? "Vorlage" : "Template"}<select className={inputClass} value={options.template} onChange={(event) => setOptions({ ...options, template: event.target.value as PropertyExposeOptions["template"] })}><option value="compact">{de ? "Kompaktes Objektblatt" : "Compact property sheet"}</option><option value="full">{de ? "Ausführliches Exposé" : "Full brochure"}</option></select></label>
-            <label className={labelClass}>{de ? "PDF-Sprache" : "PDF language"}<select className={inputClass} value={options.language} onChange={(event) => setOptions({ ...options, language: event.target.value as PropertyExposeOptions["language"] })}><option value="de">Deutsch</option><option value="en">English</option></select></label>
+            <label className={labelClass}>{de ? "PDF-Sprache" : "PDF language"}<select className={inputClass} value={options.language} onChange={(event) => setOptions({ ...options, language: event.target.value as PropertyExposeOptions["language"] })}><option value="de">Deutsch</option><option value="en">English</option><option value="es">Español</option></select></label>
             <label className={labelClass}>{de ? "Adresse" : "Address"}<select className={inputClass} value={options.address} onChange={(event) => setOptions({ ...options, address: event.target.value as PropertyExposeOptions["address"] })}><option value="city">{de ? "Nur Ort" : "City only"}</option><option value="full">{de ? "Vollständige Adresse" : "Full address"}</option><option value="hidden">{de ? "Adresse ausblenden" : "Hide address"}</option></select></label>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-2"><label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={options.showPrice} onChange={(event) => setOptions({ ...options, showPrice: event.target.checked })} />{de ? "Freigegebenen Anzeigepreis zeigen" : "Show approved display price"}</label><label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={options.showContact} onChange={(event) => setOptions({ ...options, showContact: event.target.checked })} />{de ? "Ansprechpartner zeigen" : "Show contact person"}</label></div>
           <label className={labelClass}>{de ? "Titel für dieses Exposé" : "Title for this brochure"}<input className={inputClass} maxLength={180} value={options.title ?? ""} placeholder={de ? "Gespeicherten Objekttitel verwenden" : "Use the saved property title"} onChange={(event) => setOptions({ ...options, title: event.target.value })} /></label>
           <label className={labelClass}>{de ? "Beschreibung für dieses Exposé" : "Description for this brochure"}<textarea className={inputClass} rows={5} maxLength={12000} value={options.description ?? ""} placeholder={de ? "Gespeicherten Exposétext verwenden" : "Use the saved brochure text"} onChange={(event) => setOptions({ ...options, description: event.target.value })} /></label>
           <p className="text-xs leading-5 text-stone-600">{de ? "Diese Eingaben gelten für den neuen PDF-Entwurf. Ausblenden schwärzt keine bereits in Texten oder Bildern enthaltenen Angaben. Prüfe Preis, Adresse und vertrauliche Inhalte in der fertigen PDF-Vorschau. Die Sprachauswahl übersetzt deine Texte nicht automatisch." : "These inputs apply to the new PDF draft. Hiding fields does not redact information already contained in text or images. Check price, address and confidential content in the final PDF preview. Selecting a language does not automatically translate your text."}</p>
-          <MediaSelection media={data.media.filter((item) => item.kind === "image")} selected={options.imageIds} maximum={PROPERTY_EXPOSE_MAX_IMAGES} de={de} kind="image" disabled={locked} onChange={(imageIds) => setOptions({ ...options, imageIds })} />
+          <MediaSelection media={data.media.filter((item) => item.kind === "image")} selected={options.imageIds} maximum={PROPERTY_EXPOSE_MAX_IMAGES} de={de} kind="image" disabled={locked} onChange={(imageIds) => setOptions({ ...options, imageIds })} onSelectPhotos={(imageIds) => setOptions({ ...options, imageIds, template: "full" })} />
           <MediaSelection media={data.media.filter((item) => item.kind === "floorplan")} selected={options.floorPlanIds} maximum={PROPERTY_EXPOSE_MAX_FLOORPLANS} de={de} kind="floorplan" disabled={locked} onChange={(floorPlanIds) => setOptions({ ...options, floorPlanIds })} />
         </fieldset>
         {data.warnings.length ? <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm"><h5 className="font-semibold">{de ? "Hinweise zur Erstellung" : "Generation notes"}</h5><ul className="mt-2 list-disc space-y-1 pl-5">{data.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warningText(warning, de)}</li>)}</ul></div> : null}
@@ -334,9 +334,10 @@ function PropertyExposeForm({ listing, workspaceId, language, draftStore, draftU
   </section>;
 }
 
-function MediaSelection({ media, selected, maximum, de, kind, disabled, onChange }: {
+function MediaSelection({ media, selected, maximum, de, kind, disabled, onChange, onSelectPhotos }: {
   media: PropertyExposeMediaChoice[]; selected: string[]; maximum: number; de: boolean;
   kind: "image" | "floorplan"; disabled: boolean; onChange: (ids: string[]) => void;
+  onSelectPhotos?: (ids: string[]) => void;
 }) {
   const ordered = [...selected.map((id) => media.find((item) => item.id === id)).filter((item): item is PropertyExposeMediaChoice => Boolean(item)),
     ...media.filter((item) => !selected.includes(item.id))];
@@ -347,6 +348,13 @@ function MediaSelection({ media, selected, maximum, de, kind, disabled, onChange
   }
   return <fieldset className="min-w-0" disabled={disabled}><legend className="font-semibold">{kind === "image" ? (de ? "Fotos und Reihenfolge" : "Photos and order") : (de ? "Grundrisse und Reihenfolge" : "Floor plans and order")} · {selected.length}/{maximum}</legend>
     <p className="mt-1 text-xs leading-5 text-stone-600">{kind === "image" ? (de ? "Das erste ausgewählte Foto ist das Titelbild. Mit den Pfeilen bestimmst du die Reihenfolge." : "The first selected photo is the cover image. Use the arrows to set the order.") : (de ? "Grundrisse werden vollständig dargestellt. Du kannst geeignete gespeicherte Medien auswählen." : "Floor plans are shown in full. You can select suitable saved media.")}</p>
+    {kind === "image" && media.length > 0 ? <div className="mt-2 flex flex-wrap items-center gap-2">
+      <button type="button" className={buttonClass} disabled={disabled || selected.length >= Math.min(media.length, maximum)} onClick={() => onSelectPhotos?.(selectPropertyExposePhotos(media, selected, maximum))}>{de ? `Fotos auswählen (max. ${maximum})` : `Select photos (max. ${maximum})`}</button>
+      <span className="text-xs text-stone-600">{de ? "Wählt die verfügbaren Fotos bis zur Grenze und nutzt die ausführliche Vorlage." : "Selects available photos up to the limit and uses the full template."}</span>
+    </div> : null}
+    {kind === "image" && media.length > maximum ? <p className="mt-2 text-sm text-amber-900" role="status">{de ? `Es sind ${media.length} Fotos verfügbar. Ein PDF kann derzeit höchstens ${maximum} Fotos enthalten; wähle aus, welche erscheinen sollen.` : `${media.length} photos are available. A PDF currently supports at most ${maximum}; choose which to include.`}</p> : null}
+    {kind === "floorplan" && !media.length ? <p className="mt-2 text-xs text-stone-600">{de ? "Ein Grundriss muss als Objektmedium oder Objektdokument mit der Kategorie Grundriss gespeichert sein. Web-Exposé-Dateien erscheinen hier nicht automatisch." : "Save a floor plan as property media or as a property document in the floor plan category. Web brochure files do not appear here automatically."}</p> : null}
+    {kind === "floorplan" && media.some((item) => item.mimeType?.startsWith("image/")) ? <p className="mt-2 text-sm text-amber-900">{de ? "Grundrissbilder können selbst eine Adresse enthalten. Bei ausgeblendeter Adresse bitte nur zuvor bereinigte Bilder auswählen." : "Floor plan images may contain an address. If hiding the address, select only previously redacted images."}</p> : null}
     {kind === "floorplan" && media.some((item) => item.mimeType === "application/pdf") ? <p className="mt-2 text-sm text-amber-900">{de ? "PDF-Grundrisse können eine Adresse enthalten und erfordern die Einstellung „Vollständige Adresse“. Alternativ ein zuvor bereinigtes Grundrissbild verwenden. Insgesamt sind höchstens acht Grundrissseiten möglich." : "PDF floor plans may contain an address and require the Full address setting. Alternatively, use a previously redacted floor plan image. A maximum of eight floor plan pages is supported."}</p> : null}
     {!ordered.length ? <p className="mt-2 text-sm text-stone-600">{de ? "Keine geeigneten gespeicherten Medien verfügbar." : "No suitable saved media available."}</p> : <ul className="mt-3 grid gap-3 sm:grid-cols-2">{ordered.map((item) => {
       const index = selected.indexOf(item.id);

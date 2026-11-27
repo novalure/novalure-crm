@@ -1,0 +1,176 @@
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: clamp(34px, 6vw, 84px);
+  padding: clamp(50px, 7vw, 96px) 0;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--nl-blue-dark);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  color: var(--nl-ink);
+  font-size: clamp(36px, 4.6vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.introduction {
+  max-width: 58ch;
+  margin: 22px 0 0;
+  color: var(--nl-muted);
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.highlights {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--nl-border);
+  border-top: 3px solid var(--nl-blue);
+  border-radius: 16px;
+  background: var(--nl-surface);
+  box-shadow: 0 18px 38px rgb(51 48 43 / 6%);
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.highlights h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.highlights ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.highlights li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 12px;
+  font-weight: 600;
+}
+
+.highlights li + li {
+  border-top: 1px solid var(--nl-divider);
+}
+
+.highlights svg {
+  flex: none;
+  color: var(--nl-blue-dark);
+}
+
+.section {
+  border-top: 1px solid var(--nl-border);
+  padding-top: clamp(38px, 5vw, 62px);
+  scroll-margin-top: 84px;
+}
+
+.section h2,
+.invitation h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  margin: 25px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  border: 1px solid var(--nl-border);
+  border-radius: 13px;
+  background: var(--nl-surface);
+  padding: clamp(20px, 3vw, 30px);
+}
+
+.cardHeading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--nl-blue-dark);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cardHeading p {
+  margin: 0;
+}
+
+.cardIndex {
+  min-width: 34px;
+  border-radius: 8px;
+  background: var(--nl-blue-tint);
+  padding: 3px 7px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.card h3 {
+  margin: 13px 0 7px;
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.cardDescription {
+  margin: 0;
+  color: var(--nl-muted);
+}
+
+.invitation {
+  margin-top: clamp(42px, 6vw, 76px);
+  border: 1px solid #d6e3fc;
+  border-radius: 16px;
+  background: var(--nl-blue-tint);
+  padding: clamp(24px, 5vw, 56px);
+}
+
+.invitation > p {
+  max-width: 62ch;
+  margin: 14px 0 0;
+  color: var(--nl-muted);
+  font-size: 17px;
+}
+
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
