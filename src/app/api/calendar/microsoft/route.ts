@@ -7,7 +7,7 @@ import {
 } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import {
-  getMicrosoftCalendarProviderStatus,
+  getWorkspaceMicrosoftCalendarProviderStatus,
   syncMicrosoftCalendarEvent,
 } from "@/lib/integrations/microsoft-calendar";
 
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
-  const provider = getMicrosoftCalendarProviderStatus();
+  const provider = await getWorkspaceMicrosoftCalendarProviderStatus(auth.session);
   const syncEvents = await listCalendarSyncEvents({
     session: auth.session,
     limit: getLimit(url),
@@ -87,7 +87,10 @@ export async function POST(request: Request) {
     return Response.json({ error: copy.calendarEventRequired }, { status: 400 });
   }
 
-  const provider = getMicrosoftCalendarProviderStatus();
+  const provider = await getWorkspaceMicrosoftCalendarProviderStatus(auth.session);
+  if (!provider.configured) {
+    return Response.json({ ok: false, error: "calendar_workspace_connection_required", providerStatus: provider }, { status: 409 });
+  }
   const result = await syncMicrosoftCalendarEvent({
     subject,
     startsAt,
@@ -117,7 +120,7 @@ export async function POST(request: Request) {
     error: result.error ?? null,
   });
   const connectionStatus =
-    !provider.configured ? "not_configured" : result.status === "failed" ? "failed" : "connected";
+    !provider.configured ? "not_configured" : result.status === "synced" ? "connected" : "failed";
   const providerConnection = await upsertProviderConnection({
     session: auth.session,
     provider: "microsoft-365",
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
   });
 
   return Response.json({
-    ok: result.status !== "failed",
+    ok: result.status === "synced",
     syncId,
     providerStatus: provider,
     providerConnection,

@@ -1,13 +1,14 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
+import { executeCrmCommand, reconcileCrmCommand, type CrmCommandInput, type TenantTransaction } from "@/lib/crm-command";
 import { withTenantTransaction } from "@/lib/db/tenant-client";
 import { readKnowledgeBytes } from "@/lib/knowledge-center/http";
 import { websiteSalesActorId, websiteSalesWorkspaceId } from "@/lib/website-sales-ingestion";
 import { bookingChannelError, bookingChannelJson, dispatchTrustedBookingTool } from "./channel-http";
-import { lookupBookingPublication, prepareBookingPublication } from "./publication";
+import { lookupBookingPublication, prepareBookingPublication, serverBookingSession } from "./publication";
 import { trustedStudioBookingKind } from "./channels";
-import type { BookingChannelOptions, BookingChannelRelation } from "./channels";
+import type { BookingChannelOptions, BookingChannelRelation, StudioHoldOperation } from "./channels";
 import type { BookingChannelAuthority } from "./channel-bindings";
 import type { PublicBookingPublication } from "./publication-types";
 import { BookingError } from "./types";
@@ -56,39 +57,67 @@ export async function assertStudioEnglishMutation(operation: unknown, payload: R
 }
 
 /** The accepted enquiry, lead and canonical contact are looked up again inside the fixed tenant. */
-export async function readStudioCallbackPhone(proof: Record<string, unknown>, contactId: string | undefined,
-  supplied: unknown, options: BookingChannelOptions = {}) {
+async function studioCallbackContact(tx: TenantTransaction, proof: Record<string, unknown>, contactId: string | undefined, lock = false) {
   if (!contactId) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
-  return withTenantTransaction({ actorId: websiteSalesActorId, workspaceId: websiteSalesWorkspaceId }, async tx => {
-    const contact = await tx.queryOne<{ id: string; phone: string | null }>(
-      `select contact.id,contact.phone from public.studio_enquiry_transfers transfer
+  const contact = await tx.queryOne<{ id: string; phone: string | null; version: string }>(
+      `select contact.id,contact.phone,contact.version::text as version from public.studio_enquiry_transfers transfer
        join public.leads lead on lead.id=transfer.lead_id and lead.workspace_id=transfer.workspace_id
        join public.contacts contact on contact.id=lead.contact_id and contact.workspace_id=lead.workspace_id
        where transfer.workspace_id=$1::uuid and transfer.operation_id=$2::uuid and transfer.revision=$3
          and transfer.payload_hash=$4 and transfer.reference=$5 and transfer.state='accepted'
-         and contact.id=$6::uuid`,
+         and contact.id=$6::uuid and contact.archived_at is null
+       ${lock ? "for share of transfer, lead for update of contact" : ""}`,
       [websiteSalesWorkspaceId, proof.operationId, proof.revision, proof.payloadHash, proof.crmReference, contactId]);
-    if (!contact) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
-    return validateStudioCallbackPhone(supplied === undefined ? contact.phone : supplied);
-  }, options);
+  if (!contact) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
+  return contact;
 }
 
-export async function persistStudioCallbackPhone(proof: Record<string, unknown>, contactId: string | undefined,
-  phone: string, options: BookingChannelOptions = {}) {
-  if (!contactId) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
-  phone = validateStudioCallbackPhone(phone);
-  return withTenantTransaction({ actorId: websiteSalesActorId, workspaceId: websiteSalesWorkspaceId }, async tx => {
-    const changed = await tx.queryOne<{ id: string }>(`update public.contacts contact set phone=$7,updated_at=now()
-      where contact.workspace_id=$1::uuid and contact.id=$6::uuid
-        and exists(select 1 from public.studio_enquiry_transfers transfer
-          join public.leads lead on lead.id=transfer.lead_id and lead.workspace_id=transfer.workspace_id
-          where transfer.workspace_id=$1::uuid and transfer.operation_id=$2::uuid and transfer.revision=$3
-            and transfer.payload_hash=$4 and transfer.reference=$5 and transfer.state='accepted'
-            and lead.contact_id=contact.id)
-      returning contact.id`,
-      [websiteSalesWorkspaceId, proof.operationId, proof.revision, proof.payloadHash, proof.crmReference, contactId, phone]);
-    if (!changed) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
-  }, options);
+function readStudioCallbackContact(proof: Record<string, unknown>, contactId: string | undefined, options: BookingChannelOptions) {
+  return withTenantTransaction({ actorId: websiteSalesActorId, workspaceId: websiteSalesWorkspaceId },
+    tx => studioCallbackContact(tx, proof, contactId), options);
+}
+
+export async function readStudioCallbackPhone(proof: Record<string, unknown>, contactId: string | undefined,
+  supplied: unknown, options: BookingChannelOptions = {}) {
+  const contact = await readStudioCallbackContact(proof, contactId, options);
+  return validateStudioCallbackPhone(supplied === undefined ? contact.phone : supplied);
+}
+
+/** Contact version and effect receipts use existing CRM commands under the accepted enquiry's actor. */
+function studioCallbackPhoneChange(proof: Record<string, unknown>, contactId: string, initialVersion: string, phone: string, options: BookingChannelOptions) {
+  const actor = serverBookingSession(websiteSalesWorkspaceId, websiteSalesActorId);
+  const command = (operation: StudioHoldOperation, apply = false): CrmCommandInput => ({
+    operation: apply ? "booking.studio_callback.apply" : "booking.studio_callback.prepare",
+    idempotencyKey: apply ? operation.coreKey : operation.id,
+    correlationId: operation.id,
+    resourceId: contactId,
+    capability: "pipeline:write",
+    payload: { proof, holdRequestHash: operation.requestHash },
+  });
+  return {
+    async prepare(operation: StudioHoldOperation) {
+      await executeCrmCommand(actor, command(operation), async (tx) => {
+        const contact = await studioCallbackContact(tx, proof, contactId, true);
+        if (contact.version !== initialVersion) throw new BookingError("BOOKING_CALLBACK_PHONE_CHANGED", 409);
+        return { version: contact.version };
+      }, options);
+    },
+    async commit(operation: StudioHoldOperation) {
+      await executeCrmCommand(actor, command(operation, true), async (tx) => {
+        const prepared = await reconcileCrmCommand<{ version: string }>(actor, command(operation), options);
+        if (prepared.status !== "COMMITTED") throw new BookingError("BOOKING_CALLBACK_PREPARATION_REQUIRED", 409);
+        const contact = await studioCallbackContact(tx, proof, contactId, true);
+        if (contact.version !== prepared.data.version) throw new BookingError("BOOKING_CALLBACK_PHONE_CHANGED", 409);
+        if (contact.phone !== phone) {
+          const updated = await tx.queryOne(`update public.contacts set phone=$3,updated_at=now()
+            where workspace_id=$1::uuid and id=$2::uuid and version=$4::bigint returning id`,
+            [websiteSalesWorkspaceId, contact.id, phone, prepared.data.version]);
+          if (!updated) throw new BookingError("BOOKING_CALLBACK_CONTACT_REQUIRED", 409);
+        }
+        return { id: contact.id };
+      }, options);
+    },
+  };
 }
 
 export function verifyStudioChannelSignature(raw: string, headers: Headers, secret: string | undefined, now = Date.now()) {
@@ -200,14 +229,12 @@ export async function handleStudioBookingChannelRequest(request: Request, option
       if (typeof payload.token !== "string") throw new BookingError("INVALID_BOOKING_CHANNEL_OPERATION");
       const kind = await trustedStudioBookingKind(payload.token, relation, binding);
       const { callbackPhone, channelPayload } = prepareStudioHoldPayload(kind, payload);
-      const checkedPhone = kind === "phone" ? await readStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId,
-        callbackPhone, options) : undefined;
-      const result = await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
-        { ...channelPayload, operation: body.operation }, { ...options, studioHoldPhone: checkedPhone });
-      if (checkedPhone && result && typeof result === "object" && "booking" in result &&
-          result.booking && typeof result.booking === "object" && "state" in result.booking && result.booking.state === "held")
-        await persistStudioCallbackPhone(body.enquiry as Record<string, unknown>, relation.contactId, checkedPhone, options);
-      return bookingChannelJson(result);
+      const proof = body.enquiry as Record<string, unknown>;
+      const contact = kind === "phone" ? await readStudioCallbackContact(proof, relation.contactId, options) : undefined;
+      const checkedPhone = contact ? validateStudioCallbackPhone(callbackPhone ?? contact.phone) : undefined;
+      const phoneChange = contact && callbackPhone ? studioCallbackPhoneChange(proof, contact.id, contact.version, callbackPhone, options) : undefined;
+      return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,
+        { ...channelPayload, operation: body.operation }, { ...options, studioHoldPhone: checkedPhone, studioHoldPhoneChange: phoneChange }));
     }
     await assertStudioEnglishMutation(body.operation, body.payload as Record<string, unknown>, relation, binding);
     return bookingChannelJson(await dispatchTrustedBookingTool(scopedRequest, "chat", authority,

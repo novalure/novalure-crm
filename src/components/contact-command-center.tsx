@@ -34,6 +34,7 @@ import {
 } from "@/lib/i18n";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { ContactMailboxReviewNotice, ContactProjectlessMailHints } from "@/components/contact-projectless-mail-hints";
 
 type ContactCommandCenterProps = {
   activeProjectId: string | null;
@@ -45,6 +46,7 @@ type ContactCommandCenterProps = {
   language: LanguageCode;
   leads: Lead[];
   onContactsChanged?: () => Promise<void> | void;
+  onOpenCommunication?: (messageId: string) => void;
   organizations: Organization[];
   projects: Project[];
   relationships: ContactRelationship[];
@@ -189,6 +191,7 @@ export function ContactCommandCenter({
   language,
   leads,
   onContactsChanged,
+  onOpenCommunication,
   organizations,
   projects,
   relationships,
@@ -1325,6 +1328,8 @@ export function ContactCommandCenter({
                 ) : null}
               </div>
 
+              <ContactMailboxReview key={`${workspaceId}:${selectedContact.id}`} contactId={selectedContact.id} workspaceId={workspaceId} language={language} onOpenCommunication={onOpenCommunication} />
+
               <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {contactDetailTabs.map((tab) => (
@@ -1759,4 +1764,26 @@ export function ContactCommandCenter({
       )}
     </section>
   );
+}
+
+function ContactMailboxReview({contactId,workspaceId,language,onOpenCommunication}:{contactId:string;workspaceId:string;language:LanguageCode;onOpenCommunication?:(messageId:string)=>void}) {
+  const [state,setState]=useState<{status:"loading"|"ready"|"unavailable";items:{id:string;subject:string;receivedAt:string}[];source?:"personal_imported_address_match";hasMore?:boolean;canBlock?:boolean}>({status:"loading",items:[]});
+  const de=language==="de";
+  useEffect(()=>{
+    const abort=new AbortController();
+    const query=new URLSearchParams({workspaceId,contactId});
+    fetch(`/api/crm/mailbox?${query}`,{signal:abort.signal,cache:"no-store"})
+      .then(async response=>{if(!response.ok)throw new Error("unavailable");return response.json() as Promise<{data:{available:boolean;items:{id:string;subject:string;receivedAt:string}[];source?:"personal_imported_address_match";hasMore?:boolean;canBlock?:boolean}}>})
+      .then(result=>{if(!abort.signal.aborted)setState({status:result.data.available?"ready":"unavailable",items:result.data.items,source:result.data.source,hasMore:result.data.hasMore,canBlock:result.data.canBlock});})
+      .catch(()=>{if(!abort.signal.aborted)setState({status:"unavailable",items:[]});});
+    return ()=>abort.abort();
+  },[workspaceId,contactId]);
+  if(state.status!=="ready")return <ContactMailboxReviewNotice status={state.status} language={language}/>;
+  if(!state.items.length&&state.source!=="personal_imported_address_match")return null;
+  if(state.source==="personal_imported_address_match") return <ContactProjectlessMailHints items={state.items} hasMore={Boolean(state.hasMore)} language={language} onOpenCommunication={onOpenCommunication}/>;
+  return <section className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4" aria-label={de?"Persönliche Postfachhinweise":"Personal mailbox suggestions"}>
+    <h5 className="text-sm font-semibold">{de?"Persönliche Postfachhinweise":"Personal mailbox suggestions"}</h5>
+    <p className="mt-1 text-sm text-stone-700">{de?"Die Absenderadresse passt zu diesem Kontakt. Bitte Identität und Zusammenhang persönlich prüfen.":"The sender address matches this contact. Please review the identity and context personally."}</p>
+    <ul className="mt-2 space-y-2 text-sm">{state.items.map(item=><li key={item.id} className="break-words"><span>{item.subject|| (de?"Nachricht ohne Betreff":"Message without subject")} · {new Date(item.receivedAt).toLocaleDateString(de?"de-IE":"en-IE")}</span>{onOpenCommunication&&<button type="button" className="ml-2 min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold" onClick={()=>onOpenCommunication(item.id)}>{de?"Nachricht prüfen":"Review message"}</button>}</li>)}</ul>
+  </section>;
 }

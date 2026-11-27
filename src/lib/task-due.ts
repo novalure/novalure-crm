@@ -107,3 +107,12 @@ export function mergeConfirmedTasks(server:readonly Task[],confirmed:readonly Ta
   for(const task of confirmed){const current=records.get(key(task));if(!current||Number(task.version??0)>Number(current.version??0))records.set(key(task),task);}
   return [...records.values()];
 }
+
+/** Normalize reload failures separately from the already confirmed save. */
+export async function reloadConfirmedTask(reload: () => Promise<boolean>): Promise<boolean> {
+  try {
+    return (await reload()) === true;
+  } catch {
+    return false;
+  }
+}

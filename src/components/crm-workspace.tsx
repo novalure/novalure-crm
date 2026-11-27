@@ -5068,9 +5068,7 @@ export function CrmWorkspace({
                   contacts={visibleContacts}
                   language={language}
                   leads={visibleLeads}
-                  onTasksChanged={async () => {
-                    await refreshCoreData();
-                  }}
+                  onTasksChanged={refreshCoreData}
                   projectLabel={projectScopeLabel}
                   projects={draftScopeProjects}
                   tasks={visibleTasks}
@@ -5095,6 +5093,7 @@ export function CrmWorkspace({
                   onContactsChanged={async () => {
                     await refreshCoreData();
                   }}
+                  onOpenCommunication={(messageId) => { setMailboxFocus({workspaceId:activeWorkspace.id,messageId}); handleSectionChange("communication"); }}
                   organizations={visibleOrganizations}
                   projects={draftScopeProjects}
                   relationships={visibleContactRelationships}

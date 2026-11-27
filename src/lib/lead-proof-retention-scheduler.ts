@@ -29,17 +29,47 @@ async function delegated<T>(scope:Scope,callback:(tx:TenantTransaction,session:A
   return withCrmRead(session,async()=>{await assertProjectGrant(tx,session,p.projectId,true);return callback(tx,session,p.projectId);});
  }),options);
 }
-export async function handleProofRetentionCron(request:Request,env:NodeJS.ProcessEnv=process.env,options:TenantTransactionOptions={}){
- if(request.method!=='GET'||new URL(request.url).search||!env.CRON_SECRET?.trim()||!isCronAuthorized(request,env))return Response.json({error:'Unauthorized'},{status:401});if(areQueueWorkersPaused(env))return Response.json({ok:true,paused:true});
- let scopes:Scope[];try{scopes=configuredScopes(env);}catch{return Response.json({ok:false,code:'RETENTION_SCOPE_INVALID'},{status:503});}
- const host=createCronRun({route:'lead-proof-retention'}),results:{policyId:string;status:string;deleted?:number;code?:string}[]=[];
- for(const scope of scopes){if(!host.shouldContinue()||areQueueWorkersPaused(env))break;try{
-  const jobs=await delegated(scope,async(tx,session,projectId)=>{
-   const due=await tx.query<{leadId:string;proofId:string}>(`select p.lead_id as "leadId",p.id as "proofId" from lead_qualification_proofs p join lead_proof_retention_policies r on r.workspace_id=p.workspace_id and r.project_id=p.project_id left join lead_proof_retention_jobs j on j.workspace_id=p.workspace_id and j.proof_id=p.id where p.workspace_id=$1::uuid and p.project_id=$2::uuid and r.id=$3::uuid and p.kind in('financing_confirmation','funds_evidence') and p.usable_until+make_interval(days=>r.grace_days)<=clock_timestamp() and (j.id is null or j.status='queued') and not exists(select 1 from lead_proof_retention_holds h where h.workspace_id=p.workspace_id and h.proof_id=p.id and h.active) order by p.usable_until,p.id limit 2`,[scope.workspaceId,projectId,scope.policyId]);
-   const ids:string[]=[];for(const row of due)ids.push((await prepareLeadProofRetention(tx,session,row)).id);return ids;
-  },options);
-  let deleted=0;for(const job of jobs){if(!host.shouldContinue()||areQueueWorkersPaused(env))break;await delegated(scope,async(tx,session,projectId)=>{const result=await processLeadProofRetention(tx,session,job);await tx.execute(`insert into audit_logs(workspace_id,project_id,actor_user_id,action,entity_type,entity_id,after) values($1::uuid,$2::uuid,$3::uuid,'lead_proof.scheduled_retention','lead_proof_retention_job',$4::uuid,jsonb_build_object('actorType','DELEGATED_PROOF_RETENTION_JOB','hostRunId',$5::text,'policyId',$6::text))`,[scope.workspaceId,projectId,scope.actorId,job,host.runId,scope.policyId]);return result;},options);deleted++;}
-  results.push({policyId:scope.policyId,status:'completed',deleted});
- }catch(error){results.push({policyId:scope.policyId,status:error instanceof CrmCommandError&&error.code==='RETENTION_POLICY_PAUSED'?'paused':'blocked',code:error instanceof CrmCommandError?error.code:'RETENTION_UNAVAILABLE'});}}
- const ok=results.every(result=>result.status!=='blocked');return Response.json({ok,configured:scopes.length,attempted:results.length,runId:host.runId,results},{status:ok?200:503});
+export async function handleProofRetentionCron(request: Request, env: NodeJS.ProcessEnv = process.env, options: TenantTransactionOptions = {}) {
+ if (request.method !== 'GET' || new URL(request.url).search || !env.CRON_SECRET?.trim() || !isCronAuthorized(request, env)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+ let scopes: Scope[];
+ try { scopes = configuredScopes(env); } catch { return Response.json({ ok: false, code: 'RETENTION_SCOPE_INVALID' }, { status: 503 }); }
+ const host = createCronRun({ route: 'lead-proof-retention' });
+ const results: { policyId: string; status: 'completed' | 'partial' | 'paused' | 'blocked'; selected?: number; deleted?: number; code?: string }[] = [];
+ const stopReason = () => areQueueWorkersPaused(env) ? 'RETENTION_PAUSED' : host.shouldContinue() ? undefined : 'RETENTION_DEADLINE';
+ let interruption: ReturnType<typeof stopReason>;
+ for (const scope of host.dailyScopeOrder(scopes)) {
+  interruption = stopReason();
+  if (interruption) break;
+  let selected: number | undefined;
+  let deleted = 0;
+  try {
+   const jobs = await delegated(scope, async (tx, session, projectId) => {
+    const due=await tx.query<{leadId:string;proofId:string}>(`select p.lead_id as "leadId",p.id as "proofId" from lead_qualification_proofs p join lead_proof_retention_policies r on r.workspace_id=p.workspace_id and r.project_id=p.project_id left join lead_proof_retention_jobs j on j.workspace_id=p.workspace_id and j.proof_id=p.id where p.workspace_id=$1::uuid and p.project_id=$2::uuid and r.id=$3::uuid and p.kind in('financing_confirmation','funds_evidence') and p.usable_until+make_interval(days=>r.grace_days)<=clock_timestamp() and (j.id is null or j.status='queued') and not exists(select 1 from lead_proof_retention_holds h where h.workspace_id=p.workspace_id and h.proof_id=p.id and h.active) order by p.usable_until,p.id limit 2`,[scope.workspaceId,projectId,scope.policyId]);
+    const ids: string[] = [];
+    for (const row of due) ids.push((await prepareLeadProofRetention(tx, session, row)).id);
+    return ids;
+   }, options);
+   selected = jobs.length;
+   for (const job of jobs) {
+    interruption = stopReason();
+    if (interruption) break;
+    await delegated(scope, async (tx, session, projectId) => {
+     await processLeadProofRetention(tx, session, job);
+     await tx.execute(`insert into audit_logs(workspace_id,project_id,actor_user_id,action,entity_type,entity_id,after) values($1::uuid,$2::uuid,$3::uuid,'lead_proof.scheduled_retention','lead_proof_retention_job',$4::uuid,jsonb_build_object('actorType','DELEGATED_PROOF_RETENTION_JOB','hostRunId',$5::text,'policyId',$6::text))`,[scope.workspaceId,projectId,scope.actorId,job,host.runId,scope.policyId]);
+    }, options);
+    deleted++;
+   }
+   results.push({ policyId: scope.policyId, status: interruption ? 'partial' : 'completed', selected, deleted, code: interruption });
+   if (interruption) break;
+  } catch (error) {
+   const code = error instanceof CrmCommandError ? error.code : 'RETENTION_UNAVAILABLE';
+   // A deliberately disabled policy has no scheduled work. A pause after selection leaves jobs outstanding.
+   results.push({ policyId: scope.policyId, status: code === 'RETENTION_POLICY_PAUSED' && selected === undefined ? 'paused' : 'blocked', selected, deleted, code });
+  }
+ }
+ const remaining = scopes.length - results.length;
+ const ok = remaining === 0 && results.every(result => result.status === 'completed' || result.status === 'paused');
+ return Response.json({ ok, configured: scopes.length, attempted: results.length, remaining, runId: host.runId, results,
+  code: interruption ?? (ok ? undefined : 'RETENTION_SCOPE_FAILED'), paused: interruption === 'RETENTION_PAUSED' || undefined,
+ }, { status: ok ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
 }

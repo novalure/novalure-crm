@@ -78,18 +78,18 @@ test("Microsoft create carries transaction identity, ownership and UTC times and
   }, microsoft);
 });
 
-test("Microsoft invitation is sent under current server authority and preserves existing attendees", async () => {
+test("Microsoft invitation is sent under current server authority and leaves the existing recipient in place", async () => {
   const microsoft=access("microsoft"), invitation={email:"hello@novalure.eu",name:"Synthetic owner"};
   const original=process.env.BOOKING_MESSAGES_ENABLED;process.env.BOOKING_MESSAGES_ENABLED="1";
   let writes=0,authorizations=0;
   const existing={id:"ms-event","@odata.etag":'W/"v1"',start:{dateTime:write.startsAt},end:{dateTime:write.endsAt},
     singleValueExtendedProperties:[{id:"String {f0c6c55b-2cda-4365-b7d6-b5d2cd8c6d75} Name NovalureBooking",value:`${scope.workspaceId}:${write.bookingId}`}],
-    attendees:[{emailAddress:{address:"existing@example.invalid",name:"Existing attendee"},type:"optional",status:{response:"accepted"}}]};
+    attendees:[{emailAddress:{address:invitation.email.toUpperCase(),name:"Existing attendee"},type:"optional",status:{response:"accepted"}}]};
   try{await transport((_url,init)=>{
     if(init.method==="GET")return response(existing);
     writes++;assert.equal(authorizations,writes);const body=JSON.parse(String(init.body));
-    assert.equal(body.attendees.at(-1).emailAddress.address,invitation.email);
-    if(init.method==="PATCH"){assert.deepEqual(body.attendees[0],{emailAddress:{address:"existing@example.invalid",name:"Existing attendee"},type:"optional"});assert.equal(new Headers(init.headers).get("If-Match"),'W/"v1"');}
+    if(init.method==="PATCH"){assert.equal(body.attendees,undefined);assert.equal(new Headers(init.headers).get("If-Match"),'W/"v1"');}
+    else assert.equal(body.attendees.at(-1).emailAddress.address,invitation.email);
     return response({...existing,...body,"@odata.etag":'W/"v2"',onlineMeeting:{joinUrl:"https://teams.microsoft.com/l/meetup-join/test"}});
   },async()=>{
     const provider=createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async(effect,send)=>{
@@ -129,6 +129,10 @@ test("existing Microsoft attendees cannot bypass message authority on reschedule
     assert.equal(mutations,0);process.env.BOOKING_MESSAGES_ENABLED="1";
     let checked=false;await createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async(effect,send)=>{assert.equal(effect.email,invitation.email);checked=true;return send();}}).delete({...input,invitation});
     assert.equal(checked,true);assert.equal(mutations,1);
+    existing.attendees.push({emailAddress:{address:"additional@example.invalid",name:"Additional attendee"},type:"optional"});
+    const allowedRecipient=createBookingProviderWithAccess(scope,microsoft,{withInvitationWrite:async(_effect,send)=>send()});
+    for(const action of ["update","delete"] as const)await assert.rejects(allowedRecipient[action]({...input,invitation}),e=>e instanceof BookingProviderError&&e.outcome==="rejected"&&e.code==="booking_invitation_not_authorized");
+    assert.equal(mutations,1,"the additional attendee prevents both mutations");
   },microsoft);}finally{if(original===undefined)delete process.env.BOOKING_MESSAGES_ENABLED;else process.env.BOOKING_MESSAGES_ENABLED=original;}
 });
 

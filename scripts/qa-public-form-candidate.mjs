@@ -8,6 +8,7 @@ import { listWebsiteForms, upsertWebsiteForm } from "../src/lib/db/form-reposito
 import { getRolePermissions } from "../src/lib/auth/permissions.ts";
 import { getProductRoleCapabilities } from "../src/lib/product-model.ts";
 import { studioEnquiryCandidateBinding } from "../src/lib/studio-enquiry-candidate.ts";
+import { candidateFixtureScope, reserveCandidateWorkspaces, seedCandidateIntegration } from "./lib/qa-public-form-fixture.mjs";
 import { attestStudioEnquiryCandidate, studioCandidateHttpDiagnostic } from "./lib/qa-studio-enquiry-candidate.mjs";
 
 const qa = await assertQaTarget();
@@ -43,10 +44,11 @@ requireProof(base === "http://127.0.0.1:3000", "QA_HTTP_TARGET_INVALID");
 
 const owner = new pg.Pool({ connectionString: ownerTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
 const app = new pg.Pool({ connectionString: appTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
-const marker = randomBytes(12).toString("hex");
-const own = { workspace: randomUUID(), actor: randomUUID(), viewer: randomUUID(), project: randomUUID(),
-  form: randomUUID(), deniedForm: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
-const foreign = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), key: `qa-foreign-${marker}` };
+const scope = candidateFixtureScope(qa.runPrefix);
+const { marker } = scope;
+const own = { ...scope.own, actor: randomUUID(), viewer: randomUUID(), project: randomUUID(),
+  form: randomUUID(), deniedForm: randomUUID(), draft: randomUUID() };
+const foreign = { ...scope.foreign, actor: randomUUID(), project: randomUUID(), form: randomUUID() };
 const slug = `candidate-${marker}`;
 const draftSlug = `draft-${marker}`;
 const siteKey = `nov_pk_${own.form.replaceAll("-", "")}`;
@@ -122,11 +124,6 @@ async function attestDatabase() {
   requireProof(!role?.rolcanlogin && role.rolpassword === null && !role.rolsuper && !role.rolbypassrls
     && !role.rolcreatedb && !role.rolcreaterole && !role.rolreplication, "QA_LOOKUP_ROLE_NOT_DISABLED");
   await attestRetiredLookupRoleCannotAuthenticate();
-  // Immutable CRM events prevent cascading deletion of a seeded workspace.
-  // Each disposable branch therefore runs this candidate matrix only once.
-  requireProof(await scalar(owner, `select count(*)::int as value from workspaces
-    where public_key like 'qa-%' and name like 'SYNTHETIC Candidate %'`) === 0,
-  "QA_CANDIDATE_BRANCH_ALREADY_USED");
 }
 
 async function seedForms() {
@@ -134,8 +131,6 @@ async function seedForms() {
   try {
     await client.query("begin");
     for (const fixture of [own, foreign]) {
-      await client.query("insert into workspaces(id,name,operating_model,public_key) values($1,$2,'self_service_customer',$3)",
-        [fixture.workspace, `SYNTHETIC Candidate ${marker}`, fixture.key]);
       await client.query(`insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
         values($1,$2,'SYNTHETIC owner',$3,'owner','customer_owner','active')`,
       [fixture.actor, fixture.workspace, `candidate-${fixture.actor}@example.invalid`]);
@@ -161,28 +156,7 @@ async function seedForms() {
       [own, siteKey, publicOrigin],
       [foreign, foreignSiteKey, foreignOrigin],
     ]) {
-      const integration = await client.query(`insert into external_integrations(
-        public_site_key,workspace_id,project_id,form_id,integration_type,status,mode,
-        allowed_origins,capabilities,configuration,metadata
-      ) values($1,$2,$3,$4,'public_form','active','training',array[$5],
-        array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],'{}','{"synthetic":true}')
-      on conflict(public_site_key) do update set
-        allowed_origins=excluded.allowed_origins,
-        capabilities=excluded.capabilities,
-        status='active',
-        mode='training',
-        metadata=external_integrations.metadata || excluded.metadata
-      returning id`, [key, fixture.workspace, fixture.project, fixture.form, allowedOrigin]);
-      await client.query(`insert into external_integration_widget_configs(
-        integration_id,workspace_id,brand_name,assistant_name,enabled_capabilities,
-        lead_capture_enabled,chat_enabled
-      ) values($1,$2,'SYNTHETIC Candidate','Evelyn',
-        array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],true,true)
-      on conflict(integration_id) do update set
-        enabled_capabilities=excluded.enabled_capabilities,
-        lead_capture_enabled=true,
-        chat_enabled=true`,
-      [integration.rows[0].id, fixture.workspace]);
+      await seedCandidateIntegration(client, fixture, key, allowedOrigin);
     }
     await client.query("commit");
   } catch (error) { await client.query("rollback"); throw error; }
@@ -477,6 +451,7 @@ async function attestWebsiteSales() {
 
 try {
   await attestDatabase();
+  await reserveCandidateWorkspaces(owner, scope, process.env.RUNNER_TEMP);
   await seedForms();
   await attestRls();
   await attestFormSaving();

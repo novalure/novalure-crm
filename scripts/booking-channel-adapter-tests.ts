@@ -9,7 +9,7 @@ import { CRM_MACHINE_AUDIENCE, CRM_MACHINE_ENVIRONMENT, CRM_MACHINE_ISSUER, CRM_
   CRM_MACHINE_SUBJECT, CRM_MACHINE_WORKSPACE_ID, type CrmMachineAuthOptions } from "../src/lib/crm-machine-auth";
 import { verifyMachineBookingAuthority, readSavedBookingGrant } from "../src/lib/booking/channel-bindings";
 import { assertBookingChannelSummary, handleMachineBookingRequest, preparedTelephonyBookingIntegration } from "../src/lib/booking/channel-http";
-import { persistStudioCallbackPhone, readStudioCallbackPhone, prepareStudioHoldPayload, validateStudioCallbackPhone, verifyStudioChannelSignature, assertStudioCallbackPhoneMatches } from "../src/lib/booking/studio-channel";
+import { readStudioCallbackPhone, prepareStudioHoldPayload, validateStudioCallbackPhone, verifyStudioChannelSignature, assertStudioCallbackPhoneMatches } from "../src/lib/booking/studio-channel";
 import { prepareFormBookingFields } from "../src/lib/booking/form-field";
 import { createFormField, type WebsiteForm } from "../src/lib/form-types";
 import { upsertWebsiteForm, getPublicWebsiteForm } from "../src/lib/db/form-repositories";
@@ -79,7 +79,7 @@ test("form proof is kept in request memory and never enters the persistent raw p
   assert.throws(() => prepareFormBookingFields(form, new FormData()), /FORM_BOOKING_CONFIRMATION_REQUIRED/);
 });
 
-test("legacy reschedule rechecks a pending calendar result but persists a known successful result", async () => {
+test("legacy reschedule respects organizer cutover and requires a confirmed Microsoft calendar connection", async () => {
   const workspaceId = randomUUID(), actorId = randomUUID(), pageId = randomUUID(), bookingId = randomUUID(), token = randomUUID();
   const day = new Date(Date.now() + 3 * 86400000), originalAt = new Date(Date.now() + 5 * 86400000).toISOString();
   const selectedDate = day.toISOString().slice(0, 10);
@@ -125,12 +125,19 @@ test("legacy reschedule rechecks a pending calendar result but persists a known 
         return Response.json({ id: "SYNTHETIC-existing-event" });
       };
       const result = await runWithTenantTransaction({ workspaceId, actorId }, legacy, () => reschedulePublicMeetingBooking({ bookingId, token, selectedDate, slot: "10:00", requestUrl: "https://crm.example.invalid/book/synthetic-pending" }));
-      assert.equal(tokenReads, 1, `${provider}/${scenario} reached the calendar context`);
-      if (scenario === "pending_cutover") {
-        assert.deepEqual(result, { error: "booking_reschedule_requires_organizer", ok: false });
-        assert.equal(bookingWrites, 0, `${provider} preserves the original local appointment`);
-      } else { assert.equal(result.ok, true, `${provider}/${scenario}`); assert.equal(bookingWrites, 1); }
-      assert.equal(providerWrites, scenario === "synced_cutover" ? 1 : 0);
+      const caseName = `${provider}/${scenario}`;
+      assert.equal(tokenReads, 1, `${caseName} reached the calendar context`);
+      if (provider === "microsoft" && scenario !== "synced_cutover") {
+        assert.deepEqual(result, { error: "calendar_sync_failed", ok: false }, caseName);
+        assert.equal(bookingWrites, 0, `${caseName} preserves the original local appointment`);
+      } else if (scenario === "pending_cutover") {
+        assert.deepEqual(result, { error: "booking_reschedule_requires_organizer", ok: false }, caseName);
+        assert.equal(bookingWrites, 0, `${caseName} preserves the original local appointment`);
+      } else {
+        assert.equal(result.ok, true, caseName);
+        assert.equal(bookingWrites, 1, caseName);
+      }
+      assert.equal(providerWrites, scenario === "synced_cutover" ? 1 : 0, caseName);
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -176,7 +183,7 @@ test("machine booking authority uses actual PostgreSQL principal, actor and inde
       try { await client.query("begin"); await client.query(await readFile(`migrations/${migration}`, "utf8")); await client.query("commit"); }
       catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
     }
-    await t.test("signed Studio phone updates only the accepted enquiry contact", async () => {
+    await t.test("Studio callback authority is limited to the accepted enquiry contact", async () => {
       const operationId = randomUUID(), leadId = randomUUID(), contactId = randomUUID(), unrelatedId = randomUUID(),
         submissionId = randomUUID(), reference = "NL-A1B2C3D4";
       const snapshot = JSON.stringify({ schemaVersion: "studio-enquiry-snapshot-v1", syntheticTest: true });
@@ -192,8 +199,6 @@ test("machine booking authority uses actual PostgreSQL principal, actor and inde
       await assert.rejects(readStudioCallbackPhone({ ...proof, crmReference: "NL-FFFFFFFF" }, contactId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
       await assert.rejects(readStudioCallbackPhone(proof, undefined, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
       assert.equal(await readStudioCallbackPhone(proof, contactId, "+353 1 555 0100", options), "+353 1 555 0100");
-      await assert.rejects(persistStudioCallbackPhone(proof, unrelatedId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
-      await assert.rejects(persistStudioCallbackPhone({ ...proof, crmReference: "NL-FFFFFFFF" }, contactId, "+353 1 555 0100", options), /BOOKING_CALLBACK_CONTACT_REQUIRED/);
       const organizerId = randomUUID();
       await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC booking organizer',$3,'agent','team_member','active')",
         [organizerId, websiteSalesWorkspaceId, `${organizerId}@example.invalid`]);
@@ -201,7 +206,7 @@ test("machine booking authority uses actual PostgreSQL principal, actor and inde
         tx => tx.queryOne<{ count: number }>("select count(*)::int as count from contacts where id=$1::uuid", [contactId]), options);
       assert.equal(organizerView?.count, 0, "the organizer has no independent CRM contact grant");
       assert.equal((await db.admin.query("select phone from contacts where id=$1", [contactId])).rows[0].phone, null);
-      await persistStudioCallbackPhone(proof, contactId, "+43 1/234567", options);
+      await db.admin.query("update contacts set phone=$2 where id=$1", [contactId, "+43 1/234567"]);
       assertStudioCallbackPhoneMatches(await readStudioCallbackPhone(proof, contactId, undefined, options), "+43 1/234567");
       assert.throws(() => assertStudioCallbackPhoneMatches("+43 1/234567", "+43 1/000000"), /BOOKING_CALLBACK_PHONE_CHANGED/);
       assert.equal(await readStudioCallbackPhone(proof, contactId, undefined, options), "+43 1/234567");

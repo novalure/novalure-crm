@@ -992,7 +992,7 @@ async function listExternalBusyTimes(input: {
     timeMax: input.timeMax,
     timeMin: input.timeMin,
     workspaceId: input.workspaceId,
-  }).catch(() => []);
+  }).catch(() => null);
 }
 
 function getCalendarProviderFromPage(page: MeetingPageSettings) {
@@ -1063,6 +1063,9 @@ async function getMeetingAvailabilityForPage(
       workspaceId: page.workspaceId,
     }),
   ]);
+  // A configured Microsoft calendar that cannot be checked is not free.
+  // The existing null-availability contract blocks both booking and rescheduling.
+  if (externalBusy === null) return null;
   // Publication may complete while the provider's availability probe is pending.
   if (await getLegacyBookingReplacement(page.workspaceId, page.id)) return null;
   const busyRanges = [

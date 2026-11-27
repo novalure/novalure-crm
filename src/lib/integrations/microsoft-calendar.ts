@@ -1,4 +1,6 @@
 import { getCalendarAccessToken } from "@/lib/integrations/calendar-connections";
+import { readCalendarConnectionStatuses } from "@/lib/db/crm-operational-readers";
+import type { AppSession } from "@/lib/auth/session";
 
 export type MicrosoftCalendarResult = {
   provider: "microsoft-365" | "mock";
@@ -22,7 +24,7 @@ export type MicrosoftCalendarProviderStatus = {
   provider: "microsoft-365" | "mock";
   external: boolean;
   accountLabel: string | null;
-  mode: "access-token" | "client-credentials" | "not-configured";
+  mode: "access-token" | "client-credentials" | "workspace-oauth" | "not-configured";
   reason: string | null;
   scopes: string[];
 };
@@ -103,8 +105,24 @@ export function getMicrosoftCalendarProviderStatus(): MicrosoftCalendarProviderS
   };
 }
 
+/** Do not advertise a global app calendar as a workspace connection. */
+export async function getWorkspaceMicrosoftCalendarProviderStatus(session: AppSession): Promise<MicrosoftCalendarProviderStatus> {
+  const { microsoft: connection } = await readCalendarConnectionStatuses(session);
+  return {
+    configured: connection.connected,
+    provider: "microsoft-365",
+    external: connection.connected,
+    accountLabel: connection.connected ? connection.accountLabel : null,
+    mode: connection.connected ? "workspace-oauth" : "not-configured",
+    reason: connection.connected ? null : "calendar_workspace_connection_required",
+    scopes: connection.connected ? connection.scopes : [],
+  };
+}
+
 async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
-  if (workspaceId) {
+  if (workspaceId !== undefined) {
+    // Explicit but absent/invalid workspace input must not select the global calendar.
+    if (typeof workspaceId !== "string" || !workspaceId.trim()) return null;
     const token = await getCalendarAccessToken({ provider: "microsoft", workspaceId }).catch(() => null);
 
     if (token) {
@@ -114,6 +132,8 @@ async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
         token,
       };
     }
+    // Workspace OAuth absence or failure must never fall back to global credentials.
+    return null;
   }
 
   const directToken = envValue("MICROSOFT_GRAPH_ACCESS_TOKEN");
@@ -194,7 +214,7 @@ export async function syncMicrosoftCalendarEvent(input: {
 }): Promise<MicrosoftCalendarResult> {
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
-  if (!providerStatus.configured && !input.workspaceId) {
+  if (!providerStatus.configured && input.workspaceId === undefined) {
     return {
       provider: "mock",
       status: "pending",
@@ -206,11 +226,9 @@ export async function syncMicrosoftCalendarEvent(input: {
     const graph = await getGraphToken(input.workspaceId);
 
     if (!graph) {
-      return {
-        provider: "mock",
-        status: "pending",
-        error: providerStatus.reason,
-      };
+      return input.workspaceId !== undefined
+        ? { provider: "microsoft-365", status: "failed", error: "calendar_workspace_connection_required" }
+        : { provider: "mock", status: "pending", error: providerStatus.reason };
     }
 
     const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
@@ -300,7 +318,10 @@ export async function listMicrosoftBusyTimes(input: {
   workspaceId?: string;
 }): Promise<Array<{ end: string; start: string }>> {
   const graph = await getGraphToken(input.workspaceId);
-  if (!graph) return [];
+  if (!graph) {
+    if (input.workspaceId !== undefined) throw new Error("calendar_availability_unavailable");
+    return [];
+  }
 
   const url = new URL(graph.calendarViewEndpoint);
   url.searchParams.set("startDateTime", input.timeMin);
@@ -314,17 +335,38 @@ export async function listMicrosoftBusyTimes(input: {
       Prefer: 'outlook.timezone="UTC"',
     },
   });
-  const data = (await response.json().catch(() => ({}))) as {
+  const data = (await response.json().catch(() => null)) as {
     value?: Array<{
       end?: { dateTime?: string; timeZone?: string };
       showAs?: string;
       start?: { dateTime?: string; timeZone?: string };
     }>;
-  };
+    "@odata.nextLink"?: unknown;
+  } | null;
 
-  if (!response.ok) return [];
+  if (input.workspaceId === undefined && !response.ok) return [];
+  if (input.workspaceId !== undefined && (!response.ok || !data || !Array.isArray(data.value) || data["@odata.nextLink"] != null)) throw new Error("calendar_availability_unavailable");
 
-  return (data.value ?? [])
+  // A partial/malformed provider response is not an empty calendar. The
+  // requested UTC preference is necessary to interpret offset-free times.
+  if (input.workspaceId !== undefined) {
+    const instant = (value: { dateTime?: string; timeZone?: string } | undefined) => {
+      if (!value || typeof value.dateTime !== "string" || (value.timeZone && value.timeZone.toUpperCase() !== "UTC")) throw new Error("calendar_availability_unavailable");
+      const date = new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value.dateTime) ? value.dateTime : `${value.dateTime}Z`);
+      if (!Number.isFinite(date.getTime())) throw new Error("calendar_availability_unavailable");
+      return date.toISOString();
+    };
+    return data!.value!.filter((event) => {
+      if (!event || typeof event !== "object" || typeof event.showAs !== "string") throw new Error("calendar_availability_unavailable");
+      return event.showAs !== "free";
+    }).map((event) => {
+      const start = instant(event.start), end = instant(event.end);
+      if (Date.parse(end) <= Date.parse(start)) throw new Error("calendar_availability_unavailable");
+      return {start,end};
+    });
+  }
+
+  return (data?.value ?? [])
     .filter((event) => event.showAs !== "free")
     .map((event) => ({
       end: event.end?.dateTime ? `${event.end.dateTime}Z` : "",
@@ -345,7 +387,7 @@ export async function updateMicrosoftCalendarEvent(input: {
 }): Promise<MicrosoftCalendarMutationResult> {
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
-  if (!providerStatus.configured && !input.workspaceId) {
+  if (!providerStatus.configured && input.workspaceId === undefined) {
     return {
       provider: "mock",
       status: "pending",
@@ -357,11 +399,9 @@ export async function updateMicrosoftCalendarEvent(input: {
     const graph = await getGraphToken(input.workspaceId);
 
     if (!graph) {
-      return {
-        provider: "mock",
-        status: "pending",
-        error: providerStatus.reason,
-      };
+      return input.workspaceId !== undefined
+        ? { provider: "microsoft-365", status: "failed", error: "calendar_workspace_connection_required" }
+        : { provider: "mock", status: "pending", error: providerStatus.reason };
     }
 
     const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
@@ -430,7 +470,7 @@ export async function deleteMicrosoftCalendarEvent(input: {
 }): Promise<MicrosoftCalendarMutationResult> {
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
-  if (!providerStatus.configured && !input.workspaceId) {
+  if (!providerStatus.configured && input.workspaceId === undefined) {
     return {
       provider: "mock",
       status: "pending",
@@ -442,11 +482,9 @@ export async function deleteMicrosoftCalendarEvent(input: {
     const graph = await getGraphToken(input.workspaceId);
 
     if (!graph) {
-      return {
-        provider: "mock",
-        status: "pending",
-        error: providerStatus.reason,
-      };
+      return input.workspaceId !== undefined
+        ? { provider: "microsoft-365", status: "failed", error: "calendar_workspace_connection_required" }
+        : { provider: "mock", status: "pending", error: providerStatus.reason };
     }
 
     const eventUrl = graph.eventEndpoint.replace(/\/events$/, `/events/${encodeURIComponent(input.eventId)}`);
@@ -456,12 +494,13 @@ export async function deleteMicrosoftCalendarEvent(input: {
     });
     const rawBody = await response.text();
 
-    if (!response.ok && response.status !== 404) {
+    // A scoped 404 cannot establish whether an older event belongs to this organizer.
+    if (!response.ok && (response.status !== 404 || input.workspaceId !== undefined)) {
       return {
         provider: "microsoft-365",
         status: "failed",
         eventId: input.eventId,
-        error: graphErrorMessage(response.status, rawBody),
+        error: response.status === 404 ? "calendar_delete_unconfirmed" : graphErrorMessage(response.status, rawBody),
       };
     }
 

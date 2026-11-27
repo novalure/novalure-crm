@@ -272,6 +272,56 @@ test("web exposé publication, public capabilities, inquiry and consent run in i
       assert.equal((await handleWebExposeRetentionCron(request(),{...env,NOVALURE_ANALYTICS_RETENTION_SCOPES:JSON.stringify([{workspaceId,actorId:foreignUser}])},options)).status,503);
       assert.equal((await handleWebExposeRetentionCron(request(),{...env,NOVALURE_ANALYTICS_RETENTION_SCOPES:"{}"},options)).status,503);
     });
+    await t.test("retention reports every unattempted scope and rotates its daily starting workspace", async (t) => {
+      const testEnv: NodeJS.ProcessEnv = {
+        NODE_ENV: "test",
+        CRON_SECRET: "synthetic-retention-secret",
+        NOVALURE_ANALYTICS_RETENTION_SCOPES: JSON.stringify([
+          { workspaceId, actorId: userId },
+          { workspaceId: foreignWorkspace, actorId: foreignUser },
+        ]),
+      };
+      const request = () => new Request("http://localhost/api/cron/web-expose-retention", { headers: { authorization: "Bearer synthetic-retention-secret" } });
+      const firstDay = Date.UTC(2026, 10, 27);
+
+      await t.test("deadline can stop before any scope begins", async (t) => {
+        let clockReads = 0;
+        t.mock.method(Date, "now", () => firstDay + (clockReads++ === 0 ? 0 : 45_000));
+        const response = await handleWebExposeRetentionCron(request(), testEnv, options);
+        assert.equal(response.status, 503);
+        assert.deepEqual(await response.json(), { ok: false, configured: 2, attempted: 0, remaining: 2, results: [], code: "RETENTION_DEADLINE" });
+      });
+
+      await t.test("deadline after one committed scope leaves the next day a different first scope", async (t) => {
+        let now = firstDay;
+        t.mock.method(Date, "now", () => now);
+        const runDay = (day: number) => {
+          now = day;
+          return handleWebExposeRetentionCron(request(), testEnv, { pool: {
+            async connect() {
+              const client = await options.pool.connect();
+              now += 45_000;
+              return client;
+            },
+          } });
+        };
+        for (const day of [firstDay, firstDay + 86_400_000]) {
+          const response = await runDay(day);
+          assert.equal(response.status, 503);
+          const payload = await response.json();
+          assert.deepEqual({ ok: payload.ok, configured: payload.configured, attempted: payload.attempted, remaining: payload.remaining, code: payload.code },
+            { ok: false, configured: 2, attempted: 1, remaining: 1, code: "RETENTION_DEADLINE" });
+          assert.equal(payload.results[0].workspaceId, day === firstDay ? workspaceId : foreignWorkspace);
+          assert.equal(payload.results[0].status, "completed");
+        }
+      });
+
+      await t.test("a pause reports untouched configured scopes", async () => {
+        const response = await handleWebExposeRetentionCron(request(), { ...testEnv, NOVALURE_WORKERS_PAUSED: "1" }, options);
+        assert.equal(response.status, 503);
+        assert.deepEqual(await response.json(), { ok: false, configured: 2, attempted: 0, remaining: 2, results: [], code: "RETENTION_PAUSED", paused: true });
+      });
+    });
     await t.test("publication freezes the reviewed current company template and rejects changes between preview and publish",async()=>{
       const metadata=()=>({idempotencyKey:randomUUID(),correlationId:randomUUID()});
       const configuration={schemaVersion:1 as const,name:'SYNTHETIC Company',companyName:'SYNTHETIC Frozen company',accentColor:'#164e63',sectionOrder:['hero','contact',...webExposeTemplateSections.filter(section=>!['hero','contact'].includes(section))]};

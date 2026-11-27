@@ -5,8 +5,8 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // The standalone relinking proof loads the CommonJS decoder through Node.
   {
-    // The redistributable HEIC relinking proof is an intentionally CommonJS tool.
     files: ["public/third-party/heic-decoder/relink-proof/test-relink.cjs"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
@@ -22,6 +22,8 @@ const eslintConfig = defineConfig([
     ".codex-worktrees/**",
     "out/**",
     "build/**",
+    // This is generated Emscripten output. Its inputs and relinking proof are shipped separately.
+    "public/heic-decoder/primary.js",
     "docs/**",
     "*.docx",
     "next-env.d.ts",

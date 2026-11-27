@@ -45,6 +45,8 @@ const reviewedNumber108Checksums = new Map([
   ["108_universal_booking", "97c2ce591e021467262e1ed5b54485e985f9cb0004f0df52dd8caf77e6ab6b56"],
 ]);
 const manualCutoverVersions = new Set([
+  "212_mailbox_verified_microsoft_identity",
+  "213_mailbox_contact_review",
   "057_bot_webhook_legacy_index_cutover",
   "060_tenant_rls_pilot_prepare",
   "061_validate_and_activate_tenant_rls_pilot",
@@ -73,6 +75,7 @@ const manualCutoverVersions = new Set([
   "114_customer_workspace_provisioning",
 ]);
 const migrationDependencies = new Map([
+  ["213_mailbox_contact_review", "212_mailbox_verified_microsoft_identity"],
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
   ["057_bot_webhook_legacy_index_cutover", "048_bot_webhook_integrity"],
   ["061_validate_and_activate_tenant_rls_pilot", "060_tenant_rls_pilot_prepare"],
@@ -102,6 +105,21 @@ const migrationDependencies = new Map([
   ["112_booking_production_activation", "111_booking_public_channels"],
   ["113_meeting_reminder_admission", "112_booking_production_activation"],
   ["114_customer_workspace_provisioning", "108_knowledge_connected_assistant_quota"],
+]);
+const mailPredecessorDigests = new Map([
+  ["167_crm_partner_cooperation", "ceb4c8924613a212a1d47f05f083e2482ebfa2e16a30294da7779a2e92a36963"],
+  ["170_crm_personal_mailbox", "1cf5a164c6bcac6330b1839db01a9d5e53d75744c30fff819506cb274eb7624a"],
+  ["182_personal_mailbox_sync", "fb69d00ea24df4eea3cf9bcc2e023deac8219d73fedd68c83bc63fd0bc531786"],
+  ["212_mailbox_verified_microsoft_identity", "d1bdb3c4cc3a286366d0adcb846f2158fb2e62a3ce7f025622ba731044b38cf7"],
+  ["213_mailbox_contact_review", "adec62fefd88336bd34c8dc697d5d812ea8bb5340b6b74145e54a8c3e7f4e4ec"],
+]);
+const mailDependencies = new Map([
+  ["212_mailbox_verified_microsoft_identity", ["170_crm_personal_mailbox", "182_personal_mailbox_sync"]],
+  ["213_mailbox_contact_review", ["167_crm_partner_cooperation", "170_crm_personal_mailbox", "182_personal_mailbox_sync", "212_mailbox_verified_microsoft_identity"]],
+]);
+const renamedMailVersions = new Map([
+  ["212_mailbox_verified_microsoft_identity", "190_mailbox_verified_microsoft_identity"],
+  ["213_mailbox_contact_review", "192_mailbox_contact_review"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
@@ -703,7 +721,70 @@ export function numberCollisions(ledgerRows, migrations, aliases = [], cwd = pro
   });
 }
 
-export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations, only }) {
+function assertMailSource({ version, migrations, cwd, context }) {
+  const expected = mailPredecessorDigests.get(version);
+  if (!expected) throw new Error(`Refusing ${context}: unpinned mail source ${version}`);
+  const candidates = migrations.filter((migration) => migration.version === version && !migration.rollback);
+  const source = candidates[0];
+  const file = `${version}.sql`;
+  const path = `migrations/${file}`;
+  if (candidates.length !== 1 || source.file !== file || source.path !== path ||
+      source.name !== version.slice(4) || source.checksum !== expected ||
+      typeof source.content !== "string" || checksum(source.content) !== expected) {
+    throw new Error(`Refusing ${context}: required source ${version} is missing or unverifiable`);
+  }
+  try {
+    const directory = join(cwd, "migrations");
+    const sourcePath = join(directory, file);
+    if (!lstatSync(directory).isDirectory() || !lstatSync(sourcePath).isFile() ||
+        checksum(readFileSync(sourcePath, "utf8")) !== expected) throw new Error("source mismatch");
+  } catch {
+    throw new Error(`Refusing ${context}: required source ${version} is missing or unverifiable`);
+  }
+}
+
+function assertMailSourceAndLedger({ version, ledgerRows, migrations, cwd, context }) {
+  assertMailSource({ version, migrations, cwd, context });
+  const expected = mailPredecessorDigests.get(version);
+  const rows = ledgerRows.filter((row) => String(row.version).slice(0, 3) === version.slice(0, 3));
+  if (rows.length !== 1 || ![version, version.slice(0, 3)].includes(rows[0].version) ||
+      typeof rows[0].checksum !== "string" || !/^[a-f0-9]{64}$/.test(rows[0].checksum) || rows[0].checksum !== expected) {
+    throw new Error(`Refusing ${context}: ${version} has no exact checksummed ledger identity`);
+  }
+}
+
+function assertMailLineage({ ledgerRows, migrations, plan, cwd }) {
+  // Do not let a NULL checksum turn an applied new mail version into an
+  // apparently successful empty plan, even if its source is missing.
+  const selected = new Map(plan.map((item) => [item.version, item]));
+  for (const version of renamedMailVersions.keys()) {
+    if (ledgerRows.some((row) => row.version === version || row.version === version.slice(0, 3))) {
+      assertMailSourceAndLedger({ version, ledgerRows, migrations, cwd, context: `applied migration ${version}` });
+      if (!selected.has(version)) selected.set(version, migrations.find((item) => item.version === version));
+    }
+  }
+  for (const planned of selected.values()) {
+    const oldVersion = renamedMailVersions.get(planned.version);
+    if (oldVersion) {
+      const historical = ledgerRows.filter((row) => row.version === oldVersion || row.version === oldVersion.slice(0, 3));
+      if (historical.length) {
+        throw new Error(`Refusing migration ${planned.version}: historical mail identity or numeric alias ${oldVersion} requires reconciliation before a rename`);
+      }
+      assertMailSource({ version: planned.version, migrations, cwd, context: `migration ${planned.version}` });
+      const expected = mailPredecessorDigests.get(planned.version);
+      if (planned.file !== `${planned.version}.sql` || planned.path !== `migrations/${planned.version}.sql` ||
+          planned.name !== planned.version.slice(4) || planned.checksum !== expected ||
+          typeof planned.content !== "string" || checksum(planned.content) !== expected) {
+        throw new Error(`Refusing migration ${planned.version}: planned source differs from the pinned source`);
+      }
+    }
+    for (const predecessor of mailDependencies.get(planned.version) ?? []) {
+      assertMailSourceAndLedger({ version: predecessor, ledgerRows, migrations, cwd, context: `migration ${planned.version}` });
+    }
+  }
+}
+
+export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations, only, cwd = process.cwd() }) {
   const { appliedVersions } = resolveMigrationLedgerState({ ledgerRows, migrations });
   const hasBaseline = appliedVersions.has(baselineVersion);
   const runnable = migrations.filter((migration) => !migration.rollback);
@@ -723,10 +804,12 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
         `Refusing migration ${migration.version}: required predecessor ${requiredMigration} is not checksummed in the ledger`,
       );
     }
-    return appliedVersions.has(migration.version) ? [] : [migration];
+    const plan = appliedVersions.has(migration.version) ? [] : [migration];
+    assertMailLineage({ ledgerRows, migrations, plan, cwd });
+    return plan;
   }
 
-  return runnable.filter((migration) => {
+  const plan = runnable.filter((migration) => {
     // Standard QA up/dry-run never selects manual cutovers, including 095.
     // Migration 095 requires its separate --only and --allow-manual-cutover plan.
     if (migration.manualCutover) return false;
@@ -735,6 +818,8 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
     if (!hasBaseline && migration.number < baselineNumber) return false;
     return true;
   });
+  assertMailLineage({ ledgerRows, migrations, plan, cwd });
+  return plan;
 }
 
 function plannedMigrations(args) {
@@ -747,6 +832,7 @@ function plannedMigrations(args) {
 
 export function validateMigrationPlan({ ledgerRows, migrations, plan, cwd = process.cwd() }) {
   resolveMigrationLedgerState({ ledgerRows, migrations });
+  assertMailLineage({ ledgerRows, migrations, plan, cwd });
   const reviewed108 = hasNumber108Coexistence(ledgerRows, [...migrations, ...plan]);
   if (reviewed108) {
     assertReviewedNumber108Coexistence({ ledgerRows, migrations, cwd });

@@ -24,13 +24,21 @@ export function webExposeRetentionScheduled(workspaceId: string, env: NodeJS.Pro
 /** Host configuration narrows maintenance to explicit workspace/manager pairs. The database rechecks the active manager. */
 export async function handleWebExposeRetentionCron(request: Request, env: NodeJS.ProcessEnv = process.env, options: TenantTransactionOptions = {}) {
   if (request.method !== "GET" || new URL(request.url).search || !env.CRON_SECRET?.trim() || !isCronAuthorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (areQueueWorkersPaused(env)) return Response.json({ ok: true, paused: true });
   let scopes: RetentionScope[];
   try { scopes = configuredScopes(env); } catch { return Response.json({ ok: false, code: "RETENTION_SCOPE_INVALID" }, { status: 503 }); }
   const host = createCronRun({ route: "web-expose-retention" });
-  const results: { workspaceId: string; status: string; data?: unknown; code?: string }[] = [];
-  for (const scope of scopes) {
-    if (!host.shouldContinue() || areQueueWorkersPaused(env)) break;
+  // The daily cron rotates its first workspace so time-limited runs make progress across scopes.
+  const results: { workspaceId: string; status: "completed" | "blocked"; data?: unknown; code?: string }[] = [];
+  let interruption: "RETENTION_PAUSED" | "RETENTION_DEADLINE" | undefined;
+  for (const scope of host.dailyScopeOrder(scopes)) {
+    if (areQueueWorkersPaused(env)) {
+      interruption = "RETENTION_PAUSED";
+      break;
+    }
+    if (!host.shouldContinue()) {
+      interruption = "RETENTION_DEADLINE";
+      break;
+    }
     try {
       const data = await withTenantTransaction({ workspaceId: scope.workspaceId, actorId: scope.actorId }, async tx => {
         const member = await tx.queryOne(`select role from crm_lock_active_member($1::uuid,$2::uuid)`, [scope.workspaceId, scope.actorId]);
@@ -40,6 +48,15 @@ export async function handleWebExposeRetentionCron(request: Request, env: NodeJS
       results.push({ workspaceId: scope.workspaceId, status: "completed", data });
     } catch (error) { results.push({ workspaceId: scope.workspaceId, status: "blocked", code: error instanceof CrmCommandError ? error.code : "RETENTION_UNAVAILABLE" }); }
   }
-  const ok = results.every(r => r.status === "completed");
-  return Response.json({ ok, configured: scopes.length, attempted: results.length, results }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  const remaining = scopes.length - results.length;
+  const ok = remaining === 0 && results.every(r => r.status === "completed");
+  return Response.json({
+    ok,
+    configured: scopes.length,
+    attempted: results.length,
+    remaining,
+    results,
+    code: interruption ?? (ok ? undefined : "RETENTION_SCOPE_FAILED"),
+    paused: interruption === "RETENTION_PAUSED" || undefined,
+  }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }
