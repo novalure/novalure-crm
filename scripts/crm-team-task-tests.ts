@@ -7,7 +7,7 @@ import type { TenantPool } from "../src/lib/db/tenant-client";
 import { readCrmTeam } from "../src/lib/db/crm-team-repository";
 import { upsertTaskRecord } from "../src/lib/db/crm-write-repositories";
 import { withCrmRead } from "../src/lib/crm-command";
-import { compareTaskDue, defaultTaskDueInput, formatTaskDue, mergeConfirmedTasks, nextOpenTaskForLead, taskDueState, taskLocalDateTimeToInstant } from "../src/lib/task-due";
+import { compareTaskDue, defaultTaskDueInput, formatTaskDue, mergeConfirmedTasks, nextOpenTaskForLead, reloadConfirmedTask, taskDueState, taskLocalDateTimeToInstant } from "../src/lib/task-due";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 test("today and overdue are disjoint groups using an exact time in the chosen timezone", () => {
@@ -61,6 +61,34 @@ test("a fresh server revision cannot resurrect completed work from an older conf
   assert.equal(nextOpenTaskForLead(mergeConfirmedTasks([completed],[base]),lead),null);
   assert.equal(nextOpenTaskForLead(mergeConfirmedTasks([base],[completed]),lead),null);
   assert.equal(mergeConfirmedTasks([completed],[{...base,workspaceId:"foreign",version:99}]).find(task=>task.workspaceId===lead.workspaceId)?.status,"done");
+});
+
+test("confirmed creations and completions survive failed and out-of-order reloads", async () => {
+  const open: Task = { id: "existing", workspaceId: "workspace", projectId: "project", title: "Task", project: "Test", due: "", priority: "Normal", status: "open", version: 1 };
+  const created: Task = { ...open, id: "created" };
+  const completed: Task = { ...open, status: "done", version: 2 };
+  const confirmed = [created, completed];
+  let server = [open];
+
+  assert.equal(await reloadConfirmedTask(async () => false), false);
+  assert.equal(await reloadConfirmedTask(async () => { throw new Error("reload failed"); }), false);
+  assert.deepEqual(mergeConfirmedTasks(server, confirmed), [completed, created]);
+
+  const older = Promise.withResolvers<Task[]>();
+  const newer = Promise.withResolvers<Task[]>();
+  const reload = async (snapshot: Promise<Task[]>) => {
+    server = await snapshot;
+    return true;
+  };
+  const first = reloadConfirmedTask(() => reload(older.promise));
+  const second = reloadConfirmedTask(() => reload(newer.promise));
+
+  newer.resolve([completed, created]);
+  assert.equal(await second, true);
+  assert.deepEqual(mergeConfirmedTasks(server, confirmed), [completed, created]);
+  older.resolve([open, created]);
+  assert.equal(await first, true);
+  assert.deepEqual(mergeConfirmedTasks(server, confirmed), [completed, created]);
 });
 
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>;

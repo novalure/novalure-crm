@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { createOpaqueToken, hashOpaqueToken, protectLowEntropyValue, getTrustedAuthClientIp } from "@/lib/auth/auth-security";
 import { hasBoundTenantTransaction, queryRows } from "@/lib/db/client";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
-import { crmPayloadDigest, type TenantTransaction } from "@/lib/crm-command";
+import { CrmCommandError, crmPayloadDigest, type TenantTransaction } from "@/lib/crm-command";
 import { BookingError, type BookingKind, type BookingProviderName, type BookingRecord } from "./types";
-import { bookingAudit, readBooking, withBookingTransaction } from "./repository";
+import { bookingAudit, bookingColumns, readBooking, withBookingTransaction } from "./repository";
 import { cancelBooking, confirmBooking, createBookingHold, getBookingAvailability, getBookingStatus, rescheduleBooking, type BookingServiceOptions } from "./service";
 import { bookingBootstrapRows, lookupBookingPublication, publicBookingPublication, publicationUuid, serverBookingSession, type StoredBookingPublication, type PreparedBookingPublication } from "./publication";
 import { readBookingSetup } from "./configuration";
@@ -13,10 +13,15 @@ import { bookingChannels, type BookingChannel, type PublicBookingRecord } from "
 
 export type BookingChannelRelation = { source: "studio_handoff" | "external_chat" | "machine" | "form_submission"; sourceId: string; leadId?: string; contactId?: string };
 export type TrustedBookingBinding = { expectedChannel: "chat" | "voice" | "form"; expectedWorkspaceId: string; expectedPublicId: string; expectedBindingId: string; expectedTypeIds: string[] };
-export type BookingChannelOptions = BookingServiceOptions & { trustedBinding?: TrustedBookingBinding; studioHoldPhone?: string; studioConfirmAuthorize?: () => Promise<void>; preparedPublication?: PreparedBookingPublication; findNextAvailability?: boolean };
+export type BookingChannelOptions = BookingServiceOptions & { trustedBinding?: TrustedBookingBinding; studioHoldPhone?: string; studioHoldPhoneChange?: StudioHoldPhoneChange; studioConfirmAuthorize?: () => Promise<void>; preparedPublication?: PreparedBookingPublication; findNextAvailability?: boolean };
 type SessionInput = { publicId: string; channel: BookingChannel; typeId: string; language: "de" | "en" };
 type ChannelSession = { id:string; workspaceId:string; organizerId:string; publicationId:string; assignmentId:string; channel:BookingChannel; language:"de"|"en"; bindingId:string|null; relation:BookingChannelRelation|Record<string,never>; origin:string; ipHash:string; expiresAt:string; provider:BookingProviderName; kind:BookingKind; publication:StoredBookingPublication };
 type ChannelOperation = {id:string; coreKey:string; bookingId:string|null; state:"attempting"|"succeeded"|"unknown"|"rejected"; requestHash:string; errorCode:string|null};
+export type StudioHoldOperation = Pick<ChannelOperation, "id" | "coreKey" | "requestHash">;
+type StudioHoldPhoneChange = {
+  prepare(operation: StudioHoldOperation): Promise<void>;
+  commit(operation: StudioHoldOperation): Promise<void>;
+};
 export type BookingChannelAction = "availability"|"hold"|"confirm"|"status"|"reschedule"|"cancel";
 const object=(x:unknown):x is Record<string,unknown>=>!!x&&typeof x==="object"&&!Array.isArray(x);
 function fields(input:unknown,allowed:string[]):asserts input is Record<string,unknown>{if(!object(input)||Object.keys(input).some(key=>!allowed.includes(key)))throw new BookingError("INVALID_CHANNEL_INPUT");}
@@ -84,6 +89,9 @@ async function ownBooking(tx:TenantTransaction,session:ChannelSession,id:string)
   const row=await readBooking(tx,actor(session),id);if(row.provider!==session.provider||row.kind!==session.kind)throw new BookingError("BOOKING_NOT_FOUND",404);return row;
 }
 function publicRecord(row:BookingRecord,session:ChannelSession):PublicBookingRecord{return {id:row.id,state:row.state,kind:row.kind,startsAt:row.startsAt,endsAt:row.endsAt,timeZone:row.rules.timeZone,videoUrl:row.videoUrl,videoStatus:row.videoStatus,notificationStatus:row.notificationStatus,location:row.kind==="onsite"?row.rules.location:row.kind==="office"?session.publication.config.assignments.find(item=>item.id===session.assignmentId)?.publicLocation??"":""};}
+function isStudioPhoneHold(session: ChannelSession) {
+  return session.channel === "chat" && session.kind === "phone" && session.relation.source === "studio_handoff";
+}
 function location(body:Record<string,unknown>,session:ChannelSession){if(body.location!==undefined&&session.kind!=="onsite")throw new BookingError("INVALID_LOCATION");if(body.locationConfirmed!==undefined&&typeof body.locationConfirmed!=="boolean")throw new BookingError("INVALID_LOCATION");return {...(body.location!==undefined?{location:bounded(body.location,500)}:{}),...(body.locationConfirmed!==undefined?{locationConfirmed:body.locationConfirmed as boolean}:{})};}
 async function attachRelation(session:ChannelSession,id:string,options:BookingChannelOptions){await withBookingTransaction(actor(session),async tx=>{await tx.execute("select booking_channel_attach_crm_relation($1,$2)",[session.id,id]);},options);}
 async function status(session:ChannelSession,body:Record<string,unknown>,options:BookingChannelOptions){
@@ -92,7 +100,9 @@ async function status(session:ChannelSession,body:Record<string,unknown>,options
     await sessionGuard(tx,session);
     if(body.bookingId!==undefined)return (await ownBooking(tx,session,uuid(body.bookingId))).id;
     const op=await tx.queryOne<ChannelOperation>(`select id,core_key as "coreKey",booking_id as "bookingId",state,request_hash as "requestHash",error_code as "errorCode" from booking_channel_operations where session_id=$1 and action='hold' and client_key=$2`,[session.id,uuid(body.idempotencyKey)]);
-    if(!op)return null;if(op.bookingId)return op.bookingId;
+    // A Studio phone hold with unfinished contact work can only be resumed by its exact signed hold request.
+    if(!op || isStudioPhoneHold(session) && op.state !== "succeeded")return null;
+    if(op.bookingId)return op.bookingId;
     const recovered=await tx.queryOne<{id:string}>("select id from booking_reservations where workspace_id=$1 and organizer_id=$2 and idempotency_key=$3",[session.workspaceId,session.organizerId,op.coreKey]);
     if(recovered)await tx.execute("update booking_channel_operations set booking_id=$2,state='succeeded',updated_at=now() where id=$1 and booking_id is null",[op.id,recovered.id]);
     return recovered?.id??null;
@@ -146,20 +156,46 @@ export async function dispatchBookingChannelAction(token:string,action:BookingCh
   if(action!=="hold"&&body.consent!==true)throw new BookingError("BOOKING_CONSENT_REQUIRED");
   if(action==="hold"||action==="reschedule")bounded(body.startsAt,40);
   if(action==="hold"){bounded(body.recipientEmail,254);bounded(body.recipientName,160,true);location(body,session);}
+  const studioHold = action === "hold" && isStudioPhoneHold(session) && options.studioHoldPhone !== undefined;
+  const phoneChange = studioHold ? options.studioHoldPhoneChange : undefined;
   const {operation,claimed}=await claim(session,action,body,options);
-  if(!claimed){if(operation.state==="rejected")throw new BookingError(operation.errorCode??"BOOKING_REJECTED",409);if(operation.bookingId){const result=await status(session,{bookingId:operation.bookingId},options);return operation.state==="succeeded"?result:{...result,pending:true,unknown:true};}return {booking:null,pending:true,unknown:operation.state==="unknown"};}
+  if(!claimed && (!studioHold || operation.state === "succeeded" || operation.state === "rejected")){
+    if(operation.state==="rejected")throw new BookingError(operation.errorCode??"BOOKING_REJECTED",409);
+    if(operation.bookingId){const result=await status(session,{bookingId:operation.bookingId},options);return operation.state==="succeeded"?result:{...result,pending:true,unknown:true};}
+    return {booking:null,pending:true,unknown:operation.state==="unknown"};
+  }
   try{
     let row:BookingRecord;
-    if(action==="hold")row=await createBookingHold(actor(session),{provider:session.provider,kind:session.kind,startsAt:body.startsAt as string,title:session.publication.config.title,idempotencyKey:operation.coreKey,recipientEmail:body.recipientEmail as string,recipientName:body.recipientName as string,communicationLanguage:session.language,...location(body,session)},coreOptions);
+    if (!claimed) {
+      const existing = await withBookingTransaction(actor(session), async (tx, fresh) => {
+        await coreOptions.authorize?.(tx, fresh);
+        return tx.queryOne<BookingRecord>(`select ${bookingColumns} from booking_reservations where workspace_id=$1 and organizer_id=$2 and idempotency_key=$3 and provider=$4 and kind=$5`,
+          [session.workspaceId, session.organizerId, operation.coreKey, session.provider, session.kind]);
+      }, options);
+      if (!existing) return { booking: null, pending: true, unknown: operation.state === "unknown" };
+      row = existing;
+    } else if(action==="hold") {
+      await phoneChange?.prepare(operation);
+      row=await createBookingHold(actor(session),{provider:session.provider,kind:session.kind,startsAt:body.startsAt as string,title:session.publication.config.title,idempotencyKey:operation.coreKey,recipientEmail:body.recipientEmail as string,recipientName:body.recipientName as string,communicationLanguage:session.language,...location(body,session)},coreOptions);
+    }
     else if(action==="confirm")row=await confirmBooking(actor(session),operation.bookingId!,coreOptions);
     else if(action==="reschedule")row=await rescheduleBooking(actor(session),operation.bookingId!,{startsAt:body.startsAt as string,idempotencyKey:operation.coreKey},coreOptions);
     else row=await cancelBooking(actor(session),operation.bookingId!,{idempotencyKey:operation.coreKey},coreOptions);
-    await withBookingTransaction(actor(session),async tx=>{await tx.execute("update booking_channel_operations set booking_id=$2,state='succeeded',updated_at=now() where id=$1 and state='attempting'",[operation.id,row.id]);},options);
+    if (studioHold) {
+      if (row.state !== "held" || !(Date.parse(row.expiresAt ?? "") > (options.now?.() ?? Date.now()))) throw new BookingError("BOOKING_HOLD_EXPIRED", 409);
+      await phoneChange?.commit(operation);
+    }
+    await withBookingTransaction(actor(session), async tx => {
+      const changed = await tx.queryOne(`update booking_channel_operations set booking_id=$2,state='succeeded',error_code=null,updated_at=now()
+        where id=$1 and session_id=$3 and (state='attempting' or $4::boolean and state='unknown') returning id`, [operation.id, row.id, session.id, studioHold]);
+      if (!changed && studioHold && !await tx.queryOne("select id from booking_channel_operations where id=$1 and session_id=$2 and state='succeeded' and booking_id=$3", [operation.id, session.id, row.id]))
+        throw new BookingError("BOOKING_CHANNEL_UNAVAILABLE", 503);
+    }, options);
     if(row.state==="confirmed")await attachRelation(session,row.id,options);
     return {booking:publicRecord(row,session)};
   }catch(error){
-    const known=error instanceof BookingError;
-    await withBookingTransaction(actor(session),async tx=>{await tx.execute("update booking_channel_operations set state=$2,error_code=$3,updated_at=now() where id=$1 and state='attempting'",[operation.id,known?"rejected":"unknown",known?error.code:"OUTCOME_UNKNOWN"]);},options);
+    const known=error instanceof BookingError && (!studioHold || error.status < 500) || studioHold && error instanceof CrmCommandError && error.status < 500;
+    await withBookingTransaction(actor(session),async tx=>{await tx.execute("update booking_channel_operations set state=$2,error_code=$3,updated_at=now() where id=$1 and (state='attempting' or $4::boolean and state='unknown')",[operation.id,known?"rejected":"unknown",known?error.code:"OUTCOME_UNKNOWN",studioHold]);},options);
     if(known)throw error;return {booking:null,pending:true,unknown:true};
   }
 }

@@ -28,6 +28,10 @@ export function createCronRun(input: { route: string; softDeadlineMs?: number })
 
   return {
     durationMs: () => Date.now() - startedAtMs,
+    dailyScopeOrder<T>(scopes: readonly T[]) {
+      const first = scopes.length ? Math.floor(startedAtMs / 86_400_000) % scopes.length : 0;
+      return [...scopes.slice(first), ...scopes.slice(0, first)];
+    },
     route: input.route,
     runId: randomUUID(),
     shouldContinue: () => Date.now() - startedAtMs < softDeadlineMs,

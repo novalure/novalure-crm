@@ -11,7 +11,7 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
-import { compareTaskDue, defaultTaskDueInput, formatTaskDue, mergeConfirmedTasks, taskDueState, taskLocalDateTimeToInstant } from "@/lib/task-due";
+import { compareTaskDue, defaultTaskDueInput, formatTaskDue, mergeConfirmedTasks, reloadConfirmedTask, taskDueState, taskLocalDateTimeToInstant } from "@/lib/task-due";
 import { useTaskClock } from "@/lib/use-task-clock";
 import { useCrmTeam } from "@/lib/use-crm-team";
 
@@ -20,7 +20,7 @@ type TaskCommandCenterProps = {
   contacts: Contact[];
   language: LanguageCode;
   leads: Lead[];
-  onTasksChanged?: () => Promise<void> | void;
+  onTasksChanged?: () => Promise<boolean>;
   projectLabel: string;
   projects: Project[];
   sessionUserId: string;
@@ -150,12 +150,17 @@ export function TaskCommandCenter({
   const team = useCrmTeam(scopedWorkspaceId, taskDraft.projectId || activeProjectId);
   const taskEndpoint = `/api/crm/tasks?workspaceId=${encodeURIComponent(scopedWorkspaceId)}`;
   const effectiveTasks = useMemo(() => {
+    // Overlapping reloads can finish out of order, so keep the last confirmed task versions.
     return mergeConfirmedTasks(tasks,taskOverlays).filter(task => task.workspaceId === scopedWorkspaceId && (!activeProjectId || task.projectId === activeProjectId));
   }, [taskOverlays, tasks, scopedWorkspaceId, activeProjectId]);
-  async function refreshConfirmedTask(taskId: string) {
-    if(!onTasksChanged)return;
-    try{await onTasksChanged();setTaskOverlays(current=>current.filter(task=>task.id!==taskId));}
-    catch{setNotice(language==="de"?"Aufgabe gespeichert. Die Übersicht konnte nicht aktualisiert werden; bitte neu laden.":"Task saved. The list could not be refreshed; please reload.");}
+  async function refreshConfirmedTask() {
+    if (!onTasksChanged) return;
+    const reloaded = await reloadConfirmedTask(onTasksChanged);
+    if (!reloaded) {
+      setNotice(language === "de"
+        ? "Aufgabe gespeichert. Die Übersicht konnte nicht aktualisiert werden. Bitte neu laden."
+        : "Task saved. The list could not be refreshed. Please reload.");
+    }
   }
 
   const decoratedTasks = useMemo(
@@ -292,7 +297,7 @@ export function TaskCommandCenter({
       setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId, timeZone));
       setIsCreateOpen(false);
       setNotice(text.taskCreated);
-      await refreshConfirmedTask(payload.task.id);
+      await refreshConfirmedTask();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : text.taskCreateFailed);
     } finally {
@@ -305,6 +310,7 @@ export function TaskCommandCenter({
     if (!currentTask || savingTaskIds.includes(taskId)) return;
     const nextStatus = currentTask.isCompleted ? "open" : "done";
     setSavingTaskIds((current) => [...current, taskId]);
+    setNotice("");
     void csrfFetch(taskEndpoint, {
       body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus }, expectedVersion: currentTask.task.version }),
       headers: { "Content-Type": "application/json" },
@@ -314,7 +320,7 @@ export function TaskCommandCenter({
         const payload = (await response.json().catch(() => ({}))) as { task?: Task; error?: string };
         if (!response.ok || !payload.task) throw new Error(payload.error || text.taskCreateFailed);
         setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
-        await refreshConfirmedTask(payload.task.id);
+        await refreshConfirmedTask();
       })
       .catch((error: unknown) => setNotice(error instanceof Error ? error.message : text.taskCreateFailed))
       .finally(() => setSavingTaskIds((current) => current.filter((id) => id !== taskId)));

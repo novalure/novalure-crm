@@ -68,12 +68,44 @@ test('cron refuses missing auth, request scopes and absent personal MFA delegati
  assert.equal((await scheduler.handleProofRetentionCron(new Request('https://qa.invalid/api/cron/lead-proof-retention'),env,options)).status,401);assert.equal((await scheduler.handleProofRetentionCron(new Request('https://qa.invalid/api/cron/lead-proof-retention?actorId=forged',{headers:{authorization:`Bearer ${env.CRON_SECRET}`}}),env,options)).status,401);
  await assert.rejects(policy(true,0,true),/zweitem Faktor/);const response=await scheduler.handleProofRetentionCron(new Request('https://qa.invalid/api/cron/lead-proof-retention',{headers:{authorization:`Bearer ${env.CRON_SECRET}`}}),env,options);assert.equal(response.status,503);assert.equal((await response.json()).results[0].status,'blocked');
 });
-test('a narrow personal MFA delegation runs durable jobs; revoking the current actor prevents further deletion',async()=>{
+test('a narrow personal MFA delegation runs durable jobs; revoking the current actor prevents further deletion',async(t)=>{
  const identityId=(await db.admin.query('select auth_identity_id from workspace_users where id=$1',[actorId])).rows[0].auth_identity_id,sessionId=randomUUID();await db.admin.query("update auth_identities set credential_state='active',mfa_enabled_at=now(),mfa_secret_ciphertext='SYNTHETIC-NOT-A-REAL-SECRET' where id=$1",[identityId]);await db.admin.query("insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,mfa_verified_at,expires_at) values($1,$2,$3,$4,$5,now(),now()+interval '1 hour')",[sessionId,'b'.repeat(64),identityId,actorId,workspaceId]);const cookie:AppSession={...session,source:'cookie',authIdentityId:identityId,authSessionId:sessionId};
  await policy(true,0,true,cookie);const state=await repository.getLeadProofRetention(session,leadId,options),env:NodeJS.ProcessEnv={NODE_ENV:'test',CRON_SECRET:'synthetic-retention-cron',NOVALURE_PROOF_RETENTION_SCOPES:JSON.stringify([{workspaceId,actorId,policyId:state.policy!.id}])},request=()=>new Request('https://qa.invalid/api/cron/lead-proof-retention',{headers:{authorization:`Bearer ${env.CRON_SECRET}`}});
  // Earlier deliberately blocked files are held through normal commands, so this run has an exact target.
  for(const file of(await repository.getLeadProofRetention(session,leadId,options)).files.filter(f=>f.status!=='deleted'&&!f.hold))await command((tx,fresh)=>repository.setLeadProofRetentionHold(tx,fresh,{leadId,proofId:file.proofId,active:true,expectedVersion:file.holdVersion,reason:'Synthetic isolation of an existing negative-test file'}));
  const p=await proof();const response=await scheduler.handleProofRetentionCron(request(),env,options);assert.equal(response.status,200,await response.clone().text());await assert.rejects(readFile(p.file));assert.equal((await response.json()).results[0].deleted,1);
+ const batch = [await proof(), await proof(), await proof()];
+ await t.test('deadline reports an unfinished selected job and resumes it on a later invocation', async (t) => {
+  let now = Date.now(), connections = 0;
+  t.mock.method(Date, 'now', () => now);
+  const interrupt = { pool: { async connect() {
+   const client = await options.pool!.connect();
+   if (++connections === 2) now += 45_000;
+   return client;
+  } } };
+  const partial = await scheduler.handleProofRetentionCron(request(), env, interrupt);
+  assert.equal(partial.status, 503);
+  const result = await partial.json();
+  assert.equal(result.code, 'RETENTION_DEADLINE');
+  assert.equal(result.remaining, 0);
+  assert.deepEqual(result.results, [{ policyId: state.policy!.id, status: 'partial', selected: 2, deleted: 1, code: 'RETENTION_DEADLINE' }]);
+  await assert.rejects(readFile(batch[0].file));
+  assert.ok(await readFile(batch[1].file));
+  assert.ok(await readFile(batch[2].file));
+  const resumed = await scheduler.handleProofRetentionCron(request(), env, options);
+  assert.equal(resumed.status, 200, await resumed.clone().text());
+  assert.deepEqual((await resumed.json()).results, [{ policyId: state.policy!.id, status: 'completed', selected: 2, deleted: 2 }]);
+  await assert.rejects(readFile(batch[1].file));
+  await assert.rejects(readFile(batch[2].file));
+ });
+ await t.test('a worker pause reports all configured policies as untouched', async () => {
+  const paused = await scheduler.handleProofRetentionCron(request(), { ...env, NOVALURE_WORKERS_PAUSED: '1' }, options);
+  assert.equal(paused.status, 503);
+  const result = await paused.json();
+  assert.equal(result.code, 'RETENTION_PAUSED');
+  assert.equal(result.attempted, 0);
+  assert.equal(result.remaining, 1);
+ });
  const next=await proof();await db.admin.query("update workspace_users set status='suspended' where id=$1",[actorId]);try{assert.equal((await scheduler.handleProofRetentionCron(request(),env,options)).status,503);assert.ok(await readFile(next.file));}finally{await db.admin.query("update workspace_users set status='active' where id=$1",[actorId]);}
 });
 

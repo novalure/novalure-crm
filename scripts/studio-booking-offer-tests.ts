@@ -115,6 +115,76 @@ test("Studio offers only Teams/phone while signed legacy management and another 
       const available = await dispatchBookingChannelAction(other.token, "availability", { date: startsAt.slice(0, 10) }, request(), otherOptions); assert("slots" in available);
       const cross = await signed("status", { token: other.token, bookingId: held.booking.id }); assert.equal(cross.status, 403);
     });
+    await t.test("signed callback holds resume their own phone receipt without overwriting later CRM edits", async () => {
+      const typeId = full.types.find(x => x.kind === "phone")!.id;
+      const contactPhone = async () => (await db.admin.query("select phone,version from contacts where id=$1", [contactId])).rows[0];
+      const editPhone = (phone: string) => db.admin.query("update contacts set phone=$2,updated_at=now() where id=$1", [contactId, phone]);
+      const newHold = async (hours: number, phone: string) => {
+        const response = await signed("session", { typeId });
+        assert.equal(response.status, 200, await response.clone().text());
+        const { token } = await response.json();
+        return { token, startsAt: new Date(Date.parse(startsAt) + hours * 3_600_000).toISOString(), recipientEmail: "synthetic@example.invalid",
+          recipientName: "SYNTHETIC", recipientPhone: phone, idempotencyKey: randomUUID() };
+      };
+      const interruptOnce = (statement: string): BookingChannelOptions => {
+        let interrupted = false;
+        return { pool: { async connect() {
+          const client = await tracedPool.connect();
+          return new Proxy(client, { get(target, key) {
+            if (key === "query") return (sql: string, params: unknown[]) => {
+              if (!interrupted && sql.includes(statement)) { interrupted = true; throw new Error("SYNTHETIC_TRANSACTION_INTERRUPT"); }
+              return target.query(sql, params);
+            };
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          } });
+        } } };
+      };
+      const incomplete = async (hold: Awaited<ReturnType<typeof newHold>>, statement: string) => {
+        const response = await signed("hold", hold, interruptOnce(statement));
+        assert.equal(response.status, 200, await response.clone().text());
+        assert.deepEqual(await response.json(), { booking: null, pending: true, unknown: true });
+        const status = await signed("status", { token: hold.token, idempotencyKey: hold.idempotencyKey });
+        assert.deepEqual(await status.json(), { booking: null, pending: true });
+      };
+      const recover = async (hold: Awaited<ReturnType<typeof newHold>>) => {
+        const calls = providerCalls;
+        const response = await signed("hold", hold);
+        assert.equal(response.status, 200, await response.clone().text());
+        const result = await response.json();
+        assert.equal(result.booking.state, "held");
+        assert.equal(providerCalls, calls, "a retry uses the locally committed hold");
+        return result.booking.id;
+      };
+
+      const first = await newHold(1, "+353 1 555 0101");
+      await incomplete(first, "update public.contacts set phone=");
+      assert.equal((await contactPhone()).phone, null);
+      const firstBooking = await recover(first);
+      assert.equal((await contactPhone()).phone, first.recipientPhone);
+      await editPhone("+353 1 555 0102");
+      const editedFirst = await contactPhone();
+      assert.equal(await recover(first), firstBooking);
+      assert.deepEqual(await contactPhone(), editedFirst);
+
+      const second = await newHold(2, "+353 1 555 0103");
+      await incomplete(second, "update booking_channel_operations set booking_id=$2,state='succeeded'");
+      assert.equal((await contactPhone()).phone, second.recipientPhone);
+      await editPhone("+353 1 555 0104");
+      const editedSecond = await contactPhone();
+      await recover(second);
+      assert.deepEqual(await contactPhone(), editedSecond);
+
+      const third = await newHold(3, "+353 1 555 0105");
+      await incomplete(third, "update public.contacts set phone=");
+      await editPhone("+353 1 555 0106");
+      const editedThird = await contactPhone();
+      const conflict = await signed("hold", third);
+      assert.equal(conflict.status, 409, await conflict.clone().text());
+      assert.equal((await conflict.json()).code, "BOOKING_CALLBACK_PHONE_CHANGED");
+      assert.deepEqual(await contactPhone(), editedThird);
+      assert.equal((await db.admin.query("select count(*)::int as count from crm_command_receipts where resource_id=$1 and operation='booking.studio_callback.apply'", [contactId])).rows[0].count, 2);
+    });
     await t.test("prepared presentation cannot bypass a changed publication, wrong scope, expiry or disabled organizer", async () => {
       const stored = await lookupBookingPublication(a.publication.publicId, pool), prepared = await prepareBookingPublication(stored, "chat", pool, ["teams", "phone"]), typeId = full.types.find(x => x.kind === "teams")!.id;
       const input = { publicId: a.publication.publicId, typeId, channel: "chat" as const, language: "en" as const, workspaceId: websiteSalesWorkspaceId, bindingId: operationId, relation };

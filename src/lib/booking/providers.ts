@@ -247,9 +247,16 @@ export function createBookingProviderWithAccess(scope: TenantScope, access: Cale
   const invitationEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">)=>provider==="microsoft"&&input.invitation?{bookingId:input.bookingId,operationId:input.operationId,...input.invitation}:undefined;
   const existingMeetingEffect=(input:Pick<ProviderWrite,"bookingId"|"operationId"|"invitation">,existing:JsonObject)=>{
     if(provider!=="microsoft")return undefined;
-    if(!Array.isArray(existing.attendees))throw new BookingProviderError("provider_attendees_unverified","rejected");
+    if(!Array.isArray(existing.attendees) || existing.attendees.length >= 500 || existing["attendees@odata.nextLink"])
+      throw new BookingProviderError("provider_attendees_unverified","rejected");
     if(!existing.attendees.length)return undefined;
-    if(!input.invitation)throw new BookingProviderError("booking_invitation_not_authorized","rejected");
+    if(!input.invitation || typeof input.invitation.email !== "string")throw new BookingProviderError("booking_invitation_not_authorized","rejected");
+    // Graph can notify everyone on the event when rescheduling or cancelling.
+    const authorizedEmail = input.invitation.email.toLowerCase();
+    if (existing.attendees.some(entry => {
+      const address = object(object(entry).emailAddress).address;
+      return typeof address !== "string" || address.toLowerCase() !== authorizedEmail;
+    })) throw new BookingProviderError("booking_invitation_not_authorized", "rejected");
     return invitationEffect(input);
   };
   return {

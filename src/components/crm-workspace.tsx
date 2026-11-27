@@ -5068,9 +5068,7 @@ export function CrmWorkspace({
                   contacts={visibleContacts}
                   language={language}
                   leads={visibleLeads}
-                  onTasksChanged={async () => {
-                    await refreshCoreData();
-                  }}
+                  onTasksChanged={refreshCoreData}
                   projectLabel={projectScopeLabel}
                   projects={draftScopeProjects}
                   tasks={visibleTasks}
