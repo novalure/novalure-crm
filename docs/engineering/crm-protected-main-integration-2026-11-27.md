@@ -37,6 +37,12 @@ conflict receipt, SHA-256
   remain; automatic deployment is also disabled for this integration branch.
   These source settings are not evidence of a provider deployment.
 
+The first native integration run found that the union had reordered the cron
+array, violating the existing exact production-schedule regression (259/260
+unit tests passed). The successor restores the production array order. Every
+path and schedule is unchanged; main's paths are already its subset. The
+regression assertion remains intact.
+
 Immutable third-party notices and historical patch bytes remain intact. The
 exact narrow whitespace attributes from the previously reviewed main release
 reference are retained. Other whitespace cleanup changes no non-whitespace

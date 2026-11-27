@@ -24,26 +24,6 @@
   },
   "crons": [
     {
-      "path": "/api/cron/meeting-reminders",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/teams-alerts",
-      "schedule": "4,19,34,49 * * * *"
-    },
-    {
-      "path": "/api/cron/google-alerts",
-      "schedule": "9,24,39,54 * * * *"
-    },
-    {
-      "path": "/api/cron/property-reservations",
-      "schedule": "7 * * * *"
-    },
-    {
-      "path": "/api/cron/knowledge-monitoring",
-      "schedule": "0 6 * * *"
-    },
-    {
       "path": "/api/cron/newsletter",
       "schedule": "*/5 * * * *"
     },
@@ -62,6 +42,26 @@
     {
       "path": "/api/cron/automations",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/meeting-reminders",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/teams-alerts",
+      "schedule": "4,19,34,49 * * * *"
+    },
+    {
+      "path": "/api/cron/google-alerts",
+      "schedule": "9,24,39,54 * * * *"
+    },
+    {
+      "path": "/api/cron/property-reservations",
+      "schedule": "7 * * * *"
+    },
+    {
+      "path": "/api/cron/knowledge-monitoring",
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/mailbox-sync",
