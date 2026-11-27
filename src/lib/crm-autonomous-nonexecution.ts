@@ -3,7 +3,7 @@ import {createPublicKey,verify} from "node:crypto";
 import {queryAuthenticationRows,withTenantTransaction,type TenantTransactionOptions} from "./db/tenant-client";
 import {getCrmMachineBearer,verifyCrmMachineToken,type CrmMachineAuthOptions} from "./crm-machine-auth";
 import {CrmCommandError,crmPayloadDigest} from "./crm-command";
-import {autonomousModuleContract,parseAutonomousModuleRequest} from "./crm-autonomous-module-contract";
+import {autonomousModuleContract,autonomousModuleMaximumBytes,parseAutonomousModuleRequest} from "./crm-autonomous-module-contract";
 import {readKnowledgeJson} from "./knowledge-center/http";
 
 export const autonomousNonexecutionDomain=`${autonomousModuleContract}-close.POST./api/integrations/evelyn/access`;
@@ -43,7 +43,7 @@ export async function handleAutonomousCrmNonexecution(request:Request,options:Op
   if(request.method!=="POST"||url.pathname!=="/api/integrations/evelyn/access"||url.search)deny("INVALID_REQUEST",400);
   if(request.headers.get("x-evelyn-close-without-effect")!=="1"||request.headers.has("x-evelyn-delegation")||request.headers.has("x-evelyn-reconcile-only")||request.headers.has("cookie")||request.headers.has("origin"))deny("INVALID_REQUEST",400);
   let body:ReturnType<typeof parseAutonomousModuleRequest>;
-  try{body=parseAutonomousModuleRequest(await readKnowledgeJson(request,["contractVersion","operation","correlationId","idempotencyKey","expectedVersion","patch"],65536));}
+  try{body=parseAutonomousModuleRequest(await readKnowledgeJson(request,["contractVersion","operation","correlationId","idempotencyKey","expectedVersion","patch"],autonomousModuleMaximumBytes));}
   catch{deny("INVALID_REQUEST",400);}
   if(body.operation==="Read"||body.operation==="DescribeAssignment")deny("INVALID_REQUEST",400);
   const token=getCrmMachineBearer(request.headers);if(!token)deny("ACCESS_DENIED",401);

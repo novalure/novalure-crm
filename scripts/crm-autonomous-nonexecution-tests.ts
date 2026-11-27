@@ -7,6 +7,8 @@ import {SignJWT,jwtVerify,type JWTVerifyOptions} from "jose";
 import {autonomousPairedFixture} from "./crm-autonomous-modules-tests";
 import {handleAutonomousCrmModules} from "../src/lib/crm-autonomous-modules";
 import {handleAutonomousCrmNonexecution,autonomousNonexecutionDomain} from "../src/lib/crm-autonomous-nonexecution";
+import {autonomousModuleMaximumBytes} from "../src/lib/crm-autonomous-module-contract";
+import {parseOfferContent} from "../src/lib/offer-workflow";
 import {crmPayloadDigest} from "../src/lib/crm-command";
 import {decideAutonomousBusinessAuthority} from "../src/lib/crm-autonomous-business-authority";
 import {executeOfferCommand,getOfferWorkflow} from "../src/lib/db/offer-repositories";
@@ -38,14 +40,14 @@ async function snapshot(){const out:Record<string,string>={};for(const table of 
 async function approve(r:AutonomousCrmRegistration,b:ReturnType<F["body"]>,decision="APPROVED",decisionId=String(b.patch.approvalReference??randomUUID())){return decideAutonomousBusinessAuthority(f.owner,{decision,decisionId,grantId:r.grantId,command:b,expiresAt:new Date(Date.now()+60000).toISOString()},{pool:f.db.pool as unknown as TenantPool});}
 async function reservationFixture(){const unit=randomUUID(),id=randomUUID();await f.db.admin.query("insert into property_units(id,workspace_id,project_id,unit_number,status,price_cents,area_sqm,rooms,floor) values($1::uuid,$2,$3,'SYNTHETIC rollback unit '||($1::uuid)::text,'available',12300,50,2,1)",[unit,f.ids.workspace,f.ids.project]);await f.db.admin.query("insert into property_reservations(id,workspace_id,project_id,unit_id,contact_id,buyer_lead_id,status,expires_at) values($1,$2,$3,$4,$5,$6,'requested',now()+interval '1 day')",[id,f.ids.workspace,f.ids.project,unit,f.ids.contact,f.ids.lead]);return {id,unit};}
 function reservationRegistration(id:string,unit:string){return f.registration("Reservation",id,{scopes:["crm.reservations.read","crm.reservations.confirm"],module:{contractVersion:"crm-autonomous-access-v2",readFields:["status"],writeFields:["approvalReference","unitVersion","sourceReference"],relatedResources:{unitId:unit},lifecycleMode:"EXISTING"}});}
-async function operationFixture(operation:string){
+async function operationFixture(operation:string,contentOverride?:Record<string,unknown>){
  if(operation==="Create"||operation==="Update"){
   const id=randomUUID();if(operation==="Update")await f.db.admin.query("insert into tasks(id,workspace_id,project_id,owner_user_id,title) values($1,$2,$3,$4,'SYNTHETIC rollback task')",[id,f.ids.workspace,f.ids.project,f.ids.actor]);
   const r=taskRegistration(id,operation==="Create"?"CREATE":"EXISTING");await f.provision(r);return {r,body:f.body(operation,{title:"SYNTHETIC must rollback"},operation==="Create"?null:1)};
  }
  if(operation==="PrepareOffer"||operation==="SendOffer"){
   const id=randomUUID(),deal=randomUUID();await f.db.admin.query("insert into deals(id,workspace_id,project_id,contact_id,organization_id,lead_id,name,stage) values($1,$2,$3,$4,$5,$6,'SYNTHETIC rollback deal','Qualifizieren')",[deal,f.ids.workspace,f.ids.project,f.ids.contact,f.ids.company,f.ids.lead]);
-  const content=(await f.db.admin.query("select content from crm_offer_revisions limit 1")).rows[0].content;
+  const content=contentOverride??(await f.db.admin.query("select content from crm_offer_revisions limit 1")).rows[0].content;
   if(operation==="PrepareOffer"){
    const r=f.registration("Offer",id,{scopes:["crm.offers.read","crm.offers.prepare"],module:{contractVersion:"crm-autonomous-access-v2",readFields:["status"],writeFields:["content"],relatedResources:{dealId:deal,contactId:f.ids.contact,leadId:f.ids.lead,organizationId:f.ids.company},lifecycleMode:"CREATE"}});await f.provision(r);return {r,body:f.body(operation,{content},1)};
   }
@@ -88,6 +90,34 @@ test("already committed full exact command recovers APPLIED metadata after grant
  const meta=await f.db.admin.query("select actor_user_id,project_id,resource_id,operation,correlation_id,data_classification,data_purpose from crm_command_receipts where workspace_id=$1 and idempotency_key=$2",[f.ids.workspace,body.idempotencyKey]);
  assert.equal(recovered.status,200,JSON.stringify({body:recovered.body,syntheticReceiptMetadata:meta.rows}));assert.equal(recovered.body.outcome,"APPLIED");assert.equal(recovered.body.replayed,true);assert.equal(recovered.body.auditReference,first.body.auditReference);assert.doesNotMatch(JSON.stringify(recovered.body),/committed result|data|version|updatedAt/);
 });
+test("large valid offer commands recover applied metadata or fence nonexecution under the same envelope limit",async()=>{
+ const large=async()=>{
+  const fixture=await operationFixture("PrepareOffer",{subject:"SYNTHETIC large internal proposal",recipientName:"SYNTHETIC buyer",recipientEmail:"synthetic@example.invalid",scope:"S".repeat(20_000),paymentPlan:"SYNTHETIC draft",discounts:"SYNTHETIC none",specialTerms:"T".repeat(20_000),riskComplianceNotes:"R".repeat(20_000),terms:"C".repeat(20_000),validUntil:new Date(Date.now()+86400000).toISOString(),currency:"EUR",taxBasis:"NET",items:[{description:"SYNTHETIC internal work",quantity:1,unitNetCents:1000}]});
+  parseOfferContent(fixture.body.patch.content);
+  const bytes=Buffer.byteLength(JSON.stringify(fixture.body));
+  assert.ok(bytes>65_536&&bytes<autonomousModuleMaximumBytes);
+  return fixture;
+ };
+ const applied=await large(),saved=await f.call(applied.r.grantId,applied.body);
+ assert.equal(saved.status,200,JSON.stringify(saved.body));
+ const appliedAuthority=await authority(applied.r.grantId),observed=await close(appliedAuthority,binding(applied.r,applied.body),applied.body);
+ assert.equal(observed.status,200,JSON.stringify(observed.body));assert.equal(observed.body.outcome,"APPLIED");
+ assert.equal(observed.body.auditReference,saved.body.auditReference);assert.equal("data" in observed.body,false);
+ assert.doesNotMatch(JSON.stringify(observed.body),/SSSS|TTTT|RRRR|CCCC/);
+ const pending=await large(),pendingAuthority=await authority(pending.r.grantId),fenced=await close(pendingAuthority,binding(pending.r,pending.body),pending.body);
+ assert.equal(fenced.status,200,JSON.stringify(fenced.body));assert.equal(fenced.body.outcome,"NO_EFFECT");
+ const before=await snapshot(),writes:string[]=[],late=await invoke(pending.r,pending.body,writes);
+ assert.notEqual(late.status,200);assert.ok(writes.length>0);assert.deepEqual(await snapshot(),before);
+ const oversized=await large();
+ const content=oversized.body.patch.content as Record<string,unknown>;
+ content.items=Array.from({length:60},()=>({description:"D".repeat(1000),quantity:1,unitNetCents:1}));
+ parseOfferContent(content);assert.ok(Buffer.byteLength(JSON.stringify(oversized.body))>autonomousModuleMaximumBytes);
+ const oversizedAuthority=await authority(oversized.r.grantId),oversizedBinding=binding(oversized.r,oversized.body);
+ assert.equal((await f.call(oversized.r.grantId,oversized.body)).status,400);
+ const denied=await close(oversizedAuthority,oversizedBinding,oversized.body);assert.equal(denied.status,400);assert.equal(denied.body.code,"INVALID_REQUEST");
+ assert.equal((await f.db.admin.query("select count(*) from crm_autonomous_nonexecution_closures where grant_id=$1",[oversized.r.grantId])).rows[0].count,"0");
+});
+
 test("foreign scope, body, mixed headers, expired proof and department keys cannot close; workload revocation is current",async()=>{
  const r=taskRegistration(randomUUID(),"CREATE");await f.provision(r);const body=f.body("Create",{title:"SYNTHETIC negative boundaries"}),a=await authority(r.grantId),b=binding(r,body);
  await assert.rejects(authority(r.grantId,r.publicKey),/RECOVERY_AUTHORITY_SCOPE_INVALID/);
