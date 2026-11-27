@@ -47,7 +47,7 @@ test('disconnected or review-required automatic checking can be turned off witho
  }
 });
 
-test('mailbox reader projects stored scopes and outstanding lease/run into presentation without writes',async()=>{
+test('mailbox reader projects stored scopes and an active wall-clock lease without writes',async()=>{
  const queries:string[]=[];
  const fake={
   query:async(sql:string)=>{queries.push(sql); if(sql.includes('from crm_mailbox_connections c')) return [{id:'synthetic-1',...base,checkPending:true},{id:'synthetic-2',...base,scopes:['Mail.Read','Mail.Send']},{id:'synthetic-3',...base,hasSubject:false},{id:'synthetic-4',...base,verifiedMicrosoft:false}]; return [];},
@@ -60,7 +60,8 @@ test('mailbox reader projects stored scopes and outstanding lease/run into prese
   for(const key of keys)delete process.env[key];Object.assign(process.env,{MICROSOFT_MAILBOX_CLIENT_ID:'synthetic-mail',MICROSOFT_MAILBOX_CLIENT_AUTH_METHOD:'client-secret',MICROSOFT_MAILBOX_CLIENT_SECRET:'synthetic-secret',MICROSOFT_MAILBOX_IDENTITY_MODE:'verified-preview',VERCEL:'1',VERCEL_ENV:'preview'});
   const result=await loadCrmMailbox(fake,session);
   assert.deepEqual(result.connections.map(row=>row.presentation),['check_unconfirmed','scope_review','binding_review','binding_review']);
-  assert.ok(queries.some(sql=>sql.includes("sync_lease_until is not null")&&sql.includes("r.status='running'")));
+  assert.ok(queries.some(sql=>sql.includes('coalesce(c.sync_lease_until>clock_timestamp(),false) as "checkPending"')));
+  assert.ok(!queries.some(sql=>sql.includes("sync_lease_until is not null")||sql.includes("r.status='running'")));
   assert.ok(!queries.some(sql=>/^\s*(insert|update|delete)\b/i.test(sql)));
  }finally{for(const key of keys){const value=saved.get(key);if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
