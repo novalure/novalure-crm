@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { SignJWT, jwtVerify, type JWTVerifyOptions } from "jose";
 import {
   CRM_MACHINE_AUDIENCE, CRM_MACHINE_ISSUER, CRM_MACHINE_OWNER_ID, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_SUBJECT,
@@ -30,6 +33,28 @@ const sourceGrantId = randomUUID();
 type ReaderPool = NonNullable<Parameters<typeof readStudioSource>[1]>["pool"];
 const verifier: NonNullable<CrmMachineAuthOptions["verifier"]> = async (jwt, options) =>
   jwtVerify(jwt, key.publicKey, options as JWTVerifyOptions) as ReturnType<NonNullable<CrmMachineAuthOptions["verifier"]>>;
+
+type CompiledStudioReader = (options: {
+  origin: string; deploymentId: string; crmRevision: string; sourceGrantId: string; profile: "production";
+  readGrantCredential: () => Promise<string>; getToken: (audience: string) => Promise<string>; fetch: typeof fetch;
+}) => (cursor: string | null) => Promise<unknown>;
+
+async function loadPairedStudioReader() {
+  const modulePath = process.env.CRM_PAIRED_EVELYN_MODULE;
+  const evelynRevision = process.env.CRM_PAIRED_EVELYN_REVISION;
+  const compiledSha256 = process.env.CRM_PAIRED_EVELYN_MODULE_SHA256;
+  if (modulePath === undefined && evelynRevision === undefined && compiledSha256 === undefined) return null;
+  assert.ok(modulePath && evelynRevision && /^[a-f0-9]{40}$/.test(evelynRevision) &&
+    compiledSha256 && /^[a-f0-9]{64}$/.test(compiledSha256), "EXACT_COMPILED_EVELYN_SOURCE_COUNTERPART_REQUIRED");
+  const counterpart = path.resolve(modulePath);
+  const checkout = path.resolve(path.dirname(counterpart), "../../..");
+  assert.equal(counterpart, path.join(checkout, "dist", "src", "production", "crm-studio-source-client.js"));
+  assert.equal(execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).trim(), evelynRevision);
+  assert.equal(createHash("sha256").update(await readFile(counterpart)).digest("hex"), compiledSha256);
+  const { createCrmStudioSourceReader } = await import(pathToFileURL(counterpart).href) as { createCrmStudioSourceReader: CompiledStudioReader };
+  assert.equal(typeof createCrmStudioSourceReader, "function");
+  return { createCrmStudioSourceReader, evelynRevision, compiledSha256 };
+}
 
 function runtime(profile: "production" | "preview" = "production", deploy = "dpl_Old") {
   return {
@@ -275,8 +300,38 @@ test("native staged SOURCE preserves activation and sealed progress through orde
     assert.equal(two.events[0].acceptedAt, "2026-11-27T12:00:00.001Z");
     assert.equal(two.hasMore, false);
     assert.equal(two.sourceGrantId, next.id);
-    const retry = await readStudioSource(request(jwt, { cursor: one.nextCursor, limit: 1 }, host, rotated), { pool, env: next.env, verifier, now });
-    assert.deepEqual(await retry.json(), two);
+    const paired = await loadPairedStudioReader();
+    if (paired) {
+      const origin = "https://www.novalure-crm.app";
+      let reads = 0;
+      const read = paired.createCrmStudioSourceReader({
+        origin, deploymentId: next.env.VERCEL_DEPLOYMENT_ID, crmRevision: next.env.VERCEL_GIT_COMMIT_SHA,
+        sourceGrantId: next.id, profile: "production", readGrantCredential: async () => rotated,
+        getToken: async audience => { assert.equal(audience, CRM_MACHINE_AUDIENCE); return jwt; },
+        fetch: async (input, init) => {
+          assert.equal(++reads, 1);
+          assert.equal(String(input), `${origin}${studioSourcePath}`);
+          const inbound = new Request(input, init);
+          assert.deepEqual(await inbound.clone().json(), { cursor: one.nextCursor, limit: 1 });
+          const response = await readStudioSource(inbound, { pool, env: next.env, verifier, now });
+          assert.equal(response.status, 200);
+          assert.deepEqual(await response.clone().json(), two);
+          return response;
+        },
+      });
+      assert.deepEqual(await read(one.nextCursor), {
+        crmRevision: next.env.VERCEL_GIT_COMMIT_SHA, crmDeploymentId: next.env.VERCEL_DEPLOYMENT_ID,
+        transfer: two.events[0], nextCursor: two.nextCursor,
+      });
+      assert.equal(reads, 1);
+      console.log("STUDIO_SOURCE_PAIRED_EVIDENCE " + JSON.stringify({
+        evelynRevision: paired.evelynRevision, compiledSha256: paired.compiledSha256, reads,
+        actualReceiver: true, actualPostgreSQL: true, scope: "SYNTHETIC_LOCAL_ONLY",
+      }));
+    } else {
+      const retry = await readStudioSource(request(jwt, { cursor: one.nextCursor, limit: 1 }, host, rotated), { pool, env: next.env, verifier, now });
+      assert.deepEqual(await retry.json(), two);
+    }
     const forged = await readStudioSource(request(jwt, { cursor: "999." + one.nextCursor.split(".")[1], limit: 1 }, host, rotated), { pool, env: next.env, verifier, now });
     assert.equal(forged.status, 403);
   } finally { owner.release(); }
