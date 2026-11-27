@@ -201,9 +201,16 @@ try{
   unit=(await api('/api/crm/units',{projectId:fixture.projectId,unitNumber:'SYN-BROWSER-'+randomUUID().slice(0,5),floor:1,rooms:3,areaSqm:80,status:'available',priceCents:0,idempotencyKey:randomUUID(),correlationId:randomUUID()})).data;
   assert.ok(unit?.id);
  });
- await page.goto(fixture.baseUrl+'/?lang=de&workspaceId='+fixture.workspaceId+'&projectId=all');await page.getByRole('button',{name:'Einheiten / Bestand',exact:true}).click();
  const sales=page.locator('#property-sales-workflow');
- await expect(sales).toBeVisible({timeout:30000});await sales.getByLabel('Projekt',{exact:true}).selectOption(fixture.projectId);await sales.getByRole('button',{name:'Prozess laden / aktualisieren'}).click();
+ await step('Flow B opens inventory through the grouped workspace navigation',async()=>{
+  await page.goto(fixture.baseUrl+'/?lang=de&workspaceId='+fixture.workspaceId+'&projectId=all');
+  await page.getByRole('button',{name:'Immobilien & Projekte',exact:true}).click();
+  await page.getByRole('button',{name:/^Projekt\/Gebäude\/Einheiten/}).click();
+  await page.getByRole('button',{name:'Einheiten/Bestand öffnen',exact:true}).click();
+  await expect(sales).toBeVisible({timeout:30000});
+  await sales.getByLabel('Projekt',{exact:true}).selectOption(fixture.projectId);
+  await sales.getByRole('button',{name:'Prozess laden / aktualisieren'}).click();
+ });
  async function action(value){await sales.getByLabel('Nächster Schritt').selectOption(value)}
  async function save(label){await sales.getByRole('button',{name:label,exact:true}).click();await expect(sales.getByRole('status')).toContainText('Gespeichert.',{timeout:15000});}
  async function source(text='SYNTHETIC authorized evidence'){await sales.getByLabel(/Quellbeleg|Beleg der Projektbeauftragung/).fill(text)}
