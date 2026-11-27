@@ -232,6 +232,9 @@ export function LeadInbox({
 }: LeadInboxProps) {
   const copy = getDashboardCopy(language).leadInbox;
   const text = getLeadInboxCommandCopy(language);
+  const relatedUnavailableText = language === "de"
+    ? "Gesprächsverlauf und Einwilligungen sind derzeit nicht verfügbar."
+    : "Conversation history and consent data are currently unavailable.";
   const unavailableLabel = language === "de" ? "Nicht verfügbar" : "Unavailable";
   const locale = getLocale(language);
   const [sessionLeads, setSessionLeads] = useState<LocalLead[]>([]);
@@ -1535,6 +1538,7 @@ export function LeadInbox({
               </div>
 
               <ActivityTimeline workspaceId={workspaceId} leadId={selected.lead.id} contactId={selected.lead.contactId || undefined} projectId={selected.lead.projectId || undefined} language={language} timeZone={timeZone} />
+              {!relatedDataAvailable ? <p className="text-sm text-stone-600" role="status">{relatedUnavailableText}</p> : null}
 
               <div className="rounded-lg bg-slate-950 p-4 text-white">
                 <p className="text-sm font-semibold">{text.handoverChecklist}</p>

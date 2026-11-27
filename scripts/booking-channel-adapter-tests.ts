@@ -99,6 +99,9 @@ test("legacy reschedule rechecks a pending calendar result but persists a known 
       // Bounded synthetic legacy repository: production privileges and RLS remain unchanged.
       const legacy: TenantTransaction = {
         async query<Row>(sql: string, params: readonly unknown[] = []) {
+          if (sql.includes("to_regprocedure('public.crm_property_booking_action_lookup(uuid,text)')")) {
+            return [{ ready: false, legacyRead: true }] as Row[];
+          }
           if (sql.includes("to_regprocedure")) return [{ installed: true }] as Row[];
           if (sql.includes("booking_workspace_publication_lookup")) return [{ publication: cutover ? { config: { publicId, enabled: true } } : null }] as Row[];
           if (/from meeting_bookings b/.test(sql)) { assert.equal(params[0], bookingId); return [booking] as Row[]; }

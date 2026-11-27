@@ -20,11 +20,11 @@ function changePreference(key: string, choice: string) {
   subscribers.forEach(fn => fn());
 }
 function visitor() {
-  const key = "novalure-expose-visitor-v1";
-  try { const raw = JSON.parse(localStorage.getItem(key) || "null"); if (raw && Date.now() - raw.at < 30 * 86400000 && /^[A-Za-z0-9_-]{43}$/.test(raw.token)) return raw.token as string; } catch { /* Storage can be unavailable. */ }
+  const visitorCacheSlot = "novalure-expose-visitor-v1";
+  try { const raw = JSON.parse(localStorage.getItem(visitorCacheSlot) || "null"); if (raw && Date.now() - raw.at < 30 * 86400000 && /^[A-Za-z0-9_-]{43}$/.test(raw.token)) return raw.token as string; } catch { /* Storage can be unavailable. */ }
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const token = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  try { localStorage.setItem(key, JSON.stringify({ token, at: Date.now() })); } catch { /* No persistence is required for the current visit. */ }
+  try { localStorage.setItem(visitorCacheSlot, JSON.stringify({ token, at: Date.now() })); } catch { /* No persistence is required for the current visit. */ }
   return token;
 }
 export function WebExposeWebsite({ data, token, preview = false, previewWorkspaceId, previewPropertyId }: { data: WebExposePublic; token?: string; preview?: boolean; previewWorkspaceId?: string; previewPropertyId?: string }) {

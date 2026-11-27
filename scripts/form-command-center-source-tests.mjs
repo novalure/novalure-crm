@@ -9,11 +9,12 @@ const loaderSource = source.slice(source.indexOf("async function loadPersistedFo
 assert.ok(loaderSource.startsWith("async function loadPersistedForms()"));
 const compiledLoader = ts.transpileModule(loaderSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
-async function runLoader(response, { cancelled = false, rejects = false } = {}) {
+async function runLoader(response, { cancelled = false, focusFormId = null, rejects = false } = {}) {
   const changes = {};
   const loader = vm.runInNewContext(`${compiledLoader}\nloadPersistedForms`, {
     cancelled,
     copy: {},
+    focusFormId,
     csrfFetch: async (url, options) => {
       assert.equal(url, "/api/forms");
       assert.equal(options.cache, "no-store");
@@ -48,6 +49,18 @@ test("real persisted forms and submissions retain the existing normalization flo
   const submission = { id: "persisted-submission", formId: form.id };
   const result = await runLoader({ ok: true, json: async () => ({ source: "database", forms: [form], submissions: [submission] }) });
   assert.deepEqual(result, { source: "database", forms: [{ ...form, normalized: true }], submissions: [submission], selectedId: form.id });
+});
+
+test("a requested persisted form is selected after normalization", async () => {
+  const forms = [{ id: "first-form" }, { id: "requested-form" }];
+  const response = { ok: true, json: async () => ({ source: "database", forms, submissions: [] }) };
+  const result = await runLoader(response, { focusFormId: "requested-form" });
+  assert.deepEqual(result, {
+    source: "database",
+    forms: forms.map(form => ({ ...form, normalized: true })),
+    submissions: [],
+    selectedId: "requested-form",
+  });
 });
 
 test("HTTP, network and repository fallback failures stay unavailable instead of confirmed empty", async () => {

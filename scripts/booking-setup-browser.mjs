@@ -83,7 +83,7 @@ try {
   const client = await owner.connect();
   try {
     await client.query("begin");
-    for (const name of ["108_universal_booking.sql", "109_booking_setup_communications.sql", "110_account_ui_language_preference.sql", "111_booking_public_channels.sql"]) {
+    for (const name of ["108_universal_booking.sql", "109_booking_setup_communications.sql", "110_account_ui_language_preference.sql", "111_booking_public_channels.sql", "186_property_unit_details.sql"]) {
       const sql = await readFile(`migrations/${name}`, "utf8");
       await client.query(sql);
     }

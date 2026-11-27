@@ -1,0 +1,4020 @@
+{
+  "policyVersion": "crm-department-access-2026-11-26.1",
+  "departments": {
+    "EVELYN_CEO": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationId"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "type",
+          "status",
+          "score",
+          "buyerProfile",
+          "source"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "content",
+          "status",
+          "version"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "expiresAt",
+          "nextAction"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "confirmedAt"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "Read",
+        "fields": [
+          "action",
+          "status",
+          "objectVersion",
+          "objectDigest",
+          "decidedAt"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "MANAGEMENT",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "BUSINESS_DEVELOPMENT": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "type",
+          "status",
+          "score",
+          "buyerProfile",
+          "source"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Create",
+        "fields": [
+          "source"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Update",
+        "fields": [
+          "source"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "BUSINESS_DEVELOPMENT",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "SALES": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Qualification",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Viewing",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "type",
+          "status",
+          "score",
+          "buyerProfile",
+          "source"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Create",
+        "fields": [
+          "source"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Update",
+        "fields": [
+          "source"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "content",
+          "status",
+          "version"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "expiresAt",
+          "nextAction"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "confirmedAt"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "Read",
+        "fields": [
+          "action",
+          "status",
+          "objectVersion",
+          "objectDigest",
+          "decidedAt"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Qualification",
+        "operation": "Read",
+        "fields": [
+          "buyerLeadId",
+          "budgetFrom",
+          "budgetTo",
+          "financingStatus",
+          "desiredLocation",
+          "mustHaveCriteria",
+          "niceToHaveCriteria",
+          "purchaseTimeline",
+          "propertyType",
+          "useCase"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Qualification",
+        "operation": "Update",
+        "fields": [
+          "budgetFrom",
+          "budgetTo",
+          "financingStatus",
+          "desiredLocation",
+          "mustHaveCriteria",
+          "niceToHaveCriteria",
+          "purchaseTimeline",
+          "propertyType",
+          "useCase"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Viewing",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "leadId",
+          "startsAt",
+          "endsAt",
+          "status",
+          "note"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Viewing",
+        "operation": "Update",
+        "fields": [
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "PrepareOffer",
+        "fields": [
+          "content"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "SendOffer",
+        "fields": [],
+        "purpose": "SALES",
+        "approval": "OFFER",
+        "evidence": "QC_APPROVED_OFFER"
+      },
+      {
+        "entity": "Reservation",
+        "operation": "PrepareReservation",
+        "fields": [
+          "unitId",
+          "contactId",
+          "leadId",
+          "expiresAt",
+          "unitVersion"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "ConfirmReservation",
+        "fields": [
+          "approvalReference",
+          "unitVersion",
+          "sourceReference"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": "AUTHORIZED_RESERVATION_CONFIRMATION"
+      },
+      {
+        "entity": "Sale",
+        "operation": "ConfirmSale",
+        "fields": [
+          "approvalReference",
+          "unitVersion",
+          "sourceReference"
+        ],
+        "purpose": "SALES",
+        "approval": null,
+        "evidence": "AUTHORIZED_SALE_CONFIRMATION"
+      }
+    ],
+    "MARKETING_ADS": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "MARKETING",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "WEBSITE_STUDIO": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Update",
+        "fields": [
+          "description"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "WEBSITE_DELIVERY",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "REAL_ESTATE_OPERATIONS": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Qualification",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Viewing",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "type",
+          "status",
+          "score",
+          "buyerProfile",
+          "source"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Create",
+        "fields": [
+          "source"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Update",
+        "fields": [
+          "source"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Developer",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "content",
+          "status",
+          "version"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "expiresAt",
+          "nextAction"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "confirmedAt"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Create",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Update",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Qualification",
+        "operation": "Read",
+        "fields": [
+          "buyerLeadId",
+          "budgetFrom",
+          "budgetTo",
+          "financingStatus",
+          "desiredLocation",
+          "mustHaveCriteria",
+          "niceToHaveCriteria",
+          "purchaseTimeline",
+          "propertyType",
+          "useCase"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Qualification",
+        "operation": "Update",
+        "fields": [
+          "budgetFrom",
+          "budgetTo",
+          "financingStatus",
+          "desiredLocation",
+          "mustHaveCriteria",
+          "niceToHaveCriteria",
+          "purchaseTimeline",
+          "propertyType",
+          "useCase"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Viewing",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "leadId",
+          "startsAt",
+          "endsAt",
+          "status",
+          "note"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Viewing",
+        "operation": "Update",
+        "fields": [
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "PrepareReservation",
+        "fields": [
+          "unitId",
+          "contactId",
+          "leadId",
+          "expiresAt",
+          "unitVersion"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "ConfirmReservation",
+        "fields": [
+          "approvalReference",
+          "unitVersion",
+          "sourceReference"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": "AUTHORIZED_RESERVATION_CONFIRMATION"
+      },
+      {
+        "entity": "Sale",
+        "operation": "ConfirmSale",
+        "fields": [
+          "approvalReference",
+          "unitVersion",
+          "sourceReference"
+        ],
+        "purpose": "PROPERTY_OPERATIONS",
+        "approval": null,
+        "evidence": "AUTHORIZED_SALE_CONFIRMATION"
+      }
+    ],
+    "PROJECT_MANAGEMENT": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "description"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "PROJECT_DELIVERY",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "IT_CRM": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status"
+        ],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Update",
+        "fields": [
+          "description"
+        ],
+        "purpose": "TECHNICAL_OPERATIONS",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "SECRETARIAT_ADMINISTRATION": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "ADMINISTRATION",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "SUPPORT": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status"
+        ],
+        "purpose": "SUPPORT",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "FINANCE": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationId"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "content",
+          "status",
+          "version"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "expiresAt",
+          "nextAction"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "confirmedAt"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "Read",
+        "fields": [
+          "action",
+          "status",
+          "objectVersion",
+          "objectDigest",
+          "decidedAt"
+        ],
+        "purpose": "FINANCE_RECONCILIATION",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "LEGAL_COMPLIANCE": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Offer",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "content",
+          "status",
+          "version"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Reservation",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "expiresAt",
+          "nextAction"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Sale",
+        "operation": "Read",
+        "fields": [
+          "unitId",
+          "contactId",
+          "status",
+          "confirmedAt"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "ApprovalReference",
+        "operation": "Read",
+        "fields": [
+          "action",
+          "status",
+          "objectVersion",
+          "objectDigest",
+          "decidedAt"
+        ],
+        "purpose": "LEGAL_CASE",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "HR": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "WORKFORCE_COORDINATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "WORKFORCE_COORDINATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "WORKFORCE_COORDINATION",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "WORKFORCE_COORDINATION",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "PROCUREMENT": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Create",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Update",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "PROCUREMENT",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "SOCIAL_MEDIA": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Company",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "organizationType",
+          "lifecycleStage",
+          "website"
+        ],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "SOCIAL_CONTENT",
+        "approval": null,
+        "evidence": null
+      }
+    ],
+    "VOICE_TELEPHONE": [
+      {
+        "entity": "Task",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "DescribeAssignment",
+        "fields": [],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Task",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "description",
+          "dueAt",
+          "priority",
+          "status",
+          "contactId",
+          "leadId"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "leadId",
+          "channel",
+          "direction",
+          "summary",
+          "lastMessageAt"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Create",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Communication",
+        "operation": "Update",
+        "fields": [
+          "summary"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Read",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "contactId",
+          "leadId",
+          "note"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Create",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Appointment",
+        "operation": "Update",
+        "fields": [
+          "title",
+          "startsAt",
+          "endsAt",
+          "note"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Contact",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "email",
+          "phone",
+          "organizationId",
+          "relationshipRole"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "BuyerLead",
+        "operation": "Read",
+        "fields": [
+          "contactId",
+          "type",
+          "status",
+          "score"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Project",
+        "operation": "Read",
+        "fields": [
+          "name",
+          "projectType",
+          "status",
+          "description"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      },
+      {
+        "entity": "Unit",
+        "operation": "Read",
+        "fields": [
+          "unitNumber",
+          "floor",
+          "rooms",
+          "livingAreaSqm",
+          "status",
+          "priceCents"
+        ],
+        "purpose": "VOICE_HANDOFF",
+        "approval": null,
+        "evidence": null
+      }
+    ]
+  },
+  "fieldProfiles": {
+    "Contact": {
+      "read": [
+        "name",
+        "email",
+        "phone",
+        "organizationId",
+        "relationshipRole"
+      ],
+      "write": [
+        "name",
+        "email",
+        "phone",
+        "organizationId",
+        "relationshipRole"
+      ]
+    },
+    "Company": {
+      "read": [
+        "name",
+        "organizationType",
+        "lifecycleStage",
+        "website"
+      ],
+      "write": [
+        "name",
+        "organizationType",
+        "lifecycleStage",
+        "website"
+      ]
+    },
+    "Developer": {
+      "read": [
+        "name",
+        "organizationType",
+        "lifecycleStage",
+        "website"
+      ],
+      "write": [
+        "name",
+        "lifecycleStage",
+        "website"
+      ]
+    },
+    "Project": {
+      "read": [
+        "name",
+        "projectType",
+        "status",
+        "description"
+      ],
+      "write": [
+        "name",
+        "description"
+      ]
+    },
+    "Unit": {
+      "read": [
+        "unitNumber",
+        "floor",
+        "rooms",
+        "livingAreaSqm",
+        "status",
+        "priceCents"
+      ],
+      "write": [
+        "unitNumber",
+        "floor",
+        "rooms",
+        "livingAreaSqm"
+      ]
+    },
+    "BuyerLead": {
+      "read": [
+        "contactId",
+        "type",
+        "status",
+        "score",
+        "buyerProfile",
+        "source"
+      ],
+      "write": [
+        "source"
+      ]
+    },
+    "Qualification": {
+      "read": [
+        "buyerLeadId",
+        "budgetFrom",
+        "budgetTo",
+        "financingStatus",
+        "desiredLocation",
+        "mustHaveCriteria",
+        "niceToHaveCriteria",
+        "purchaseTimeline",
+        "propertyType",
+        "useCase"
+      ],
+      "write": [
+        "budgetFrom",
+        "budgetTo",
+        "financingStatus",
+        "desiredLocation",
+        "mustHaveCriteria",
+        "niceToHaveCriteria",
+        "purchaseTimeline",
+        "propertyType",
+        "useCase"
+      ]
+    },
+    "Offer": {
+      "read": [
+        "title",
+        "content",
+        "status",
+        "version"
+      ],
+      "write": [
+        "content"
+      ]
+    },
+    "Task": {
+      "read": [
+        "title",
+        "description",
+        "dueAt",
+        "priority",
+        "status",
+        "contactId",
+        "leadId"
+      ],
+      "write": [
+        "title",
+        "description",
+        "dueAt",
+        "priority",
+        "status",
+        "contactId",
+        "leadId"
+      ]
+    },
+    "Appointment": {
+      "read": [
+        "title",
+        "startsAt",
+        "endsAt",
+        "status",
+        "contactId",
+        "leadId",
+        "note"
+      ],
+      "write": [
+        "title",
+        "startsAt",
+        "endsAt",
+        "note"
+      ]
+    },
+    "Viewing": {
+      "read": [
+        "unitId",
+        "contactId",
+        "leadId",
+        "startsAt",
+        "endsAt",
+        "status",
+        "note"
+      ],
+      "write": [
+        "startsAt",
+        "endsAt",
+        "note"
+      ]
+    },
+    "Reservation": {
+      "read": [
+        "unitId",
+        "contactId",
+        "status",
+        "expiresAt",
+        "nextAction"
+      ],
+      "write": [
+        "nextAction"
+      ]
+    },
+    "Sale": {
+      "read": [
+        "unitId",
+        "contactId",
+        "status",
+        "confirmedAt"
+      ],
+      "write": []
+    },
+    "Communication": {
+      "read": [
+        "contactId",
+        "leadId",
+        "channel",
+        "direction",
+        "summary",
+        "lastMessageAt"
+      ],
+      "write": [
+        "summary"
+      ]
+    },
+    "ApprovalReference": {
+      "read": [
+        "action",
+        "status",
+        "objectVersion",
+        "objectDigest",
+        "decidedAt"
+      ],
+      "write": []
+    }
+  }
+}
