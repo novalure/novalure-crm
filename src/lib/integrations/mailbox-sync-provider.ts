@@ -8,6 +8,10 @@ function rows(v: unknown, max = 5000) { if (v === undefined) return []; if (!Arr
 const auth = (token: string, microsoft = false, microsoftPageSize = 5) => ({ Authorization: `Bearer ${token}`, Accept: "application/json", ...(microsoft ? { Prefer: `IdType="ImmutableId", odata.maxpagesize=${microsoftPageSize}` } : {}) });
 const historyId = (v: unknown) => { if (typeof v !== "string" || !/^\d{1,40}$/.test(v)) throw new MailboxProviderError("MAIL_INVALID_HISTORY_ID"); return v; };
 const metadataSelect = "id,conversationId,internetMessageId,internetMessageHeaders,subject,from,toRecipients,ccRecipients,receivedDateTime,parentFolderId";
+function deltaContinuation(value: unknown, inboxId: string | undefined, kind: "next" | "delta") {
+  try { return mailboxDeltaContinuationUrl(value, inboxId, kind); }
+  catch { throw new MailboxProviderError("MAIL_INVALID_DELTA_CURSOR"); }
+}
 export async function fetchMailboxSyncPage(provider: MailboxProvider, token: string, checkpoint: MailboxSyncCheckpoint, transport = defaultTransport, inboxId?: string, importStart?: number | null, options: { productionPilot?: boolean } = {}) {
   const after = mailboxSyncPosition(checkpoint), changes: MailboxSyncChange[] = [];
   if (provider === "google") {
@@ -34,13 +38,13 @@ export async function fetchMailboxSyncPage(provider: MailboxProvider, token: str
       initial.searchParams.set("$select", "id,receivedDateTime");
       initial.searchParams.set("$filter", `receivedDateTime ge ${new Date(importStart).toISOString()}`);
     }
-    const url = cursor == null ? mailboxDeltaUrl(initial.toString(), inboxId) : mailboxDeltaContinuationUrl(cursor, inboxId, after.pendingCursor != null ? "next" : "delta");
+    const url = cursor == null ? mailboxDeltaUrl(initial.toString(), inboxId) : deltaContinuation(cursor, inboxId, after.pendingCursor != null ? "next" : "delta");
     const page = await mailboxProviderJson(url, { headers: auth(token, true, pageSize) }, transport);
     // A partial or ambiguous response must not advance the durable checkpoint.
     // Graph returns a value array and exactly one opaque continuation link.
     const hasNext = Object.hasOwn(page, "@odata.nextLink"), hasDelta = Object.hasOwn(page, "@odata.deltaLink");
     if (!Array.isArray(page.value) || hasNext === hasDelta) throw new MailboxProviderError("MAIL_INVALID_RESPONSE");
-    const continuation = mailboxDeltaContinuationUrl(page[hasNext ? "@odata.nextLink" : "@odata.deltaLink"], inboxId, hasNext ? "next" : "delta");
+    const continuation = deltaContinuation(page[hasNext ? "@odata.nextLink" : "@odata.deltaLink"], inboxId, hasNext ? "next" : "delta");
     // Graph may return more than the requested page size. Keep the entire page
     // within the existing response bounds so the caller can commit it atomically.
     for (const row of rows(page.value, 500)) {
@@ -54,7 +58,11 @@ export async function fetchMailboxSyncPage(provider: MailboxProvider, token: str
   }
   return { changes, after };
 }
-export async function fetchMailboxInboxId(token: string, transport = defaultTransport) { const folder = await mailboxProviderJson('https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id', { headers: auth(token, true) }, transport, 65536); return mailboxProviderId(folder.id); }
+export async function fetchMailboxInboxId(token: string, transport = defaultTransport) {
+  const folder = await mailboxProviderJson('https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id', { headers: auth(token, true) }, transport, 65536);
+  try { return mailboxProviderId(folder.id); }
+  catch { throw new MailboxProviderError("MAIL_INVALID_FOLDER_ID"); }
+}
 export async function fetchMailboxMetadata(provider: MailboxProvider, token: string, id: string, transport = defaultTransport, inboxId?: string, options: { senderOnly?: boolean } = {}): Promise<MailboxMetadata | null> {
   const messageId = encodeURIComponent(mailboxProviderId(id));
   let microsoftInboxId: string | null = null;
