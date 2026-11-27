@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { SignJWT, jwtVerify, type JWTVerifyOptions } from "jose";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import type { AppSession } from "../src/lib/auth/session";
@@ -230,15 +231,15 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   }), { pool });
   const locationId = registered.data.location.id;
   const identity = { workspaceId, projectId, companyId: ids.company, locationId };
-  const observed = await runWebsiteSalesIrelandCommand(session, command("observe", {
+  const observe = async (expiresAt: number, expectedVersion?: number) => runWebsiteSalesIrelandCommand(session, command("observe", {
     prospect: { identity, country: "IRELAND", identityStatus: "VERIFIED", domain: null, path: "NO_WEBSITE",
       ownWebsiteSearch: "NONE_FOUND", obstacle: null, platformUrl: null, bookingRoute: "UNKNOWN", need: "EVIDENCED",
       evidence: ["IDENTITY", "OWN_WEBSITE_SEARCH", "BUSINESS_NEED"].map(kind => ({ evidenceId: kind, identity, kind,
         sourceUrl: "https://example.invalid/evidence", finding: "Synthetic current research", confidence: 0.9,
-        observedAt: new Date(Date.now() - 30_000).toISOString(), validUntil: new Date(Date.now() + 120_000).toISOString(), validityCondition: "Synthetic evidence remains current" })),
+        observedAt: new Date(Date.now() - 30_000).toISOString(), validUntil: new Date(expiresAt).toISOString(), validityCondition: "Synthetic evidence remains current" })),
     },
-  }, { locationId, locationVersion: registered.data.location.version }), { pool });
-  const workflow = observed.data.workflow!;
+  }, { locationId, locationVersion: registered.data.location.version, expectedVersion }), { pool });
+  let workflow = (await observe(Date.now() + 120_000)).data.workflow!;
   assert.equal(workflow.qualificationStatus, "READY");
   const registrar = await db.admin.connect();
   try {
@@ -257,16 +258,67 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
       await assert.rejects(registerWebsiteSalesMachineAccess(registrar, previewRegistration), /SALES_PREVIEW_TARGET_REQUIRED/);
     }
   } finally { await registrar.query("reset role"); registrar.release(); }
-  const original = command("qualify", { contactId: ids.contact, opportunitySummary: "Synthetic opportunity", nextAction: "Review internally",
-    expectedEvidenceDigest: workflow.evidenceDigest, studioTransfer: {
+  const qualify = (observed: typeof workflow) => command("qualify", { contactId: ids.contact,
+    opportunitySummary: "Synthetic opportunity", nextAction: "Review internally",
+    expectedEvidenceDigest: observed.evidenceDigest, studioTransfer: {
       sourceGrantId: ids.sourceGrant, operationId: ids.transfer, revision: 1, payloadHash, leadId: ids.lead, submissionId: ids.submission,
-    } }, { locationId, expectedVersion: workflow.version });
+    } }, { locationId, expectedVersion: observed.version });
 
   const totals = async () => (await db.admin.query(`select
     (select count(*)::int from tasks where workspace_id=$1 and project_id=$2) as tasks,
     (select count(*)::int from leads where workspace_id=$1 and project_id=$2) as leads,
     (select count(*)::int from deals where workspace_id=$1 and project_id=$2) as deals,
     (select count(*)::int from crm_command_receipts where workspace_id=$1 and operation='website_sales.ireland.qualify') as receipts`, [workspaceId, projectId])).rows[0];
+  if (profile === "production") {
+    await t.test("a Lead UPDATE lock carries valid evidence across its real expiry and rolls back every effect", async () => {
+      const expiresAt = Date.now() + 5_000;
+      const expiring = (await observe(expiresAt, workflow.version)).data.workflow!;
+      assert.equal(expiring.qualificationStatus, "READY");
+      const request = qualify(expiring);
+      const snapshot = async () => ({
+        totals: await totals(),
+        state: (await db.admin.query(`select
+          (select jsonb_build_object('status',status,'version',version,'task',next_task_id)
+            from crm_website_sales_workflows where id=$1) as workflow,
+          (select jsonb_build_object('version',version,'metadata',metadata) from leads where id=$2) as lead,
+          (select jsonb_build_object('version',version,'metadata',metadata,'company',organization_id) from deals where id=$3) as deal,
+          (select count(*)::int from audit_logs where after->>'correlationId'=$4) as audit,
+          (select count(*)::int from crm_domain_events where correlation_id=$4::text::uuid) as events,
+          (select count(*)::int from crm_website_sales_machine_events where grant_id=$5) as machine_events`,
+        [expiring.id, ids.lead, ids.deal, request.correlationId, activeGrantId])).rows[0],
+      });
+      const before = await snapshot();
+      const blocker = await db.admin.connect();
+      let pending: ReturnType<typeof invoke> | undefined;
+      try {
+        await blocker.query("begin");
+        await blocker.query("select id from leads where id=$1 for update", [ids.lead]);
+        const blockerPid = (await blocker.query("select pg_backend_pid() as pid")).rows[0].pid;
+        pending = invoke(envelope(request));
+        let waitingAfterReady = false;
+        while (!waitingAfterReady && Date.now() < expiresAt) {
+          waitingAfterReady = (await db.admin.query(`select exists(
+            select 1 from pg_stat_activity where wait_event_type='Lock' and $1::int=any(pg_blocking_pids(pid))
+              and query like 'update leads l set metadata=%') as waiting`, [blockerPid])).rows[0].waiting;
+          if (!waitingAfterReady) await delay(20);
+        }
+        assert.equal(waitingAfterReady, true, "the transfer must reach the late Lead update while evidence is valid");
+        assert.ok(Date.now() < expiresAt, "the Lead update must be blocked before expiry");
+        await delay(Math.max(0, expiresAt - Date.now()) + 25);
+        assert.ok(Date.now() >= expiresAt);
+        await blocker.query("commit");
+        const result = await pending;
+        assert.equal(result.status, 409);
+        assert.equal(result.body.code, "CURRENT_EVIDENCE_REQUIRED");
+        assert.deepEqual(await snapshot(), before);
+      } finally {
+        try { await blocker.query("rollback"); } finally { blocker.release(); }
+        await pending;
+      }
+      workflow = (await observe(Date.now() + 120_000, expiring.version)).data.workflow!;
+    });
+  }
+  const original = qualify(workflow);
   const baseline = await totals();
   if (profile === "preview") {
     const read = { contractVersion: websiteSalesMachineContract, operation: "read",

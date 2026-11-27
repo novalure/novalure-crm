@@ -169,8 +169,10 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
         await revalidate();
         if (await tx.queryOne("select nonce from crm_website_sales_machine_events where grant_id=$1 and nonce=$2", [grant.id, nonce])) denied("NONCE_REPLAY", 409);
         let result: Record<string, unknown>;
+        let checkNewQualification: (() => void) | undefined;
         if (body.operation === "execute") {
-          result = { ...await runWebsiteSalesIrelandCommand(fresh, body.request, options), contractVersion: websiteSalesIrelandContract, persisted: true };
+          const execution = await runWebsiteSalesIrelandCommand(fresh, body.request, options, check => { checkNewQualification = check; });
+          result = { ...execution, contractVersion: websiteSalesIrelandContract, persisted: true };
         } else if (body.operation === "reconcile") {
           result = { ...await reconcileWebsiteSalesIrelandCommand(fresh, body.request, options), contractVersion: websiteSalesMachineContract };
         } else {
@@ -185,6 +187,9 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
         [grant.id, nonce, grant.workspace_id, grant.actor_user_id, grant.project_id, grant.company_id, grant.location_id,
           grant.department_id, grant.agent_id, grant.task_id, action(body), crmPayloadDigest(body), claims.jtiHash, auditReference,
           result.status === "NOT_FOUND" ? "NOT_FOUND" : "SUCCESS"]);
+        // The last potentially blocking statement has completed. A failed
+        // evidence check still rolls back the task, receipt and machine audit.
+        checkNewQualification?.();
         return { ...result, target: "workflow", correlationId: original.correlationId, machine, auditReference,
           requestHash: crmPayloadDigest(body), ...(body.operation === "read" ? {} : { idempotencyKey: body.request.idempotencyKey }),
           scope: { workspaceId: grant.workspace_id, projectId: grant.project_id, companyId: grant.company_id, locationId: grant.location_id } };

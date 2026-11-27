@@ -230,7 +230,8 @@ export async function reconcileWebsiteSalesIrelandCommand(session: AppSession, r
   }, options);
 }
 
-export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: WebsiteSalesIrelandCommand, options: TenantTransactionOptions = {}) {
+export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: WebsiteSalesIrelandCommand,
+  options: TenantTransactionOptions = {}, registerQualificationCheck?: (check: () => void) => void) {
   const input = validateWebsiteSalesIrelandCommand(raw);
   const command = websiteSalesIrelandCommandInput(session, input);
   return withCrmCommandPreflight(session, command, async (tx, fresh) => {
@@ -264,6 +265,7 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
       }, websiteSalesStudioAuthority(fresh, scope, sourceGrantId));
     };
     const confirmedSubmission = await checkStudioTransfer();
+    let checkNewQualification: (() => void) | undefined;
     const result = await executeCrmCommand(fresh, command, async (commandTx, context) => {
       const row = await workflow(commandTx, fresh, scope, true);
       if (input.operation === "observe") {
@@ -316,8 +318,11 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
             observationId: row.observationId, evidenceDigest: current.evidenceDigest, studioTransferOperationId: studioTransfer.operationId,
             contactBasis: "NONE", outboundEnabled: false, opportunitySummary: summary,
             websiteSalesPipeline: { pipelineId: stage.pipelineId, stageId: stage.id, stageName: stage.name } });
-          const effective = qualification(row.prospect);
-          if (effective.status !== "READY" || effective.evidenceDigest !== current.evidenceDigest) fail("CURRENT_EVIDENCE_REQUIRED");
+          checkNewQualification = () => {
+            const effective = qualification(row.prospect);
+            if (effective.status !== "READY" || effective.evidenceDigest !== current.evidenceDigest) fail("CURRENT_EVIDENCE_REQUIRED");
+          };
+          checkNewQualification();
           const contactBlocked = await contactStop(commandTx, fresh, { ...row, contactId });
           if (contactBlocked) fail(contactBlocked);
           await attachWebsiteSalesInbound(commandTx, fresh, scope, contactId, inbound, provenance);
@@ -335,7 +340,11 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
       if (currentSubmission?.contactId !== confirmedSubmission.contactId || currentSubmission?.dealId !== confirmedSubmission.dealId)
         fail("STUDIO_INBOUND_CHANGED");
     }
-    // Keep the command receipt stable across later workflow stops.
+    // Receipt replay never runs the effect callback or creates a fresh evidence check.
+    if (checkNewQualification) {
+      checkNewQualification();
+      registerQualificationCheck?.(checkNewQualification);
+    }
     return result;
   }, options);
 }
