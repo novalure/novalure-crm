@@ -890,7 +890,12 @@ function WorkspaceCompanyProfileSettings({
               </div>
             ) : null}
 
-            <div className="max-w-full overflow-x-auto rounded-lg border border-stone-200">
+            <div
+              aria-label={text.users}
+              className="max-w-full overflow-x-auto rounded-lg border border-stone-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+              role="region"
+              tabIndex={0}
+            >
               <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-500">
                   <tr>

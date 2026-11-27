@@ -54,6 +54,14 @@ navigation, branded theme, current isolated schema and deterministic cleanup of
 an intercepted fallback response. Tenant, MFA, private-data, modal-focus and
 fallback assertions remain. No Outlook product implementation is imported.
 
+That actual browser run subsequently exposed three failures (47/50 passed):
+the `#bots` link selected the generic AI assistant instead of the registered
+bot workspace, which also hid the unavailable-data metrics, and the wide team
+table lacked a keyboard-focusable scroll region. The inspected minimal fixes
+from `b3213880611e198e2fd7bf6d6243faa93608846f` add only the explicit bot hash
+mapping and a labelled focusable table region with a visible focus outline.
+They do not change data authority, routes, mailbox behavior or assertions.
+
 The current-browser schema option applies existing migration bytes unchanged
 and remains off for predecessor-only database tests. It is not a production
 migration or a rehearsal of the complete production ledger.
