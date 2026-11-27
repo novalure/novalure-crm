@@ -7,7 +7,7 @@ import {
   type CrmCommandContext, type TenantTransaction, type TenantTransactionOptions,
 } from "@/lib/crm-command";
 import { qualifyWebsiteProspect, type WebsiteProspectQualification } from "@/lib/website-prospect";
-import { websiteSalesActorAuthority, websiteSalesStudioWorkload } from "@/lib/website-sales-machine-authority";
+import { websiteSalesActorAuthority, websiteSalesStudioAuthority } from "@/lib/website-sales-machine-authority";
 import { assertStudioAcceptedTransfer } from "@/lib/studio-source-reader";
 import { studioEnquiryCrmProject } from "@/lib/studio-enquiry-contract";
 import { attachWebsiteSalesInbound, lockWebsiteSalesInboundDeal } from "./website-sales-inbound-repository";
@@ -261,7 +261,7 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
       const { sourceGrantId, ...proof } = studioTransfer;
       return assertStudioAcceptedTransfer(tx, {
         ...proof, workspaceId: fresh.workspaceId, crmProjectId: scope.projectId,
-      }, { sourceGrantId, workloadId: websiteSalesStudioWorkload(fresh, scope) });
+      }, websiteSalesStudioAuthority(fresh, scope, sourceGrantId));
     };
     const confirmedSubmission = await checkStudioTransfer();
     const result = await executeCrmCommand(fresh, command, async (commandTx, context) => {

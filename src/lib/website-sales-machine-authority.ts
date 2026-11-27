@@ -2,12 +2,16 @@ import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { AppSession } from "./auth/session";
 import { CrmCommandError } from "./crm-command";
+import type { WebsiteSalesPreviewTarget } from "./website-sales-preview-auth";
 
 type Scope = { projectId: string; companyId: string; locationId?: string };
+type StudioAuthority =
+  | Readonly<{ workloadId: string }>
+  | Readonly<{ preview: WebsiteSalesPreviewTarget; sourceGrantId: string }>;
 export type WebsiteSalesMachineAuthority = Readonly<{
   workspaceId: string; actorId: string; identityId: string; grantId: string; workloadId: string;
   departmentId: "SALES"; agentId: string; taskId: string; scope: Scope;
-  operation: string; mode: "execute" | "read" | "reconcile"; sourceWorkloadId?: string;
+  operation: string; mode: "execute" | "read" | "reconcile"; studioSource?: StudioAuthority;
 }>;
 const authority = new AsyncLocalStorage<WebsiteSalesMachineAuthority>();
 
@@ -32,11 +36,15 @@ export function websiteSalesActorAuthority(session: AppSession, scope: Scope, op
     agentId: bound.agentId, taskId: bound.taskId };
 }
 
-export function websiteSalesStudioWorkload(session: AppSession, scope: Scope) {
+export function websiteSalesStudioAuthority(session: AppSession, scope: Scope, sourceGrantId: string) {
   const machine = websiteSalesActorAuthority(session, scope, "qualify");
   const bound = authority.getStore();
-  if (!machine || bound?.mode !== "execute" || !bound.sourceWorkloadId) {
+  const studioSource = bound?.studioSource;
+  if (!machine || bound?.mode !== "execute" || !studioSource ||
+    ("preview" in studioSource
+      ? session.serviceIdentity?.environment !== "preview" || studioSource.sourceGrantId !== sourceGrantId
+      : session.serviceIdentity?.environment !== "production")) {
     throw new CrmCommandError("SALES_MACHINE_AUTHORITY_REQUIRED", "Explicit scoped Sales effect authority required", 403);
   }
-  return bound.sourceWorkloadId;
+  return { ...studioSource, sourceGrantId };
 }

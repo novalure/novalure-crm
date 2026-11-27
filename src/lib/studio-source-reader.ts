@@ -10,6 +10,7 @@ import { queryRows, resolveDatabaseUrl, withPublicSubmissionTransaction } from "
 import { readKnowledgeJson } from "./knowledge-center/http";
 import { studioEnquiryCrmProject, studioEnquiryProject } from "./studio-enquiry-contract";
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "./website-sales-ingestion";
+import { isWebsiteSalesPreviewTarget, type WebsiteSalesPreviewTarget } from "./website-sales-preview-auth";
 
 export const studioSourcePath = "/api/integrations/evelyn/studio/source";
 export const studioSourcePreviewAudience = `urn:novalure:crm:studio-source:preview:${studioEnquiryProject}`;
@@ -108,21 +109,37 @@ function isAcceptedTransfer(value: unknown): value is StudioAcceptedSourceTransf
 
 // Called inside the normal Sales command, after its own current project/write
 // authorization. The only cross-actor Studio authority is an exact boolean.
+type StudioSalesSourceAuthority = Readonly<(
+  { workloadId: string } | { preview: WebsiteSalesPreviewTarget }
+) & { sourceGrantId: string }>;
 export async function assertStudioAcceptedTransfer(
-  tx: TenantTransaction, proof: StudioTransferBinding, authority: { workloadId: string; sourceGrantId: string },
+  tx: TenantTransaction, proof: StudioTransferBinding, authority: StudioSalesSourceAuthority,
 ) {
   const fail = () => { throw new CrmCommandError("STUDIO_SOURCE_TRANSFER_UNCONFIRMED", "Studio transfer is not confirmed for this project.", 409); };
-  if (!bindingIsValid(proof) || !uuid.test(authority.workloadId) || !uuid.test(authority.sourceGrantId)) return fail();
+  if (!bindingIsValid(proof) || !uuid.test(authority.sourceGrantId)) return fail();
+  const preview = "preview" in authority;
+  if (preview ? !isWebsiteSalesPreviewTarget(authority.preview) : !uuid.test(authority.workloadId)) return fail();
   const ready = await tx.queryOne<{ ready: boolean }>(
-    "select to_regprocedure('public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid)') is not null as ready");
+    preview
+      ? "select to_regprocedure('public.crm_studio_preview_source_transfer_matches(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid)') is not null as ready"
+      : "select to_regprocedure('public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid)') is not null as ready");
   if (!ready?.ready) return fail();
-  const result = await tx.queryOne<{ matched: boolean; dealId: string | null; contactId: string | null }>(
-    `select public.crm_studio_source_transfer_matches($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::integer,$7,$8::uuid,$9::uuid) as matched,
+  const binding = [proof.workspaceId, proof.crmProjectId, proof.operationId, proof.revision, proof.payloadHash, proof.leadId,
+    proof.submissionId, websiteSalesFormId];
+  type Match = { matched: boolean; dealId: string | null; contactId: string | null };
+  const result = preview
+    ? await tx.queryOne<Match>(
+      `select public.crm_studio_preview_source_transfer_matches($1::uuid,$2,$3,$4::uuid,$5::uuid,$6::uuid,$7::integer,$8,$9::uuid,$10::uuid) as matched,
+        s.deal_id as "dealId", s.contact_id as "contactId"
+        from public.form_submissions s where s.workspace_id = $4::uuid and s.project_id = $5::uuid
+          and s.lead_id = $9::uuid and s.id = $10::uuid and s.form_id = $11::uuid and s.mode = 'live'`,
+      [authority.sourceGrantId, authority.preview.deploymentId, authority.preview.revision, ...binding])
+    : await tx.queryOne<Match>(
+      `select public.crm_studio_source_transfer_matches($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::integer,$7,$8::uuid,$9::uuid) as matched,
       s.deal_id as "dealId", s.contact_id as "contactId"
       from public.form_submissions s where s.workspace_id = $3::uuid and s.project_id = $4::uuid
         and s.lead_id = $8::uuid and s.id = $9::uuid and s.form_id = $10::uuid and s.mode = 'live'`,
-    [authority.workloadId, authority.sourceGrantId, proof.workspaceId, proof.crmProjectId, proof.operationId,
-      proof.revision, proof.payloadHash, proof.leadId, proof.submissionId, websiteSalesFormId]);
+      [authority.workloadId, authority.sourceGrantId, ...binding]);
   if (result?.matched !== true || !result.dealId || !uuid.test(result.dealId) || !result.contactId || !uuid.test(result.contactId)) return fail();
   return { dealId: result.dealId, contactId: result.contactId };
 }

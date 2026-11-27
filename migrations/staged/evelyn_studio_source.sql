@@ -194,6 +194,44 @@ begin
 end
 $body$;
 
+-- Preview Sales verifies only a transfer from its separately paired SOURCE
+-- grant on the same guarded deployment. Production continues to use its
+-- workload-bound function above.
+create function public.crm_studio_preview_source_transfer_matches(
+  p_grant uuid, p_deployment text, p_revision text, p_workspace uuid, p_project uuid,
+  p_operation uuid, p_revision_number integer, p_payload_hash text, p_lead uuid, p_submission uuid
+) returns boolean
+language plpgsql volatile security definer set search_path = pg_catalog, public as $body$
+declare boundary bigint; binding uuid;
+begin
+  if p_workspace is distinct from '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'::uuid
+    or p_project is distinct from 'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2'::uuid
+    or p_workspace is distinct from nullif(current_setting('app.tenant_id', true),'')::uuid
+    or nullif(current_setting('app.actor_id', true),'') is null or session_user <> 'novalure_app'
+    or current_database() <> 'neondb'
+    or current_setting('neon.project_id', true) is distinct from 'long-fog-84900593'
+    or current_setting('neon.branch_id', true) is distinct from 'br-summer-mountain-bh7w67e3'
+  then return false; end if;
+  select a.starts_after into boundary from public.crm_studio_source_activation a
+    where a.profile = 'preview' and a.database_project = current_setting('neon.project_id', true)
+      and a.database_branch = current_setting('neon.branch_id', true);
+  if not found then return false; end if;
+  select g.id into binding from public.crm_studio_source_grants g
+    where g.id = p_grant and g.workload_id is null and g.profile = 'preview'
+      and g.workspace_id = p_workspace and g.crm_project_id = p_project and g.revoked_at is null
+      and g.receiver_project='prj_R32Okl6AHijTohvuKmryuTLjWMsk'
+      and g.deployment_id = p_deployment and g.revision = p_revision
+    for share;
+  if not found or not exists (select 1 from public.crm_studio_source_grants where id = binding and expires_at > clock_timestamp())
+  then return false; end if;
+  return exists (
+    select 1 from public.studio_enquiry_transfers t where t.workspace_id = p_workspace and t.operation_id = p_operation
+      and t.revision = p_revision_number and t.payload_hash = p_payload_hash and t.lead_id = p_lead and t.submission_id = p_submission
+      and t.source_seq > boundary and t.state = 'accepted' and t.snapshot_text::jsonb->'syntheticTest' = 'false'::jsonb
+  );
+end
+$body$;
+
 revoke all on sequence public.crm_studio_source_seq from public, novalure_app, novalure_tenant_app;
 revoke all on function public.crm_studio_source_sequence(), public.crm_studio_source_activate(), public.crm_studio_source_revoke()
   from public, novalure_app, novalure_tenant_app;
@@ -201,3 +239,6 @@ revoke all on function public.crm_studio_source_position(text, uuid, text, text,
 grant execute on function public.crm_studio_source_position(text, uuid, text, text, text, text, bigint) to novalure_tenant_app;
 revoke all on function public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid) from public, novalure_app;
 grant execute on function public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid) to novalure_tenant_app;
+revoke all on function public.crm_studio_preview_source_transfer_matches(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid)
+  from public, novalure_app, novalure_tenant_app;
+grant execute on function public.crm_studio_preview_source_transfer_matches(uuid,text,text,uuid,uuid,uuid,integer,text,uuid,uuid) to novalure_tenant_app;

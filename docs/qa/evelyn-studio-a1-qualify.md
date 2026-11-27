@@ -52,9 +52,24 @@ Installation is a separate protected change. The SOURCE stage and staged
 `202_website_sales_ireland.sql` then `203_website_sales_machine.sql` must
 be independently admitted on the exact target. The stages seed no
 activation, identity, grants or business data. The protected registration
-helper accepts only the three A1 scopes. Long Fog qualification requires
-its own exact checked deployment, database, revision and workload grant.
-The production OIDC verifier stays production-only.
+helper accepts only the three A1 scopes.
+
+### Protected Long Fog Preview
+
+Enable `CRM_WEBSITE_SALES_PREVIEW_ENABLED=1` only on the admitted exact CRM
+Preview. Use the native deployment URL and a real Evelyn Preview OIDC
+token with audience
+`urn:novalure:crm:website-sales:preview:prj_R32Okl6AHijTohvuKmryuTLjWMsk`.
+Continue to sign the full request with the Ed25519 key for its separate
+Preview Sales grant.
+
+Register the Preview workload and expiring Sales grant with
+`preview: {deploymentId, revision, sourceGrantId}`. The SOURCE grant
+belongs to the same Preview deployment and revision. The Sales lookup and
+SOURCE effect check enforce Long Fog project `long-fog-84900593`, branch
+`br-summer-mountain-bh7w67e3`, database `neondb` and the `novalure_app`
+runtime. The audit identity is `EVELYN_WEBSITE_SALES_QA_IDENTITY` with role
+`Evelyn.QA`. Production keeps its production OIDC verifier and grants.
 
 Targeted qualification regression:
 
@@ -62,7 +77,8 @@ Targeted qualification regression:
 node --conditions=react-server --import tsx --test scripts/website-sales-a1-qualify-tests.ts
 ```
 
-The PostgreSQL case uses the existing disposable local cluster, actual
-202/203 DDL, the narrow Sales route and the actual CRM receipt transaction.
-It uses a synthetic SOURCE tuple at that boundary. The protected SOURCE
-reader has its separate tests.
+Both profiles exercise the actual 202/203 DDL, Sales route and receipt
+transaction in disposable local PostgreSQL. The production test uses a
+synthetic SOURCE tuple. The Preview test also installs the guarded SOURCE
+stage and uses locally signed OIDC fixtures and simulated native target
+metadata. A protected Vercel run provides the separate native acceptance.

@@ -12,6 +12,9 @@ import { KnowledgeCenterError } from "./knowledge-center/policy";
 import { getWebsiteSalesIrelandWorkflow, reconcileWebsiteSalesIrelandCommand, runWebsiteSalesIrelandCommand,
   validateWebsiteSalesIrelandCommand, websiteSalesIrelandCommandInput, websiteSalesIrelandContract, type WebsiteSalesIrelandCommand } from "./db/website-sales-ireland-repositories";
 import { withWebsiteSalesMachineAuthority, type WebsiteSalesMachineAuthority } from "./website-sales-machine-authority";
+import {
+  verifyWebsiteSalesPreviewToken, websiteSalesPreviewIdentity, websiteSalesPreviewReceiver, websiteSalesProductionIdentity,
+} from "./website-sales-preview-auth";
 
 export const websiteSalesMachineContract = "website-sales-machine-v1";
 export const websiteSalesMachinePath = "/api/integrations/evelyn/website-sales";
@@ -27,10 +30,10 @@ export type WebsiteSalesMachineRequest = { contractVersion: typeof websiteSalesM
 export type WebsiteSalesMachineOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions };
 type Grant = { id: string; workload_id: string; workspace_id: string; actor_user_id: string; project_id: string;
   company_id: string; location_id: string; department_id: "SALES"; agent_id: string; task_id: string;
-  scopes: WebsiteSalesMachineScope[]; delegation_public_key: string; authority_reference: string };
+  scopes: WebsiteSalesMachineScope[]; delegation_public_key: string; authority_reference: string; preview_source_grant_id: string | null };
 type Principal = { id: string; workspace_id: string; identity_id: string };
-const grantSql = "select * from public.crm_lock_website_sales_machine_grant($1::uuid,$2::uuid)";
-const principalSql = "select * from public.crm_authenticate_website_sales_workload($1,$2,$3,$4,$5,$6::uuid,$7)";
+const grantSql = "select * from public.crm_lock_website_sales_machine_grant($1::uuid,$2::uuid,$3,$4)";
+const principalSql = "select * from public.crm_authenticate_website_sales_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8,$9)";
 const sourceWorkloadSql = "select id,workspace_id,identity_id from public.crm_authenticate_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7)";
 function isSourceWorkload(principal: Principal | null | undefined, workspaceId: string): principal is Principal {
   return principal?.identity_id === "EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY" && principal.workspace_id === workspaceId;
@@ -85,7 +88,8 @@ function verifyDelegation(delegation: ReturnType<typeof parseDelegation>, grant:
 function grantDigest(grant: Grant) { return crmPayloadDigest({ id: grant.id, workloadId: grant.workload_id,
   workspaceId: grant.workspace_id, actorId: grant.actor_user_id, projectId: grant.project_id, companyId: grant.company_id,
   locationId: grant.location_id, departmentId: grant.department_id, agentId: grant.agent_id, taskId: grant.task_id,
-  scopes: grant.scopes, publicKey: grant.delegation_public_key, authorityReference: grant.authority_reference }); }
+  scopes: grant.scopes, publicKey: grant.delegation_public_key, authorityReference: grant.authority_reference,
+  previewSourceGrantId: grant.preview_source_grant_id }); }
 function action(body: WebsiteSalesMachineRequest): WebsiteSalesMachineScope {
   if (body.operation === "read") return "crm.website-sales.read";
   return body.operation === "reconcile" ? "crm.website-sales.reconcile" : "crm.website-sales.qualify";
@@ -106,24 +110,29 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
       || request.headers.has("cookie") || request.headers.has("origin")) denied("SALES_ACCESS_DENIED", 401);
     const bearer = getCrmMachineBearer(request.headers);
     if (!bearer) denied("SALES_ACCESS_DENIED", 401);
-    const claims = await verifyCrmMachineToken(bearer, options.machineAuth);
+    const machineAuth = options.machineAuth ?? {};
+    const env = machineAuth.env ?? process.env;
+    const preview = env.VERCEL_ENV === "preview" ? websiteSalesPreviewReceiver(url, env) : null;
+    const claims = preview ? await verifyWebsiteSalesPreviewToken(bearer, machineAuth) : await verifyCrmMachineToken(bearer, machineAuth);
     const delegation = parseDelegation(request.headers.get("x-evelyn-delegation"));
     const body = parseRequest(await readKnowledgeJson(request, ["contractVersion", "target", "operation", "request"], 131072));
     const identityBinding = [claims.issuer, claims.audience, claims.projectId, claims.ownerId, claims.subject, claims.workspaceId, claims.environment];
-    const principal = (await queryAuthenticationRows<Principal>(principalSql, identityBinding, options))[0];
-    if (!principal || principal.workspace_id !== claims.workspaceId ||
-      principal.identity_id !== "EVELYN_WEBSITE_SALES_INTERNAL_IDENTITY") denied();
-    const grant = (await queryAuthenticationRows<Grant>(grantSql, [principal.id, delegation.grantId], options))[0];
+    const receiverBinding = [preview?.deploymentId ?? null, preview?.revision ?? null];
+    const effectiveIdentity = preview ? websiteSalesPreviewIdentity : websiteSalesProductionIdentity;
+    const principal = (await queryAuthenticationRows<Principal>(principalSql, [...identityBinding, ...receiverBinding], options))[0];
+    if (!principal || principal.workspace_id !== claims.workspaceId || principal.identity_id !== effectiveIdentity) denied();
+    const grantBinding = [principal.id, delegation.grantId, ...receiverBinding];
+    const grant = (await queryAuthenticationRows<Grant>(grantSql, grantBinding, options))[0];
     if (!grant || grant.workspace_id !== claims.workspaceId) denied();
     bind(grant, body);
-    const now = () => options.machineAuth?.now ?? new Date();
+    const now = () => machineAuth.now ?? new Date();
     const nonce = verifyDelegation(delegation, grant, body, now());
     const original = body.request;
     for (const [header, field] of [["x-correlation-id", "correlationId"], ["idempotency-key", "idempotencyKey"]] as const) {
       if (request.headers.has(header) && request.headers.get(header) !== (original as unknown as Record<string, unknown>)[field]) denied("METADATA_MISMATCH", 400);
     }
     let sourceWorkloadId: string | undefined;
-    if (body.operation === "execute") {
+    if (body.operation === "execute" && !preview) {
       const source = (await queryAuthenticationRows<Principal>(sourceWorkloadSql, identityBinding, options))[0];
       if (!isSourceWorkload(source, claims.workspaceId)) denied("STUDIO_SOURCE_WORKLOAD_REQUIRED");
       sourceWorkloadId = source.id;
@@ -132,18 +141,21 @@ export async function handleWebsiteSalesMachine(request: Request, options: Websi
       workspaceId: grant.workspace_id, workspaceName: "Registered internal Sales delegation", name: "Registered Sales actor",
       email: "sales-agent@service.invalid", role: "agent", productRole: "novalure_sales",
       permissions: getRolePermissions("agent"), productPermissions: getProductRoleCapabilities("novalure_sales"),
-      serviceIdentity: { identityId: principal.identity_id, role: claims.role, consumer: claims.consumer,
-        environment: claims.environment, jtiHash: claims.jtiHash } };
+      serviceIdentity: claims.environment === "preview"
+        ? { identityId: websiteSalesPreviewIdentity, role: claims.role, consumer: claims.consumer, environment: claims.environment, jtiHash: claims.jtiHash }
+        : { identityId: websiteSalesProductionIdentity, role: claims.role, consumer: claims.consumer, environment: claims.environment, jtiHash: claims.jtiHash } };
     const machine = { workloadId: principal.id, grantId: grant.id, departmentId: grant.department_id, agentId: grant.agent_id, taskId: grant.task_id };
     const authority: WebsiteSalesMachineAuthority = { ...machine, workspaceId: grant.workspace_id, actorId: grant.actor_user_id,
       identityId: principal.identity_id, scope: { projectId: grant.project_id, companyId: grant.company_id,
-        locationId: grant.location_id }, mode: body.operation, sourceWorkloadId,
+        locationId: grant.location_id }, mode: body.operation,
+      ...(sourceWorkloadId ? { studioSource: { workloadId: sourceWorkloadId } } : {}),
+      ...(preview && grant.preview_source_grant_id ? { studioSource: { preview, sourceGrantId: grant.preview_source_grant_id } } : {}),
       operation: body.operation === "read" ? "read" : body.request.operation };
     return await withWebsiteSalesMachineAuthority(authority, async () => {
       const command = body.operation === "read" ? null : websiteSalesIrelandCommandInput(session, body.request);
       const access = async (tx: TenantTransaction, fresh: AppSession) => {
         const revalidate = async () => {
-          const current = await tx.queryOne<Grant>(grantSql, [principal.id, grant.id]);
+          const current = await tx.queryOne<Grant>(grantSql, grantBinding);
           if (!current || grantDigest(current) !== grantDigest(grant)) denied();
           bind(current, body); verifyDelegation(delegation, current, body, now());
           if (sourceWorkloadId) {

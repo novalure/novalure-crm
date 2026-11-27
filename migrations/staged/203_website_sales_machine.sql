@@ -5,15 +5,26 @@ set local statement_timeout = '14min';
 
 create table public.crm_website_sales_machine_workloads (
   id uuid primary key,
-  identity_id text not null unique check(identity_id='EVELYN_WEBSITE_SALES_INTERNAL_IDENTITY'),
+  identity_id text not null,
   workspace_id uuid not null check(workspace_id='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'),
   actor_user_id uuid not null,
   issuer text not null check(issuer='https://oidc.vercel.com/novalure'),
-  audience text not null check(audience='urn:novalure:crm:production'),
+  audience text not null,
   project_id text not null check(project_id='prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I'),
   owner_id text not null check(owner_id='team_sjD78IkSicXJK6TAOR1JC7Wv'),
-  subject text not null check(subject='owner:novalure:project:evelyn:environment:production'),
-  environment text not null check(environment='production'),
+  subject text not null,
+  environment text not null check(environment in ('production','preview')),
+  receiver_deployment_id text,
+  receiver_revision text,
+  check((environment='production' and identity_id='EVELYN_WEBSITE_SALES_INTERNAL_IDENTITY'
+      and audience='urn:novalure:crm:production' and subject='owner:novalure:project:evelyn:environment:production'
+      and receiver_deployment_id is null and receiver_revision is null)
+    or (environment='preview' and identity_id='EVELYN_WEBSITE_SALES_QA_IDENTITY'
+      and audience='urn:novalure:crm:website-sales:preview:prj_R32Okl6AHijTohvuKmryuTLjWMsk'
+      and subject='owner:novalure:project:evelyn:environment:preview'
+      and receiver_deployment_id is not null and receiver_deployment_id ~ '^dpl_[a-zA-Z0-9]+$'
+      and receiver_revision is not null and receiver_revision ~ '^[0-9a-f]{40}$')),
+  unique nulls not distinct (identity_id,receiver_deployment_id,receiver_revision),
   not_before timestamptz not null default clock_timestamp(), expires_at timestamptz,
   revoked_at timestamptz, disabled boolean not null default false, kill_switch_active boolean not null default false,
   authority_reference text not null check(length(trim(authority_reference)) between 1 and 200),
@@ -28,6 +39,7 @@ create table public.crm_website_sales_machine_grants (
   agent_id text not null check(agent_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$'), task_id uuid not null,
   authority_reference text not null check(length(trim(authority_reference)) between 1 and 200),
   delegation_public_key text not null check(delegation_public_key ~ '^[A-Za-z0-9_-]{59}$'),
+  preview_source_grant_id uuid,
   scopes text[] not null check(cardinality(scopes)>0 and scopes <@ array[
     'crm.website-sales.read','crm.website-sales.qualify','crm.website-sales.reconcile']::text[]),
   check(not ('crm.website-sales.reconcile'=any(scopes)) or 'crm.website-sales.qualify'=any(scopes)),
@@ -111,7 +123,18 @@ create trigger website_sales_machine_event_binding before insert on public.crm_w
 create trigger website_sales_machine_event_immutable before update or delete or truncate on public.crm_website_sales_machine_events
   for each statement execute function public.crm_reject_immutable_mutation();
 
-create function public.crm_authenticate_website_sales_workload(p_issuer text,p_audience text,p_project text,p_owner text,p_subject text,p_workspace uuid,p_environment text)
+-- Preview authorization is native to the isolated database. Receiver identity is
+-- supplied by the hosting runtime and matched to the protected workload row.
+create function public.crm_website_sales_long_fog() returns boolean
+language sql stable set search_path=pg_catalog as $function$
+  select coalesce(current_database()='neondb'
+    and current_setting('neon.project_id',true)='long-fog-84900593'
+    and current_setting('neon.branch_id',true)='br-summer-mountain-bh7w67e3',false)
+$function$;
+revoke all on function public.crm_website_sales_long_fog() from public,novalure_app,novalure_tenant_app;
+
+create function public.crm_authenticate_website_sales_workload(p_issuer text,p_audience text,p_project text,p_owner text,
+  p_subject text,p_workspace uuid,p_environment text,p_deployment text default null,p_revision text default null)
 returns table(id uuid,workspace_id uuid,identity_id text)
 language sql stable security definer set search_path=pg_catalog,public as $function$
   select a.id,a.workspace_id,a.identity_id from public.crm_website_sales_machine_workloads a
@@ -119,12 +142,15 @@ language sql stable security definer set search_path=pg_catalog,public as $funct
   join public.workspaces w on w.id=a.workspace_id
   where a.issuer=p_issuer and a.audience=p_audience and a.project_id=p_project and a.owner_id=p_owner
     and a.subject=p_subject and a.workspace_id=p_workspace and a.environment=p_environment
+    and a.receiver_deployment_id is not distinct from p_deployment and a.receiver_revision is not distinct from p_revision
+    and (a.environment='production' or (session_user='novalure_app' and public.crm_website_sales_long_fog()))
     and not a.disabled and not a.kill_switch_active and a.revoked_at is null
     and a.not_before<=clock_timestamp() and (a.expires_at is null or a.expires_at>clock_timestamp())
     and actor.status='active' and actor.role='agent' and actor.product_role='novalure_operator'
     and w.operating_model='novalure_internal'
 $function$;
-create function public.crm_lock_website_sales_machine_grant(p_workload uuid,p_grant uuid)
+create function public.crm_lock_website_sales_machine_grant(p_workload uuid,p_grant uuid,
+  p_deployment text default null,p_revision text default null)
 returns setof public.crm_website_sales_machine_grants
 language sql volatile security definer set search_path=pg_catalog,public as $function$
   select g.* from public.crm_website_sales_machine_grants g
@@ -135,6 +161,11 @@ language sql volatile security definer set search_path=pg_catalog,public as $fun
   join public.project_pipeline_permissions project_grant on project_grant.workspace_id=g.workspace_id
     and project_grant.project_id=g.project_id and project_grant.user_id=g.actor_user_id
   where g.id=p_grant and p.id=p_workload and not g.disabled and g.revoked_at is null
+    and p.receiver_deployment_id is not distinct from p_deployment and p.receiver_revision is not distinct from p_revision
+    and ((p.environment='production' and g.preview_source_grant_id is null)
+      or (p.environment='preview' and g.preview_source_grant_id is not null and g.expires_at is not null
+        and public.crm_website_sales_long_fog()
+        and (session_user='novalure_app' or pg_has_role(session_user,current_user,'MEMBER'))))
     and g.not_before<=clock_timestamp() and (g.expires_at is null or g.expires_at>clock_timestamp())
     and not p.disabled and not p.kill_switch_active and p.revoked_at is null
     and p.not_before<=clock_timestamp() and (p.expires_at is null or p.expires_at>clock_timestamp())
@@ -150,7 +181,7 @@ language sql volatile security definer set search_path=pg_catalog,public as $fun
       where location.workspace_id=g.workspace_id and location.project_id=g.project_id and location.company_id=g.company_id and location.id=g.location_id)
   for share of g,p,source_actor,actor,w,project_grant
 $function$;
-revoke all on function public.crm_authenticate_website_sales_workload(text,text,text,text,text,uuid,text) from public,novalure_app;
-revoke all on function public.crm_lock_website_sales_machine_grant(uuid,uuid) from public,novalure_app;
-grant execute on function public.crm_authenticate_website_sales_workload(text,text,text,text,text,uuid,text) to novalure_tenant_app;
-grant execute on function public.crm_lock_website_sales_machine_grant(uuid,uuid) to novalure_tenant_app;
+revoke all on function public.crm_authenticate_website_sales_workload(text,text,text,text,text,uuid,text,text,text) from public,novalure_app;
+revoke all on function public.crm_lock_website_sales_machine_grant(uuid,uuid,text,text) from public,novalure_app;
+grant execute on function public.crm_authenticate_website_sales_workload(text,text,text,text,text,uuid,text,text,text) to novalure_tenant_app;
+grant execute on function public.crm_lock_website_sales_machine_grant(uuid,uuid,text,text) to novalure_tenant_app;

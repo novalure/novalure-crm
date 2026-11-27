@@ -68,6 +68,12 @@ export type AppSession = {
     environment: "preview";
     jtiHash: string;
   } | {
+    identityId: "EVELYN_WEBSITE_SALES_QA_IDENTITY";
+    role: "Evelyn.QA";
+    consumer: "EVELYN";
+    environment: "preview";
+    jtiHash: string;
+  } | {
     identityId: "KNOWLEDGE_MONITOR";
     role: "Knowledge.Monitor";
     consumer: "KNOWLEDGE_MONITORING";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { SignJWT, jwtVerify, type JWTVerifyOptions } from "jose";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import type { AppSession } from "../src/lib/auth/session";
 import { crmPayloadDigest } from "../src/lib/crm-command";
@@ -14,14 +15,16 @@ import {
   runWebsiteSalesIrelandCommand, websiteSalesIrelandContract, type WebsiteSalesIrelandCommand,
 } from "../src/lib/db/website-sales-ireland-repositories";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
-import { studioEnquiryCrmProject } from "../src/lib/studio-enquiry-contract";
+import { studioEnquiryCrmProject, studioEnquiryProject } from "../src/lib/studio-enquiry-contract";
+import { studioSourcePreviewAudience } from "../src/lib/studio-source-reader";
 import { websiteSalesFormId } from "../src/lib/website-sales-ingestion";
 import {
   handleWebsiteSalesMachine, websiteSalesMachineContract, websiteSalesMachineDelegationDomain,
   websiteSalesMachinePath, websiteSalesMachineScopes,
 } from "../src/lib/website-sales-machine";
 import { registerWebsiteSalesMachineAccess } from "../src/lib/website-sales-machine-registration";
-import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { websiteSalesPreviewAudience, websiteSalesPreviewIdentity, websiteSalesPreviewSubject } from "../src/lib/website-sales-preview-auth";
+import { applySalesSchema, LocalSalesPool, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 const projectId = studioEnquiryCrmProject;
 const workspaceId = CRM_MACHINE_WORKSPACE_ID;
@@ -29,20 +32,29 @@ const ids = { actor: randomUUID(), workload: randomUUID(), sourceWorkload: rando
   sourceGrant: randomUUID(), company: randomUUID(), contact: randomUUID(), lead: randomUUID(), deal: randomUUID(),
   transfer: randomUUID(), submission: randomUUID(), task: randomUUID(), intakeTask: randomUUID() };
 const key = generateKeyPairSync("ed25519");
-const bearer = "eyJ" + "a".repeat(20) + "." + "b".repeat(24) + "." + "c".repeat(24);
+const oidcKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const payloadHash = "a".repeat(64);
+const previewHost = "sales-a1-synthetic.vercel.app";
+const previewTarget = { deploymentId: "dpl_SalesA1Synthetic", revision: "b".repeat(40) };
+const previewGrantId = randomUUID();
 
-function auth(): CrmMachineAuthOptions {
+type Profile = "production" | "preview";
+function runtime(profile: Profile): NodeJS.ProcessEnv {
+  const base: NodeJS.ProcessEnv = { CRM_MACHINE_AUTH_ENABLED: "1", VERCEL_ENV: profile, NODE_ENV: "test" };
+  if (profile === "production") return base;
+  return { ...base, CRM_WEBSITE_SALES_PREVIEW_ENABLED: "1", VERCEL: "1", VERCEL_URL: previewHost,
+    VERCEL_PROJECT_ID: studioEnquiryProject, VERCEL_DEPLOYMENT_ID: previewTarget.deploymentId, VERCEL_GIT_COMMIT_SHA: previewTarget.revision,
+    DATABASE_URL: "postgresql://novalure_app:test@ep-summer-dew-bht4t903-pooler.synthetic.neon.tech/neondb?sslmode=verify-full" };
+}
+const verifier: NonNullable<CrmMachineAuthOptions["verifier"]> = async (jwt, options) =>
+  jwtVerify(jwt, oidcKey.publicKey, options as JWTVerifyOptions) as ReturnType<NonNullable<CrmMachineAuthOptions["verifier"]>>;
+async function oidcToken(profile: Profile, overrides = {}) {
   const now = Math.floor(Date.now() / 1000);
-  return {
-    env: { CRM_MACHINE_AUTH_ENABLED: "1", VERCEL_ENV: "production", NODE_ENV: "production" },
-    verifier: async () => ({
-      protectedHeader: { alg: "RS256", typ: "JWT", kid: "isolated-a1-fixture" },
-      payload: { iss: CRM_MACHINE_ISSUER, aud: CRM_MACHINE_AUDIENCE, owner_id: CRM_MACHINE_OWNER_ID,
-        project_id: CRM_MACHINE_PROJECT_ID, sub: CRM_MACHINE_SUBJECT, environment: "production",
-        iat: now - 2, nbf: now - 2, exp: now + 60, jti: randomUUID() },
-    }),
-  };
+  return new SignJWT({ iss: CRM_MACHINE_ISSUER, owner_id: CRM_MACHINE_OWNER_ID, project_id: CRM_MACHINE_PROJECT_ID,
+    aud: profile === "preview" ? websiteSalesPreviewAudience : CRM_MACHINE_AUDIENCE,
+    sub: profile === "preview" ? websiteSalesPreviewSubject : CRM_MACHINE_SUBJECT, environment: profile,
+    iat: now - 2, nbf: now - 2, exp: now + 60, jti: randomUUID(), ...overrides,
+  }).setProtectedHeader({ alg: "RS256", typ: "JWT", kid: "isolated-a1-fixture" }).sign(oidcKey.privateKey);
 }
 function command(operation: WebsiteSalesIrelandCommand["operation"], payload: Record<string, unknown>, extras = {}): WebsiteSalesIrelandCommand {
   return {
@@ -53,17 +65,23 @@ function command(operation: WebsiteSalesIrelandCommand["operation"], payload: Re
 function envelope(request: WebsiteSalesIrelandCommand, operation = "execute") {
   return { contractVersion: websiteSalesMachineContract, target: "workflow", operation, request };
 }
-function credential(body: unknown) {
+function credential(body: unknown, grantId = ids.grant) {
   const now = Math.floor(Date.now() / 1000);
   const payload = Buffer.from(JSON.stringify({ issuedAt: now, expiresAt: now + 60, nonce: randomUUID(), requestHash: crmPayloadDigest(body) })).toString("base64url");
-  const signature = sign(null, Buffer.from(`${websiteSalesMachineDelegationDomain}.${ids.grant}.${payload}`), key.privateKey).toString("base64url");
-  return `v1.${ids.grant}.${payload}.${signature}`;
+  const signature = sign(null, Buffer.from(`${websiteSalesMachineDelegationDomain}.${grantId}.${payload}`), key.privateKey).toString("base64url");
+  return `v1.${grantId}.${payload}.${signature}`;
 }
-async function call(body: unknown, pool?: TenantPool, delegation = credential(body)) {
-  const response = await handleWebsiteSalesMachine(new Request(`https://crm.invalid${websiteSalesMachinePath}`, {
-    method: "POST", headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json", "x-evelyn-delegation": delegation },
+async function call(body: unknown, pool?: TenantPool, delegation?: string, options: {
+  env?: NodeJS.ProcessEnv; token?: string; host?: string;
+} = {}) {
+  const env = options.env ?? runtime("production");
+  const profile = env.VERCEL_ENV === "preview" ? "preview" : "production";
+  const bearer = options.token ?? await oidcToken(profile);
+  const signed = delegation ?? credential(body, profile === "preview" ? previewGrantId : ids.grant);
+  const response = await handleWebsiteSalesMachine(new Request(`https://${options.host ?? env.VERCEL_URL ?? "crm.invalid"}${websiteSalesMachinePath}`, {
+    method: "POST", headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json", "x-evelyn-delegation": signed },
     body: JSON.stringify(body),
-  }), { pool, machineAuth: auth() });
+  }), { pool, machineAuth: { env, verifier } });
   return { status: response.status, body: await response.json() };
 }
 
@@ -81,11 +99,53 @@ test("A1 machine rejects other operations, surfaces and unsigned transfer fields
   assert.equal((await call(envelope(wrongTarget), deniedPool)).status, 400);
 });
 
-test("A1 qualify persists one atomic task and the exact receipt using staged local PostgreSQL", { timeout: 240_000 }, async t => {
-  const db = await startLocalSalesDb();
-  t.after(() => db.stop());
+test("A1 Preview requires its own signed OIDC token and the enabled native receiver before SQL", async () => {
+  let connections = 0;
+  const deniedPool = { connect() { connections++; throw new Error("Unexpected database"); } } as unknown as TenantPool;
+  const body = { contractVersion: websiteSalesMachineContract, operation: "read",
+    request: { projectId, companyId: ids.company, locationId: randomUUID(), correlationId: randomUUID() } };
+  const env = runtime("preview"), preview = await oidcToken("preview");
+  const production = await oidcToken("production"), source = await oidcToken("preview", { aud: studioSourcePreviewAudience });
+  const wrongProject = await oidcToken("preview", { project_id: "prj_Unregistered" });
+  const wrongEnvironment = await oidcToken("preview", { environment: "production" });
+  const wrongOwner = await oidcToken("preview", { owner_id: "team_Unregistered" });
+  for (const options of [
+    { env, token: production }, { env, token: source }, { env, token: wrongProject },
+    { env, token: wrongEnvironment }, { env, token: wrongOwner },
+    { env, token: preview, host: "foreign-receiver.vercel.app" },
+    { env: { ...env, CRM_WEBSITE_SALES_PREVIEW_ENABLED: "0" }, token: preview },
+    { env: { ...env, VERCEL_PROJECT_ID: "prj_Unregistered" }, token: preview },
+    { env: { ...env, VERCEL_TARGET_ENV: "production" }, token: preview },
+    { env: { ...env, DATABASE_URL: env.DATABASE_URL!.replace("summer-dew-bht4t903", "spring-night") }, token: preview },
+    { env: { ...env, DATABASE_URL: env.DATABASE_URL!.replace("novalure_app", "neondb_owner") }, token: preview },
+  ]) assert.equal((await call(body, deniedPool, undefined, options)).body.code, "SALES_PREVIEW_ACCESS_DENIED");
+  assert.equal((await call(body, deniedPool, undefined, { env: runtime("production"), token: preview })).status, 401);
+  assert.equal(connections, 0);
+});
+
+for (const profile of ["production", "preview"] as const) {
+test(`A1 ${profile} qualify persists one atomic task and the exact receipt using staged local PostgreSQL`, { timeout: 240_000 }, async t => {
+  const cluster = await startLocalSalesDb();
+  let previewAdmin: LocalSalesPool | undefined, previewRuntime: LocalSalesPool | undefined;
+  t.after(async () => {
+    try { await Promise.all([previewAdmin?.end(), previewRuntime?.end()]); }
+    finally { await cluster.stop(); }
+  });
+  const local = { host: "127.0.0.1", port: cluster.port, database: "neondb" };
+  if (profile === "preview") {
+    await cluster.admin.query("create database neondb");
+    await cluster.admin.query(`alter database neondb set neon.project_id='long-fog-84900593';
+      alter database neondb set neon.branch_id='br-summer-mountain-bh7w67e3';
+      alter role novalure_app login`);
+    previewAdmin = new LocalSalesPool({ ...local, user: "qa_admin" });
+    previewRuntime = new LocalSalesPool({ ...local, user: "novalure_app" });
+  }
+  const db = { ...cluster, admin: previewAdmin ?? cluster.admin, pool: previewRuntime ?? cluster.pool };
   const pool = db.pool as unknown as TenantPool;
+  const activeGrantId = profile === "preview" ? previewGrantId : ids.grant;
+  const invoke = (body: unknown, delegation?: string) => call(body, pool, delegation, { env: runtime(profile) });
   await applySalesSchema(db, { maxMigrationNumber: 90 });
+  if (profile === "preview") await db.admin.query("grant novalure_tenant_app to novalure_app");
   const install = async (name: string, role?: string) => {
     const client = await db.admin.connect();
     try {
@@ -121,11 +181,38 @@ test("A1 qualify persists one atomic task and the exact receipt using staged loc
   returns table(id uuid,workspace_id uuid,identity_id text) language sql stable security definer set search_path=pg_catalog,public as $$
     select workload_id,workspace_id,'EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY'::text from a1_source_fixture where workspace_id=$6
   $$;
-  create function public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid)
-  returns boolean language sql volatile security definer set search_path=pg_catalog,public as $$
-    select exists(select 1 from a1_source_fixture where enabled and (workload_id,grant_id,workspace_id,project_id,operation_id,revision,payload_hash,lead_id,submission_id)=($1,$2,$3,$4,$5,$6,$7,$8,$9))
-  $$;
   grant select on form_submissions to novalure_tenant_app;`);
+  if (profile === "production") {
+    await db.admin.query(`create function public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid)
+      returns boolean language sql volatile security definer set search_path=pg_catalog,public as $$
+      select exists(select 1 from a1_source_fixture where enabled
+        and (workload_id,grant_id,workspace_id,project_id,operation_id,revision,payload_hash,lead_id,submission_id)=($1,$2,$3,$4,$5,$6,$7,$8,$9))
+      $$`);
+  } else {
+    // Install the actual Preview SOURCE check with isolated predecessor rows.
+    await db.admin.query(`create role sales_source_fixture_owner nologin noinherit;
+      grant create on schema public to sales_source_fixture_owner;
+      create table studio_enquiry_transfers (
+        operation_id uuid primary key, workspace_id uuid, revision integer, payload_hash text,
+        snapshot_text text, state text, lead_id uuid, submission_id uuid, accepted_at timestamptz
+      );
+      alter table studio_enquiry_transfers owner to sales_source_fixture_owner;
+      alter table studio_enquiry_transfers enable row level security;
+      alter table studio_enquiry_transfers force row level security`);
+    await install("evelyn_studio_source.sql", "sales_source_fixture_owner");
+    const owner = await db.admin.connect();
+    try {
+      await owner.query("set role sales_source_fixture_owner");
+      await owner.query("insert into crm_studio_source_activation(profile) values('preview')");
+      await owner.query(`insert into crm_studio_source_grants
+        (id,profile,workspace_id,crm_project_id,receiver_project,deployment_id,revision,credential_hash,authority_reference,expires_at)
+        values($1,'preview',$2,$3,$4,$5,$6,$7,'Synthetic Preview SOURCE grant',clock_timestamp()+interval '1 hour')`,
+      [ids.sourceGrant, workspaceId, projectId, studioEnquiryProject, previewTarget.deploymentId, previewTarget.revision, "c".repeat(64)]);
+    } finally { await owner.query("reset role"); owner.release(); }
+    await db.admin.query(`insert into studio_enquiry_transfers(operation_id,workspace_id,revision,payload_hash,snapshot_text,state,lead_id,submission_id)
+      values($1,$2,1,$3,'{"syntheticTest":false}','reserved',$4,$5)`, [ids.transfer, workspaceId, payloadHash, ids.lead, ids.submission]);
+    await db.admin.query("update studio_enquiry_transfers set state='accepted',accepted_at=clock_timestamp() where operation_id=$1", [ids.transfer]);
+  }
   await db.admin.query("insert into a1_source_fixture values($1,$2,$3,$4,$5,1,$6,$7,$8)",
     [ids.sourceWorkload, ids.sourceGrant, workspaceId, projectId, ids.transfer, payloadHash, ids.lead, ids.submission]);
   await db.admin.query("create role sales_machine_installer nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
@@ -156,10 +243,19 @@ test("A1 qualify persists one atomic task and the exact receipt using staged loc
   const registrar = await db.admin.connect();
   try {
     await registrar.query("set role sales_machine_installer");
-    await registerWebsiteSalesMachineAccess(registrar, { workloadId: ids.workload, workloadActorId: ids.actor, grantId: ids.grant,
-      actorId: ids.actor, projectId, companyId: ids.company, locationId, departmentId: "SALES", agentId: "evelyn.sales.a1",
+    const registration = { workloadId: ids.workload, workloadActorId: ids.actor, grantId: ids.grant,
+      actorId: ids.actor, projectId, companyId: ids.company, locationId, departmentId: "SALES" as const, agentId: "evelyn.sales.a1",
       taskId: ids.task, scopes: websiteSalesMachineScopes, publicKey: key.publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
-      authorityReference: "Synthetic current A1 sales assignment", expiresAt: null });
+      authorityReference: "Synthetic current A1 sales assignment", expiresAt: null };
+    const preview = { ...previewTarget, sourceGrantId: ids.sourceGrant };
+    const previewRegistration = { ...registration, workloadId: randomUUID(), grantId: previewGrantId,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(), preview };
+    await registerWebsiteSalesMachineAccess(registrar, registration);
+    if (profile === "preview") {
+      await registerWebsiteSalesMachineAccess(registrar, previewRegistration);
+    } else {
+      await assert.rejects(registerWebsiteSalesMachineAccess(registrar, previewRegistration), /SALES_PREVIEW_TARGET_REQUIRED/);
+    }
   } finally { await registrar.query("reset role"); registrar.release(); }
   const original = command("qualify", { contactId: ids.contact, opportunitySummary: "Synthetic opportunity", nextAction: "Review internally",
     expectedEvidenceDigest: workflow.evidenceDigest, studioTransfer: {
@@ -172,17 +268,42 @@ test("A1 qualify persists one atomic task and the exact receipt using staged loc
     (select count(*)::int from deals where workspace_id=$1 and project_id=$2) as deals,
     (select count(*)::int from crm_command_receipts where workspace_id=$1 and operation='website_sales.ireland.qualify') as receipts`, [workspaceId, projectId])).rows[0];
   const baseline = await totals();
-  assert.equal((await call(envelope({ ...original, projectId: randomUUID() }), pool)).body.code, "SALES_RESOURCE_DENIED");
+  if (profile === "preview") {
+    const read = { contractVersion: websiteSalesMachineContract, operation: "read",
+      request: { projectId, companyId: ids.company, locationId, correlationId: randomUUID() } };
+    assert.equal((await invoke(read)).body.data.workflow.qualificationStatus, "READY");
+    assert.equal((await invoke(envelope(original), credential(envelope(original), ids.grant))).body.code, "SALES_ACCESS_DENIED");
+    assert.equal((await call(envelope(original), pool, credential(envelope(original), previewGrantId))).body.code, "SALES_ACCESS_DENIED");
+    for (const mismatch of [{ VERCEL_GIT_COMMIT_SHA: "e".repeat(40) }, { VERCEL_DEPLOYMENT_ID: "dpl_Other" }]) {
+      assert.equal((await call(envelope(original), pool, undefined, { env: { ...runtime("preview"), ...mismatch } })).body.code,
+        "SALES_ACCESS_DENIED");
+    }
+    const wrongRole = new LocalSalesPool({ ...local, user: db.role });
+    try {
+      assert.equal((await call(envelope(original), wrongRole as unknown as TenantPool, undefined, { env: runtime("preview") })).body.code,
+        "SALES_ACCESS_DENIED");
+    } finally { await wrongRole.end(); }
+    await db.admin.query("alter role novalure_app set neon.branch_id='br-foreign'");
+    const wrongBranch = new LocalSalesPool({ ...local, user: "novalure_app" });
+    try {
+      assert.equal((await call(envelope(original), wrongBranch as unknown as TenantPool, undefined, { env: runtime("preview") })).body.code,
+        "SALES_ACCESS_DENIED");
+    } finally {
+      await wrongBranch.end();
+      await db.admin.query("alter role novalure_app reset neon.branch_id");
+    }
+  }
+  assert.equal((await invoke(envelope({ ...original, projectId: randomUUID() }))).body.code, "SALES_RESOURCE_DENIED");
   const transfer = original.payload.studioTransfer as Record<string, unknown>;
   const changed = { ...original, payload: { ...original.payload, studioTransfer: { ...transfer, revision: 2 } } };
-  assert.equal((await call(envelope(changed), pool)).body.code, "STUDIO_SOURCE_TRANSFER_UNCONFIRMED");
-  assert.equal((await call(envelope({ ...original, payload: { ...original.payload, contactId: randomUUID() } }), pool)).body.code, "STUDIO_INBOUND_CONTACT_CONFLICT");
+  assert.equal((await invoke(envelope(changed))).body.code, "STUDIO_SOURCE_TRANSFER_UNCONFIRMED");
+  assert.equal((await invoke(envelope({ ...original, payload: { ...original.payload, contactId: randomUUID() } }))).body.code, "STUDIO_INBOUND_CONTACT_CONFLICT");
   const stale = { ...original, payload: { ...original.payload, expectedEvidenceDigest: payloadHash } };
-  assert.equal((await call(envelope(stale), pool)).body.code, "CURRENT_EVIDENCE_REQUIRED");
+  assert.equal((await invoke(envelope(stale))).body.code, "CURRENT_EVIDENCE_REQUIRED");
   await assert.rejects(db.admin.query("update organizations set division='WEB_DESIGN' where id=$1", [ids.company]),
     /CRM_DIVISION_PROJECT_MISMATCH/);
   await db.admin.query("update contacts set consent_label='Opt-out' where id=$1", [ids.contact]);
-  assert.equal((await call(envelope(original), pool)).body.code, "OPT_OUT");
+  assert.equal((await invoke(envelope(original))).body.code, "OPT_OUT");
   await db.admin.query("update contacts set consent_label='Nur CRM' where id=$1", [ids.contact]);
   assert.deepEqual(await totals(), baseline);
 
@@ -191,31 +312,41 @@ test("A1 qualify persists one atomic task and the exact receipt using staged loc
     if new.status='QUALIFIED' then raise exception 'synthetic test rollback'; end if; return new;
     end $$;
     create trigger a1_test_abort before update on crm_website_sales_workflows for each row execute function a1_test_abort_qualify()`);
-  assert.equal((await call(envelope(original), pool)).status, 503);
+  assert.equal((await invoke(envelope(original))).status, 503);
   assert.deepEqual(await totals(), baseline);
   await db.admin.query("drop trigger a1_test_abort on crm_website_sales_workflows");
 
-  const signed = credential(envelope(original));
-  const first = await call(envelope(original), pool, signed);
+  const signed = credential(envelope(original), activeGrantId);
+  const first = await invoke(envelope(original), signed);
   assert.equal(first.status, 200, JSON.stringify(first.body));
   assert.equal(first.body.data.workflow.leadId, ids.lead);
   assert.equal(first.body.data.workflow.dealId, ids.deal);
   assert.equal(first.body.data.workflow.canContact, false);
   assert.ok(first.body.data.workflow.nextTaskId);
-  assert.equal((await call(envelope(original), pool, signed)).body.code, "NONCE_REPLAY");
-  const replay = await call(envelope(original), pool);
+  assert.equal((await invoke(envelope(original), signed)).body.code, "NONCE_REPLAY");
+  const replay = await invoke(envelope(original));
   assert.equal(replay.body.replayed, true);
   assert.equal(replay.body.data.workflow.nextTaskId, first.body.data.workflow.nextTaskId);
   assert.deepEqual(await totals(), { ...baseline, tasks: baseline.tasks + 1, receipts: baseline.receipts + 1 });
 
-  await db.admin.query("update a1_source_fixture set enabled=false");
-  assert.equal((await call(envelope(original), pool)).body.code, "STUDIO_SOURCE_TRANSFER_UNCONFIRMED");
-  const receipt = await call(envelope(original, "reconcile"), pool);
+  if (profile === "preview") {
+    const audit = (await db.admin.query("select after->'actor' as actor from audit_logs where id=$1", [first.body.auditReference])).rows[0].actor;
+    assert.equal(audit.actorType, "SERVICE_IDENTITY");
+    assert.equal(audit.identityId, websiteSalesPreviewIdentity);
+    assert.equal(audit.environment, "preview");
+    assert.equal(audit.role, "Evelyn.QA");
+    await db.admin.query("update crm_studio_source_grants set revoked_at=clock_timestamp() where id=$1", [ids.sourceGrant]);
+  } else {
+    await db.admin.query("update a1_source_fixture set enabled=false");
+  }
+  assert.equal((await invoke(envelope(original))).body.code, "STUDIO_SOURCE_TRANSFER_UNCONFIRMED");
+  const receipt = await invoke(envelope(original, "reconcile"));
   assert.equal(receipt.body.status, "COMMITTED");
   assert.equal(receipt.body.auditReference, first.body.auditReference);
   assert.deepEqual(receipt.body.data, first.body.data);
-  assert.equal((await call(envelope(changed, "reconcile"), pool)).body.code, "IDEMPOTENCY_CONFLICT");
+  assert.equal((await invoke(envelope(changed, "reconcile"))).body.code, "IDEMPOTENCY_CONFLICT");
   assert.deepEqual(await totals(), { ...baseline, tasks: baseline.tasks + 1, receipts: baseline.receipts + 1 });
   assert.deepEqual((await db.admin.query("select title,status from tasks where id=$1", [ids.intakeTask])).rows,
     [{ title: "Original intake task", status: "open" }]);
 });
+}
