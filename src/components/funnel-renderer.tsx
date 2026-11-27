@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { FunnelSafeContent } from "@/components/funnel-safe-content";
+import {initialFunnelAnswers,funnelRuntimeFields,funnelElementFields,setFunnelAnswer,funnelRuntimeConsent,buildFunnelRuntimeSubmission,funnelSubmissionFailure,type FunnelAnswer} from "@/lib/funnel-runtime";
 import {
   getDeviceValue,
   type FunnelBlueprint,
@@ -23,7 +25,7 @@ type FunnelRendererProps = {
   onEvent?: (event: { label: string; detail: string; status: string }) => void;
 };
 
-type FieldValue = string | string[] | boolean | number | null;
+type FieldValue = FunnelAnswer;
 type FunnelRendererText = ReturnType<typeof getFunnelRendererCopy>;
 
 const deviceWidths: Record<FunnelDevice, string> = {
@@ -31,29 +33,19 @@ const deviceWidths: Record<FunnelDevice, string> = {
   tablet: "max-w-3xl",
   mobile: "max-w-[390px]",
 };
-
-function fieldInitialValue(field: FunnelField): FieldValue {
-  if (field.type === "multiChoice") return [];
-  if (field.type === "consent") return false;
-  if (field.type === "number" || field.type === "slider" || field.type === "rating") return field.defaultValue ? Number(field.defaultValue) : null;
-  return field.defaultValue ?? "";
-}
-
-function collectFields(blueprint: FunnelBlueprint) {
-  return blueprint.pages.flatMap((page) =>
-    page.sections.flatMap((section) =>
-      section.rows.flatMap((row) =>
-        row.columns.flatMap((column) =>
-          column.elements.flatMap((element) => element.fields ?? []),
-        ),
-      ),
-    ),
-  );
-}
-
-function buildInitialAnswers(blueprint: FunnelBlueprint) {
-  return Object.fromEntries(collectFields(blueprint).map((field) => [field.id, fieldInitialValue(field)]));
-}
+const subscribeViewport = (listener: () => void) => { window.addEventListener("resize", listener); return () => window.removeEventListener("resize", listener); };
+const subscribeNoViewport = () => () => undefined;
+const serverViewport = (): FunnelDevice => "mobile";
+const browserViewport = (): FunnelDevice => typeof window === "undefined" ? "mobile" : window.innerWidth >= 1024 ? "desktop" : window.innerWidth >= 768 ? "tablet" : "mobile";
+const legacyCustomerCopy: Record<string, string> = {
+  "Qualifizierte Leads erfassen und an Vertrieb übergeben": "Informationen zur Immobilie anfordern",
+  "Capture qualified leads and hand them over to sales": "Request property information",
+  "Der Kunde beantwortet wenige Fragen, wird qualifiziert und landet direkt im richtigen CRM-Ziel.": "Kontaktdaten eintragen und weitere Informationen zur Immobilie anfordern.",
+  "The customer answers a few questions, is qualified and lands in the right CRM destination.": "Enter your contact details and request more information about the property.",
+  "Kundenvorteile, Vertrauen und nächster Schritt klar darstellen.": "Weitere Informationen zur Immobilie und Antworten auf offene Fragen erhalten.",
+  "Show customer benefits, trust and the next step clearly.": "Get more property information and answers to your questions.",
+  "Lead starten": "Informationen anfordern", "Start lead": "Request information",
+};
 
 function buildAnswerLookup(fields: FunnelField[], answers: Record<string, FieldValue>) {
   const lookup = new Map<string, FieldValue>();
@@ -135,40 +127,6 @@ function validateField(field: FunnelField, value: FieldValue, text: FunnelRender
   return null;
 }
 
-function fieldIntent(field: FunnelField) {
-  return `${field.id} ${field.crmField} ${field.label}`.toLowerCase();
-}
-
-function buildConsentPayload(fields: FunnelField[], answers: Record<string, FieldValue>) {
-  const consentFields = fields.filter((field) => field.type === "consent");
-  let analytics = false;
-  let marketing = false;
-  let privacy = false;
-
-  consentFields.forEach((field) => {
-    if (answers[field.id] !== true && answers[field.crmField] !== true) return;
-
-    const intent = fieldIntent(field);
-    const isAnalytics = /(analytics|tracking|cookie|pixel|capi|utm|analyse)/i.test(intent);
-    const isMarketing = /(marketing|newsletter|whatsapp|instagram|outreach|werbung|kampagne)/i.test(intent);
-    const isPrivacy = /(privacy|datenschutz|dsgvo|gdpr|terms|einwilligung|consent)/i.test(intent);
-
-    analytics = analytics || isAnalytics;
-    marketing = marketing || isMarketing;
-    privacy = privacy || isPrivacy || (!isAnalytics && !isMarketing);
-  });
-
-  return { analytics, marketing, privacy };
-}
-
-function readUtmParams() {
-  if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const entries = Array.from(params.entries()).filter(([key]) => key.startsWith("utm_") || key === "gclid" || key === "fbclid");
-
-  return Object.fromEntries(entries);
-}
-
 function isVisible(element: FunnelElement, device: FunnelDevice) {
   return element.visibility?.[device] ?? true;
 }
@@ -181,11 +139,7 @@ function formatDestination(destination: FunnelBlueprint["crmHandover"]["destinat
 }
 
 function RichContent({ className, value }: { className?: string; value?: string }) {
-  const content = value ?? "";
-  if (content.includes("<")) {
-    return <span className={className} dangerouslySetInnerHTML={{ __html: content }} />;
-  }
-  return <span className={className}>{content}</span>;
+  return <FunnelSafeContent className={className} value={value} inline />;
 }
 
 function FieldControl({
@@ -331,17 +285,23 @@ function FieldControl({
 }
 
 export function FunnelRenderer({ blueprint, device = "mobile", language = "en", mode = "preview", onEvent }: FunnelRendererProps) {
+  const viewport = useSyncExternalStore(mode === "live" ? subscribeViewport : subscribeNoViewport, browserViewport, serverViewport);
+  const renderDevice = mode === "live" ? viewport : device;
   const text = getFunnelRendererCopy(language);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, FieldValue>>(() => buildInitialAnswers(blueprint));
+  const [answers, setAnswers] = useState<Record<string, FieldValue>>(() => initialFunnelAnswers(blueprint));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submissionKey] = useState(() => crypto.randomUUID());
+  const [submissionErrorMessage,setSubmissionErrorMessage] = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const pages = blueprint.pages;
   const page = pages[Math.min(currentPageIndex, pages.length - 1)];
-  const allFields = useMemo(() => collectFields(blueprint), [blueprint]);
-  const runtimeConsent = useMemo(() => buildConsentPayload(allFields, answers), [allFields, answers]);
+  const allFields = useMemo(() => funnelRuntimeFields(blueprint), [blueprint]);
+  const runtimeConsent = useMemo(() => funnelRuntimeConsent(allFields, answers), [allFields, answers]);
   const accent = blueprint.theme.colors.accent;
-  const spacing = getDeviceValue(blueprint.theme.spacing, device, 16);
+  const spacing = getDeviceValue(blueprint.theme.spacing, renderDevice, 16);
+  const customerText = (value: string | undefined) => mode === "live" && value ? legacyCustomerCopy[value] ?? value : value;
+  const customerField = (field: FunnelField) => mode === "live" && field.helpText === "Wird für die CRM-Zuordnung verwendet." ? { ...field, helpText: "Name für die persönliche Ansprache." } : mode === "live" && field.type === "phone" && field.helpText === "Später mit echter Nummernvalidierung verbinden." ? { ...field, helpText: "Telefonnummer für Rückfragen zu deiner Anfrage." } : field;
 
   useEffect(() => {
     if (blueprint.tracking.consentMode !== "active" || !runtimeConsent.analytics) return;
@@ -357,28 +317,8 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     onEvent?.({ label, detail, status });
   }
 
-  function withRuntimeHiddenAnswers(current: Record<string, FieldValue>) {
-    if (typeof window === "undefined") return current;
-    const params = new URLSearchParams(window.location.search);
-    const next = { ...current };
-
-    allFields.forEach((field) => {
-      if (field.type !== "hidden") return;
-      let value = field.defaultValue ?? "";
-      if (field.hiddenValueSource === "utm") value = params.get(field.crmField) ?? params.get(`utm_${field.crmField.replace(/^utm_/, "")}`) ?? value;
-      if (field.hiddenValueSource === "urlParam") value = params.get(field.crmField) ?? value;
-      if (field.hiddenValueSource === "system") value = field.crmField === "source_url" ? window.location.href : value;
-      if (value) {
-        next[field.id] = value;
-        next[field.crmField] = value;
-      }
-    });
-
-    return next;
-  }
-
   function setFieldValue(field: FunnelField, value: FieldValue) {
-    setAnswers((current) => ({ ...current, [field.id]: value, [field.crmField]: value }));
+    setAnswers((current) => setFunnelAnswer(current, field, value));
     setErrors((current) => {
       const next = { ...current };
       delete next[field.id];
@@ -388,13 +328,14 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
 
   function goToNext(nextAnswers = answers) {
     const nextIndex = pages.findIndex((candidate, index) =>
-      index > currentPageIndex && pageHasVisibleContent(candidate, device, allFields, nextAnswers),
+      index > currentPageIndex && pageHasVisibleContent(candidate, renderDevice, allFields, nextAnswers),
     );
     setCurrentPageIndex(nextIndex >= 0 ? nextIndex : Math.min(currentPageIndex + 1, pages.length - 1));
   }
 
   async function submit(testOnly = mode !== "live") {
-    const runtimeAnswers = withRuntimeHiddenAnswers(answers);
+    const payload=buildFunnelRuntimeSubmission(blueprint,answers,{mode:testOnly?"test":"live",search:typeof window!=="undefined"?window.location.search:"",sourceUrl:typeof window!=="undefined"?window.location.href:undefined,userAgent:typeof window!=="undefined"?window.navigator.userAgent:undefined});
+    const runtimeAnswers=payload.answers;
     const nextErrors = Object.fromEntries(
       allFields
         .map((field) => [field.id, validateField(field, runtimeAnswers[field.id], text)] as const)
@@ -407,28 +348,18 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
       return;
     }
 
-    setSubmitState("sending");
+    setSubmitState("sending");setSubmissionErrorMessage("");
+    let failureMessage=funnelSubmissionFailure(undefined,language);
     try {
-      const consent = buildConsentPayload(allFields, runtimeAnswers);
       const apiFetch = testOnly ? csrfFetch : fetch;
-      const response = await apiFetch(`/api/funnels/${blueprint.id}/submissions`, {
-        body: JSON.stringify({
-          funnelId: blueprint.id,
-          mode: testOnly ? "test" : "live",
-          answers: runtimeAnswers,
-          visitor: {
-            id: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("visitorId") ?? undefined : undefined,
-            sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
-            userAgent: typeof window !== "undefined" ? window.navigator.userAgent : undefined,
-          },
-          consent,
-          utm: readUtmParams(),
-        }),
-        headers: { "content-type": "application/json" },
+      const response = await apiFetch(`/api/funnels/${blueprint.id}/submissions?token=${encodeURIComponent(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") ?? "" : "")}`, {
+        body: JSON.stringify(payload),
+        headers: { "content-type": "application/json", "idempotency-key": submissionKey },
         method: "POST",
       });
-      if (!response.ok) throw new Error("Submission failed");
-      const result = (await response.json()) as { leadPreview?: { destination?: string; score?: number } };
+      const result=await response.json().catch(()=>null) as {persisted?:boolean;submissionId?:string;code?:string;leadPreview?:{destination?:string;score?:number}}|null;
+      if(!response.ok){failureMessage=funnelSubmissionFailure(result?.code,language);throw new Error("Submission rejected");}
+      if(result?.persisted!==true||typeof result.submissionId!=="string")throw new Error("Submission result unknown");
       setSubmitState("sent");
       emit(
         testOnly ? text.testLeadSent : text.leadSent,
@@ -436,23 +367,23 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
         testOnly ? "test" : "live",
       );
     } catch {
-      setSubmitState("error");
+      setSubmitState("error");setSubmissionErrorMessage(failureMessage);
       emit(text.submissionError, text.submissionErrorDetail, "error");
     }
   }
 
   function renderElement(element: FunnelElement) {
-    if (!elementCanRender(element, device, allFields, answers)) return null;
+    if (!elementCanRender(element, renderDevice, allFields, answers)) return null;
 
     if (element.type === "headline") {
-      return <h1 className="break-words text-3xl font-semibold leading-tight text-slate-950 md:text-4xl"><RichContent value={resolveTokens(element.content, allFields, answers)} /></h1>;
+      return <h1 className="break-words text-3xl font-semibold leading-tight text-slate-950 md:text-4xl"><RichContent value={customerText(resolveTokens(element.content, allFields, answers))} /></h1>;
     }
 
     if (element.type === "text" || element.type === "testimonial") {
       return (
         <div className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-4" style={{ borderRadius: blueprint.theme.radii.block }}>
-          <p className="break-words text-sm font-semibold text-slate-950">{element.name}</p>
-          <p className="mt-2 break-words text-sm text-stone-700"><RichContent value={resolveTokens(element.content, allFields, answers)} /></p>
+          {mode !== "live" || element.name !== "Hero" ? <p className="break-words text-sm font-semibold text-slate-950">{element.name}</p> : null}
+          <p className="mt-2 break-words text-sm text-stone-700"><RichContent value={customerText(resolveTokens(element.content, allFields, answers))} /></p>
         </div>
       );
     }
@@ -479,7 +410,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
           style={{ backgroundColor: accent, borderRadius: blueprint.theme.radii.button }}
           type="button"
         >
-          {element.ctaLabel ?? text.next}
+          {customerText(element.ctaLabel) ?? text.next}
         </button>
       );
     }
@@ -504,7 +435,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     }
 
     if (element.type === "html") {
-      return <div className="min-w-0 overflow-auto rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm" dangerouslySetInnerHTML={{ __html: resolveTokens(element.content, allFields, answers) ?? "" }} />;
+      return <FunnelSafeContent className="min-w-0 overflow-auto rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm" value={resolveTokens(element.content, allFields, answers) ?? ""} />;
     }
 
     if (element.type === "choice") {
@@ -518,8 +449,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
                 key={option}
                 onClick={() => {
                   emit(text.answerSelected, `${element.name}: ${option}`, "preview");
-                  const key = element.crmField ?? element.id;
-                  const nextAnswers = { ...answers, [key]: option, [element.id]: option };
+                  const nextAnswers = setFunnelAnswer(answers,funnelElementFields(element)[0],option);
                   setAnswers(nextAnswers);
                   goToNext(nextAnswers);
                 }}
@@ -544,15 +474,15 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
         >
           <div className="min-w-0">
             <p className="break-words text-lg font-semibold text-slate-950">{resolveTokens(element.content ?? element.name, allFields, answers)}</p>
-            <p className="mt-1 break-words text-sm text-stone-600">
+            {mode !== "live" ? <p className="mt-1 break-words text-sm text-stone-600">
               {text.target} {formatDestination(blueprint.crmHandover.destination, text)} / {blueprint.crmHandover.pipelineStage}
-            </p>
+            </p> : null}
           </div>
-          {(element.fields ?? []).map((field) => (
+          {funnelElementFields(element).map((field) => (
             <FieldControl
               copy={text}
               error={errors[field.id]}
-              field={field}
+              field={customerField(field)}
               key={field.id}
               value={answers[field.id]}
               onChange={(value) => setFieldValue(field, value)}
@@ -567,7 +497,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
             {submitState === "sending" ? text.checking : mode === "live" ? text.sendRequest : text.testLead}
           </button>
           {submitState === "sent" ? <p className="break-words text-sm font-semibold text-emerald-800">{text.processed}</p> : null}
-          {submitState === "error" ? <p className="break-words text-sm font-semibold text-red-700">{text.failed}</p> : null}
+          {submitState === "error" ? <p className="break-words text-sm font-semibold text-red-700">{submissionErrorMessage || funnelSubmissionFailure(undefined,language)}</p> : null}
         </form>
       );
     }
@@ -580,16 +510,16 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
   }
 
   return (
-    <div className={`mx-auto w-full ${deviceWidths[device]} min-w-0`} data-funnel-mode={mode}>
+    <div className={`mx-auto w-full ${mode === "live" ? "max-w-6xl" : deviceWidths[device]} min-w-0`} data-funnel-mode={mode} data-funnel-layout={mode === "live" ? "responsive" : "preview"}>
       <div
         className="min-w-0 rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm"
         style={{ backgroundColor: blueprint.theme.colors.background, color: blueprint.theme.colors.text }}
       >
         <div className="mb-4 flex min-w-0 items-center justify-between gap-3 border-b border-stone-200 pb-3 text-xs font-semibold">
           <span className="min-w-0 break-words">{blueprint.theme.logoText}</span>
-          <span className="shrink-0" style={{ color: accent }}>
+          {mode !== "live" ? <span className="shrink-0" style={{ color: accent }}>
             {device}
-          </span>
+          </span> : null}
         </div>
         <div className="mb-4 h-2 overflow-hidden rounded-full bg-stone-100">
           <div className="h-full rounded-full" style={{ backgroundColor: accent, width: `${((currentPageIndex + 1) / Math.max(1, pages.length)) * 100}%` }} />

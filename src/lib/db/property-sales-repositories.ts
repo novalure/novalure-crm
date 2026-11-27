@@ -4,6 +4,7 @@ import { can } from "@/lib/auth/permissions";
 import { executeCrmCommand, withCrmRead, assertProjectGrant, CrmCommandError } from "@/lib/crm-command";
 import type { TenantTransaction, TenantTransactionOptions } from "@/lib/db/tenant-client";
 import { syncBuyerSearchProfileInTransaction } from "@/lib/db/broker-entity-repositories";
+import { recordSourceAutomationEvent } from "@/lib/automation/source-events";
 import { assertReservationTransition, salesActions, salesText, salesUuid, salesVersion, validateQualification, validateViewing, PropertySalesValidationError, type PropertySalesAction } from "@/lib/property-sales";
 type Row = Record<string,unknown>;
 export type PropertySalesCommand = {action:PropertySalesAction;projectId:string;expectedVersion?:number;idempotencyKey:string;correlationId:string;payload:Record<string,unknown>};
@@ -43,6 +44,20 @@ async function activeRecipient(tx:TenantTransaction,session:AppSession,project:s
    or exists(select 1 from project_pipeline_permissions p where p.workspace_id=u.workspace_id and p.project_id=$3 and p.user_id=u.id and p.can_read=true and p.can_edit_deals=true))`,[session.workspaceId,salesUuid(id,'recipientUserId'),project]),'Active project recipient');
  return user;
 }
+/** Shared authoritative viewing mutation. Public booking context never calls this without a real staff command. */
+export async function savePropertyViewingInTransaction(tx:TenantTransaction,session:AppSession,projectId:string,p:Record<string,unknown>,expectedVersion?:number){
+ const w=session.workspaceId;await assertProjectGrant(tx,session,projectId,true);
+ const selected=await unit(tx,w,projectId,p.unitId),buyer=await lead(tx,w,projectId,p.leadId);await handoverExists(tx,w,projectId,String(buyer.id));
+ if(selected.status==='sold'||selected.status==='blocked')conflict('Unit cannot be viewed');
+ const old=p.viewingId?required(await tx.queryOne<Row>('select * from property_viewing_slots where workspace_id=$1 and project_id=$2 and id=$3 for update',[w,projectId,salesUuid(p.viewingId,'viewingId')]),'Viewing'):null;
+ if(old){version(old,expectedVersion);if(old.unit_id!==selected.id||old.lead_id!==buyer.id)conflict('Viewing references are immutable');}
+ const values=validateViewing(p,old?String(old.status):undefined),owner=await activeRecipient(tx,session,projectId,p.ownerUserId);
+ const params=[w,projectId,selected.id,buyer.contact_id,buyer.id,owner.id,values.startsAt,values.endsAt,values.status,values.timeZone];
+ const row=old?await tx.queryOne<Row>('update property_viewing_slots set owner_user_id=$6,starts_at=$7,ends_at=$8,status=$9,time_zone=$10,version=version+1,updated_at=now() where workspace_id=$1 and project_id=$2 and unit_id=$3 and contact_id=$4 and lead_id=$5 and id=$11 returning *',[...params,old.id])
+ :await tx.queryOne<Row>('insert into property_viewing_slots(workspace_id,project_id,unit_id,contact_id,lead_id,owner_user_id,starts_at,ends_at,status,time_zone) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',params);
+ if(row&&row.status==='confirmed'&&old?.status!=='confirmed')await recordSourceAutomationEvent(session,{projectId,leadId:String(buyer.id),eventId:`viewing-confirmed:${row.id}:${row.version}`,trigger:'appointment_booked',context:{unitId:String(selected.id),viewingId:String(row.id),viewingVersion:Number(row.version)}});
+ return {entity:'viewing',record:row};
+}
 /** No caller-supplied tenant or actor is accepted. All side effects share one command transaction. */
 export async function runPropertySalesCommand(session:AppSession,command:PropertySalesCommand,options?:TenantTransactionOptions) {
  try{
@@ -80,10 +95,13 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     if(selectedUnit.status==='sold'||selectedUnit.status==='blocked')conflict('Desired unit is not available for qualification');
     const contact=required(await tx.queryOne<Row>('select * from contacts where workspace_id=$1 and id=$2 and project_id=$3',[w,row.contact_id,projectId]),'Project buyer contact');
     if(!contact.email&&!contact.phone)throw new PropertySalesValidationError('A buyer contact channel is required');
-    const profile={...object(row.buyer_profile),budgetFrom:q.budgetFrom,budgetTo:q.budgetTo,financingStatus:q.financingStatus,purchaseTimeline:q.purchaseTimeline,useCase:q.useCase};
+    const profile={...object(row.buyer_profile),budgetFrom:q.budgetFrom,budgetTo:q.budgetTo,financingStatus:q.financingStatus,purchaseTimeline:q.purchaseTimeline,useCase:q.useCase,
+      ...(q.desiredLocation!==undefined?{desiredLocation:q.desiredLocation}:{}),...(q.mustHaveCriteria!==undefined?{mustHaveCriteria:q.mustHaveCriteria}:{}),
+      ...(q.niceToHaveCriteria!==undefined?{niceToHaveCriteria:q.niceToHaveCriteria}:{}),...(q.propertyType!==undefined?{propertyType:q.propertyType}:{})};
     const qualification={complete:true,priority:q.priority,desiredUnitId:q.desiredUnitId,sourceReference:q.sourceReference,qualifiedBy:session.userId,qualifiedAt:new Date().toISOString(),version:Number(row.version)+1};
     const saved=await tx.queryOne<Row>("update leads set buyer_profile=$4::jsonb,sales_qualification=$5::jsonb,status='Qualifiziert',version=version+1,updated_at=now() where workspace_id=$1 and project_id=$2 and id=$3 returning *",[w,projectId,row.id,JSON.stringify(profile),JSON.stringify(qualification)]);
     await syncBuyerSearchProfileInTransaction(tx,{session,profile:{...profile,financingStatus:q.financingStatus as 'offen',projectId,buyerLeadId:String(row.id),contactId:String(row.contact_id),title:String(row.intent||'Käufer-Suchprofil'),matchingStatus:'open',metadata:{source:'sales_qualification',qualificationVersion:qualification.version}}});
+    if(saved&&row.status!==saved.status)await recordSourceAutomationEvent(session,{projectId,leadId:String(row.id),eventId:`lead-phase:${row.id}:${saved.version}`,trigger:'lead_phase_changed'});
     return {entity:'qualification',record:saved};
    }
    if(command.action==='handover.create'){
@@ -96,21 +114,11 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     if(existing)conflict('Handover already exists');
     const handover=await tx.queryOne<Row>('insert into lead_sales_handovers(workspace_id,project_id,lead_id,qualification_version,recipient_user_id,actor_id,source_reference) values($1,$2,$3,$4,$5,$6,$7) returning *',[w,projectId,row.id,row.version,recipient.id,session.userId,source(p.sourceReference)]);
     await tx.execute("update leads set status='Übergabe',assigned_to_user_id=$3,version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,row.id,recipient.id]);
+    await recordSourceAutomationEvent(session,{projectId,leadId:String(row.id),eventId:`lead-phase:${row.id}:${Number(row.version)+1}`,trigger:'lead_phase_changed'});
     return {entity:'handover',record:handover};
    }
    if(command.action==='viewing.save'){
-    const selected=await unit(tx,w,projectId,p.unitId);
-    const buyer=await lead(tx,w,projectId,p.leadId);
-    await handoverExists(tx,w,projectId,String(buyer.id));
-    if(selected.status==='sold'||selected.status==='blocked')conflict('Unit cannot be viewed');
-    const old=p.viewingId?required(await tx.queryOne<Row>('select * from property_viewing_slots where workspace_id=$1 and project_id=$2 and id=$3 for update',[w,projectId,salesUuid(p.viewingId,'viewingId')]),'Viewing'):null;
-    if(old){version(old,command.expectedVersion);if(old.unit_id!==selected.id||old.lead_id!==buyer.id)conflict('Viewing references are immutable')}
-    const values=validateViewing(p,old?String(old.status):undefined);
-    const owner=await activeRecipient(tx,session,projectId,p.ownerUserId);
-    const params=[w,projectId,selected.id,buyer.contact_id,buyer.id,owner.id,values.startsAt,values.endsAt,values.status,values.timeZone];
-    const row=old?await tx.queryOne<Row>('update property_viewing_slots set owner_user_id=$6,starts_at=$7,ends_at=$8,status=$9,time_zone=$10,version=version+1,updated_at=now() where workspace_id=$1 and project_id=$2 and unit_id=$3 and contact_id=$4 and lead_id=$5 and id=$11 returning *',[...params,old.id])
-     :await tx.queryOne<Row>('insert into property_viewing_slots(workspace_id,project_id,unit_id,contact_id,lead_id,owner_user_id,starts_at,ends_at,status,time_zone) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',params);
-    return {entity:'viewing',record:row};
+    return savePropertyViewingInTransaction(tx,session,projectId,p,command.expectedVersion);
    }
    if(command.action==='unit.price.confirm'){
     const selected=await unit(tx,w,projectId,p.unitId);version(selected,command.expectedVersion);
@@ -139,7 +147,8 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     if(duplicates)conflict('Unit already has an open reservation');
     const expiresAt=salesText(p.expiresAt,'expiresAt');
     if(!Number.isFinite(Date.parse(expiresAt))||Date.parse(expiresAt)<=Date.now())throw new PropertySalesValidationError('Future expiry required');
-    const row=await tx.queryOne<Row>("insert into property_reservations(workspace_id,project_id,unit_id,contact_id,buyer_lead_id,status,expires_at,metadata) values($1,$2,$3,$4,$5,'requested',$6,jsonb_build_object('requestedBy',$7::text)) returning *",[w,projectId,selected.id,buyer.contact_id,buyer.id,expiresAt,session.userId]);
+    const reservationId=p.reservationId===undefined?null:salesUuid(p.reservationId,'reservationId');
+    const row=await tx.queryOne<Row>("insert into property_reservations(id,workspace_id,project_id,unit_id,contact_id,buyer_lead_id,status,expires_at,metadata) values(coalesce($8::uuid,gen_random_uuid()),$1,$2,$3,$4,$5,'requested',$6,jsonb_build_object('requestedBy',$7::text)) returning *",[w,projectId,selected.id,buyer.contact_id,buyer.id,expiresAt,session.userId,reservationId]);
     return {entity:'reservation',record:row,unitVersion:Number(selected.version)};
    }
    if(!reservation)throw new CrmCommandError('NOT_FOUND','Reservation not found',404);
@@ -168,7 +177,8 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     return {entity:'reservation',record:row,unitVersion:Number(selected.version)+1};
    }
    if(!reservation.confirmation||!reservation.buyer_lead_id)conflict('Authorized reservation confirmation is required');
-   const sale=await tx.queryOne<Row>('insert into property_sales(workspace_id,project_id,unit_id,reservation_id,buyer_lead_id,contact_id,authority_id,confirmed_by,source_reference,unit_version) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',[w,projectId,selected.id,reservation.id,reservation.buyer_lead_id,reservation.contact_id,auth.id,session.userId,evidence.sourceReference,evidence.unitVersion]);
+   const saleId=p.saleId===undefined?null:salesUuid(p.saleId,'saleId');
+   const sale=await tx.queryOne<Row>('insert into property_sales(id,workspace_id,project_id,unit_id,reservation_id,buyer_lead_id,contact_id,authority_id,confirmed_by,source_reference,unit_version) values(coalesce($11::uuid,gen_random_uuid()),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',[w,projectId,selected.id,reservation.id,reservation.buyer_lead_id,reservation.contact_id,auth.id,session.userId,evidence.sourceReference,evidence.unitVersion,saleId]);
    await tx.execute("update property_reservations set status='converted',version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,reservation.id]);
    await tx.execute("update property_units set status='sold',buyer_contact_id=$3,version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,selected.id,reservation.contact_id]);
    if(reservation.deal_id)await tx.execute("update deals set stage='Gewonnen',probability=100,closed_at=now(),updated_at=now() where workspace_id=$1 and project_id=$2 and id=$3",[w,projectId,reservation.deal_id]);

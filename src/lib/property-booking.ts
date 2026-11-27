@@ -1,0 +1,4 @@
+export type PropertyBookingPublicOffer={offerId:string;title:string;unitNumber:string;path:string};
+export type PropertyBookingOffer={id:string;unitId:string;unitNumber:string;meetingPageId:string;meetingTitle:string;enabled:boolean;version:number};
+export type PropertyBookingRequest={bookingId:string;unitNumber:string;contactName:string;contactEmail:string;contactNote:string;startsAt:string;endsAt:string;bookingStatus:string;status:'unverified'|'confirmed'|'needs_review'|'cancelled';leadId:string|null;viewingId:string|null;reason:string|null;version:number};
+export type PropertyBookingState={projectId:string;units:{id:string;number:string;status:string}[];pages:{id:string;title:string}[];offers:PropertyBookingOffer[];requests:PropertyBookingRequest[];leads:{id:string;name:string}[];owners:{id:string;name:string}[]};

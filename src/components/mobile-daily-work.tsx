@@ -7,11 +7,11 @@ import {
   formatDateTime,
   formatNumber,
   getCrmSystemTextLabel,
-  getCrmTaskDueLabel,
   getMobileDailyWorkCopy,
   type LanguageCode,
 } from "@/lib/i18n";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
+import { compareTaskDue, formatTaskDue } from "@/lib/task-due";
 
 type MobileDailySection = "leadInbox" | "tasks" | "calendar";
 export type MobileDailyPanel = "overdueSla" | "hotLeads" | "meetings" | "tasks";
@@ -26,6 +26,7 @@ type MobileDailyWorkProps = {
   projects: Project[];
   tasks: Task[];
   users: WorkspaceUser[];
+  timeZone?: string;
 };
 
 type MobileLeadItem = {
@@ -73,20 +74,6 @@ function isToday(value: string, nowMs: number | null) {
   );
 }
 
-function taskDueRank(task: Task) {
-  const parsed = new Date(task.due).getTime();
-  if (Number.isFinite(parsed)) return Math.round(parsed / 60000);
-
-  if (task.due.includes("Heute")) {
-    const match = task.due.match(/(\d{1,2}):(\d{2})/);
-    return match ? Number(match[1]) * 60 + Number(match[2]) : 600;
-  }
-
-  if (task.due.includes("Morgen")) return 24 * 60;
-  if (task.due.includes("Woche")) return 7 * 24 * 60;
-  return 30 * 24 * 60;
-}
-
 function formatOverdueDuration(minutes: number | null, language: LanguageCode) {
   if (minutes === null) return "";
   const absoluteMinutes = Math.abs(minutes);
@@ -101,12 +88,6 @@ function formatOverdueDuration(minutes: number | null, language: LanguageCode) {
   }
 
   return `${absoluteMinutes} min`;
-}
-
-function taskPriorityRank(task: Task) {
-  if (task.priority === "Hoch") return 0;
-  if (task.priority === "Mittel") return 1;
-  return 2;
 }
 
 function getProjectName(projects: Project[], projectId: string, fallback: string) {
@@ -130,6 +111,7 @@ export function MobileDailyWork({
   projects,
   tasks,
   users,
+  timeZone = "Europe/Vienna",
 }: MobileDailyWorkProps) {
   const text = getMobileDailyWorkCopy(language);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
@@ -140,7 +122,8 @@ export function MobileDailyWork({
 
   useEffect(() => {
     const timer = window.setTimeout(() => setNowMs(Date.now()), 0);
-    return () => window.clearTimeout(timer);
+    const interval = window.setInterval(() => setNowMs(Date.now()), 30000);
+    return () => { window.clearTimeout(timer); window.clearInterval(interval); };
   }, []);
 
   const hotLeadItems = useMemo<MobileLeadItem[]>(() => {
@@ -215,12 +198,11 @@ export function MobileDailyWork({
       })
       .sort(
         (left, right) =>
-          taskDueRank(left.task) - taskDueRank(right.task) ||
-          taskPriorityRank(left.task) - taskPriorityRank(right.task) ||
+          compareTaskDue(left.task, right.task, new Date(nowMs ?? 0), timeZone) ||
           (right.lead?.score ?? 0) - (left.lead?.score ?? 0),
       )
       .slice(0, 4);
-  }, [completedTaskIds, contacts, leads, projects, tasks]);
+  }, [completedTaskIds, contacts, leads, projects, tasks, nowMs, timeZone]);
 
   const metrics = [
     { id: "hotLeads", label: text.metrics.hotLeads, value: hotLeadItems.length },
@@ -269,13 +251,13 @@ export function MobileDailyWork({
   function markTaskDone(task: Task) {
     if (savingTaskIds.includes(task.id) || completedTaskIds.includes(task.id)) return;
     setSavingTaskIds((current) => [...current, task.id]);
-    void csrfFetch("/api/crm/tasks", {
+    void csrfFetch(`/api/crm/tasks?workspaceId=${encodeURIComponent(task.workspaceId)}`, {
       body: JSON.stringify({ task: { ...task, status: "done" }, expectedVersion: task.version }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     }).then(async (response) => {
-      const payload = await response.json().catch(() => ({})) as { task?: Task; error?: string };
-      if (!response.ok || !payload.task) throw new Error(payload.error || (language === "de" ? "Aufgabe konnte nicht gespeichert werden." : "Task could not be saved."));
+      const payload = await response.json().catch(() => ({})) as { persisted?: boolean; task?: Task; error?: string };
+      if (!response.ok || payload.persisted !== true || !payload.task || payload.task.id !== task.id || payload.task.workspaceId !== task.workspaceId || payload.task.status !== "done") throw new Error(payload.error || (language === "de" ? "Aufgabe konnte nicht gespeichert werden." : "Task could not be saved."));
       setCompletedTaskIds((current) => current.includes(task.id) ? current : [...current, task.id]);
       setNotice(text.notices.taskDone(payload.task.title));
     }).catch((error: unknown) => setNotice(error instanceof Error ? error.message : (language === "de" ? "Speichern fehlgeschlagen." : "Save failed.")))
@@ -496,7 +478,7 @@ export function MobileDailyWork({
                 <article className="rounded-md border border-stone-200 bg-stone-50 p-3" key={task.id}>
                   <p className="break-words text-sm font-semibold text-slate-950">{task.title}</p>
                   <p className="mt-1 break-words text-xs text-stone-600">
-                    {getCrmTaskDueLabel(task.due, language)} · {projectName}
+                    {formatTaskDue(task.due, language, timeZone, new Date(nowMs ?? 0))} · {projectName}
                   </p>
                   <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
                     {route.phoneHref ? (

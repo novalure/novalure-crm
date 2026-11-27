@@ -124,7 +124,7 @@ function buildDefaultContactFields(source: { id: string }): FunnelField[] {
       placeholder: "Vor- und Nachname",
       required: true,
       errorMessage: "Bitte Namen eintragen.",
-      helpText: "Wird für die CRM-Zuordnung verwendet.",
+      helpText: "Name für die persönliche Ansprache.",
     },
     {
       id: `${source.id}_field_email`,
@@ -144,7 +144,7 @@ function buildDefaultContactFields(source: { id: string }): FunnelField[] {
       placeholder: "+43 ...",
       required: true,
       errorMessage: "Bitte Telefonnummer eintragen.",
-      helpText: "Später mit echter Nummernvalidierung verbinden.",
+      helpText: "Telefonnummer für Rückfragen zu deiner Anfrage.",
     },
     {
       id: `${source.id}_field_consent`,
@@ -237,7 +237,7 @@ function buildBlockElement(block: string, funnel: FunnelDraft, index: number): F
     id: `${funnel.id}_block_${index}_text`,
     type: "text",
     name: block,
-    content: funnel.designerBlockText ?? `${block} klar und conversion-orientiert erklären.`,
+    content: funnel.designerBlockText ?? "Weitere Informationen zur Immobilie anfordern.",
     visibility: { desktop: true, tablet: true, mobile: true },
   };
 }
@@ -284,7 +284,7 @@ function buildLandingPage(funnel: FunnelDraft, steps: FunnelStepDraft[]): Funnel
                     id: `${funnel.id}_cta`,
                     type: "button",
                     name: "CTA",
-                    ctaLabel: funnel.designerCtaLabel ?? "Lead starten",
+                    ctaLabel: funnel.designerCtaLabel ?? "Informationen anfordern",
                     analyticsEvent: "funnel_start",
                     visibility: { desktop: true, tablet: true, mobile: true },
                   },

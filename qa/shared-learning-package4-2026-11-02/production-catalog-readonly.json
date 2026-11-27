@@ -1,0 +1,56 @@
+{
+  "status": "ACTUAL_READ_ONLY_PRODUCTION_METADATA",
+  "source": "Neon connected run_sql",
+  "metadata": {
+    "branch": "br-spring-night-alyu48yp",
+    "ledger": [
+      {
+        "version": "115_shared_behavior_foundation",
+        "checksum": "3e00721474c52707bafde0675879aa0a347046b813fc7de73c9a1a8f70a00cf9"
+      },
+      {
+        "version": "116_shared_behavior_package2",
+        "checksum": "0f73b7b79cee3585a61cb134714b1d2094d9d178c54576fba6381f387e023bd9"
+      },
+      {
+        "version": "117_shared_behavior_package3",
+        "checksum": "24f7baf8acee246cf3ef7e4a951e0d087a10247f448b499ae96558f5b8fa162d"
+      },
+      {
+        "version": "118_shared_behavior_personal_runtime",
+        "checksum": "30fdebf0b386a751342867afc1db931c8970e6d26df8cd1d55214590d1974484"
+      },
+      {
+        "version": "119_shared_behavior_revocable_operation",
+        "checksum": "9590b94e58df2b665e8f0b1669065c021ef142a356ae76e5d5607cf2aeefca23"
+      }
+    ],
+    "project": "misty-cloud-70835427",
+    "database": "neondb",
+    "observedAtUtc": "2026-11-02T14:18:49.534921+00:00",
+    "package4Exists": false,
+    "publisherRoles": [
+      {
+        "name": "novalure_behavior_publisher",
+        "login": false,
+        "super": false,
+        "createDb": false,
+        "bypassrls": false,
+        "createRole": false,
+        "replication": false
+      },
+      {
+        "name": "novalure_behavior_resolver",
+        "login": false,
+        "super": false,
+        "createDb": false,
+        "bypassrls": false,
+        "createRole": false,
+        "replication": false
+      }
+    ],
+    "privateSignalsForcedRls": true
+  },
+  "providerWrites": 0,
+  "modelCalls": 0
+}

@@ -1,10 +1,11 @@
 import type { Project, PropertyBuilding } from "@/lib/crm-types";
 import { parsePropertyEuroCents } from "@/lib/property-money";
 import { parsePropertyAreaSqm } from "@/lib/property-area-input";
+import { mapUnitDetails, parseUnitDetailsPatch, unitDetailsDraft, type UnitDetailsDraft } from "@/lib/property-unit-details";
 
 export type UnitInventoryMode = "building" | "unit";
 
-export type UnitInventoryDraft = {
+export type UnitInventoryDraft = UnitDetailsDraft & {
   address: string;
   areaSqm: string;
   buildingId: string;
@@ -18,7 +19,7 @@ export type UnitInventoryDraft = {
 };
 
 export function createUnitInventoryDraft(projectId = ""): UnitInventoryDraft {
-  return { address: "", areaSqm: "", buildingId: "", floor: "", floors: "", name: "", price: "", projectId, rooms: "", unitNumber: "" };
+  return { ...unitDetailsDraft(), address: "", areaSqm: "", buildingId: "", floor: "", floors: "", name: "", price: "", projectId, rooms: "", unitNumber: "" };
 }
 
 export function updateUnitInventoryDraft<Key extends keyof UnitInventoryDraft>(
@@ -51,7 +52,9 @@ function inventoryPayload(draft: UnitInventoryDraft, mode: UnitInventoryMode) {
     || (draft.areaSqm.trim() && (!decimalInput.test(draft.areaSqm.trim()) || parsePropertyAreaSqm(draft.areaSqm) === null))) {
     throw new Error("unit_inventory_invalid");
   }
-  return { ...common, areaSqm: draft.areaSqm, buildingId: draft.buildingId, floor: draft.floor, price: draft.price, rooms: draft.rooms, unitNumber: draft.unitNumber };
+  let details;
+  try { details = parseUnitDetailsPatch(draft); } catch { throw new Error("unit_inventory_invalid"); }
+  return { ...common, ...details, areaSqm: draft.areaSqm, buildingId: draft.buildingId, floor: draft.floor, price: draft.price, rooms: draft.rooms, unitNumber: draft.unitNumber };
 }
 
 function matchesReceipt(value: unknown, draft: UnitInventoryDraft, mode: UnitInventoryMode, workspaceId: string) {
@@ -62,7 +65,10 @@ function matchesReceipt(value: unknown, draft: UnitInventoryDraft, mode: UnitInv
     return data.name === draft.name.trim() && data.address === draft.address.trim()
       && data.floors === Number(draft.floors || 0);
   }
-  return data.unitNumber === draft.unitNumber.trim() && data.buildingId === draft.buildingId
+  const expectedDetails = parseUnitDetailsPatch(draft);
+  const actualDetails = mapUnitDetails(data);
+  return Object.entries(expectedDetails).every(([key,value]) => actualDetails[key as keyof typeof actualDetails] === value)
+    && data.unitNumber === draft.unitNumber.trim() && data.buildingId === draft.buildingId
     && data.priceCents === (draft.price.trim() ? parsePropertyEuroCents(draft.price) : 0)
     && data.areaSqm === (draft.areaSqm.trim() ? parsePropertyAreaSqm(draft.areaSqm) : 0)
     && data.floor === Number(draft.floor || 0) && data.rooms === Number(draft.rooms || 0);

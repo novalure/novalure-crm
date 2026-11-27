@@ -1,0 +1,116 @@
+--- a/examples/heif_dec.cc
++++ b/examples/heif_dec.cc
+@@ -273,6 +273,7 @@
+   }
+ 
+   int has_alpha = heif_image_handle_has_alpha_channel(handle);
++  int write_errors = 0;
+ 
+   heif_image* image;
+   heif_error err;
+@@ -304,6 +305,7 @@
+     bool written = encoder->Encode(handle, image, filename);
+     if (!written) {
+       fprintf(stderr, "could not write image\n");
++      write_errors++;
+     }
+     else {
+       if (!option_quiet) {
+@@ -350,6 +352,7 @@
+         written = encoder->Encode(depth_handle, depth_image, s.str());
+         if (!written) {
+           fprintf(stderr, "could not write depth image\n");
++          write_errors++;
+         }
+         else {
+           if (!option_quiet) {
+@@ -424,6 +427,7 @@
+           written = encoder->Encode(aux_handle, aux_image, auxFilename);
+           if (!written) {
+             fprintf(stderr, "could not write auxiliary image\n");
++            write_errors++;
+           }
+           else {
+             if (!option_quiet) {
+@@ -469,6 +473,11 @@
+             std::string xmp_filename = filename_stem + ".xmp";
+             std::ofstream ostr(xmp_filename.c_str());
+             ostr.write((char*) xmp.data(), xmpSize);
++            ostr.close();
++            if (!ostr) {
++              fprintf(stderr, "could not write XMP data\n");
++              write_errors++;
++            }
+           }
+           else if (option_with_exif && itemtype == "Exif") {
+             // read EXIF data to memory array
+@@ -502,13 +511,18 @@
+             std::string exif_filename = filename_stem + ".exif";
+             std::ofstream ostr(exif_filename.c_str());
+             ostr.write((char*) exif.data() + offset, exifSize - offset);
++            ostr.close();
++            if (!ostr) {
++              fprintf(stderr, "could not write EXIF data\n");
++              write_errors++;
++            }
+           }
+         }
+       }
+     }
+   }
+ 
+-  return 0;
++  return write_errors ? 1 : 0;
+ }
+ 
+ 
+@@ -531,6 +545,7 @@
+                        heif_decoding_options* decode_options,
+                        std::unique_ptr<Encoder>& encoder)
+ {
++  int write_errors = 0;
+   heif_image_tiling tiling;
+ 
+   heif_image_handle_get_image_tiling(handle, !decode_options->ignore_transformations, &tiling);
+@@ -587,6 +602,7 @@
+         bool written = encoder->Encode(handle, image, filename);
+         if (!written) {
+           fprintf(stderr, "could not write image\n");
++          write_errors++;
+         }
+         else {
+           if (!option_quiet) {
+@@ -597,7 +613,7 @@
+       }
+     }
+ 
+-  return 0;
++  return write_errors ? 1 : 0;
+ }
+ 
+ static int max_value_progress = 0;
+@@ -940,6 +956,7 @@
+     }
+ 
+     int with_alpha = heif_track_has_alpha_channel(track);
++    int sequence_write_errors = 0;
+ 
+     for (int i=0; ;i++) {
+       heif_image* out_image = nullptr;
+@@ -984,6 +1001,7 @@
+       bool written = encoder->Encode(nullptr, out_image, numbered_filename);
+       if (!written) {
+         fprintf(stderr, "could not write image\n");
++        sequence_write_errors++;
+       }
+       else {
+         if (!option_quiet) {
+@@ -995,7 +1013,7 @@
+ 
+     heif_track_release(track);
+ 
+-    return 0;
++    return sequence_write_errors ? 1 : 0;
+   }
+ 
+ 

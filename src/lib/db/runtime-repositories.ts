@@ -1,7 +1,8 @@
+import {projectFunnelCrmAnswers} from "@/lib/funnel-runtime";
 import type { AppSession } from "@/lib/auth/session";
 import type { BotEvaluationCaseResult, BotEvaluationRun } from "@/lib/crm-types";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
-import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { hasBoundTenantTransaction, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secret-box";
@@ -44,13 +45,6 @@ export type BotCrmSyncResult = {
   leadId: string | null;
   timelineItemId: string | null;
 };
-const legacyProjectNames: Record<string, string> = {
-  project_wohnpark_graz: "Wohnpark Graz",
-  project_investment_wien: "Investment Wien",
-  project_seller_linz: "Seller Leads Linz",
-  project_novalure_eu: "Novalure.eu",
-};
-
 export type PersistenceResult =
   | { persisted: true; ids: Record<string, string | null> }
   | { persisted: false; reason: string };
@@ -319,6 +313,7 @@ export async function persistFunnelSubmission(input: {
   blueprint: FunnelBlueprint;
   payload: FunnelSubmissionPayload;
   score: number;
+  idempotencyKey?: string;
 }): Promise<PersistenceResult> {
   if (!canPersist()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
@@ -330,11 +325,12 @@ export async function persistFunnelSubmission(input: {
     return { persisted: false, reason: "Funnel not found in database" };
   }
 
-  const contactName = getAnswerString(input.payload.answers, ["name", "full_name", "fullname", "contact_name"]) || "Funnel Lead";
-  const email = getAnswerString(input.payload.answers, ["email", "e_mail", "mail"]);
-  const phone = getAnswerString(input.payload.answers, ["phone", "telefon", "telephone"]);
-  const intent = getAnswerString(input.payload.answers, ["intent", "bedarf", "interest", "interesse"]) || input.blueprint.goal;
-  const budget = getAnswerString(input.payload.answers, ["budget", "price", "preis"]);
+  const crmAnswers=projectFunnelCrmAnswers(input.blueprint,input.payload.answers);
+  const contactName = getAnswerString(crmAnswers, ["name", "full_name", "fullname", "contact_name"]) || "Funnel Lead";
+  const email = getAnswerString(crmAnswers, ["email", "e_mail", "mail"]);
+  const phone = getAnswerString(crmAnswers, ["phone", "telefon", "telephone"]);
+  const intent = getAnswerString(crmAnswers, ["intent", "bedarf", "interest", "interesse"]) || input.blueprint.goal;
+  const budget = getAnswerString(crmAnswers, ["budget", "price", "preis"]);
   const leadType = input.blueprint.audience;
   const now = new Date().toISOString();
   const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
@@ -442,9 +438,9 @@ export async function persistFunnelSubmission(input: {
   const submission = await queryOne<IdRow>(
     `
       insert into funnel_submissions (
-        workspace_id, project_id, funnel_id, contact_id, lead_id, mode, score, answers, consent, tracking, raw_payload
+        workspace_id, project_id, funnel_id, contact_id, lead_id, mode, score, answers, consent, tracking, raw_payload, idempotency_key
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb)
+      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12)
       returning id
     `,
     [
@@ -459,6 +455,7 @@ export async function persistFunnelSubmission(input: {
       JSON.stringify(input.payload.consent),
       JSON.stringify({ utm: input.payload.utm ?? {}, visitor: input.payload.visitor }),
       JSON.stringify(input.payload),
+      input.idempotencyKey ?? null,
     ],
   );
 
@@ -751,117 +748,10 @@ export async function persistFunnelTestSubmission(input: {
 }
 
 async function getOrCreateSubmissionFunnel(session: AppSession, blueprint: FunnelBlueprint) {
-  const existing = await queryOne<FunnelRow>(
-    `
-      select
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        owner_user_id as "ownerUserId",
-        name
-      from funnels
-      where workspace_id = $1
-        and (
-          ($2::uuid is not null and id = $2::uuid)
-          or tracking->>'legacyId' = $3
-          or name = $4
-        )
-      order by updated_at desc
-      limit 1
-    `,
-    [session.workspaceId, isUuid(blueprint.id) ? blueprint.id : null, blueprint.id, blueprint.name],
-  );
-
-  if (existing) return existing;
-
-  const projectId = await resolveSubmissionProjectId(session.workspaceId, blueprint.projectId);
-  const ownerUserId = isUuid(session.userId) ? session.userId : null;
-  const status = blueprint.status === "aktiv" ? "aktiv" : blueprint.status === "optimieren" ? "optimieren" : "entwurf";
-
-  return queryOne<FunnelRow>(
-    `
-      insert into funnels (
-        workspace_id,
-        project_id,
-        owner_user_id,
-        name,
-        goal,
-        audience,
-        entry_channel,
-        status,
-        blueprint,
-        tracking
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
-      returning
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        owner_user_id as "ownerUserId",
-        name
-    `,
-    [
-      session.workspaceId,
-      projectId,
-      ownerUserId,
-      blueprint.name,
-      blueprint.goal,
-      blueprint.audience,
-      blueprint.entryChannel,
-      status,
-      JSON.stringify(blueprint),
-      JSON.stringify({
-        legacyId: blueprint.id,
-        legacyProjectId: blueprint.projectId,
-        consentMode: blueprint.tracking.consentMode,
-        createdFromSubmission: true,
-      }),
-    ],
-  );
-}
-
-async function resolveSubmissionProjectId(workspaceId: string, projectId: string) {
-  if (isUuid(projectId)) {
-    const existing = await queryOne<IdRow>(
-      `
-        select id
-        from projects
-        where id = $1 and workspace_id = $2
-        limit 1
-      `,
-      [projectId, workspaceId],
-    );
-
-    if (existing) return existing.id;
-  }
-
-  const legacyName = legacyProjectNames[projectId];
-  const project = legacyName
-    ? await queryOne<IdRow>(
-        `
-          select id
-          from projects
-          where workspace_id = $1 and name = $2
-          limit 1
-        `,
-        [workspaceId, legacyName],
-      )
-    : null;
-
-  if (project) return project.id;
-
-  const fallback = await queryOne<IdRow>(
-    `
-      select id
-      from projects
-      where workspace_id = $1
-      order by created_at asc
-      limit 1
-    `,
-    [workspaceId],
-  );
-
-  return fallback?.id ?? null;
+  if (!hasBoundTenantTransaction() || blueprint.workspaceId !== session.workspaceId || !isUuid(blueprint.projectId)) throw new CrmCommandError("TENANT_REQUIRED", "Funnel persistence requires its authenticated tenant transaction", 403);
+  const existing = await queryOne<FunnelRow>(`select id,workspace_id as "workspaceId",project_id as "projectId",owner_user_id as "ownerUserId",name from funnels where workspace_id=$1::uuid and project_id=$2::uuid and (id::text=$3 or tracking->>'legacyId'=$3) for update`, [session.workspaceId,blueprint.projectId,blueprint.id]);
+  if (!existing) throw new CrmCommandError("FUNNEL_UNAVAILABLE", "Published funnel not found", 404);
+  return existing;
 }
 
 const runtimeKnowledgeChannels = new Set<string>(["webchat", "whatsapp", "instagram", "messenger", "email", "internal"]);

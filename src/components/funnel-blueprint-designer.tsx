@@ -1,19 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { FunnelRenderer } from "@/components/funnel-renderer";
 import { calculateAbTestResults } from "@/lib/funnel-ab-testing";
 import { createTrackingSnippet } from "@/lib/funnel-tracking";
 import { funnelFieldTypes, type FunnelBlueprint, type FunnelDevice, type FunnelElement, type FunnelElementType, type FunnelField, type FunnelMediaAsset, type FunnelPage, type FunnelRule, type FunnelRuleOperator, type FunnelVersion } from "@/lib/funnel-schema";
 import { getFunnelDesignerCopy, getLocale, type LanguageCode } from "@/lib/i18n";
 import { MediaLibraryPicker, type CrmMediaAsset } from "@/components/media-library-picker";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { runFunnelPreflight, funnelPublicationBlockerText } from "@/lib/funnel-publication";
+import { FunnelSafeContent } from "@/components/funnel-safe-content";
 
 type FunnelBlueprintDesignerProps = {
   initialBlueprint: FunnelBlueprint;
   language?: LanguageCode;
   onEvent?: (event: { label: string; detail: string; status: string }) => void;
+  onSaved?: (saved: FunnelDesignerSaved) => void;
   variant?: "embedded" | "immersive";
 };
+export type FunnelDesignerSaved = { funnelId: string; status: "aktiv" | "optimieren" | "entwurf"; blueprint: FunnelBlueprint };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 type FunnelDesignerText = ReturnType<typeof getFunnelDesignerCopy>;
@@ -205,7 +211,7 @@ function insertToken(value: string | undefined, token: string) {
   return `${value ?? ""}${value ? " " : ""}${token}`;
 }
 
-export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onEvent, variant = "embedded" }: FunnelBlueprintDesignerProps) {
+export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onEvent, onSaved, variant = "embedded" }: FunnelBlueprintDesignerProps) {
   const text = getFunnelDesignerCopy(language);
   const locale = getLocale(language);
   const isImmersive = variant === "immersive";
@@ -218,6 +224,14 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   const [future, setFuture] = useState<FunnelBlueprint[]>([]);
   const [versions, setVersions] = useState<FunnelVersion[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [publishReviewed, setPublishReviewed] = useState(false);
+  const [liveToken, setLiveToken] = useState("");
+  const [publicationMessage, setPublicationMessage] = useState("");
+  const [largePreviewOpen, setLargePreviewOpen] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<"preview" | "pages" | "inspector">("preview");
+  const previewDialog = useRef<HTMLDivElement>(null), previewLaunch = useRef<HTMLButtonElement>(null), previewClose = useRef<HTMLButtonElement>(null);
+  const publicationCheck = runFunnelPreflight(blueprint);
+  const blueprintEndpoint = `/api/funnels/${encodeURIComponent(blueprint.id)}/blueprint?workspaceId=${encodeURIComponent(blueprint.workspaceId)}`;
   const [mediaDraft, setMediaDraft] = useState({ name: "", url: "", folder: text.defaultFolder, type: "image" as FunnelMediaAsset["type"] });
   const elements = useMemo(() => collectElements(blueprint), [blueprint]);
   const selectedElement = findElement(blueprint, selectedElementId) ?? elements[0]?.element ?? null;
@@ -226,12 +240,13 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
 
   useEffect(() => {
     let active = true;
-    csrfFetch(`/api/funnels/${initialBlueprint.id}/blueprint`)
+    csrfFetch(`/api/funnels/${encodeURIComponent(initialBlueprint.id)}/blueprint?workspaceId=${encodeURIComponent(initialBlueprint.workspaceId)}`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { blueprint?: FunnelBlueprint; versions?: FunnelVersion[] } | null) => {
+      .then((payload: { blueprint?: FunnelBlueprint; versions?: FunnelVersion[]; status?: string; tracking?: { publicToken?: string } } | null) => {
         if (!active || !payload?.blueprint) return;
         setBlueprint(payload.blueprint);
         setVersions(payload.versions ?? []);
+        setLiveToken(payload.status === "aktiv" ? payload.tracking?.publicToken ?? "" : "");
         setSelectedPageId(payload.blueprint.pages[0]?.id ?? "");
         setSelectedElementId(firstElementId(payload.blueprint));
       })
@@ -239,9 +254,33 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
     return () => {
       active = false;
     };
-  }, [initialBlueprint]);
+  }, [initialBlueprint.id, initialBlueprint.workspaceId]);
+
+  useEffect(() => {
+    if (!largePreviewOpen) return;
+    const previous = document.documentElement.style.overflow, opener=previewLaunch.current;
+    document.documentElement.style.overflow = "hidden";
+    previewClose.current?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setLargePreviewOpen(false); }
+      if (event.key !== "Tab") return;
+      const controls = [...(previewDialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]') ?? [])].filter(node => node.offsetParent !== null);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => { document.documentElement.style.overflow = previous; document.removeEventListener("keydown", handleKey); opener?.focus(); };
+  }, [largePreviewOpen]);
+
+  function notifySaved(payload: { funnelId?: string; status?: string; blueprint?: FunnelBlueprint }) {
+    if (!payload.funnelId || !payload.blueprint || !["aktiv", "optimieren", "entwurf"].includes(payload.status ?? "")) return;
+    try { onSaved?.({ funnelId: payload.funnelId, status: payload.status as FunnelDesignerSaved["status"], blueprint: payload.blueprint }); }
+    catch { setPublicationMessage(current => current + (language === "de" ? " Der Stand ist gespeichert; die Listenansicht bitte aktualisieren." : " The version is saved; please refresh the list.")); }
+  }
 
   function commit(next: FunnelBlueprint, label: string) {
+    setPublishReviewed(false);
     setPast((current) => [blueprint, ...current].slice(0, 50));
     setFuture([]);
     setBlueprint(next);
@@ -269,22 +308,56 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
     setBlueprint(next);
   }
 
-  async function saveBlueprint() {
+  async function saveBlueprint(publish = false) {
+    if (saveState === "saving" || (publish && (!publishReviewed || !publicationCheck.ok))) return;
     setSaveState("saving");
+    setPublicationMessage("");
     try {
-      const response = await csrfFetch(`/api/funnels/${blueprint.id}/blueprint`, {
+      const response = await csrfFetch(blueprintEndpoint, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ blueprint, label: "Designer-Version" }),
+        body: JSON.stringify({ blueprint: { ...blueprint, status: publish ? "aktiv" : "entwurf" }, label: publish ? "Geprüfte Veröffentlichung" : "Designer-Entwurf", publishReviewed: publish }),
       });
-      if (!response.ok) throw new Error("Save failed");
-      const payload = (await response.json()) as { versions?: FunnelVersion[] };
+      const payload = (await response.json()) as { funnelId?: string; blueprint?: FunnelBlueprint; versions?: FunnelVersion[]; status?: string; tracking?: { publicToken?: string }; error?: string };
+      if (!response.ok || !payload.blueprint) throw new Error(payload.error ?? (language === "de" ? "Funnel konnte nicht gespeichert werden." : "The funnel could not be saved."));
+      setBlueprint(payload.blueprint);
       setVersions(payload.versions ?? []);
+      setLiveToken(payload.status === "aktiv" ? payload.tracking?.publicToken ?? "" : "");
+      setPublishReviewed(false);
+      setPublicationMessage(language === "de" ? publish ? "Geprüfte Fassung veröffentlicht. Der neue Live-Link ist unten verfügbar." : "Entwurf gespeichert. Eine bestehende veröffentlichte Fassung bleibt unverändert." : publish ? "Reviewed version published. The new live link is available below." : "Draft saved. An existing published version stays unchanged.");
       setSaveState("saved");
+      notifySaved(payload);
       onEvent?.({ label: text.savedEvent, detail: text.savedDetail, status: "CRM" });
-    } catch {
+    } catch (error) {
       setSaveState("error");
+      setPublicationMessage(error instanceof Error ? error.message : language === "de" ? "Speichern fehlgeschlagen." : "Save failed.");
     }
+  }
+
+  async function restoreVersion(versionId: string) {
+    if (saveState === "saving") return;
+    setSaveState("saving");
+    try {
+      const response = await csrfFetch(blueprintEndpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ restoreVersionId: versionId }) });
+      const payload = await response.json() as { funnelId?: string; status?: string; blueprint?: FunnelBlueprint; versions?: FunnelVersion[]; error?: string };
+      if (!response.ok || !payload.blueprint) throw new Error(payload.error ?? "Version konnte nicht wiederhergestellt werden.");
+      setBlueprint(payload.blueprint); setVersions(payload.versions ?? []); setLiveToken(""); setPublishReviewed(false); setSaveState("saved");
+      setPublicationMessage(language === "de" ? "Als Entwurf wiederhergestellt. Der bisherige Live-Link wurde beendet; vor erneuter Veröffentlichung prüfen." : "Restored as a draft. The previous live link is disabled; review before publishing again.");
+      notifySaved(payload);
+    } catch (error) { setSaveState("error"); setPublicationMessage(error instanceof Error ? error.message : "Wiederherstellung fehlgeschlagen."); }
+  }
+
+  async function unpublish() {
+    if (saveState === "saving") return;
+    setSaveState("saving");
+    try {
+      const response = await csrfFetch(blueprintEndpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "unpublish" }) });
+      const result = await response.json() as { funnelId?: string; status?: string; blueprint?: FunnelBlueprint; versions?: FunnelVersion[]; error?: string };
+      if (!response.ok || !result.blueprint) throw new Error(result.error ?? "Veröffentlichung konnte nicht beendet werden.");
+      setBlueprint(result.blueprint); setVersions(result.versions ?? []); setLiveToken(""); setSaveState("saved"); setPublishReviewed(false);
+      setPublicationMessage(language === "de" ? "Veröffentlichung beendet. Der bisherige Live-Link nimmt keine Anfragen mehr an." : "Unpublished. The previous live link no longer accepts enquiries.");
+      notifySaved(result);
+    } catch (error) { setSaveState("error"); setPublicationMessage(error instanceof Error ? error.message : "Veröffentlichung prüfen."); }
   }
 
   function addMediaAsset() {
@@ -366,23 +439,23 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   };
   const conditionRule =
     selectedElement?.condition?.rules.find((rule): rule is FunnelRule => !("rules" in rule)) ?? null;
-  const designerShellClass = isImmersive ? "flex h-full min-h-0 flex-col gap-3" : "grid min-w-0 gap-4";
+  const designerShellClass = isImmersive ? "flex h-full min-h-0 flex-col gap-2" : "grid min-w-0 gap-4";
   const designerToolbarClass = isImmersive
-    ? "flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3"
+    ? "flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-white p-2"
     : "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-4";
   const workspaceGridClass = isImmersive
-    ? "grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_330px] 2xl:grid-cols-[280px_minmax(0,1fr)_380px]"
+    ? "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[200px_minmax(0,1fr)_280px] xl:grid-cols-[220px_minmax(0,1fr)_310px] 2xl:grid-cols-[240px_minmax(0,1fr)_350px]"
     : "grid min-w-0 gap-4 2xl:grid-cols-[260px_minmax(0,1fr)_390px]";
   const leftPanelClass = isImmersive
-    ? "grid min-h-0 min-w-0 content-start gap-4 overflow-y-auto rounded-lg border border-stone-200 bg-white p-4"
+    ? `${mobilePanel === "pages" ? "grid" : "hidden"} min-h-0 min-w-0 content-start gap-4 overflow-y-auto rounded-lg border border-stone-200 bg-white p-3 lg:grid`
     : "grid min-w-0 content-start gap-4 rounded-lg border border-stone-200 bg-white p-4";
   const canvasPanelClass = isImmersive
-    ? "grid min-h-0 min-w-0 content-start gap-4 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-4"
+    ? `${mobilePanel === "preview" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-2 lg:flex`
     : "grid min-w-0 content-start gap-4 rounded-lg border border-stone-200 bg-stone-50 p-4";
   const previewGridClass = isImmersive
-    ? "grid min-h-[520px] gap-4 2xl:grid-cols-[minmax(0,1fr)_160px]"
+    ? "grid min-h-0 flex-1 content-start gap-4 overflow-y-auto overscroll-contain 2xl:grid-cols-[minmax(0,1fr)_160px]"
     : "grid gap-4 2xl:grid-cols-[minmax(0,1fr)_160px]";
-  const inspectorPanelClass = isImmersive ? "grid min-h-0 min-w-0 content-start gap-4 overflow-y-auto pr-1" : "grid min-w-0 gap-4";
+  const inspectorPanelClass = isImmersive ? `${mobilePanel === "inspector" ? "grid" : "hidden"} min-h-0 min-w-0 content-start gap-4 overflow-y-auto pr-1 lg:grid` : "grid min-w-0 gap-4";
   const qrPanelClass = isImmersive
     ? "hidden content-start rounded-lg border border-stone-200 bg-white p-3 2xl:grid"
     : "hidden content-start rounded-lg border border-stone-200 bg-white p-3 2xl:grid";
@@ -484,9 +557,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   }
 
   function richPreview(value: string | undefined) {
-    const content = value ?? "";
-    if (content.includes("<")) return <span dangerouslySetInnerHTML={{ __html: content }} />;
-    return <span>{content}</span>;
+    return <FunnelSafeContent value={value} inline />;
   }
 
   function renderDesignerElement(element: FunnelElement) {
@@ -552,16 +623,30 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   return (
     <div className={designerShellClass}>
       <div className={designerToolbarClass}>
-        <div className="min-w-0">
+        <div className={isImmersive ? "sr-only" : "min-w-0"}>
           <p className="text-sm font-semibold">{text.title}</p>
           <p className="mt-1 break-words text-xs text-stone-600">{text.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isImmersive ? <div className="flex gap-1 lg:hidden">{(["preview", "pages", "inspector"] as const).map(panel => <button type="button" key={panel} aria-pressed={mobilePanel === panel} className="min-h-10 rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold" onClick={() => setMobilePanel(panel)}>{panel === "preview" ? "Vorschau" : panel === "pages" ? "Seiten" : "Bearbeiten"}</button>)}</div> : null}
           <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50" disabled={!past.length} onClick={undo} type="button">{text.undo}</button>
           <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50" disabled={!future.length} onClick={redo} type="button">{text.redo}</button>
-          <button className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={saveBlueprint} type="button">{saveState === "saving" ? text.saving : text.save}</button>
+          <button className="min-h-11 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" disabled={saveState === "saving"} onClick={() => { void saveBlueprint(false); }} type="button">{saveState === "saving" ? text.saving : language === "de" ? "Entwurf speichern" : "Save draft"}</button>
+          <button ref={previewLaunch} type="button" className="min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold" onClick={() => setLargePreviewOpen(true)}>{language === "de" ? "Große Vorschau" : "Large preview"}</button>
         </div>
       </div>
+
+      <details className="shrink-0 rounded-lg border border-stone-200 bg-white px-3 py-1 text-sm">
+        <summary className="flex min-h-10 cursor-pointer items-center gap-2 font-semibold"><span aria-hidden="true">▾</span>{language === "de" ? "Veröffentlichung & Live-Link" : "Publication & live link"}<span className="ml-auto rounded-full bg-stone-100 px-2 py-1 text-xs">{liveToken ? language === "de" ? "Veröffentlicht" : "Published" : language === "de" ? "Entwurf" : "Draft"}</span></summary>
+        <div className="max-h-[45dvh] overflow-y-auto pb-3">
+        <p className="mt-2 text-stone-600">{language === "de" ? "Entwürfe ändern den bestehenden Live-Link nicht. Eine neue Veröffentlichung ersetzt ihn; der bisherige Link wird ungültig." : "Drafts do not change an existing live link. Publishing a new version replaces it and disables the previous link."}</p>
+        {publicationCheck.blockers.length ? <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-800">{publicationCheck.blockers.map(code => <li key={code}>{funnelPublicationBlockerText(code, language)}</li>)}</ul> : null}
+        <label className="mt-3 flex items-start gap-2"><input type="checkbox" checked={publishReviewed} disabled={saveState === "saving"} onChange={event => setPublishReviewed(event.target.checked)} />{language === "de" ? "Ich habe Inhalte, Datenschutz und die Übergabe an die richtige Lead-Zentrale geprüft." : "I reviewed the content, privacy notice and handover to the correct lead inbox."}</label>
+        <button type="button" disabled={!publishReviewed || !publicationCheck.ok || saveState === "saving"} className="mt-3 min-h-11 rounded-md bg-emerald-800 px-4 py-2 font-semibold text-white disabled:opacity-40" onClick={() => { void saveBlueprint(true); }}>{language === "de" ? "Geprüfte Fassung veröffentlichen" : "Publish reviewed version"}</button>
+        {liveToken ? <div className="mt-4 flex flex-wrap items-center gap-3"><a className="break-all font-semibold text-emerald-800 underline" target="_blank" rel="noreferrer" href={`/preview/${encodeURIComponent(blueprint.id)}?mode=live&lang=${language}&token=${encodeURIComponent(liveToken)}`}>{language === "de" ? "Veröffentlichten Live-Link öffnen" : "Open published live link"}</a><button className="min-h-11 rounded-md border border-stone-300 px-3 py-2" disabled={saveState === "saving"} type="button" onClick={() => { void unpublish(); }}>{language === "de" ? "Veröffentlichung beenden" : "Unpublish"}</button></div> : <p className="mt-3 text-stone-500">{language === "de" ? "Noch kein veröffentlichter Link vorhanden." : "No published link yet."}</p>}
+        {publicationMessage ? <p role="status" className="mt-3 rounded-md bg-stone-100 p-3">{publicationMessage}</p> : null}
+        </div>
+      </details>
 
       <div className={workspaceGridClass}>
         <aside className={leftPanelClass}>
@@ -644,7 +729,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
             </div>
             <a className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white" href={fullPreviewUrl} rel="noreferrer" target="_blank">{text.openPreview}</a>
           </div>
-          <div className={previewGridClass}>
+          <div className={previewGridClass} role="region" aria-label={language === "de" ? "Funnelvorschau" : "Funnel preview"} tabIndex={0}>
             <div className={`mx-auto grid w-full ${deviceFrameClass[device]} gap-4 rounded-[28px] border border-stone-300 bg-white p-4 shadow-sm`} style={{ backgroundColor: blueprint.theme.colors.background, color: blueprint.theme.colors.text }}>
               <div className="flex items-center justify-between border-b border-stone-200 pb-3 text-xs font-semibold">
                 <span className="break-words">{blueprint.theme.logoText}</span>
@@ -794,7 +879,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
         </aside>
       </div>
 
-      <details className="rounded-lg border border-stone-200 bg-white p-4">
+      <details className={isImmersive ? "shrink-0 rounded-lg border border-stone-200 bg-white px-3 py-2" : "rounded-lg border border-stone-200 bg-white p-4"}>
         <summary className="cursor-pointer text-sm font-semibold text-slate-900">{text.advanced}</summary>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <div className="rounded-lg border border-stone-200 bg-white p-4">
@@ -819,11 +904,15 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
         <div className="rounded-lg border border-stone-200 bg-white p-4 xl:col-span-2">
           <p className="text-sm font-semibold">{text.versions}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {versions.length ? versions.map((version) => <span className="rounded-md bg-stone-100 px-3 py-2 text-xs font-semibold" key={version.id}>{version.label} / {new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(version.createdAt))}</span>) : <span className="text-sm text-stone-500">{text.noVersions}</span>}
+            {versions.length ? versions.map((version) => <button type="button" disabled={saveState === "saving"} onClick={() => { void restoreVersion(version.id); }} className="min-h-11 rounded-md bg-stone-100 px-3 py-2 text-left text-xs font-semibold disabled:opacity-40" key={version.id}>{version.label} / {new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(version.createdAt))}<span className="mt-1 block font-normal">{language === "de" ? "Als Entwurf wiederherstellen · beendet den Live-Link" : "Restore as draft · disables live link"}</span></button>) : <span className="text-sm text-stone-500">{text.noVersions}</span>}
           </div>
         </div>
       </div>
       </details>
+      {largePreviewOpen && typeof document !== "undefined" ? createPortal(<div ref={previewDialog} role="dialog" aria-modal="true" aria-label={language === "de" ? "Große Funnelvorschau" : "Large funnel preview"} className="fixed inset-0 z-[100] flex h-dvh min-h-0 flex-col bg-stone-100 text-slate-950">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-white px-4 py-2"><h2 className="text-base font-semibold">{language === "de" ? "Große Funnelvorschau" : "Large funnel preview"}</h2><div className="flex flex-wrap gap-2">{(["mobile", "tablet", "desktop"] as const).map(item => <button type="button" key={item} aria-pressed={device === item} className="min-h-10 rounded-md border border-stone-300 px-3 py-2 text-sm" onClick={() => setDevice(item)}>{item === "mobile" ? "Mobil" : item === "tablet" ? "Tablet" : "Desktop"}</button>)}<button ref={previewClose} type="button" className="min-h-10 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" onClick={() => setLargePreviewOpen(false)}>{language === "de" ? "Zurück zum Bearbeiten" : "Back to editing"}</button></div></div>
+        <div role="region" aria-label={language === "de" ? "Große Funnelvorschau Inhalt" : "Large funnel preview content"} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5"><FunnelRenderer blueprint={blueprint} device={device} language={language} mode="preview" /></div>
+      </div>, document.body) : null}
     </div>
   );
 }

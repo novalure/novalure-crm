@@ -1,0 +1,28 @@
+--- a/libheif/plugins/decoder_dav1d.cc
++++ b/libheif/plugins/decoder_dav1d.cc
+@@ -112,6 +112,10 @@
+   if (options->num_threads) {
+     decoder->settings.n_threads = options->num_threads;
+   }
++#if defined(__EMSCRIPTEN__)
++  decoder->settings.n_threads = 1;
++  decoder->settings.max_frame_delay = 1;
++#endif
+ 
+   if (dav1d_open(&decoder->context, &decoder->settings) != 0) {
+     delete decoder;
+--- a/libheif/plugins/decoder_libde265.cc
++++ b/libheif/plugins/decoder_libde265.cc
+@@ -198,11 +198,7 @@
+   }
+ #endif
+ 
+-#if defined(__EMSCRIPTEN__)
+-  // Speed up decoding from JavaScript.
+-  de265_set_parameter_bool(decoder->ctx, DE265_DECODER_PARAM_DISABLE_DEBLOCKING, 1);
+-  de265_set_parameter_bool(decoder->ctx, DE265_DECODER_PARAM_DISABLE_SAO, 1);
+-#else
++#if !defined(__EMSCRIPTEN__)
+   int nThreads = (options->num_threads ? options->num_threads : 1);
+ 
+   // Worker threads are not supported when running on Emscripten.

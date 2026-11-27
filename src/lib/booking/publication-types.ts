@@ -17,7 +17,7 @@ export type BookingPublicationReadiness = {
 export type PublicBookingPublication = {
   publicId: string; title: string; description: string; appearance: "light" | "dark"; language: "auto" | "de" | "en";
   allowedOrigins: string[]; channels: Record<BookingChannel, boolean>;
-  types: Array<{ id: string; kind: BookingKind; durationMinutes: number; timeZone: string; locationRequired: boolean; location: string }>;
+  types: Array<{ id: string; kind: BookingKind; organizerName: string; durationMinutes: number; timeZone: string; locationRequired: boolean; location: string }>;
 };
 export type PublicBookingRecord = {
   id: string; state: string; kind: BookingKind; startsAt: string; endsAt: string; timeZone: string;

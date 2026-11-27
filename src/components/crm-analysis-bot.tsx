@@ -335,7 +335,7 @@ export function CrmAnalysisBot({
     const openTasks = tasks.filter((task) => task.status !== "done").length;
     const hotLeads = leads.filter((lead) => lead.hotStatus || lead.score >= 80).length;
     const teamsMeetings = calendarEvents.filter(
-      (event) => event.teamsJoinUrl || event.meetingProvider === "microsoft-teams",
+      (event) => event.status!=="abgesagt" && (event.teamsJoinUrl || event.meetingProvider === "microsoft-teams"),
     ).length;
     const approvedKnowledge = knowledgeItems.filter((item) => item.status === "approved").length;
     const strictKnowledgeBots = bots.filter((bot) => bot.strictKnowledge).length;

@@ -1,89 +1,39 @@
-import { NextResponse } from "next/server";
-import { requirePermissionAndProductCapability } from "@/lib/auth/session";
-import { findFunnelBlueprint } from "@/lib/funnel-builder-adapter";
-import { funnelSteps, funnels, projects, users } from "@/lib/crm-source";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { CrmCommandError, crmCommandErrorResponse } from "@/lib/crm-command";
+import { getStoredFunnel, saveStoredFunnel, restoreStoredFunnelVersion } from "@/lib/funnel-store";
+import { runFunnelPreflight } from "@/lib/funnel-publication";
+import { readFunnelJson } from "@/lib/funnel-http";
 import type { FunnelBlueprint } from "@/lib/funnel-schema";
-import { getStoredFunnel, restoreStoredFunnelVersion, saveStoredFunnel } from "@/lib/funnel-store";
-import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 
-type RouteContext = {
-  params: Promise<{ funnelId: string }>;
-};
-
-function runFunnelPreflight(blueprint: FunnelBlueprint) {
-  const fields = blueprint.pages.flatMap((page) =>
-    page.sections.flatMap((section) =>
-      section.rows.flatMap((row) =>
-        row.columns.flatMap((column) =>
-          column.elements.flatMap((element) => element.type === "form" ? element.fields ?? [] : []),
-        ),
-      ),
-    ),
-  );
-  const blockers: string[] = [];
-
-  if (!blueprint.name.trim()) blockers.push("name_missing");
-  if (!blueprint.projectId.trim()) blockers.push("project_missing");
-  if (fields.length === 0) blockers.push("contact_form_missing");
-  if (!fields.some((field) => {
-    const searchable = [field.type, field.crmField, field.label, field.helpText]
-      .map((value) => String(value ?? "").toLowerCase())
-      .join(" ");
-    return searchable.includes("privacy") || searchable.includes("datenschutz") || searchable.includes("consent") || searchable.includes("dsgvo") || searchable.includes("gdpr");
-  })) blockers.push("privacy_consent_missing");
-  if (!blueprint.crmHandover.destination.trim()) blockers.push("crm_handover_missing");
-  if (fields.some((field) => field.required && !field.label.trim())) blockers.push("required_field_label_missing");
-
-  return { blockers: Array.from(new Set(blockers)), ok: blockers.length === 0 };
-}
-
-export async function GET(_request: Request, context: RouteContext) {
-  const text = getApiSystemCopy(resolveRequestLanguage(_request));
-  const { funnelId } = await context.params;
-  const stored = await getStoredFunnel(funnelId);
-  const fallback = findFunnelBlueprint(funnelId, { funnels, projects, steps: funnelSteps, users });
-
-  if (!stored && !fallback) {
-    return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
-  }
-
-  return NextResponse.json({
-    blueprint: stored?.blueprint ?? fallback,
-    versions: stored?.versions ?? [],
-    updatedAt: stored?.updatedAt ?? null,
-    source: stored?.source ?? "crm-data",
-  });
-}
-
-export async function PUT(request: Request, context: RouteContext) {
-  const auth = await requirePermissionAndProductCapability(request, "funnels:write", "funnels:publish");
+type RouteContext = { params: Promise<{ funnelId: string }> };
+const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
+export async function GET(request: Request, context: RouteContext) {
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
-
-  const text = getApiSystemCopy(resolveRequestLanguage(request));
-  const { funnelId } = await context.params;
-  let body: { blueprint?: FunnelBlueprint; label?: string; restoreVersionId?: string };
-
   try {
-    body = (await request.json()) as { blueprint?: FunnelBlueprint; label?: string; restoreVersionId?: string };
-  } catch {
-    return NextResponse.json({ error: text.invalidJson }, { status: 400 });
-  }
-
-  if (body.restoreVersionId) {
-    const restored = await restoreStoredFunnelVersion(funnelId, body.restoreVersionId);
-    if (!restored) return NextResponse.json({ error: text.versionNotFound }, { status: 404 });
-    return NextResponse.json(restored);
-  }
-
-  if (!body.blueprint || body.blueprint.id !== funnelId) {
-    return NextResponse.json({ error: text.invalidBlueprint }, { status: 400 });
-  }
-
-  const preflight = runFunnelPreflight(body.blueprint);
-  if (body.blueprint.status === "aktiv" && !preflight.ok) {
-    return NextResponse.json({ error: "Funnel preflight blocked publish", preflight }, { status: 409 });
-  }
-
-  const saved = await saveStoredFunnel(body.blueprint, body.label, auth.session);
-  return NextResponse.json({ ...saved, preflight });
+    const { funnelId } = await context.params, saved = await getStoredFunnel(funnelId, auth.session);
+    return saved ? Response.json({ ...saved, preflight: runFunnelPreflight(saved.blueprint) }, { headers }) : Response.json({ error: "Funnel nicht gefunden." }, { status: 404, headers });
+  } catch (error) { return crmCommandErrorResponse(error); }
+}
+export async function PUT(request: Request, context: RouteContext) {
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "funnels:write", capability: "funnels:publish" });
+  if (!auth.ok) return auth.response;
+  try {
+    const { funnelId } = await context.params, body = await readFunnelJson(request, 1100000);
+    if (Object.keys(body).some(key => !["blueprint", "label", "restoreVersionId", "publishReviewed", "action"].includes(key))) throw new CrmCommandError("INVALID_REQUEST", "Unbekannte Funnelangaben.");
+    if (typeof body.restoreVersionId === "string") {
+      const restored = await restoreStoredFunnelVersion(funnelId, body.restoreVersionId, auth.session);
+      return restored ? Response.json(restored, { headers }) : Response.json({ error: "Version nicht gefunden." }, { status: 404, headers });
+    }
+    if (body.action === "unpublish") {
+      const current = await getStoredFunnel(funnelId, auth.session);
+      if (!current) throw new CrmCommandError("NOT_FOUND", "Funnel nicht gefunden.", 404);
+      return Response.json(await saveStoredFunnel({ ...current.blueprint, status: "entwurf" }, "Veröffentlichung beendet", auth.session, { unpublish: true }), { headers });
+    }
+    const blueprint = body.blueprint as FunnelBlueprint | undefined;
+    if (!blueprint || blueprint.id !== funnelId || (body.label !== undefined && typeof body.label !== "string")) throw new CrmCommandError("INVALID_REQUEST", "Funnel-ID und Version prüfen.");
+    if (blueprint.status === "aktiv" && body.publishReviewed !== true) throw new CrmCommandError("PUBLICATION_REVIEW", "Veröffentlichung und Datenschutz zuerst ausdrücklich prüfen.", 409);
+    const saved = await saveStoredFunnel(blueprint, body.label as string | undefined, auth.session);
+    return Response.json({ ...saved, preflight: runFunnelPreflight(saved.blueprint) }, { headers });
+  } catch (error) { return crmCommandErrorResponse(error); }
 }

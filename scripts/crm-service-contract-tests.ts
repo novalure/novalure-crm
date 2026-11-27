@@ -29,7 +29,7 @@ async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
  if(target.origin!==new URL(baseUrl).origin)throw new Error("Test HTTP target is not the owned loopback server");
  const headers=new Headers(init.headers);headers.set("connection","close");
  try {
-  const response=await fetch(target,{...init,headers,signal:AbortSignal.timeout(15_000)});
+  const response=await fetch(target,{...init,headers,redirect:"manual",signal:AbortSignal.timeout(15_000)});
   assert.equal(response.headers.get("connection"),"close","Harness must not pool connections between test cases");
   return response;
  } catch(error) {

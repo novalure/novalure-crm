@@ -1394,6 +1394,9 @@ async function runIntegration() {
     "Authorized search uses a native modal and never reveals another tenant",
     async () => {
       await open(operatorPage, accounts.operator.workspaceId);
+      await expect(operatorPage.locator("[data-crm-eyebrow]")).toHaveText(
+        "Alle Projekte",
+      );
       const trigger = operatorPage.getByRole("button", {
         name: "CRM durchsuchen",
         exact: true,

@@ -24,8 +24,11 @@ import {
   updateGoogleCalendarEvent,
 } from "@/lib/integrations/google-calendar";
 import { escapeHtmlText } from "@/lib/security/public-submission-abuse";
+import { getPublicPropertyMeetingPageSettings,propertyBookingContextParts,resolvePublicPropertyBookingContext } from "@/lib/property-booking-repository";
 
 export type MeetingPageSettings = {
+  propertyContext?:string;
+  bookingAction?:{bookingId:string;token:string};
   automation: unknown;
   calendarIntegrations: unknown;
   id?: string;
@@ -372,6 +375,7 @@ type MeetingAutomationConfig = {
 
 type CreateMeetingBookingResult = {
   bookingUrl?: string;
+  publicActionToken?:string;
   autoConfirmed?: boolean;
   bookingId?: string | null;
   confirmationStatus?: string | null;
@@ -414,6 +418,7 @@ export type MeetingBookingInput = {
   source?: string;
   suppressExternalEffects?: boolean;
   workspacePublicKey?: string;
+  propertyContext?: string;
 };
 
 export type MeetingNotificationJob = {
@@ -945,7 +950,11 @@ async function listDatabaseBusyTimes(input: {
   meetingPageId: string;
   timeMax: string;
   timeMin: string;
+  propertyContext?:string;
+  bookingAction?:{bookingId:string;token:string};
 }) {
+  if(input.bookingAction){const row=await queryOne<{result:{startsAt:string;endsAt:string}[]}>(`select crm_property_booking_action_busy($1::uuid,$2,$3::timestamptz,$4::timestamptz) as result`,[input.bookingAction.bookingId,input.bookingAction.token,input.timeMin,input.timeMax]);return row?.result??[];}
+  if(input.propertyContext){const context=propertyBookingContextParts(input.propertyContext),row=await queryOne<{result:{startsAt:string;endsAt:string}[]}>(`select crm_property_booking_busy($1,$2::uuid,$3::timestamptz,$4::timestamptz) as result`,[context.hash,context.offerId,input.timeMin,input.timeMax]);return row?.result??[];}
   return queryRows<{ endsAt: string | Date; startsAt: string | Date }>(
     `
       select starts_at as "startsAt", ends_at as "endsAt"
@@ -1040,6 +1049,8 @@ async function getMeetingAvailabilityForPage(
   const calendarProvider = getCalendarProviderFromPage(page);
   const [databaseBusy, externalBusy] = await Promise.all([
     listDatabaseBusyTimes({
+      propertyContext:page.propertyContext,
+      bookingAction:page.bookingAction,
       meetingPageId: page.id,
       timeMax: dayEnd.toISOString(),
       timeMin: dayStart.toISOString(),
@@ -1115,8 +1126,12 @@ async function getMeetingAvailabilityForPage(
 
 export async function getPublicMeetingAvailability(input: PublicSlugLookup & {
   date?: string;
+  propertyContext?:string;
+  bookingAction?:{bookingId:string;token:string};
 }): Promise<PublicMeetingAvailability | null> {
-  return getMeetingAvailabilityForPage(await getPublicMeetingPageSettings(input), input.date);
+  const action=input.bookingAction?await queryOne<{result:PublicMeetingBookingRow|null}>(`select crm_property_booking_action_lookup($1::uuid,$2) as result`,[input.bookingAction.bookingId,input.bookingAction.token]):null;
+  const page=action?.result?{id:action.result.meetingPageId??undefined,workspaceId:action.result.workspaceId,slug:action.result.pageSlug??'',title:action.result.pageTitle??'',calendarIntegrations:action.result.calendarIntegrations,automation:action.result.automation,shareConfig:{},bookingAction:input.bookingAction}:input.propertyContext?await getPublicPropertyMeetingPageSettings(input.propertyContext):await getPublicMeetingPageSettings(input);
+  return getMeetingAvailabilityForPage(page,input.date);
 }
 
 export async function getWorkspaceMeetingAvailability(input: {
@@ -1131,6 +1146,7 @@ export async function getWorkspaceMeetingAvailability(input: {
 async function resolveMeetingPageForBooking(
   input: MeetingBookingInput,
 ): Promise<{ page: MeetingPageSettings | null; reason?: string }> {
+  if(input.propertyContext){const page=await getPublicPropertyMeetingPageSettings(input.propertyContext);if(!page||page.slug!==input.slug||page.workspacePublicKey!==input.workspacePublicKey)return{page:null,reason:'property_context_unavailable'};return{page};}
   if (input.workspacePublicKey?.trim()) {
     return {
       page: await getPublicMeetingPageSettings({
@@ -1179,6 +1195,8 @@ export async function createMeetingBookingWithNotifications(
 
   const contactName = input.contactName.trim();
   const contactEmail = input.contactEmail.trim().toLowerCase();
+  const propertyContext=input.propertyContext?await resolvePublicPropertyBookingContext(input.propertyContext):null;
+  if(input.propertyContext&&(!propertyContext||propertyContext.workspaceId!==page.workspaceId||propertyContext.meetingPageId!==page.id))return{persisted:false,reason:'property_context_unavailable'};
   const availability = await getMeetingAvailabilityForPage(page, input.selectedDate);
   const startsAt = parseBookingStart(
     input.selectedDate,
@@ -1201,7 +1219,7 @@ export async function createMeetingBookingWithNotifications(
 
   const currentReplacement = await getLegacyBookingReplacement(page.workspaceId, page.id);
   if (currentReplacement) return { persisted: false, reason: "booking_channel_moved", ...(currentReplacement.enabled && currentReplacement.channels.link ? { bookingUrl: replacementBookingPath(currentReplacement.publicId) } : {}) };
-  const bookingRow = await queryOne<IdRow>(
+  const bookingRow = propertyContext?(await queryOne<{result:IdRow}>(`select crm_property_booking_create($1,$2::uuid,$3,$4,$5,$6::timestamptz,$7::timestamptz,$8::uuid) as result`,[propertyContext.hash,propertyContext.offerId,contactName,contactEmail,input.contactNote??'',startsAt.toISOString(),endsAt.toISOString(),publicToken]))?.result:await queryOne<IdRow>(
     `
         insert into meeting_bookings (
           workspace_id,
@@ -1250,11 +1268,12 @@ export async function createMeetingBookingWithNotifications(
     return { persisted: false, reason: "slot_unavailable" };
   }
 
-  if (input.suppressExternalEffects) {
+  if (input.suppressExternalEffects||propertyContext) {
     return {
       autoConfirmed: false,
       bookingId: bookingRow.id,
-      confirmationStatus: "qa_suppressed",
+      confirmationStatus: propertyContext?"awaiting_property_review":"qa_suppressed",
+      ...(propertyContext?{publicActionToken:publicToken}:{}),
       jobsQueued: 0,
       onlineMeetingUrl: null,
       persisted: true,
@@ -1532,6 +1551,9 @@ async function getPublicMeetingBookingByToken(input: {
   token: string;
 }): Promise<PublicMeetingBookingRow | null> {
   if (!hasDatabaseUrl() || !isUuid(input.bookingId) || !input.token) return null;
+  const installed=await queryOne<{ready:boolean;legacyRead:boolean}>(`select to_regprocedure('public.crm_property_booking_action_lookup(uuid,text)') is not null as ready,has_table_privilege(current_user,'public.meeting_bookings','SELECT') as "legacyRead"`);
+  if(installed?.ready){const scoped=await queryOne<{result:PublicMeetingBookingRow|null}>(`select crm_property_booking_action_lookup($1::uuid,$2) as result`,[input.bookingId,input.token]);if(scoped?.result)return scoped.result;}
+  if(!installed?.legacyRead)return null;
 
   const booking = await queryOne<PublicMeetingBookingRow>(
     `
@@ -1752,6 +1774,8 @@ export async function cancelPublicMeetingBooking(input: {
     },
   };
 
+  if(metadata.propertyBookingOfferId){const saved=await queryOne<{result:boolean}>(`select crm_property_booking_action_update($1::uuid,$2,'cancel',null,null,$3::jsonb) as result`,[booking.id,input.token,JSON.stringify(actionMetadata)]);if(!saved?.result)return{ok:false,error:'cancel_deadline_passed'};const current=await getPublicMeetingBookingByToken(input);return{ok:true,booking:current?toPublicMeetingBookingActionState(current):undefined,notificationJobId:null};}
+
   await queryOne<IdRow>(
     `
       update meeting_bookings
@@ -1861,6 +1885,7 @@ export async function reschedulePublicMeetingBooking(input: {
     title: booking.pageTitle || booking.title,
     workspaceId: booking.workspaceId,
     workspacePublicKey: booking.workspacePublicKey,
+    ...(getBookingMetadata(booking.metadata).propertyBookingOfferId?{bookingAction:{bookingId:booking.id,token:input.token}}:{}),
   };
   const availability = await getMeetingAvailabilityForPage(page, input.selectedDate);
   const selectedSlot = availability?.slots.find((slot) => slot.time === input.slot);
@@ -1916,6 +1941,8 @@ export async function reschedulePublicMeetingBooking(input: {
     previousStartsAt: normalizeDateInput(booking.startsAt),
     rescheduledAt: new Date().toISOString(),
   };
+
+  if(metadata.propertyBookingOfferId){const saved=await queryOne<{result:boolean}>(`select crm_property_booking_action_update($1::uuid,$2,'reschedule',$3::timestamptz,$4::timestamptz,$5::jsonb) as result`,[booking.id,input.token,startsAt.toISOString(),endsAt.toISOString(),JSON.stringify(actionMetadata)]);if(!saved?.result)return{ok:false,error:'reschedule_deadline_passed'};const current=await getPublicMeetingBookingByToken(input);return{ok:true,booking:current?toPublicMeetingBookingActionState(current):undefined,notificationJobId:null};}
 
   await queryOne<IdRow>(
     `
@@ -2120,7 +2147,9 @@ export async function confirmMeetingBooking(input: {
     return { error: "Invalid booking", ok: false };
   }
 
-  const booking = await queryOne<MeetingBookingConfirmationRow>(
+  const scopedReader=await queryOne<{available:boolean}>(`select case when to_regprocedure('public.crm_property_booking_staff_confirmation(uuid,uuid)') is null then false else has_function_privilege(current_user,'public.crm_property_booking_staff_confirmation(uuid,uuid)','EXECUTE') end as available`);
+  const scopedBooking=scopedReader?.available?await queryOne<{result:MeetingBookingConfirmationRow|null}>(`select crm_property_booking_staff_confirmation($1::uuid,$2::uuid) as result`,[input.session.workspaceId,input.bookingId]):null;
+  const booking = scopedBooking?.result??await queryOne<MeetingBookingConfirmationRow>(
     `
       select
         b.id,
@@ -2168,6 +2197,11 @@ export async function confirmMeetingBooking(input: {
   if (booking.meetingPageId && await getLegacyBookingReplacement(booking.workspaceId, booking.meetingPageId)) {
     return booking.status === "confirmed" ? { bookingId: booking.id, status: "confirmed", ok: true }
       : { error: "Use the published booking channel to confirm a new appointment", ok: false };
+  }
+  if(metadata.propertyBookingOfferId){
+    const reviewed=await queryOne<{contactId:string}>(`select l.contact_id as "contactId" from property_meeting_bookings a join leads l on l.workspace_id=a.workspace_id and l.id=a.lead_id join property_viewing_slots v on v.workspace_id=a.workspace_id and v.id=a.viewing_id and v.lead_id=l.id where a.workspace_id=$1::uuid and a.booking_id=$2::uuid and a.status='confirmed' and v.status='confirmed'`,[booking.workspaceId,booking.id]);
+    if(!reviewed?.contactId)return{ok:false,error:'property_review_required',status:'awaiting_property_review'};
+    booking.contactId=reviewed.contactId;
   }
   let calendarEventId =
     typeof metadata.calendarEventId === "string" && isUuid(metadata.calendarEventId)
@@ -2593,4 +2627,10 @@ export function renderMeetingNotificationTemplate(input: {
     subject: resolveTokens(input.subject, input.tokens),
     title: resolveTokens(input.title, input.tokens),
   };
+}
+/** Fresh pre-dispatch check; a cancelled lease or a proposed property reschedule cannot issue a new reminder. */
+export async function meetingNotificationStillCurrent(id:string,leaseOwner:string){
+ const installed=await queryOne<{ready:boolean}>(`select to_regprocedure('public.crm_property_booking_notification_current(uuid,text)') is not null as ready`);
+ if(installed?.ready)return(await queryOne<{allowed:boolean}>(`select crm_property_booking_notification_current($1::uuid,$2) as allowed`,[id,leaseOwner]))?.allowed===true;
+ return(await queryOne<{allowed:boolean}>(`select exists(select 1 from meeting_notification_jobs j join meeting_bookings b on b.id=j.booking_id and b.workspace_id=j.workspace_id where j.id=$1::uuid and j.locked_by=$2 and j.status='sending' and b.status<>'cancelled') as allowed`,[id,leaseOwner]))?.allowed===true;
 }

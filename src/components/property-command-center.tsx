@@ -1,6 +1,8 @@
 "use client";
+import { PropertyCostWorkspace } from "@/components/property-cost-workspace";
+import { PropertyTextWorkspace } from "@/components/property-text-workspace";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -23,9 +25,9 @@ import {
   buildPropertyAssets,
   buildPropertyDataQualityIssues,
   buildPropertyMatches,
+  createPropertyUnitBoardScope,
   getPropertyDepartmentTabs,
   getPropertyActionStates,
-  getPropertyFieldSections,
   PROPERTY_CHANNEL_TYPES,
   PROPERTY_CHANNEL_PRICE_KEYS,
   PROPERTY_COST_GROUPS,
@@ -49,9 +51,24 @@ import { PropertyCoreEditor } from "@/components/property-core-editor";
 import { PropertyRelationshipEditor } from "@/components/property-relationship-editor";
 import { PropertyMediaGallery } from "@/components/property-media-gallery";
 import { PropertyDocumentReview } from "@/components/property-document-review";
+import { PropertyPortalWorkspace } from "@/components/property-portal-workspace";
+import { WebExposeCommandCenter } from "@/components/web-expose-command-center";
+import { PropertyInquiryList } from "@/components/property-inquiry-list";
+import { PropertyInquiryAssignment } from "@/components/property-inquiry-assignment";
+import { PropertyBookingWorkspace } from "@/components/property-booking-workspace";
+import { GuidedPropertyCreateWorkspace } from "@/components/guided-property-create-workspace";
+import type { PropertyInquiryState } from "@/lib/property-inquiries";
 import { PropertyExposeWorkspace } from "@/components/property-expose-workspace";
 import { createPropertyDraftStore } from "@/lib/property-draft-store";
+import { classifyPropertyUploadResponse, isConfirmedPropertyAttachment, PropertyUploadError, shouldSetPropertyCover, uploadPropertyBatch } from "@/lib/property-batch-upload";
+import { preparePropertyUploadFile } from "@/lib/property-upload-preparation";
 import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
+import { createPropertyGeography, type PropertyGeography } from "@/lib/property-country";
+import { PropertyGeographyFields } from "@/components/property-geography-fields";
+import { PropertyEnergyFields } from "@/components/property-energy-fields";
+import { PropertyDetailsEditor } from "@/components/property-details-editor";
+import { bindPropertyDetails,readPropertyDetails,propertyDetailsInput,type PropertyDetails } from "@/lib/property-details";
+import type { PropertyEnergyCertificate } from "@/lib/property-country";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -64,6 +81,7 @@ type PropertyCommandCenterProps = {
   leads: Lead[];
   initialSelectedAssetId?: string;
   onOpenLeadInbox: () => void;
+  onOpenLead?: (leadId: string) => void;
   onOpenReservations: () => void;
   onOpenUnits: (scope?: PropertyUnitBoardScope) => void;
   onClearPropertyFocus?: () => void;
@@ -84,6 +102,11 @@ type PropertyCommandCenterProps = {
 };
 
 type PropertyDraft = {
+  propertyDetails?:PropertyDetails;
+  energyCertificate?:PropertyEnergyCertificate;
+  city?:string;
+  street?:string;
+  geography: PropertyGeography;
   address: string;
   areaSqm: string;
   availableFrom: string;
@@ -174,10 +197,6 @@ function ActionButton({
   );
 }
 
-function fieldKey(sectionId: string, label: string) {
-  return `${sectionId}.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-}
-
 function parseMoney(value: string | undefined) {
   if (!value) return undefined;
   const multiplier = value.toLowerCase().includes("mio") ? 1_000_000 : 1;
@@ -238,7 +257,6 @@ const propertyFieldClass = "grid min-w-0 gap-2 text-sm font-semibold text-slate-
 const propertyInputClass = "min-h-12 w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-base font-medium leading-6 text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 const propertySelectClass = `${propertyInputClass} pr-9`;
 const propertyTextareaClass = `${propertyInputClass} min-h-[168px] resize-y align-top`;
-const defaultOpenPropertyDetailSections = new Set(["location", "areas", "costs", "energy"]);
 
 function PropertyFormSection({
   children,
@@ -289,16 +307,7 @@ function listingIdFromAssetId(assetId: string | undefined) {
 }
 
 function createUnitBoardScope(asset: PropertyAssetSummary | undefined): PropertyUnitBoardScope | undefined {
-  if (!asset || (!asset.projectId && asset.unitIds.length === 0)) return undefined;
-
-  const unitKey = asset.unitIds.length ? asset.unitIds.join("|") : asset.projectId ?? asset.id;
-  return {
-    key: `${asset.id}:${unitKey}`,
-    label: asset.title,
-    originAssetId: asset.id,
-    projectId: asset.projectId,
-    unitIds: asset.unitIds.length ? asset.unitIds : undefined,
-  };
+  return createPropertyUnitBoardScope(asset);
 }
 
 export function PropertyCommandCenter({
@@ -312,6 +321,7 @@ export function PropertyCommandCenter({
   language,
   leads,
   onOpenLeadInbox,
+  onOpenLead,
   onOpenReservations,
   onOpenUnits,
   onClearPropertyFocus,
@@ -332,7 +342,6 @@ export function PropertyCommandCenter({
 }: PropertyCommandCenterProps) {
   const copy = getPropertyDepartmentCopy(language);
   const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
-  const localizedFieldSections = useMemo(() => getPropertyFieldSections(language), [language]);
   const assets = useMemo(
     () => buildPropertyAssets({
       brokerMandates,
@@ -364,11 +373,14 @@ export function PropertyCommandCenter({
   const [saving, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaUploadProgress, setMediaUploadProgress] = useState<{ completed: number; total: number; propertyLabel: string } | null>(null);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [editingRelationshipListingId, setEditingRelationshipListingId] = useState<string | null>(null);
   const [workflowDraftStore] = useState(createPropertyDraftStore);
+  const workflowMutationBusy = useSyncExternalStore(workflowDraftStore.subscribe,workflowDraftStore.isMutationBusy,()=>false);
   const workflowCapabilities = usePropertyWorkflowCapabilities(context.workspaceId);
   const [draft, setDraft] = useState<PropertyDraft>(() => ({
+    geography: createPropertyGeography("AT"),
     address: "",
     areaSqm: "",
     availableFrom: "",
@@ -431,6 +443,19 @@ export function PropertyCommandCenter({
   const qualityIssues = buildPropertyDataQualityIssues({ assets, language, leads, reservations });
   const matches = buildPropertyMatches({ assets, buyerSearchProfiles, contacts, language, leads });
   const activeReservations = reservations.filter((reservation) => reservation.status === "hold" || reservation.status === "reserved");
+  const inquiryScopeKey = `${context.workspaceId}:${activeProjectId ?? "all"}`;
+  const [storedInquiryState,setStoredInquiryState] = useState<{key:string;data:PropertyInquiryState|null;error:string}|null>(null);
+  const [inquiryRefresh,setInquiryRefresh] = useState(0);
+  useEffect(()=>{
+    const controller = new AbortController();
+    void fetch(`/api/crm/property-inquiries?workspaceId=${encodeURIComponent(context.workspaceId)}${activeProjectId?`&projectId=${encodeURIComponent(activeProjectId)}`:""}`,{cache:"no-store",signal:controller.signal}).then(async response=>{
+      const result=await response.json() as {data?:PropertyInquiryState;error?:string};if(!response.ok||!result.data)throw new Error(result.error||"Objektanfragen nicht verfügbar");
+      setStoredInquiryState({key:inquiryScopeKey,data:result.data,error:""});
+    }).catch((error:unknown)=>{if(!controller.signal.aborted)setStoredInquiryState({key:inquiryScopeKey,data:null,error:error instanceof Error?error.message:"Objektanfragen nicht verfügbar"});});
+    return()=>controller.abort();
+  },[context.workspaceId,activeProjectId,activeTab,inquiryScopeKey,inquiryRefresh]);
+  const savedInquiries=storedInquiryState?.key===inquiryScopeKey?storedInquiryState.data:null;
+  const inquiryError=storedInquiryState?.key===inquiryScopeKey?storedInquiryState.error:"";
   const routeResults = leads.slice(0, 20).map((lead) => {
     const budget = getBudgetRange(lead);
     return {
@@ -474,14 +499,6 @@ export function PropertyCommandCenter({
 
   function updateDraft<Key extends keyof PropertyDraft>(key: Key, value: PropertyDraft[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateField(sectionId: string, label: string, value: string) {
-    const key = fieldKey(sectionId, label);
-    setDraft((current) => ({
-      ...current,
-      fieldValues: { ...current.fieldValues, [key]: value },
-    }));
   }
 
   function updateTextBlock(key: string, value: string) {
@@ -547,56 +564,106 @@ export function PropertyCommandCenter({
     }
   }
 
-  async function uploadAndAttachFile(file: File, kind: "media" | "document") {
-    if (!selectedAsset?.sellerListingId || saving || !workflowCapabilities.canEditProperty) return;
+  async function uploadAndAttachFiles(files: File[], kind: "media" | "document" | "floorplan") {
+    if (!selectedAsset?.sellerListingId || saving || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty) return;
+    const propertyLabel = [selectedAsset.title, selectedAsset.location].filter(Boolean).join(" – ");
     const setUploading = kind === "media" ? setUploadingMedia : setUploadingDocument;
     setUploading(true);
     setNotice(null);
+    if (kind === "media") setMediaUploadProgress({ completed: 0, total: files.length, propertyLabel });
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", `properties/${selectedAsset.sellerListingId}`);
-      formData.append("name", file.name);
-      formData.append("alt", file.name.replace(/\.[^.]+$/, ""));
-      formData.append("public", "false");
-      const uploadResponse = await csrfFetch(`/api/media?${new URLSearchParams({ workspaceId: context.workspaceId })}`, { body: formData, method: "POST" });
-      const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
-      if (!uploadResponse.ok || !uploadPayload.asset?.id) {
-        throw new Error(typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed);
-      }
-      await postPropertyOperation(kind === "media" ? {
-        media: {
-          category: file.type.startsWith("image/") ? "gallery" : "document",
-          isCover: selectedMedia.length === 0,
-          mediaAssetId: uploadPayload.asset.id,
-          mediaType: file.type.startsWith("image/") ? "image" : "document",
-          position: selectedMedia.length,
-          status: "draft",
-          title: file.name,
-          visibility: "private",
-        },
-        operation: "attach_media",
-        projectId: selectedAsset.projectId,
-        propertyId: selectedAsset.sellerListingId,
-      } : {
-        document: {
-          category: "expose",
-          mediaAssetId: uploadPayload.asset.id,
-          requiredForPublication: false,
-          status: "needs_review",
-          title: file.name,
-          visibility: "private",
-        },
-        operation: "attach_document",
-        projectId: selectedAsset.projectId,
-        propertyId: selectedAsset.sellerListingId,
+      const result = await uploadPropertyBatch(files, async (file, attachedCount) => {
+        const preparedFile = await preparePropertyUploadFile(file, kind);
+        const floorplanImage = kind === "floorplan" && ["image/jpeg", "image/png", "image/webp"].includes(preparedFile.type.toLowerCase());
+        if (kind === "floorplan" && !floorplanImage && preparedFile.type.toLowerCase() !== "application/pdf") {
+          throw new PropertyUploadError(language === "de" ? "Grundriss als JPEG, PNG, WebP oder PDF auswählen." : "Select a floor plan in JPEG, PNG, WebP or PDF format.", true);
+        }
+        const formData = new FormData();
+        formData.append("file", preparedFile);
+        formData.append("folder", `properties/${selectedAsset.sellerListingId}`);
+        formData.append("name", preparedFile.name);
+        formData.append("alt", preparedFile.name.replace(/\.[^.]+$/, ""));
+        formData.append("public", "false");
+        let uploadResponse: Response;
+        try {
+          uploadResponse = await csrfFetch(`/api/media?${new URLSearchParams({ workspaceId: context.workspaceId })}`, { body: formData, method: "POST" });
+        } catch {
+          throw new PropertyUploadError(language === "de"
+            ? "Verbindung unterbrochen; Speicherstatus dieser Datei ist unbekannt. Bitte vor erneutem Hochladen prüfen."
+            : "Connection lost; the storage status of this file is unknown. Check before uploading it again.", true);
+        }
+        const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
+        const uploadState = classifyPropertyUploadResponse(uploadResponse.status, uploadPayload.asset?.id, uploadPayload.code);
+        if (uploadState !== "confirmed") {
+          throw new PropertyUploadError(
+            uploadState === "uncertain" ? (language === "de"
+              ? "Speicherstatus dieser Datei ist unbekannt. Bitte vor erneutem Hochladen prüfen."
+              : "The storage status of this file is unknown. Check before uploading it again.")
+              : typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed,
+            uploadState !== "continue",
+          );
+        }
+        try {
+          const attachment = await postPropertyOperation(kind === "media" || floorplanImage ? {
+            media: {
+              category: floorplanImage ? "floorplan" : "gallery",
+              isCover: shouldSetPropertyCover(selectedMedia, floorplanImage, attachedCount),
+              mediaAssetId: uploadPayload.asset.id,
+              mediaType: floorplanImage ? "floorplan" : "image",
+              position: selectedMedia.length + attachedCount,
+              status: "draft",
+              title: preparedFile.name,
+              visibility: "private",
+            },
+            operation: "attach_media",
+            projectId: selectedAsset.projectId,
+            propertyId: selectedAsset.sellerListingId,
+          } : {
+            document: {
+              category: kind === "floorplan" ? "floorplan" : "expose",
+              mediaAssetId: uploadPayload.asset.id,
+              requiredForPublication: false,
+              status: "needs_review",
+              title: preparedFile.name,
+              visibility: "private",
+            },
+            operation: "attach_document",
+            projectId: selectedAsset.projectId,
+            propertyId: selectedAsset.sellerListingId,
+          });
+          if (!isConfirmedPropertyAttachment(attachment)) throw new Error(language === "de" ? "Keine bestätigte Zuordnung erhalten." : "No confirmed attachment was returned.");
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : copy.notices.uploadSaveFailed;
+          throw new PropertyUploadError(language === "de"
+            ? `Datei im Medienspeicher, aber nicht sicher dem Objekt zugeordnet: ${reason}`
+            : `File stored, but not confirmed as attached to the property: ${reason}`, true);
+        }
+      }, (completed, total) => {
+        if (kind === "media") setMediaUploadProgress({ completed, total, propertyLabel });
       });
-      setNotice({ kind: "success", message: kind === "media" ? copy.notices.mediaAttached : copy.notices.documentAttached });
-      await onPropertyChanged?.();
+      let refreshFailed = false;
+      if (result.attached > 0) {
+        try { await onPropertyChanged?.(); } catch { refreshFailed = true; }
+      }
+      if (result.failures.length || result.notAttempted || refreshFailed) {
+        const failures = result.failures.map(({ file, message }) => `${file.name}: ${message}`).join("; ");
+        const summary = language === "de"
+          ? `${result.attached} von ${files.length} Dateien zugeordnet. ${result.notAttempted ? `${result.notAttempted} nicht versucht. ` : ""}${refreshFailed ? "Aktualisierung der Anzeige fehlgeschlagen. " : ""}`
+          : `${result.attached} of ${files.length} files attached. ${result.notAttempted ? `${result.notAttempted} not attempted. ` : ""}${refreshFailed ? "Refreshing the view failed. " : ""}`;
+        setNotice({ kind: "error", message: `${propertyLabel}: ${summary}${failures}` });
+      } else {
+        const message = kind === "floorplan"
+          ? (language === "de" ? "Grundriss wurde privat am Objekt gespeichert. Im PDF-Exposé kann er ausgewählt werden." : "Floor plan saved privately with the property. It can be selected for the PDF brochure.")
+          : kind === "media" && files.length > 1
+          ? (language === "de" ? `${result.attached} Bilder wurden dem Objekt zugeordnet.` : `${result.attached} images were attached to the property.`)
+          : kind === "media" ? copy.notices.mediaAttached : copy.notices.documentAttached;
+        setNotice({ kind: "success", message: `${propertyLabel}: ${message}` });
+      }
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.uploadSaveFailed });
+      setNotice({ kind: "error", message: `${propertyLabel}: ${error instanceof Error ? error.message : copy.notices.uploadSaveFailed}` });
     } finally {
       setUploading(false);
+      if (kind === "media") setMediaUploadProgress(null);
     }
   }
 
@@ -614,10 +681,12 @@ export function PropertyCommandCenter({
     setNotice(null);
 
     try {
+      const completeDetails=propertyDetailsInput({...draft,costItems:toCostItems(draft)});
       const response = await csrfFetch("/api/crm/properties", {
         body: JSON.stringify({
           operation: "create_property",
           ...draft,
+          ...completeDetails,
           costItems: toCostItems(draft),
           publicPrice: draft.publicPrice || draft.price,
           textBlocks: toTextBlocks(draft),
@@ -638,6 +707,9 @@ export function PropertyCommandCenter({
         availableFromText: "",
         availabilityNote: "",
         costItems: createCostDrafts(),
+        propertyDetails:undefined,
+        energyCertificate:undefined,
+        city:"",street:"",
         projectId: activeProjectId ?? "",
         price: "",
         publicPrice: "",
@@ -836,7 +908,7 @@ export function PropertyCommandCenter({
                         ) : "-"}
                       </td>
                       <td className="py-3 text-stone-700">
-                        {routeResults.filter((item) => item.route.propertyId === asset.id || item.route.projectId === asset.projectId).length}
+                        {savedInquiries ? savedInquiries.counts.find(item=>item.propertyId===asset.sellerListingId)?.count ?? 0 : "—"}
                       </td>
                     </tr>
                   ))}
@@ -879,7 +951,7 @@ export function PropertyCommandCenter({
                   >
                     {copy.detail.openUnits}
                   </button>
-                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
+                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("documents")} />
                   <button
                     className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
                     disabled={!selectedListing || !workflowCapabilities.canEditProperty}
@@ -891,7 +963,7 @@ export function PropertyCommandCenter({
                     }}
                     type="button"
                   >
-                    {language === "de" ? "Stammdaten & Kaufnebenkosten bearbeiten" : "Edit property core & purchase costs"}
+                    {language === "de" ? "Objekt vollständig bearbeiten" : "Edit complete property"}
                   </button>
                   <button
                     className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
@@ -917,6 +989,10 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "create" ? (
+        <div className="grid gap-5">
+        {actions.createProperty.enabled ? <GuidedPropertyCreateWorkspace workspaceId={context.workspaceId} projectId={activeProjectId} language={language}
+          onCreated={async listing=>{await refreshPropertyData();onClearPropertyFocus?.();setQuery("");setStatusFilter("all");setSelectedAssetId(`listing:${listing.id}`);setActiveTab("overview");setEditingListingId(listing.id);}}/> : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{actions.createProperty.reason}</p>}
+        <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">{language==="de"?"Erweiterte Direkterfassung mit allen Feldern":"Advanced direct entry with all fields"}</summary><p className="my-4 text-sm text-stone-600">{language==="de"?"Für fortsetzbare Serverentwürfe den Assistenten oben verwenden. Ungespeicherte Eingaben in dieser Direkterfassung bleiben nur in der aktuellen Ansicht.":"Use the wizard above for resumable server drafts. Unsaved direct-entry values stay only in the current view."}</p>
         <form className="grid gap-5" onSubmit={submitProperty}>
           <div className="sticky top-3 z-20 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -1002,10 +1078,6 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("postalCode", event.target.value)} value={draft.postalCode} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>{copy.form.region}</span>
-                    <input className={propertyInputClass} onChange={(event) => updateDraft("region", event.target.value)} value={draft.region} />
-                  </label>
-                  <label className={propertyFieldClass}>
                     <span>{copy.form.subObjectType}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("subObjectType", event.target.value)} value={draft.subObjectType} />
                   </label>
@@ -1014,6 +1086,10 @@ export function PropertyCommandCenter({
                     <input className={propertyInputClass} onChange={(event) => updateDraft("availableFromText", event.target.value)} value={draft.availableFromText} />
                   </label>
                 </div>
+                <PropertyGeographyFields geography={draft.geography} region={draft.region} language={language} disabled={saving}
+                  onChange={(geography) => setDraft((current) => ({ ...current, geography, region: geography.region,energyCertificate:current.geography.countryCode===geography.countryCode?current.energyCertificate:{version:1,countryCode:geography.countryCode} }))} />
+                <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className={propertyFieldClass}>{language==="de"?"Ort":"City / locality"}<input className={propertyInputClass} value={draft.city??""} onChange={e=>updateDraft("city",e.target.value)}/></label><label className={propertyFieldClass}>{language==="de"?"Straße (strukturiert)":"Street (structured)"}<input className={propertyInputClass} value={draft.street??""} onChange={e=>updateDraft("street",e.target.value)}/></label></div>
+                <PropertyEnergyFields geography={draft.geography} energy={draft.energyCertificate??{version:1,countryCode:draft.geography.countryCode}} usageType={draft.usageType} yearBuilt={Number(draft.yearBuilt)||0} language={language} disabled={saving} onChange={energyCertificate=>updateDraft("energyCertificate",energyCertificate)}/>
               </PropertyFormSection>
 
               <PropertyFormSection title={copy.form.areasAvailability}>
@@ -1116,25 +1192,7 @@ export function PropertyCommandCenter({
                 description={copy.form.legalDetailsDescription}
                 title={copy.form.legalDetails}
               >
-                <div className="grid gap-4">
-                  {localizedFieldSections.map((section) => (
-                    <details className="rounded-md border border-stone-200 bg-stone-50 p-4" key={section.id} open={defaultOpenPropertyDetailSections.has(section.id)}>
-                      <summary className="cursor-pointer text-base font-semibold text-slate-950">{section.title}</summary>
-                      <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                        {section.fields.map((field) => (
-                          <label className={propertyFieldClass} key={field.key}>
-                            <span>{field.label}</span>
-                            <input
-                              className={propertyInputClass}
-                              onChange={(event) => updateField(section.id, field.key, event.target.value)}
-                              value={draft.fieldValues[fieldKey(section.id, field.key)] ?? ""}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                  ))}
-                </div>
+                <PropertyDetailsEditor details={bindPropertyDetails(draft.propertyDetails??readPropertyDetails({canonicalPayload:{fieldValues:draft.fieldValues}}),draft as unknown as Record<string,unknown>)} language={language} countryCode={draft.geography.countryCode} disabled={saving} onChange={details=>updateDraft("propertyDetails",details)}/>
               </PropertyFormSection>
             </div>
 
@@ -1206,6 +1264,8 @@ export function PropertyCommandCenter({
             </aside>
           </div>
         </form>
+        </details>
+        </div>
       ) : null}
 
       {activeTab === "projectUnits" ? (
@@ -1282,11 +1342,20 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "inquiries" ? (
+        <>
+        <PropertyInquiryList data={savedInquiries} error={inquiryError} propertyId={selectedListingId} language={language} onRefresh={()=>setInquiryRefresh(value=>value+1)} onOpenLead={id=>onOpenLead?onOpenLead(id):onOpenLeadInbox()}/>
+        <PropertyInquiryAssignment language={language} workspaceId={context.workspaceId} activeProjectId={activeProjectId}
+          assets={assets} units={units} canAssign={workflowCapabilities.canAssignInquiry} disabledReason={workflowCapabilities.failed ? (language==="de"?"Berechtigungen konnten nicht geladen werden. Bitte Ansicht neu laden.":"Permissions could not be loaded. Please reload.") : undefined}
+          isMutationBusy={workflowMutationBusy} acquireMutation={workflowDraftStore.acquireMutation} releaseMutation={workflowDraftStore.releaseMutation}
+          onRefresh={refreshPropertyData} suggestions={routeResults.map(({lead,route})=>({leadId:lead.id,label:route.routingReason}))}/>
+        {selectedListing ? <PropertyBookingWorkspace workspaceId={context.workspaceId} propertyId={selectedListing.id}
+          canWrite={workflowCapabilities.canEditProperty} onChanged={refreshPropertyData}/> : null}
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">{copy.subviews.inquiryRouting}</h4>
+            <h4 className="text-lg font-semibold text-slate-950">{language === "de" ? "Zuordnungsvorschläge" : "Suggested associations"}</h4>
             <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenLeadInbox} type="button">{copy.subviews.openLeadCenter}</button>
           </div>
+          <p className="mt-3 text-sm text-stone-600">{language === "de" ? "Kriterienbasierte Vorschläge sind noch keine gespeicherte Objektzuordnung und fließen nicht in die Objektzähler ein." : "Criteria-based suggestions are not saved property associations and are excluded from property counters."}</p>
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-[960px] w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
@@ -1302,7 +1371,7 @@ export function PropertyCommandCenter({
                 {routeResults.map(({ lead, route }) => (
                   <tr className="border-t border-stone-200 align-top" key={lead.id}>
                     <td className="py-3 pr-4">
-                      <p className="font-semibold text-slate-950">{getCrmSystemTextLabel(lead.intent, language)}</p>
+                      <button className="text-left font-semibold text-blue-900 underline decoration-blue-200 underline-offset-4" type="button" onClick={() => onOpenLead ? onOpenLead(lead.id) : onOpenLeadInbox()}>{getCrmSystemTextLabel(lead.intent, language)}</button>
                       <p className="mt-1 text-xs text-stone-500">{contacts.find((contact) => contact.id === lead.contactId)?.name ?? lead.contactId}</p>
                     </td>
                     <td className="py-3 pr-4 text-stone-700">{route.sourceChannel}</td>
@@ -1315,6 +1384,7 @@ export function PropertyCommandCenter({
             </table>
           </div>
         </article>
+        </>
       ) : null}
 
       {activeTab === "channels" ? (
@@ -1356,14 +1426,14 @@ export function PropertyCommandCenter({
               <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.price}: {copy.priceVisibility[selectedAsset.priceVisibility] ?? selectedAsset.priceVisibility}</span>
             </div>
           ) : null}
+          {selectedListing ? <PropertyPortalWorkspace workspaceId={context.workspaceId} propertyId={selectedListing.id} language={language} /> : null}
           {preflight ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Preflight</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{preflight.status}</p>
                 <div className="mt-4 grid gap-2">
-                  <ActionButton action={actions.publishProperty} />
-                  <ActionButton action={actions.exportChannel} />
+                  <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("documents")} />
                 </div>
               </div>
               <div className="grid gap-2">
@@ -1390,12 +1460,13 @@ export function PropertyCommandCenter({
               <label className="cursor-pointer rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50">
                 {uploadingMedia ? copy.subviews.uploading : copy.subviews.uploadImage}
                 <input
-                  accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
+                  accept="image/avif,image/gif,image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || !workflowCapabilities.canEditProperty}
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty}
+                  multiple
                   onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void uploadAndAttachFile(file, "media");
+                    const files = Array.from(event.target.files ?? []);
+                    if (files.length) void uploadAndAttachFiles(files, "media");
                     event.currentTarget.value = "";
                   }}
                   type="file"
@@ -1406,22 +1477,39 @@ export function PropertyCommandCenter({
                 <input
                   accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingDocument || !workflowCapabilities.canEditProperty}
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file) void uploadAndAttachFile(file, "document");
+                    if (file) void uploadAndAttachFiles([file], "document");
                     event.currentTarget.value = "";
                   }}
                   type="file"
                 />
               </label>
-              <ActionButton action={actions.approveDocument} />
+              <label className="cursor-pointer rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50">
+                {uploadingDocument ? copy.subviews.uploading : (language === "de" ? "Grundriss hochladen" : "Upload floor plan")}
+                <input
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf"
+                  className="sr-only"
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || uploadingDocument || !workflowCapabilities.canEditProperty}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadAndAttachFiles([file], "floorplan");
+                    event.currentTarget.value = "";
+                  }}
+                  type="file"
+                />
+              </label>
             </div>
           </div>
+          <p className="mt-2 text-xs text-stone-600">{language === "de" ? "HEIC/HEIF bis 10 MB und 40 Megapixel wird vor dem Upload auf deinem Gerät in JPEG umgewandelt. " : "HEIC/HEIF up to 10 MB and 40 megapixels is converted to JPEG on your device before upload. "}<a className="underline" href="/third-party/heic-decoder/NOTICE.txt" target="_blank" rel="noreferrer">{language === "de" ? "Softwarelizenzen" : "Software licences"}</a></p>
+          {mediaUploadProgress ? <p aria-live="polite" role="status" className="mt-3 text-sm text-stone-600">{mediaUploadProgress.propertyLabel}: {language === "de" ? `Bilder verarbeitet: ${mediaUploadProgress.completed} / ${mediaUploadProgress.total}` : `Images processed: ${mediaUploadProgress.completed} / ${mediaUploadProgress.total}`}</p> : null}
           {notice ? <p aria-atomic="true" className={`mt-3 text-sm font-semibold ${notice.kind === "success" ? "text-emerald-800" : "text-rose-800"}`}
             role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</p> : null}
           {selectedListing ? (
             <div className="mt-4">
+              <PropertyCostWorkspace draftStore={workflowDraftStore} draftUserId={draftUserId} listing={selectedListing} workspaceId={context.workspaceId} items={selectedCostItems} language={language} canEdit={workflowCapabilities.canEditProperty} onSaved={refreshPropertyData} />
+              <PropertyTextWorkspace listing={selectedListing} workspaceId={context.workspaceId} blocks={selectedTextBlocks} language={language} canEdit={workflowCapabilities.canEditProperty} draftStore={workflowDraftStore} draftUserId={draftUserId} onSaved={refreshPropertyData} />
               <PropertyExposeWorkspace
                 draftStore={workflowDraftStore}
                 draftUserId={draftUserId}
@@ -1430,6 +1518,8 @@ export function PropertyCommandCenter({
                 listing={selectedListing}
                 workspaceId={context.workspaceId}
               />
+              <WebExposeCommandCenter workspaceId={context.workspaceId} propertyId={selectedListing.id} propertyTitle={selectedListing.title} language={language}
+                leads={leads.filter(lead => lead.projectId === selectedListing.projectId).map(lead => ({ id: lead.id, label: contacts.find(contact => contact.id === lead.contactId)?.name || lead.intent || lead.id }))} />
             </div>
           ) : (
             <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">

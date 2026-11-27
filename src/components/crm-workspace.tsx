@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
 import { Notice as CommandNotice } from "../../design-c/components/ui";
-import { getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
+import { canAccessCrmBilling, getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
 import { CrmCommandSearch } from "@/components/crm-command-search";
 import { LanguagePreferenceSelect, type LanguagePreferenceSaveState } from "@/components/language-preference-select";
 import { EvelynCommandCenter, type EvelynCommandSection } from "@/components/evelyn-command-center";
@@ -13,8 +13,8 @@ const {
   automations, botCallInsights, botLeadWorkflows, botLanguageRules,
   contactRelationships, contactTimeline, consents, conversations,
   crmBotConversations, crmBotTools, customerWorkspaceAccess, knowledgeBase,
-  leadSequenceEvents, leadSequences, newsletterAutomations, newsletterDeliverability,
-  newsletterSuppressions, newsletterTemplates, organizations, pipeline,
+  leadSequences,
+  newsletterSuppressions, organizations, pipeline,
 } = unavailableCrmRelatedData;
 import { BotCommandCenter } from "@/components/bot-command-center";
 import { BotLanguageTester } from "@/components/bot-language-tester";
@@ -23,26 +23,50 @@ import { GovernanceCompliancePanel } from "@/components/admin/governance-complia
 import { SystemReleasesPanel } from "@/components/admin/system-releases-panel";
 import { CalendarCommandCenter } from "@/components/calendar-command-center";
 import { CompanyProfileSettings } from "@/components/company-profile-settings";
+import { CrmAiBillingPanel, getAiBillingNavigationLabel } from "@/components/crm-ai-billing-panel";
+import { AiBillingAdminPanel } from "@/components/ai-billing-admin-panel";
+import { CrmAiAssistant } from "@/components/crm-ai-assistant";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
 import { isVisibleBusinessRecord, selectVisibleBusinessRecords } from "@/components/crm-business-visibility";
 import { ContactCommandCenter } from "@/components/contact-command-center";
 import { CustomerAccessCockpit } from "@/components/customer-access-cockpit";
+import { PartnerCooperationWorkspace } from "@/components/partner-cooperation-workspace";
 import { DailyQueueBoard } from "@/components/daily-queue-board";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { DataHygieneBoard } from "@/components/data-hygiene-board";
 import { DealPipelineWorkspace } from "@/components/deal-pipeline-workspace";
 import { FormCommandCenter } from "@/components/form-command-center";
+import { InquirySourceReport } from "@/components/inquiry-source-report";
+import { MarketingHub } from "@/components/marketing-hub";
+import { MarketingContactPolicyEditor } from "@/components/marketing-contact-policy-editor";
+import { MarketingDataWorkspace } from "@/components/marketing-data-workspace";
+import type { MarketingSourceTarget } from "@/lib/marketing-hub";
+import { IntegrationCommandCenter } from "@/components/integration-command-center";
 import { FunnelCommandCenter } from "@/components/funnel-command-center";
 import { KnowledgeCommandCenter } from "@/components/knowledge-command-center";
 import { CustomerWorkspaceSetup, type CreatedCustomerWorkspace } from "@/components/customer-workspace-setup";
 import { LeadInbox } from "@/components/lead-inbox";
-import { LeadSequenceCommandCenter } from "@/components/lead-sequence-command-center";
+import { AutomationCommandCenter } from "@/components/automation-command-center";
+import { DataTransferCommandCenter } from "@/components/data-transfer-command-center";
+import { LeadDetailDrawer } from "@/components/lead-detail-drawer";
+import { taskDueState } from "@/lib/task-due";
+import { useTaskClock } from "@/lib/use-task-clock";
+import { useCrmTeam } from "@/lib/use-crm-team";
+import { readPropertyGeography } from "@/lib/property-country";
 import { MobileDailyWork, type MobileDailyPanel } from "@/components/mobile-daily-work";
-import { NewsletterCommandCenter } from "@/components/newsletter-command-center";
+import { ConnectedNewsletterCommandCenter } from "@/components/connected-newsletter-command-center";
+import { ConnectedCommunicationWorkspace } from "@/components/connected-communication-workspace";
+import { MailboxTriageQueue } from "@/components/mailbox-triage-queue";
+import { WebExposeTemplateEditor } from "@/components/web-expose-template-editor";
+import { ProjectReportPicker } from "@/components/project-report-picker";
+import { CrmNotifications } from "@/components/crm-notifications";
 import { PropertyCommandCenter } from "@/components/property-command-center";
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
+import { OnboardingWorkspace } from "@/components/onboarding-workspace";
+import { WorkspaceNavigation } from "@/components/workspace-navigation";
+import { WorkspaceSectionTabs } from "@/components/workspace-section-tabs";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
 import { can as hasAppPermission } from "@/lib/auth/permissions";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
@@ -65,9 +89,6 @@ import type { CoreCrmDataResult } from "@/lib/db/crm-loaders";
 import type {
   CalendarEvent,
   BrokerMandate,
-  ConsentRecord,
-  Contact,
-  Conversation,
   CustomerWorkspaceAccess,
   BuyerSearchProfile,
   Deal,
@@ -98,8 +119,6 @@ import {
   defaultLanguage,
   getDashboardCopy,
   getLanguagePreferenceCopy,
-  getCrmConsentChannelLabel,
-  getCrmConsentStatusLabel,
   getCrmEnumLabel,
   getCrmLeadTypeKey,
   getCrmProjectTypeLabel,
@@ -115,6 +134,7 @@ import { isLanguagePreference, type LanguagePreference } from "@/lib/crm-languag
 
 type DashboardSection =
   | "dashboard"
+  | "marketing"
   | "analytics"
   | "leadInbox"
   | "pipelines"
@@ -142,13 +162,8 @@ type DashboardSection =
   | "forms"
   | "calendar";
 
-function usesFocusedWorkspaceSidebar(section: DashboardSection) {
-  return section === "pipelines" || section === "properties";
-}
-
 type HeaderActionModal = "import" | "project" | "customer" | null;
 
-type ImportSource = "hubspot" | "csv" | "contacts" | "meetings";
 
 type ProjectWizardDraft = {
   calendarProvider: CalendarProviderChoice;
@@ -198,7 +213,11 @@ type NavigationPresetId =
   | "novalureAdmin";
 
 type NavigationEntryId =
+  | "billing"
+  | "aiBillingAdmin"
+  | "aiAssistant"
   | "analysis"
+  | "marketing"
   | "analytics"
   | "appointments"
   | "approvals"
@@ -239,6 +258,7 @@ type NavigationEntryId =
   | "reservations"
   | "sellerLeads"
   | "serviceCockpit"
+  | "sequences"
   | "settings"
   | "slaCockpit"
   | "systemReleases"
@@ -344,7 +364,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "calendar",
       "funnels",
       "forms",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "analysis",
       "bots",
       "studioKnowledgeAi",
@@ -366,7 +387,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "tasks",
       "calendar",
       "funnels",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "bots",
       "knowledge",
       "analytics",
@@ -379,7 +401,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   realEstateBroker: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: [
+    navigationEntries: ["onboarding",
       "dashboard",
       "properties",
       "leadInbox",
@@ -395,7 +417,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "tasks",
       "calendar",
       "funnels",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "bots",
       "knowledge",
       "analytics",
@@ -407,7 +430,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   completeBrokerage: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: [
+    navigationEntries: ["onboarding",
       "dashboard",
       "properties",
       "sellerLeads",
@@ -422,7 +445,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "communication",
       "objectsMandates",
       "funnels",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "bots",
       "knowledge",
       "analytics",
@@ -434,7 +458,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   propertyDeveloper: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: [
+    navigationEntries: ["onboarding",
       "properties",
       "projectOverview",
       "developerLeads",
@@ -477,7 +501,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   hybridRealEstate: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: [
+    navigationEntries: ["onboarding",
       "dashboard",
       "properties",
       "leadInbox",
@@ -494,7 +518,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "funnels",
       "bots",
       "knowledge",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "analytics",
       "settings",
     ],
@@ -518,9 +543,9 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   marketing: {
     mobilePanels: ["hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "properties", "funnels", "newsletter", "leadInbox", "contacts", "forms", "analytics", "communication"],
-    startSection: "dashboard",
-    startEntry: "dashboard",
+    navigationEntries: ["marketing", "dashboard", "properties", "funnels", "newsletter", "sequences", "leadInbox", "contacts", "forms", "analytics", "communication"],
+    startSection: "marketing",
+    startEntry: "marketing",
     quickActions: ["funnels", "newsletter", "leadInbox", "analysis"],
   },
   assistant: {
@@ -539,7 +564,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   newUser: {
     mobilePanels: ["hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "properties", "leadInbox", "contacts", "tasks", "calendar", "pipelines"],
+    navigationEntries: ["onboarding", "dashboard", "properties", "leadInbox", "contacts", "tasks", "calendar", "pipelines"],
     startSection: "dashboard",
     startEntry: "dashboard",
     quickActions: ["leadInbox", "tasks", "meetings", "pipeline"],
@@ -555,7 +580,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "contacts",
       "communication",
       "calendar",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "bots",
       "knowledge",
       "analytics",
@@ -577,7 +603,8 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "tasks",
       "communication",
       "funnels",
-      "newsletter",
+      "marketing", "newsletter",
+      "sequences",
       "bots",
       "knowledge",
       "analytics",
@@ -644,8 +671,12 @@ type NavigationEntry = {
 };
 
 const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
+  marketing: { id: "marketing", section: "marketing" },
   analysis: { id: "analysis", section: "analysis" },
   analytics: { id: "analytics", section: "analytics" },
+  billing: { id: "billing", section: "settings" },
+  aiBillingAdmin: { id: "aiBillingAdmin", section: "settings" },
+  aiAssistant: { id: "aiAssistant", section: "bots" },
   appointments: { id: "appointments", section: "calendar" },
   approvals: { id: "approvals", section: "managedService" },
   auditLog: { id: "auditLog", section: "managedService" },
@@ -674,6 +705,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   leadInbox: { id: "leadInbox", section: "leadInbox" },
   managedService: { id: "managedService", section: "managedService" },
   newsletter: { id: "newsletter", section: "newsletter" },
+  sequences: { id: "sequences", section: "sequences" },
   objectsMandates: { id: "objectsMandates", section: "objectsMandates" },
   onboarding: { id: "onboarding", section: "onboarding" },
   pipelines: { id: "pipelines", section: "pipelines" },
@@ -725,6 +757,7 @@ const moduleBySection: Partial<Record<DashboardSection, WorkspaceModuleKey>> = {
   knowledge: "knowledge",
   leadInbox: "leadInbox",
   newsletter: "newsletter",
+  sequences: "tasks",
   objectsMandates: "objectsMandates",
   pipelines: "pipeline",
   properties: "properties",
@@ -923,6 +956,8 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
   const iconClass = "h-4 w-4";
 
   switch (section) {
+    case "marketing":
+      return <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24"><path d="M4 10h4l11-5v14L8 14H4zM8 14l2 6H6l-2-6M22 8v8" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /></svg>;
     case "dashboard":
       return (
         <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24">
@@ -1172,7 +1207,11 @@ function readStoredPresetId(
 }
 
 const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
+  marketing: "marketing",
   auditLog: "audit-log",
+  billing: "billing",
+  aiBillingAdmin: "ai-billing-admin",
+  aiAssistant: "ai-assistant",
   buyerLeads: "buyer-leads",
   buyerProfiles: "buyer-profiles",
   dailyQueue: "daily-queue",
@@ -1199,6 +1238,9 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
 
   const hash = window.location.hash.replace("#", "").toLowerCase();
   const sections: Record<string, DashboardSection> = {
+    billing: "settings",
+    "ai-billing-admin": "settings",
+    "ai-assistant": "bots",
     analysis: "analysis",
     analyse: "analysis",
     "analyse-bot": "analysis",
@@ -1235,6 +1277,7 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     meeting: "calendar",
     meetings: "calendar",
     newsletter: "newsletter",
+    marketing: "marketing",
     mandates: "objectsMandates",
     mandate: "objectsMandates",
     immobilien: "properties",
@@ -1625,6 +1668,7 @@ function AnalyticsCommandCenter({
   leads,
   projectLabel,
   tasks,
+  timeZone = "Europe/Vienna",
 }: {
   calendarEvents: CalendarEvent[];
   copy: ReturnType<typeof getDashboardCopy>;
@@ -1633,7 +1677,9 @@ function AnalyticsCommandCenter({
   leads: Lead[];
   projectLabel: string;
   tasks: Task[];
+  timeZone?: string;
 }) {
+  const taskClock = useTaskClock();
   const panelCopy = getCommandCentersCopy(copy).analytics;
   const businessLeads = leads.filter(isBusinessKpiRecord);
   const businessDeals = deals.filter(isBusinessKpiRecord);
@@ -1643,8 +1689,7 @@ function AnalyticsCommandCenter({
   const pipelineValue = openDeals.reduce((sum, deal) => sum + parseCrmMoney(deal.value), 0);
   const weightedValue = openDeals.reduce((sum, deal) => sum + parseCrmMoney(deal.value) * (deal.probability / 100), 0);
   const conversion = businessLeads.length ? Math.round((wonDeals.length / businessLeads.length) * 100) : 0;
-  const today = new Date().toISOString().slice(0, 10);
-  const overdueTasks = businessTasks.filter((task) => task.status === "open" && task.due && task.due < today).length;
+  const overdueTasks = businessTasks.filter(task => task.status === "open" && taskDueState(task.due,new Date(taskClock),timeZone).overdue).length;
   const bySource = Array.from(
     businessLeads.reduce<Map<string, number>>((summary, lead) => {
       const sourceKey = getCrmSourceKey(lead.source);
@@ -1669,7 +1714,7 @@ function AnalyticsCommandCenter({
           [panelCopy.meetings, calendarEvents.length],
           [panelCopy.tasks, businessTasks.length],
           [panelCopy.overdueTasks, overdueTasks],
-          [panelCopy.speedToLead, businessLeads.filter((lead) => lead.slaDueAt && lead.slaDueAt >= today).length],
+          [language === "de" ? "Offene Erstkontaktfristen" : "Pending first-contact deadlines", businessLeads.filter(lead => !lead.lastContactAt && lead.status !== "Archiviert" && lead.slaDueAt && Date.parse(lead.slaDueAt) >= taskClock).length],
         ].map(([label, value]) => (
           <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
             <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
@@ -1696,128 +1741,6 @@ function AnalyticsCommandCenter({
   );
 }
 
-function CommunicationCommandCenter({
-  consents,
-  contacts,
-  conversations,
-  copy,
-  language,
-  leads,
-  onOpenLeadInbox,
-  projectLabel,
-  projects,
-  users,
-}: {
-  consents: ConsentRecord[];
-  contacts: Contact[];
-  conversations: Conversation[];
-  copy: ReturnType<typeof getDashboardCopy>;
-  language: LanguageCode;
-  leads: Lead[];
-  onOpenLeadInbox: () => void;
-  projectLabel: string;
-  projects: Project[];
-  users: WorkspaceUser[];
-}) {
-  const panelCopy = getCommandCentersCopy(copy).communication;
-  const locale = getLocale(language);
-  const sortedConversations = [...conversations].sort(
-    (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
-  );
-
-  return (
-    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
-      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{projectLabel}</p>
-        <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{panelCopy.title}</h3>
-        <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">{panelCopy.description}</p>
-      </article>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        {[
-          [panelCopy.conversations, sortedConversations.length],
-          [panelCopy.noOwner, leads.filter((lead) => !lead.assignedToUserId).length],
-          [panelCopy.noConsent, contacts.filter((contact) => !consents.some((consent) => consent.contactId === contact.id)).length],
-        ].map(([label, value]) => (
-          <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
-            <p className="break-words text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
-          </div>
-        ))}
-      </div>
-
-      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
-        {sortedConversations.length ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-[860px] w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
-                <tr>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.channel}</th>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.contact}</th>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.project}</th>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.lastMessage}</th>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.nextAction}</th>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.owner}</th>
-                  <th className="py-2 pr-4 font-semibold">{panelCopy.mode}</th>
-                  <th className="py-2 font-semibold">{panelCopy.consent}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedConversations.map((conversation) => {
-                  const contact = contacts.find((item) => item.id === conversation.contactId);
-                  const lead = leads.find((item) => item.id === conversation.leadId || item.contactId === conversation.contactId);
-                  const project = projects.find((item) => item.id === conversation.projectId);
-                  const owner = lead?.assignedToUserId ? users.find((user) => user.id === lead.assignedToUserId) : undefined;
-                  const consent = consents.find((item) => item.contactId === conversation.contactId);
-                  const isBotMode = conversation.summary.toLowerCase().includes("bot") || conversation.channel === "WhatsApp";
-
-                  return (
-                    <tr className="border-t border-stone-200 align-top" key={conversation.id}>
-                      <td className="py-3 pr-4 font-semibold text-slate-950">{conversation.channel}</td>
-                      <td className="py-3 pr-4 text-stone-700">{contact?.name ?? panelCopy.contactUnknown}</td>
-                      <td className="py-3 pr-4 text-stone-700">{project?.name ?? projectLabel}</td>
-                      <td className="py-3 pr-4 text-stone-700">
-                        <span className="block font-semibold text-slate-900">{conversation.summary}</span>
-                        <span className="mt-1 block text-xs text-stone-500">
-                          {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(conversation.lastMessageAt))}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-stone-700">{lead?.nextAction ? getCrmSystemTextLabel(lead.nextAction, language) : panelCopy.noNextAction}</td>
-                      <td className="py-3 pr-4 text-stone-700">{owner?.name ?? panelCopy.noOwner}</td>
-                      <td className="py-3 pr-4">
-                        <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">
-                          {isBotMode ? panelCopy.botMode : panelCopy.manualMode}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${consent ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-                          {consent
-                            ? `${getCrmConsentChannelLabel(consent.channel, language)}: ${getCrmConsentStatusLabel(consent.status, language)}`
-                            : panelCopy.noConsent}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-sm text-stone-600">
-            <p className="max-w-3xl break-words">{panelCopy.empty}</p>
-            <button
-              className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={onOpenLeadInbox}
-              type="button"
-            >
-              {panelCopy.emptyCta}
-            </button>
-          </div>
-        )}
-      </article>
-    </section>
-  );
-}
 
 function SettingsCommandCenter({
   context,
@@ -2180,7 +2103,7 @@ function RolePriorityPanel({
     .reduce((sum, deal) => sum + parseRolePanelDealValue(deal.value) * (deal.probability / 100), 0);
   const locale = getLocale(language);
   const metricValues = {
-    appointments: events.filter((event) => new Date(event.startsAt).getTime() >= now.getTime()).length,
+    appointments: events.filter((event) => event.status!=="abgesagt" && new Date(event.startsAt).getTime() >= now.getTime()).length,
     hotLeads: businessLeads.filter((lead) => lead.score >= 80 || lead.hotStatus).length,
     noOwner: businessLeads.filter((lead) => !lead.assignedToUserId).length,
     openTasks: openTasks.length,
@@ -2667,6 +2590,7 @@ function InternalWorkspaceView({
   projectLabel,
   projects,
   tasks,
+  timeZone = "Europe/Vienna",
 }: {
   activeProject?: Project;
   calendarEvents: CalendarEvent[];
@@ -2680,7 +2604,9 @@ function InternalWorkspaceView({
   projectLabel: string;
   projects: Project[];
   tasks: Task[];
+  timeZone?: string;
 }) {
+  const taskClock = useTaskClock();
   const screen = copy.internalScreens[kind];
   const labels = copy.internalScreens.labels;
   const [managedWorkspaces, setManagedWorkspaces] = useState<ManagedWorkspaceOption[]>([]);
@@ -2769,7 +2695,6 @@ function InternalWorkspaceView({
   const metricLeads = scopedLeads.filter(isBusinessKpiRecord);
   const metricTasks = scopedTasksForView.filter(isBusinessKpiRecord);
   const selectedManagedWorkspace = managedWorkspaces.find((item) => item.id === selectedManagedWorkspaceId);
-  const today = new Date().toISOString().slice(0, 10);
   const scopedCustomers =
     kind === "onboarding"
       ? customerAccess.filter((item) => ["demo", "trial", "onboarding"].includes(item.status))
@@ -2777,8 +2702,8 @@ function InternalWorkspaceView({
         ? customerAccess.filter((item) => item.status === "active" || item.status === "risk" || item.health !== "healthy")
         : customerAccess;
   const newLeads = metricLeads.filter((lead) => lead.status === "Neu");
-  const overdueTasks = metricTasks.filter((task) => task.status === "open" && task.due && task.due < today);
-  const meetingsToday = scopedEventsForView.filter((event) => event.startsAt.slice(0, 10) === today);
+  const overdueTasks = metricTasks.filter(task => task.status === "open" && taskDueState(task.due,new Date(taskClock),timeZone).overdue);
+  const meetingsToday = scopedEventsForView.filter(event => taskDueState(event.startsAt,new Date(taskClock),timeZone).dueToday);
   const selectedCustomerName = selectedManagedWorkspace?.name ?? scopedCustomers[0]?.customerName ?? context.workspaceName;
   const selectedProjectName = managedActiveProject?.name ?? (selectedManagedProjectId === "all" ? labels.allProjects : projectLabel);
   const nextActions = [
@@ -2980,7 +2905,7 @@ export function CrmWorkspace({
 }: CrmWorkspaceProps) {
   const coreData = useMemo(() => selectAuthoritativeCrmPresentation(suppliedCoreData), [suppliedCoreData]);
   const workspace = { ...sessionWorkspace, plan: initialLanguage === "de" ? "Nicht verfügbar" : "Unavailable", activeProjects: coreData.projects.length, activeUsers: 1 };
-  const users: WorkspaceUser[] = [{ id: sessionUserId, workspaceId: sessionWorkspace.id, name: sessionUserName, email: "", role: sessionRole, productRole: sessionProductRole, status: "active" }];
+  const sessionUsers: WorkspaceUser[] = [{ id: sessionUserId, workspaceId: sessionWorkspace.id, name: sessionUserName, email: "", role: sessionRole, productRole: sessionProductRole, status: "active" }];
   const router = useRouter();
   useEffect(() => {
     const controller = new AbortController();
@@ -3016,6 +2941,8 @@ export function CrmWorkspace({
   const [crmScope, setCrmScope] = useState<CrmScope>(() =>
     createDefaultCrmScope(sessionWorkspace.id),
   );
+  const [leadDrawer, setLeadDrawer] = useState<{ workspaceId: string; leadId: string } | null>(null);
+  const [mailboxFocus,setMailboxFocus] = useState<{workspaceId:string;messageId:string}|null>(null);
   const [scopeHydrated, setScopeHydrated] = useState(false);
   const scopeInitializedWorkspaceRef = useRef("");
   const [workspaceSetup, setWorkspaceSetup] = useState(() => ({
@@ -3031,11 +2958,14 @@ export function CrmWorkspace({
   const [activeNavigationEntryId, setActiveNavigationEntryId] =
     useState<NavigationEntryId>(activePreset.startEntry);
   const [activeSection, setActiveSection] = useState<DashboardSection>(activePreset.startSection);
+  const [marketingSourceFocus, setMarketingSourceFocus] = useState<(MarketingSourceTarget & { workspaceId: string }) | null>(null);
+  const [marketingNavigation, setMarketingNavigation] = useState<{ workspaceId: string; entryId: NavigationEntryId } | null>(null);
+  const [marketingNavigationNotice, setMarketingNavigationNotice] = useState<{ workspaceId: string; text: string } | null>(null);
   const [liveCoreData, setLiveCoreData] = useState(coreData);
   const [activeWorkspace, setActiveWorkspace] = useState<ManagedWorkspaceOption>(() => ({
     activeCalendarProvider: sessionWorkspace.activeCalendarProvider ?? workspace.activeCalendarProvider ?? "none",
     activeProjects: coreData.projects.length,
-    activeUsers: users.length,
+    activeUsers: sessionUsers.length,
     customerType: sessionWorkspace.customerType ?? workspace.customerType ?? "real_estate_broker",
     id: sessionWorkspace.id,
     name: sessionWorkspace.name,
@@ -3054,8 +2984,6 @@ export function CrmWorkspace({
   const focusPageTitleAfterNavigationRef = useRef(false);
   const [actionModal, setActionModal] = useState<HeaderActionModal>(null);
   const [customerSetupBusy, setCustomerSetupBusy] = useState(false);
-  const [importNotice, setImportNotice] = useState("");
-  const [importSource, setImportSource] = useState<ImportSource>("hubspot");
   const [projectNotice, setProjectNotice] = useState("");
   const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
   const [isProjectSaving, setIsProjectSaving] = useState(false);
@@ -3064,7 +2992,6 @@ export function CrmWorkspace({
   const [languageSaveState, setLanguageSaveState] = useState<LanguagePreferenceSaveState>(languagePreferenceAvailable ? "idle" : "unavailable");
   const languageSavePending = useRef(false);
   const copy = getDashboardCopy(language);
-  const importSourceOptions = copy.dialogs.import.sources;
   const projectTypeOptions = copy.dialogs.project.projectTypes;
   const projectPipelineOptions = copy.dialogs.project.pipelines;
   const [projectDraft, setProjectDraft] = useState<ProjectWizardDraft>(() => ({
@@ -3081,14 +3008,15 @@ export function CrmWorkspace({
     name: "",
     notes: "",
     operatingModel: workspaceSetup.operatingModel,
-    ownerUserId: users[0]?.id ?? "",
+    ownerUserId: sessionUsers[0]?.id ?? "",
     pipelineId: projectPipelineOptions[0]?.id ?? "pipeline_standard_sales",
     teamStructure: workspaceSetup.teamStructure,
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
+  const [propertyUnitNavigationWorkspaceId, setPropertyUnitNavigationWorkspaceId] = useState<string | null>(null);
   const [propertyFocusAssetId, setPropertyFocusAssetId] = useState<string | undefined>(undefined);
   const [showStudioTestEnquiries, setShowStudioTestEnquiries] = useState(false);
 
@@ -3366,6 +3294,10 @@ export function CrmWorkspace({
   const activeProjectId = projectScopeInvalid
     ? crmScope.projectId ?? "invalid"
     : crmScope.projectId ?? "all";
+  const team = useCrmTeam(activeWorkspace.id, activeProject?.id ?? null);
+  const users = team.users;
+  const taskTimeZone = readPropertyGeography(sellerListingRecords.find(listing => listing.projectId === activeProject?.id) ?? {})?.bookingTimezone ?? "Europe/Vienna";
+
   const draftScopeProjects = scopeHydrated && !projectScopeInvalid ? allProjects : [];
   const projectScopeLabel = !scopeHydrated
     ? language === "de" ? "Projektscope wird geladen" : "Loading project scope"
@@ -3382,10 +3314,28 @@ export function CrmWorkspace({
   const sidebarToggleLabel = sidebarCollapsed
     ? copy.shell.expandNavigation
     : copy.shell.collapseNavigation;
-  const navigationLabels: Record<string, string> = isStudioNavigation
-    ? { ...copy.navigation, ...studioCopy.navigation }
-    : copy.navigation;
-  const enabledNavigationEntryIds = getCrmSelfServiceEntries(normalizedActivePreset.navigationEntries, sessionProductRole).filter((entryId) => {
+  const navigationLabels: Record<string, string> = {
+    ...copy.navigation,
+    marketing: "Marketing",
+    ...(isStudioNavigation ? studioCopy.navigation : {}),
+    billing: getAiBillingNavigationLabel(language),
+    aiBillingAdmin: language === "de" ? "KI-Buchungsanfragen" : "AI booking requests",
+    aiAssistant: language === "de" ? "KI-Assistent" : "AI assistant",
+  };
+  const marketingNavigationEntries: NavigationEntryId[] = marketingNavigation?.workspaceId === activeWorkspace.id &&
+    marketingNavigation.entryId === activeNavigationEntryId && normalizedActivePreset.navigationEntries.includes("marketing")
+    ? [...new Set<NavigationEntryId>([...normalizedActivePreset.navigationEntries, marketingNavigation.entryId])]
+    : normalizedActivePreset.navigationEntries;
+  const taskNavigationEntries: NavigationEntryId[] =
+    propertyUnitNavigationWorkspaceId === activeWorkspace.id &&
+    activeNavigationEntryId === "units" &&
+    normalizedActivePreset.navigationEntries.includes("properties")
+      ? [...new Set<NavigationEntryId>([...marketingNavigationEntries, "units"])]
+      : marketingNavigationEntries;
+  const billingProductRole = activeWorkspace.productRole ?? workspaceContext.productRole;
+  const enabledNavigationEntryIds = getCrmSelfServiceEntries(taskNavigationEntries, billingProductRole).filter((entryId) => {
+    if (entryId === "billing") return canAccessCrmBilling(billingProductRole);
+    if (entryId === "aiBillingAdmin") return ["platform_admin", "novalureAdmin"].includes(billingProductRole) && workspaceContext.operatingModel === "novalure_internal";
     if (isStudioNavigation) {
       // This entry is a setup plan; it loads no knowledge or bot data.
       if (entryId === "studioKnowledgeAi") return true;
@@ -3438,10 +3388,11 @@ export function CrmWorkspace({
     navigationLabels[visibleActiveNavigationEntry.id] ??
     navigationLabels[visibleActiveNavigationEntry.section] ??
     activePresetProfile.label;
-  const unavailableSectionCollections = unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
-  const sectionScopeUnavailable = visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
+  const isBillingSection = ["billing", "aiBillingAdmin", "aiAssistant"].includes(visibleActiveNavigationEntry.id);
+  const unavailableSectionCollections = isBillingSection ? [] : unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
+  const sectionScopeUnavailable = !isBillingSection && visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
   const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects ? allProjects.length : "—";
-  const relatedSectionUnavailable = ["analysis", "dataHygiene", "communication", "sequences"].includes(visibleActiveSection);
+  const relatedSectionUnavailable = ["analysis", "dataHygiene"].includes(visibleActiveSection);
   const sessionOnlySectionUnavailable = activeWorkspace.id !== sessionWorkspace.id && ["forms", "customerAccess"].includes(visibleActiveSection);
 
   useEffect(() => {
@@ -3497,17 +3448,11 @@ export function CrmWorkspace({
   const visibleLeadSequences = leadSequences.filter((sequence) =>
     isProjectInActiveScope(sequence.projectId, true),
   );
-  const visibleLeadSequenceEvents = leadSequenceEvents.filter((event) =>
-    isProjectInActiveScope(event.projectId, true),
-  );
   const visibleNewsletterSegments = newsletterSegmentRecords.filter((segment) =>
     isProjectInActiveScope(segment.projectId, true),
   );
   const visibleNewsletterCampaigns = newsletterCampaignRecords.filter((campaign) =>
     isProjectInActiveScope(campaign.projectId, true),
-  );
-  const visibleNewsletterAutomations = newsletterAutomations.filter((automation) =>
-    isProjectInActiveScope(automation.projectId, true),
   );
   const visibleAutomations = automations.filter((automation) =>
     isProjectInActiveScope(automation.projectId, true),
@@ -3553,41 +3498,11 @@ export function CrmWorkspace({
       value: cards.length > 0 ? activeProject.revenue : "0",
     };
   });
-  const selectedImportSource =
-    importSourceOptions.find((option) => option.id === importSource) ?? importSourceOptions[0];
   const selectedProjectTypeLabel =
     projectTypeOptions.find((option) => option.id === projectDraft.type)?.label ??
     projectDraft.type;
   const selectedProjectPipelineLabel =
     projectPipelineOptions.find((option) => option.id === projectDraft.pipelineId)?.label ?? "-";
-  const importChecks = [
-    {
-      detail: copy.dialogs.import.checks.contacts(contacts.length),
-      label: copy.dialogs.import.checks.contactsLabel,
-      status: contacts.length > 0 ? ("ready" as const) : ("warning" as const),
-    },
-    {
-      detail: copy.dialogs.import.checks.leads(leads.length),
-      label: copy.dialogs.import.checks.leadsLabel,
-      status: leads.length > 0 ? ("ready" as const) : ("warning" as const),
-    },
-    {
-      detail: copy.dialogs.import.checks.pipeline(deals.length),
-      label: copy.dialogs.import.checks.pipelineLabel,
-      status: deals.length > 0 ? ("ready" as const) : ("action" as const),
-    },
-    {
-      detail: copy.dialogs.import.checks.meetings(calendarEvents.length),
-      label: copy.dialogs.import.checks.meetingsLabel,
-      status: calendarEvents.length > 0 ? ("ready" as const) : ("action" as const),
-    },
-    {
-      detail: copy.dialogs.import.checks.duplicates,
-      label: copy.dialogs.import.checks.duplicatesLabel,
-      status: "action" as const,
-    },
-  ];
-  const readyImportChecks = importChecks.filter((check) => check.status === "ready").length;
   const projectWizardChecks = [
     {
       detail: projectDraft.name.trim() || copy.dialogs.project.missingName,
@@ -3619,7 +3534,6 @@ export function CrmWorkspace({
     projectDraft.name.trim().length >= 3 && Boolean(projectDraft.type && projectDraft.pipelineId);
 
   function openImportReview() {
-    setImportNotice("");
     setActionModal("import");
   }
 
@@ -3628,12 +3542,6 @@ export function CrmWorkspace({
     setProjectNotice("");
     setProjectNoticeTone("success");
     setActionModal("project");
-  }
-
-  function handleImportReview() {
-    setImportNotice(
-      copy.dialogs.import.notice(selectedImportSource.label, readyImportChecks, importChecks.length),
-    );
   }
 
   async function handlePrepareProject() {
@@ -3792,7 +3700,7 @@ export function CrmWorkspace({
       setActivePresetId(storedPresetId);
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
-      setSidebarCollapsed(usesFocusedWorkspaceSidebar(resolvedSection));
+
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -3808,7 +3716,7 @@ export function CrmWorkspace({
       const resolvedSection = navigationEntries[nextEntryId].section;
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
-      setSidebarCollapsed(usesFocusedWorkspaceSidebar(resolvedSection));
+
     };
 
     window.addEventListener("hashchange", syncSectionFromHash);
@@ -3834,7 +3742,7 @@ export function CrmWorkspace({
         const nextSection = navigationEntries[nextEntryId].section;
         setActiveNavigationEntryId(nextEntryId);
         setActiveSection(nextSection);
-        setSidebarCollapsed(usesFocusedWorkspaceSidebar(nextSection));
+
       }
     });
 
@@ -4031,10 +3939,11 @@ export function CrmWorkspace({
     if (matchingEntry) {
       setActiveNavigationEntryId(matchingEntry);
     }
-    setSidebarCollapsed(usesFocusedWorkspaceSidebar(nextSection));
+
 
     if ([
       "dashboard",
+      "marketing",
       "analysis",
       "analytics",
       "leadInbox",
@@ -4073,8 +3982,11 @@ export function CrmWorkspace({
 
   function handleNavigationChange(
     entryId: NavigationEntryId,
-    options?: { preservePropertyFocus?: boolean; preserveUnitScope?: boolean },
+    options?: { preservePropertyFocus?: boolean; preserveUnitScope?: boolean; fromMarketing?: boolean },
   ) {
+    if (options?.fromMarketing) setMarketingNavigation({ workspaceId: activeWorkspace.id, entryId });
+    else setMarketingNavigation(null);
+    if (entryId !== "units") setPropertyUnitNavigationWorkspaceId(null);
     if (entryId === "units" && !options?.preserveUnitScope) {
       setUnitBoardFocusScope(null);
     }
@@ -4086,6 +3998,7 @@ export function CrmWorkspace({
   }
 
   function handleOpenUnitsFromProperty(scope?: PropertyUnitBoardScope) {
+    setPropertyUnitNavigationWorkspaceId(activeWorkspace.id);
     setUnitBoardFocusScope(scope ?? null);
     handleNavigationChange("units", { preserveUnitScope: true });
   }
@@ -4134,6 +4047,23 @@ export function CrmWorkspace({
         window.history.pushState(null, "", nextUrl);
       }
     }
+  }
+
+  async function handleOpenSavedProperty(propertyId:string, fromMarketing = false){
+    const listing=sellerListingRecords.find(item=>item.id===propertyId&&item.workspaceId===activeWorkspace.id);
+    if(!listing)throw new Error(language==="de"?"Das berechtigte Objekt ist nicht mehr geladen. Bitte die Gesamtansicht aktualisieren.":"The authorized property is no longer loaded. Please refresh the main view.");
+    if(crmScope.projectId&&crmScope.projectId!==listing.projectId)handleProjectScopeChange(listing.projectId??"all");
+    setLeadDrawer(null);setPropertyFocusAssetId(`listing:${listing.id}`);handleNavigationChange("properties",{preservePropertyFocus:true,fromMarketing});
+  }
+
+  function handleOpenMarketingSource(target: MarketingSourceTarget) {
+    setMarketingNavigationNotice(null);
+    setMarketingSourceFocus({ ...target, workspaceId: activeWorkspace.id });
+    if (target.projectId && target.projectId !== crmScope.projectId) handleProjectScopeChange(target.projectId);
+    if (target.kind === "expose" && target.propertyId) { void handleOpenSavedProperty(target.propertyId, true).catch((error: unknown) => setMarketingNavigationNotice({ workspaceId: activeWorkspace.id, text: error instanceof Error ? error.message : "Immobilie konnte nicht geöffnet werden." })); return; }
+    if (target.kind === "expose") { handleNavigationChange("properties", { fromMarketing: true }); return; }
+    const entry = target.kind === "newsletter" ? "newsletter" : target.kind === "automation" ? "sequences" : target.kind === "funnel" ? "funnels" : "forms";
+    handleNavigationChange(entry, { fromMarketing: true });
   }
 
   function handlePresetChange(nextPresetId: NavigationPresetId) {
@@ -4190,24 +4120,16 @@ export function CrmWorkspace({
       <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]" data-crm-shell>
         <aside
           aria-hidden={mobileNavigationOpen ? true : undefined}
-          className={`hidden shrink-0 overflow-hidden border-r border-stone-200 bg-white py-6 transition-all duration-200 xl:block ${
-            sidebarCollapsed ? "w-16 px-2" : "w-80 px-5"
-          }`}
+          className="hidden shrink-0 border-r transition-all duration-200 xl:flex"
           data-collapsed={sidebarCollapsed ? "true" : "false"}
           data-crm-sidebar
           inert={mobileNavigationOpen ? true : undefined}
         >
-          <div
-            className={`mb-8 flex gap-3 ${
-              sidebarCollapsed ? "flex-col items-center" : "items-start justify-between"
-            }`}
-            data-crm-brand-row
-          >
+          <div data-crm-brand-row>
             {sidebarCollapsed ? <CrmBrand compact /> : <CrmBrand />}
             <button
               aria-expanded={!sidebarCollapsed}
               aria-label={sidebarToggleLabel}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100"
               data-crm-collapse
               onClick={() => setSidebarCollapsed((current) => !current)}
               title={sidebarToggleLabel}
@@ -4218,221 +4140,56 @@ export function CrmWorkspace({
           </div>
 
           {!sidebarCollapsed ? (
-            <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 p-4" data-crm-profile-card>
-              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                {copy.navigationPresets.label}
-                <select
-                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900"
-                  onChange={(event) =>
-                    handlePresetChange(event.target.value as NavigationPresetId)
-                  }
-                  value={normalizedActivePresetId}
-                >
-                  {presetOptionGroups.map((group) => (
-                    <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
-                      {group.presetIds.map((presetId) => (
-                        <option key={presetId} value={presetId}>
-                          {copy.navigationPresets.profiles[presetId].label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
-              <p className="mt-2 break-words text-sm font-medium text-slate-900">
-                {activePresetProfile.description}
-              </p>
-              <p className="mt-2 break-words text-xs text-stone-500">
-                {copy.navigationPresets.helper}
-              </p>
+            <div data-crm-sidebar-profile>
+              <p title={workspaceContext.workspaceName}>{workspaceContext.workspaceName}</p>
+              <select
+                aria-label={copy.navigationPresets.label}
+                data-crm-profile-select
+                onChange={(event) => handlePresetChange(event.target.value as NavigationPresetId)}
+                title={activePresetProfile.description}
+                value={normalizedActivePresetId}
+              >
+                {presetOptionGroups.map((group) => (
+                  <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
+                    {group.presetIds.map((presetId) => (
+                      <option key={presetId} value={presetId}>
+                        {copy.navigationPresets.profiles[presetId].label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
           ) : null}
 
-          <nav aria-label={copy.navigationPresets.mobileNavigationLabel} className="space-y-1 text-sm font-medium" data-crm-nav>
-            {focusedNavigationItems.map((item) => (
-              <button
-                aria-current={visibleActiveNavigationEntry.id === item.id ? "page" : undefined}
-                aria-label={item.label}
-                className={`flex w-full items-center rounded-md py-2.5 text-left ${
-                  visibleActiveNavigationEntry.id === item.id
-                    ? "bg-slate-950 text-white"
-                    : "text-slate-600 hover:bg-stone-100 hover:text-slate-950"
-                } ${sidebarCollapsed ? "justify-center px-0" : "justify-between px-3"}`}
-                data-active={visibleActiveNavigationEntry.id === item.id ? "true" : "false"}
-                data-crm-nav-item
-                key={item.id}
-                onClick={() => handleNavigationChange(item.id)}
-                title={item.label}
-                type="button"
-              >
-                <NavigationIcon section={item.section} />
-                {!sidebarCollapsed ? <span className="min-w-0 break-words">{item.label}</span> : null}
-              </button>
-            ))}
-            {canUseBookingNavigation ? (
-              <Link
-                aria-label={bookingNavigationLabel}
-                className={`flex w-full items-center rounded-md py-2.5 text-slate-600 hover:bg-stone-100 hover:text-slate-950 ${sidebarCollapsed ? "justify-center px-0" : "justify-between px-3"}`}
-                data-active="false"
-                data-crm-nav-item
-                href="/booking"
-                prefetch={false}
-                title={bookingNavigationLabel}
-              >
-                <NavigationIcon section="calendar" />
-                {!sidebarCollapsed ? <span className="min-w-0 break-words">{bookingNavigationLabel}</span> : null}
-              </Link>
-            ) : null}
+          <nav aria-label={copy.navigationPresets.mobileNavigationLabel} data-crm-nav data-crm-primary-nav>
+            <WorkspaceNavigation items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} collapsed={sidebarCollapsed} language={language}
+              area="primary" onNavigate={handleNavigationChange} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
           </nav>
 
-          {!sidebarCollapsed ? (
-            <>
-              <div className="mt-8 rounded-lg border border-stone-200 bg-stone-50 p-4" data-crm-workspace-card>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
-                  {copy.sidebar.workspace}
-                </p>
-                <p className="mt-2 break-words text-sm font-semibold">{workspaceContext.workspaceName}</p>
-                <p className="mt-1 break-words text-xs text-stone-600">
-                  {copy.workspaceMode.operatingModelLabels[workspaceContext.operatingModel]}
-                </p>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-md bg-white p-3">
-                    <p className="font-semibold">{projectCount}</p>
-                    <p className="break-words text-xs text-stone-500">{copy.sidebar.projects}</p>
-                  </div>
-                  <div className="rounded-md bg-white p-3">
-                    <p className="font-semibold">{sessionUserName}</p>
-                    <p className="break-words text-xs text-stone-500">{sessionProductRole}</p>
-                  </div>
-                </div>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-stone-200 bg-white p-4" data-crm-projects open>
-                <summary className="cursor-pointer select-none text-sm font-semibold text-slate-900">
-                  {copy.sidebar.projects}
-                </summary>
-                <div className="mt-4 space-y-2">
-                  <button
-                    aria-pressed={activeProjectId === "all"}
-                    className={`block w-full rounded-md border p-3 text-left text-sm ${
-                      activeProjectId === "all"
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
-                    }`}
-                    data-active={activeProjectId === "all" ? "true" : "false"}
-                    data-crm-project-button
-                    onClick={() => handleProjectScopeChange("all")}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="min-w-0">
-                        <span className="block break-words font-semibold">{copy.header.allProjects}</span>
-                        <span
-                          className={`mt-1 block break-words text-xs ${
-                            activeProjectId === "all" ? "text-slate-300" : "text-stone-500"
-                          }`}
-                        >
-                          {copy.header.allProjectsSubtitle}
-                        </span>
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                          activeProjectId === "all"
-                            ? "bg-white/10 text-white"
-                            : "bg-white text-stone-700"
-                        }`}
-                      >
-                        {projectCount}
-                      </span>
-                    </span>
-                  </button>
-                  {allProjects.map((project) => (
-                    <button
-                      aria-pressed={activeProjectId === project.id}
-                      className={`block w-full rounded-md border p-3 text-left text-sm ${
-                        activeProjectId === project.id
-                          ? "border-slate-950 bg-slate-950 text-white"
-                          : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
-                      }`}
-                      data-active={activeProjectId === project.id ? "true" : "false"}
-                      data-crm-project-button
-                      key={project.name}
-                      onClick={() => handleProjectScopeChange(project.id)}
-                      type="button"
-                    >
-                      <span className="flex min-w-0 items-start justify-between gap-2">
-                        <span className="min-w-0">
-                          <span
-                            className={`block break-words font-semibold ${
-                              activeProjectId === project.id ? "text-white" : "text-slate-900"
-                            }`}
-                          >
-                            {project.name}
-                          </span>
-                          <span
-                            className={`mt-1 block break-words text-xs ${
-                              activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
-                            }`}
-                          >
-                            {getCrmProjectTypeLabel(project.type, language)}
-                          </span>
-                        </span>
-                        <span
-                          className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                            statusStyles[project.status] ?? statusStyles.Review
-                          }`}
-                        >
-                          {getCrmStatusLabel(project.status, language)}
-                        </span>
-                      </span>
-                      <span className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <span
-                          className={`rounded-md p-2 ${
-                            activeProjectId === project.id ? "bg-white/10" : "bg-white"
-                          }`}
-                        >
-                          <span
-                            className={`block font-semibold ${
-                              activeProjectId === project.id ? "text-white" : "text-slate-900"
-                            }`}
-                          >
-                            {project.leads}
-                          </span>
-                          <span
-                            className={
-                              activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
-                            }
-                          >
-                            {copy.sidebar.leads}
-                          </span>
-                        </span>
-                        <span
-                          className={`rounded-md p-2 ${
-                            activeProjectId === project.id ? "bg-white/10" : "bg-white"
-                          }`}
-                        >
-                          <span
-                            className={`block break-words font-semibold ${
-                              activeProjectId === project.id ? "text-white" : "text-slate-900"
-                            }`}
-                          >
-                            {project.revenue}
-                          </span>
-                          <span
-                            className={
-                              activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
-                            }
-                          >
-                            {copy.sidebar.pipeline}
-                          </span>
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </>
-          ) : null}
+          <div data-crm-sidebar-footer>
+            <nav aria-label={language === "de" ? "Verwaltung" : "Management"} data-crm-nav>
+              <WorkspaceNavigation items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} collapsed={sidebarCollapsed} language={language}
+                area="utility" onNavigate={handleNavigationChange} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
+              {canUseBookingNavigation ? (
+                <Link
+                  aria-label={bookingNavigationLabel}
+                  data-active="false"
+                  data-crm-nav-item
+                  href="/booking"
+                  prefetch={false}
+                  title={bookingNavigationLabel}
+                >
+                  <NavigationIcon section="calendar" />
+                  {!sidebarCollapsed ? <span>{bookingNavigationLabel}</span> : null}
+                </Link>
+              ) : null}
+            </nav>
+            <div data-crm-sidebar-user title={`${sessionUserName} · ${sessionProductRole}`}>
+              <span data-crm-sidebar-avatar aria-hidden="true">{sessionUserName.slice(0, 1).toLocaleUpperCase(language)}</span>
+              {!sidebarCollapsed ? <span>{sessionUserName}<small>{sessionProductRole}</small></span> : null}
+            </div>
+          </div>
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col" data-crm-stage>
@@ -4533,22 +4290,14 @@ export function CrmWorkspace({
                   <section>
                     <h2 data-crm-mobile-section-label>{copy.navigationPresets.mobileNavigationLabel}</h2>
                     <nav aria-label={copy.navigationPresets.mobileNavigationLabel} data-crm-nav>
-                      {focusedNavigationItems.map((item) => (
-                        <button
-                          aria-current={visibleActiveNavigationEntry.id === item.id ? "page" : undefined}
-                          data-active={visibleActiveNavigationEntry.id === item.id ? "true" : "false"}
-                          data-crm-nav-item
-                          key={item.id}
-                          onClick={() => {
-                            focusPageTitleAfterNavigationRef.current = true;
-                            handleNavigationChange(item.id);
-                          }}
-                          type="button"
-                        >
-                          <NavigationIcon section={item.section} />
-                          <span className="min-w-0 break-words">{item.label}</span>
-                        </button>
-                      ))}
+                      <WorkspaceNavigation items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} collapsed={false} language={language}
+                        onActiveNavigate={() => {
+                          focusPageTitleAfterNavigationRef.current = true;
+                          setMobileNavigationOpen(false);
+                        }} onNavigate={id => {
+                          focusPageTitleAfterNavigationRef.current = true;
+                          handleNavigationChange(id);
+                        }} renderIcon={id => <NavigationIcon section={navigationEntries[id].section} />} />
                       {canUseBookingNavigation ? (
                         <Link
                           data-active="false"
@@ -4637,7 +4386,16 @@ export function CrmWorkspace({
                 </h1>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-end" data-crm-header-actions>
+                <CrmNotifications workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language}
+                  onOpenSource={item => {
+                    if (item.sourceType === "lead" && visibleLeads.some(lead => lead.id === item.sourceId)) setLeadDrawer({workspaceId:activeWorkspace.id,leadId:item.sourceId});
+                    else if (item.sourceType === "task") handleSectionChange("tasks");
+                    else if (item.sourceType === "reservation") handleSectionChange("reservations");
+                    else if (item.sourceType === "automation") handleSectionChange("sequences");
+                    else handleSectionChange("properties");
+                  }} />
                 <CrmCommandSearch key={`${activeWorkspace.id}-${activeProjectId}`} language={language} entries={focusedNavigationItems.map(item => ({ id: item.id, label: item.label, section: item.section }))} contacts={visibleContacts} leads={visibleLeads} projects={allProjects.filter(project => isProjectInActiveScope(project.id))} onNavigate={entry => handleNavigationChange(entry as NavigationEntryId)} />
+                {enabledNavigationEntryIds.includes("aiAssistant") ? <button type="button" className="min-h-11 rounded-md bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800" onClick={() => handleNavigationChange("aiAssistant")}>{navigationLabels.aiAssistant}</button> : null}
                 <span data-crm-current-user>{sessionUserName}<small>{sessionProductRole}</small></span>
                 <LanguagePreferenceSelect language={language} preference={languagePreference} saveState={languageSaveState} onChange={preference => void handleLanguageChange(preference)} />
                 <WorkspaceOnboardingTour
@@ -4691,6 +4449,19 @@ export function CrmWorkspace({
               </div>
             </div>
             <div className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-4 lg:flex-row lg:items-center lg:justify-between" data-crm-quickbar>
+              <label data-crm-project-scope>
+                <span>{copy.sidebar.projects}</span>
+                <select
+                  aria-label={copy.sidebar.projects}
+                  data-crm-project-select
+                  onChange={(event) => handleProjectScopeChange(event.target.value)}
+                  value={activeProjectId}
+                >
+                  <option value="all">{copy.header.allProjects} ({projectCount})</option>
+                  {projectScopeInvalid && crmScope.projectId ? <option value={crmScope.projectId}>{projectScopeLabel}</option> : null}
+                  {allProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </select>
+              </label>
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
                   {copy.navigationPresets.quickActionsLabel}
@@ -4753,6 +4524,11 @@ export function CrmWorkspace({
             </div>
           </header>
 
+          <div aria-hidden={mobileNavigationOpen ? true : undefined} inert={mobileNavigationOpen ? true : undefined} data-crm-section-navigation>
+            <WorkspaceSectionTabs items={focusedNavigationItems} activeId={visibleActiveNavigationEntry.id} language={language}
+              onNavigate={handleNavigationChange} />
+          </div>
+
           <div
             aria-hidden={mobileNavigationOpen ? true : undefined}
             className="min-w-0 space-y-6 px-4 py-6 md:px-8"
@@ -4793,7 +4569,13 @@ export function CrmWorkspace({
               </div>
             ) : null}
 
-            {unavailableSectionCollections.length || sectionScopeUnavailable || relatedSectionUnavailable || sessionOnlySectionUnavailable ? (
+            {visibleActiveNavigationEntry.id === "billing" ? (
+              <CrmAiBillingPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
+            ) : visibleActiveNavigationEntry.id === "aiBillingAdmin" ? (
+              <AiBillingAdminPanel key={activeWorkspace.id} workspaceId={activeWorkspace.id} language={language} />
+            ) : visibleActiveNavigationEntry.id === "aiAssistant" ? (
+              <CrmAiAssistant key={activeWorkspace.id} workspaceId={activeWorkspace.id} projectId={activeProjectId === "all" ? null : activeProjectId} language={language} />
+            ) : unavailableSectionCollections.length || sectionScopeUnavailable || relatedSectionUnavailable || sessionOnlySectionUnavailable ? (
               <section className="dc-card rounded-xl border border-stone-200 bg-white" data-crm-source-unavailable role="status">
                 <h2>{language === "de" ? "Daten für diesen Bereich nicht verfügbar" : "Data for this section is unavailable"}</h2>
                 <p>{sessionOnlySectionUnavailable
@@ -4855,6 +4637,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "dashboard" && scopeHydrated && !projectScopeInvalid && !isStudioNavigation && !liveCoreData.collectionCompleteness && ["contacts", "leads", "tasks", "deals", "calendarEvents", "projects", "funnels", "sellerListings"].every(key => liveCoreData.moduleSources[key as keyof typeof liveCoreData.moduleSources] === "database" && !liveCoreData.moduleErrors?.[key as keyof typeof liveCoreData.moduleSources]) ? (
               <DashboardOverview
+                timeZone={taskTimeZone}
                 calendarEvents={visibleCalendarEvents}
                 contacts={visibleContacts}
                 deals={visibleDeals}
@@ -4882,6 +4665,7 @@ export function CrmWorkspace({
                 language={language}
                 leads={visibleLeads}
                 onOpenLeadInbox={() => handleSectionChange("leadInbox")}
+                onOpenLead={leadId => setLeadDrawer({ workspaceId: activeWorkspace.id, leadId })}
                 onOpenReservations={() => handleNavigationChange("reservations")}
                 onOpenUnits={handleOpenUnitsFromProperty}
                 onClearPropertyFocus={() => setPropertyFocusAssetId(undefined)}
@@ -4907,6 +4691,7 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "projects" ? (
+              <>
               <ProjectsCommandCenter
                 context={workspaceContext}
                 copy={copy}
@@ -4915,6 +4700,8 @@ export function CrmWorkspace({
                 projects={allProjects}
                 tasks={visibleTasks}
               />
+              <ProjectReportPicker workspaceId={activeWorkspace.id} activeProjectId={activeProject?.id ?? null} projects={draftScopeProjects} language={language} />
+              </>
             ) : null}
 
             {visibleActiveSection === "objectsMandates" ? (
@@ -4935,6 +4722,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "analytics" ? (
               <AnalyticsCommandCenter
+                timeZone={taskTimeZone}
                 calendarEvents={visibleCalendarEvents}
                 copy={copy}
                 deals={visibleDeals}
@@ -4963,6 +4751,8 @@ export function CrmWorkspace({
                   moduleSources={liveCoreData.moduleSources}
                   profileLabel={activePresetProfile.label}
                 />
+              <IntegrationCommandCenter workspaceId={activeWorkspace.id} projectId={activeProject?.id} language={language} onChanged={async()=>{await refreshCoreData(activeWorkspace.id);}}/>
+              <WebExposeTemplateEditor workspaceId={activeWorkspace.id} language={language}/>
               </>
             ) : null}
 
@@ -5009,6 +4799,7 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "customerAccess" ? (
+              <>
               <CustomerAccessCockpit
                 key={activeWorkspace.id}
                 activeProjectId={activeProjectId}
@@ -5018,10 +4809,13 @@ export function CrmWorkspace({
                 projects={allProjects}
                 users={users}
               />
+              <PartnerCooperationWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language}/>
+              </>
             ) : null}
 
             {visibleActiveSection === "managedService" && visibleActiveNavigationEntry.id !== "auditLog" ? (
               <InternalWorkspaceView
+                timeZone={taskTimeZone}
                 activeProject={activeProject}
                 calendarEvents={visibleCalendarEvents}
                 context={workspaceContext}
@@ -5042,24 +4836,19 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "onboarding" ? (
-              <InternalWorkspaceView
-                activeProject={activeProject}
-                calendarEvents={visibleCalendarEvents}
-                context={workspaceContext}
-                copy={copy}
-                customerAccess={visibleCustomerWorkspaceAccess}
-                deals={visibleDeals}
-                kind="onboarding"
-                language={language}
-                leads={visibleLeads}
-                projectLabel={projectScopeLabel}
-                projects={allProjects}
-                tasks={visibleTasks}
-              />
+              <OnboardingWorkspace workspaceId={activeWorkspace.id} language={language} onNavigate={(target, context) => {
+                const section = ({ projects:"projects",properties:"properties",leads:"leadInbox",tasks:"tasks",flows:"sequences" } as const)[target as "projects"|"properties"|"leads"|"tasks"|"flows"];
+                if(!section)return;
+                if(context?.projectId){
+                  const url=new URL(window.location.href);url.searchParams.set("workspaceId",activeWorkspace.id);url.searchParams.set("projectId",context.projectId);url.hash=section;
+                  window.location.assign(url.toString());
+                }else handleSectionChange(section);
+              }} />
             ) : null}
 
             {visibleActiveSection === "customerSuccess" ? (
               <InternalWorkspaceView
+                timeZone={taskTimeZone}
                 activeProject={activeProject}
                 calendarEvents={visibleCalendarEvents}
                 context={workspaceContext}
@@ -5088,18 +4877,10 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "communication" ? (
-              <CommunicationCommandCenter
-                consents={visibleConsents}
-                contacts={visibleContacts}
-                conversations={visibleConversations}
-                copy={copy}
-                language={language}
-                leads={visibleLeads}
-                onOpenLeadInbox={() => handleSectionChange("leadInbox")}
-                projectLabel={projectScopeLabel}
-                projects={allProjects}
-                users={users}
-              />
+              <div className="grid gap-5"><MailboxTriageQueue workspaceId={activeWorkspace.id} projectId={activeProject?.id??null} language={language}
+                onOpenMailbox={messageId=>{if(messageId)setMailboxFocus({workspaceId:activeWorkspace.id,messageId});}}
+                onOpenLead={leadId=>setLeadDrawer({workspaceId:activeWorkspace.id,leadId})}/>
+              <ConnectedCommunicationWorkspace workspaceId={activeWorkspace.id} language={language} initialMessageId={mailboxFocus?.workspaceId===activeWorkspace.id?mailboxFocus.messageId:undefined}/></div>
             ) : null}
 
             {visibleActiveSection === "leadInbox" ? (
@@ -5126,6 +4907,10 @@ export function CrmWorkspace({
                 </section>
               ) : null}
               <LeadInbox
+                onOpenProperty={handleOpenSavedProperty}
+                tasks={visibleTasks}
+                onTasksChanged={async () => { await refreshCoreData(activeWorkspace.id); }}
+                timeZone={taskTimeZone}
                 relatedDataAvailable={false}
                 key={visibleActiveNavigationEntry.id === "studioWebsiteEnquiries" ? `studio:${activeWorkspace.id}:${activeProjectId}:${showStudioTestEnquiries}` : "lead-inbox"}
                 activeProjectId={activeProject?.id ?? null}
@@ -5172,6 +4957,8 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "pipelines" ? (
               <DealPipelineWorkspace
+                timeZone={taskTimeZone}
+                onOpenLead={leadId => setLeadDrawer({ workspaceId: activeWorkspace.id, leadId })}
                 calendarEvents={visibleCalendarEvents}
                 contacts={visibleContacts}
                 crmPipelineStages={crmPipelineStages.filter((stage) => isProjectInActiveScope(stage.projectId))}
@@ -5249,7 +5036,11 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "dailyQueue" ? (
+              <div className="grid gap-5">
               <DailyQueueBoard
+                workspaceId={activeWorkspace.id} activeProjectId={activeProject?.id ?? null} users={users}
+                onOpenLead={leadId => setLeadDrawer({ workspaceId: activeWorkspace.id, leadId })}
+                timeZone={taskTimeZone}
                 contacts={visibleContacts}
                 dailyQueue={!scopeHydrated || projectScopeInvalid || crmScope.projectId ? undefined : liveCoreData.dailyQueue}
                 events={visibleCalendarEvents}
@@ -5260,12 +5051,18 @@ export function CrmWorkspace({
                 projects={allProjects}
                 tasks={visibleTasks}
               />
+              <MailboxTriageQueue compact workspaceId={activeWorkspace.id} projectId={activeProject?.id??null} language={language}
+                onOpenMailbox={messageId=>{if(messageId)setMailboxFocus({workspaceId:activeWorkspace.id,messageId});handleSectionChange("communication");}}
+                onOpenLead={leadId=>setLeadDrawer({workspaceId:activeWorkspace.id,leadId})}/>
+              </div>
             ) : null}
 
             {["tasks", "contacts"].includes(visibleActiveSection) ? (
             <section className="grid gap-4">
               {visibleActiveSection === "tasks" ? (
                 <TaskCommandCenter
+                  workspaceId={activeWorkspace.id}
+                  timeZone={taskTimeZone}
                   activeProjectId={activeProject?.id ?? null}
                   contacts={visibleContacts}
                   language={language}
@@ -5284,6 +5081,7 @@ export function CrmWorkspace({
 
               {visibleActiveSection === "contacts" ? (
                 <ContactCommandCenter
+                  timeZone={taskTimeZone}
                   activeProjectId={activeProject?.id ?? null}
                   canAssignOwner={canManageContactOwners}
                   canWriteContacts={canCreateOrEditContacts}
@@ -5351,8 +5149,34 @@ export function CrmWorkspace({
               />
             ) : null}
 
+            {visibleActiveSection === "marketing" ? (
+              <>
+              {marketingNavigationNotice?.workspaceId === activeWorkspace.id ? <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">{marketingNavigationNotice.text}</p> : null}
+              <MarketingHub workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} projects={draftScopeProjects} language={language}
+                onProjectChange={handleProjectScopeChange} onOpenSource={handleOpenMarketingSource}
+                onOpenTool={entry => handleNavigationChange(entry, { fromMarketing: true })}
+                renderArea={(area, country) => {
+                  if (area === "campaigns" || area === "audiences") return <MarketingDataWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} area={area} country={country} onOpenSource={handleOpenMarketingSource} />;
+                  if (area === "templates") return <div className="space-y-5">
+                    {isWorkspaceModuleEnabled(workspaceContext.enabledModules, "newsletter") ? <details open className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-lg font-semibold">{language === "de" ? "Mailvorlagen · DE / EN / ES" : "Email templates · DE / EN / ES"}</summary><MarketingDataWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} area="templates" onOpenSource={handleOpenMarketingSource} /></details> : null}
+                    {isWorkspaceModuleEnabled(workspaceContext.enabledModules, "properties") ? <details className="rounded-xl border border-stone-200 bg-white p-4"><summary className="cursor-pointer text-lg font-semibold">{language === "de" ? "Exposéwebsite & PDF · Firmenvorlagen" : "Property website & PDF · Company templates"}</summary><WebExposeTemplateEditor workspaceId={activeWorkspace.id} language={language} /></details> : null}
+                  </div>;
+                  if (area === "flows") return <><MarketingContactPolicyEditor workspaceId={activeWorkspace.id} language={language} /><AutomationCommandCenter onOpenLead={leadId => setLeadDrawer({ workspaceId: activeWorkspace.id, leadId })} workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} leads={visibleLeads}
+                    canWrite={hasAppPermission(sessionRole, "crm:write") && hasProductCapability(sessionProductRole, "pipeline:write")} onChanged={async () => { await refreshCoreData(activeWorkspace.id); }} /></>;
+                  if (area === "mailings") return <><MarketingContactPolicyEditor workspaceId={activeWorkspace.id} language={language} /><ConnectedNewsletterCommandCenter workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} onChanged={async () => { await refreshCoreData(activeWorkspace.id); }} /></>;
+                  return <div className="space-y-5"><InquirySourceReport workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} /><MarketingDataWorkspace workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language} area="campaigns" onOpenSource={handleOpenMarketingSource} /><ProjectReportPicker workspaceId={activeWorkspace.id} activeProjectId={activeProject?.id ?? null} projects={draftScopeProjects} language={language} /></div>;
+                }} />
+              </>
+            ) : null}
+
             {visibleActiveSection === "funnels" ? (
+              <>
+              <InquirySourceReport key={`${activeWorkspace.id}:${activeProject?.id ?? "all"}`} workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null} language={language}/>
               <FunnelCommandCenter
+                activeProjectId={activeProject?.id ?? null}
+                currentUserId={team.currentUserId ?? undefined}
+                onChanged={async () => { await refreshCoreData(activeWorkspace.id); }}
+                focusFunnelId={marketingSourceFocus?.workspaceId === activeWorkspace.id && marketingSourceFocus.kind === "funnel" ? marketingSourceFocus.id : undefined}
                 funnels={visibleFunnels}
                 language={language}
                 leads={visibleLeads}
@@ -5361,46 +5185,25 @@ export function CrmWorkspace({
                 steps={visibleFunnelSteps}
                 users={users}
               />
+              </>
             ) : null}
 
             {visibleActiveSection === "sequences" ? (
-              <LeadSequenceCommandCenter
-                consents={visibleConsents}
-                contacts={visibleContacts}
-                conversations={visibleConversations}
-                deals={visibleDeals}
-                events={visibleLeadSequenceEvents}
-                language={language}
-                leads={visibleLeads}
-                projectLabel={projectScopeLabel}
-                projects={allProjects}
-                sequences={visibleLeadSequences}
-                tasks={visibleTasks}
-                users={users}
-              />
+              <AutomationCommandCenter onOpenLead={leadId => setLeadDrawer({ workspaceId: activeWorkspace.id, leadId })} workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null}
+                focusAutomationId={marketingSourceFocus?.workspaceId === activeWorkspace.id && marketingSourceFocus.kind === "automation" ? marketingSourceFocus.id : undefined}
+                leads={visibleLeads} canWrite={hasAppPermission(sessionRole, "crm:write") && hasProductCapability(sessionProductRole, "pipeline:write")}
+                onChanged={async () => { await refreshCoreData(activeWorkspace.id); }} />
             ) : null}
 
             {visibleActiveSection === "newsletter" ? (
-              <NewsletterCommandCenter
-                relatedDataAvailable={false}
-                automations={visibleNewsletterAutomations}
-                campaigns={visibleNewsletterCampaigns}
-                consents={visibleConsents}
-                contacts={visibleContacts}
-                deliverability={newsletterDeliverability}
-                language={language}
-                leads={visibleLeads}
-                projectLabel={projectScopeLabel}
-                projects={allProjects}
-                segments={visibleNewsletterSegments}
-                suppressions={newsletterSuppressions}
-                templates={newsletterTemplates}
-                users={users}
-              />
+              <ConnectedNewsletterCommandCenter workspaceId={activeWorkspace.id} projectId={activeProject?.id ?? null}
+                focusCampaignId={marketingSourceFocus?.workspaceId === activeWorkspace.id && marketingSourceFocus.kind === "newsletter" ? marketingSourceFocus.id : undefined}
+                language={language} onChanged={async () => { await refreshCoreData(activeWorkspace.id); }} />
             ) : null}
 
             {visibleActiveSection === "forms" ? (
               <FormCommandCenter
+                focusFormId={marketingSourceFocus?.workspaceId === activeWorkspace.id && marketingSourceFocus.kind === "form" ? marketingSourceFocus.id : undefined}
                 contacts={visibleContacts}
                 events={visibleCalendarEvents}
                 funnels={visibleFunnels}
@@ -5449,107 +5252,20 @@ export function CrmWorkspace({
           <CustomerWorkspaceSetup language={language} onBusyChange={setCustomerSetupBusy} onCreated={handleCustomerWorkspaceCreated} userId={sessionUserId} />
         </ModalShell>
       ) : null}
+      {leadDrawer?.workspaceId === activeWorkspace.id && visibleLeads.some(lead => lead.id === leadDrawer.leadId) ? <LeadDetailDrawer key={leadDrawer.leadId}
+        onOpenProperty={handleOpenSavedProperty}
+        leadId={leadDrawer.leadId} onClose={() => setLeadDrawer(null)} workspaceId={activeWorkspace.id} activeProjectId={activeProject?.id ?? null}
+        language={language} leads={visibleLeads} contacts={visibleContacts} projects={draftScopeProjects} users={users}
+        consents={visibleConsents} conversations={visibleConversations} relatedDataAvailable={false} tasks={visibleTasks} timeZone={taskTimeZone}
+        onLeadsChanged={refreshCoreData} onTasksChanged={async () => { await refreshCoreData(activeWorkspace.id); }}
+        brokerMandates={brokerMandates.filter(mandate => isProjectInActiveScope(mandate.projectId))}
+        buyerSearchProfiles={buyerSearchProfiles.filter(profile => isProjectInActiveScope(profile.projectId))} /> : null}
       {actionModal === "import" ? (
-        <ModalShell
-          closeLabel={copy.dialogs.close}
-          eyebrow={copy.dialogs.import.eyebrow}
-          footer={
-            <>
-              <button
-                className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
-                onClick={() => setActionModal(null)}
-                type="button"
-              >
-                {copy.dialogs.close}
-              </button>
-              <button
-                className="rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-950 hover:bg-blue-50"
-                onClick={() => {
-                  setActionModal(null);
-                  handleSectionChange("contacts");
-                }}
-                type="button"
-              >
-                {copy.dialogs.import.openDataQuality}
-              </button>
-              <button
-                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                onClick={handleImportReview}
-                type="button"
-              >
-                {copy.dialogs.import.startReview}
-              </button>
-            </>
-          }
-          onClose={() => setActionModal(null)}
-          title={copy.dialogs.import.title}
-        >
-          <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-            <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-              <h4 className="text-base font-semibold text-slate-950">{copy.dialogs.import.dataSource}</h4>
-              <p className="mt-1 text-sm text-stone-600">
-                {copy.dialogs.import.description}
-              </p>
-              <div className="mt-4 grid gap-2">
-                {importSourceOptions.map((option) => (
-                  <button
-                    className={`rounded-md border p-3 text-left text-sm ${
-                      importSource === option.id
-                        ? "border-slate-950 bg-white text-slate-950"
-                        : "border-stone-200 bg-white text-stone-700 hover:border-blue-200"
-                    }`}
-                    key={option.id}
-                    onClick={() => setImportSource(option.id)}
-                    type="button"
-                  >
-                    <span className="block font-semibold">{option.label}</span>
-                    <span className="mt-1 block text-xs text-stone-500">
-                      {option.description}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em]">
-                  {selectedImportSource.label}
-                </p>
-                <h4 className="mt-1 text-lg font-semibold">{copy.dialogs.import.readiness}</h4>
-                <p className="mt-2 text-sm text-blue-900">
-                  {copy.dialogs.import.readinessDescription(readyImportChecks, importChecks.length)}
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {importChecks.map((check) => (
-                  <div
-                    className={`rounded-lg border p-4 ${actionStatusStyles[check.status]}`}
-                    key={check.label}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-semibold">{check.label}</p>
-                      <span className="rounded-md bg-white/70 px-2 py-1 text-xs font-semibold">
-                        {check.status === "ready"
-                          ? copy.dialogs.statusReady
-                          : check.status === "warning"
-                            ? copy.dialogs.statusMissing
-                            : copy.dialogs.statusReview}
-                      </span>
-                    </div>
-                    <p className="mt-2 break-words text-sm opacity-80">{check.detail}</p>
-                  </div>
-                ))}
-              </div>
-
-              {importNotice ? (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
-                  {importNotice}
-                </div>
-              ) : null}
-            </div>
-          </div>
+        <ModalShell closeLabel={copy.dialogs.close} eyebrow={copy.dialogs.import.eyebrow}
+          footer={<button className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold" onClick={() => setActionModal(null)} type="button">{copy.dialogs.close}</button>}
+          onClose={() => setActionModal(null)} title={language === "de" ? "Daten importieren und exportieren" : "Import and export data"}>
+          <DataTransferCommandCenter workspaceId={activeWorkspace.id} activeProjectId={activeProject?.id ?? null} projects={allProjects}
+            language={language} canImport={canCreateOrEditContacts} onChanged={async () => { await refreshCoreData(activeWorkspace.id); }} />
         </ModalShell>
       ) : null}
 
