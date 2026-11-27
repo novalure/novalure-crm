@@ -37,6 +37,7 @@ const verifier: NonNullable<CrmMachineAuthOptions["verifier"]> = async (jwt, opt
 type CompiledStudioReader = (options: {
   origin: string; deploymentId: string; crmRevision: string; sourceGrantId: string; profile: "production";
   readGrantCredential: () => Promise<string>; getToken: (audience: string) => Promise<string>; fetch: typeof fetch;
+  getTrustedSourceToken?: () => Promise<string>;
 }) => (cursor: string | null) => Promise<unknown>;
 
 async function loadPairedStudioReader() {
@@ -303,15 +304,18 @@ test("native staged SOURCE preserves activation and sealed progress through orde
     const paired = await loadPairedStudioReader();
     if (paired) {
       const origin = "https://www.novalure-crm.app";
+      const trustedSourceToken = "synthetic-vercel-platform-oidc";
       let reads = 0;
       const read = paired.createCrmStudioSourceReader({
         origin, deploymentId: next.env.VERCEL_DEPLOYMENT_ID, crmRevision: next.env.VERCEL_GIT_COMMIT_SHA,
         sourceGrantId: next.id, profile: "production", readGrantCredential: async () => rotated,
         getToken: async audience => { assert.equal(audience, CRM_MACHINE_AUDIENCE); return jwt; },
+        getTrustedSourceToken: async () => trustedSourceToken,
         fetch: async (input, init) => {
           assert.equal(++reads, 1);
           assert.equal(String(input), `${origin}${studioSourcePath}`);
           const inbound = new Request(input, init);
+          assert.equal(inbound.headers.get("x-vercel-trusted-oidc-idp-token"), trustedSourceToken);
           assert.deepEqual(await inbound.clone().json(), { cursor: one.nextCursor, limit: 1 });
           const response = await readStudioSource(inbound, { pool, env: next.env, verifier, now });
           assert.equal(response.status, 200);
@@ -321,7 +325,7 @@ test("native staged SOURCE preserves activation and sealed progress through orde
       });
       assert.deepEqual(await read(one.nextCursor), {
         crmRevision: next.env.VERCEL_GIT_COMMIT_SHA, crmDeploymentId: next.env.VERCEL_DEPLOYMENT_ID,
-        transfer: two.events[0], nextCursor: two.nextCursor,
+        sourceGrantId: next.id, transfer: two.events[0], nextCursor: two.nextCursor,
       });
       assert.equal(reads, 1);
       console.log("STUDIO_SOURCE_PAIRED_EVIDENCE " + JSON.stringify({
