@@ -325,12 +325,13 @@ export async function runWebsiteSalesIrelandCommand(session: AppSession, raw: We
           checkNewQualification();
           const contactBlocked = await contactStop(commandTx, fresh, { ...row, contactId });
           if (contactBlocked) fail(contactBlocked);
-          await attachWebsiteSalesInbound(commandTx, fresh, scope, contactId, inbound, provenance);
+          const qualifiedInbound = await attachWebsiteSalesInbound(commandTx, fresh, scope, contactId, inbound, provenance,
+            { name: `Studio enquiry: ${summary}`.slice(0, 500), stage: stage.name, nextAction });
           await commandTx.execute(`insert into tasks(id,workspace_id,project_id,contact_id,lead_id,owner_user_id,title,priority,status,metadata)
             values($1,$2,$3,$4,$5,$6,$7,'Normal','open',$8::jsonb)`, [taskId, fresh.workspaceId, scope.projectId, contactId, inbound.leadId,
             fresh.userId, `Internal research review: ${nextAction}`.slice(0, 500), provenance]);
           await updateWorkflow(commandTx, context, row, "status='QUALIFIED',contact_id=$6,lead_id=$7,deal_id=$8,next_task_id=$9,studio_operation_id=$10",
-            [contactId, inbound.leadId, inbound.dealId, taskId, studioTransfer.operationId]);
+            [contactId, inbound.leadId, qualifiedInbound.dealId, taskId, studioTransfer.operationId]);
         }
       }
       return view(commandTx, fresh, scope, registered);

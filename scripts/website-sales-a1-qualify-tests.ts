@@ -12,13 +12,16 @@ import {
   CRM_MACHINE_SUBJECT, CRM_MACHINE_WORKSPACE_ID, type CrmMachineAuthOptions,
 } from "../src/lib/crm-machine-auth";
 import type { TenantPool } from "../src/lib/db/tenant-client";
+import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import {
   runWebsiteSalesIrelandCommand, websiteSalesIrelandContract, type WebsiteSalesIrelandCommand,
 } from "../src/lib/db/website-sales-ireland-repositories";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
-import { studioEnquiryCrmProject, studioEnquiryProject } from "../src/lib/studio-enquiry-contract";
+import { executeStudioEnquiry } from "../src/lib/studio-enquiry";
+import { parseStudioEnquiryRequest, studioEnquiryCrmProject, studioEnquiryHash, studioEnquiryProject,
+  type StudioEnquirySnapshot } from "../src/lib/studio-enquiry-contract";
 import { studioSourcePreviewAudience } from "../src/lib/studio-source-reader";
-import { websiteSalesFormId } from "../src/lib/website-sales-ingestion";
+import { websiteSalesActorId, websiteSalesFormId } from "../src/lib/website-sales-ingestion";
 import {
   handleWebsiteSalesMachine, websiteSalesMachineContract, websiteSalesMachineDelegationDomain,
   websiteSalesMachinePath, websiteSalesMachineScopes,
@@ -144,6 +147,8 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   const db = { ...cluster, admin: previewAdmin ?? cluster.admin, pool: previewRuntime ?? cluster.pool };
   const pool = db.pool as unknown as TenantPool;
   const activeGrantId = profile === "preview" ? previewGrantId : ids.grant;
+  let chain: { operationId: string; revision: number; payloadHash: string; leadId: string; submissionId: string } =
+    { operationId: ids.transfer, revision: 1, payloadHash, leadId: ids.lead, submissionId: ids.submission };
   const invoke = (body: unknown, delegation?: string) => call(body, pool, delegation, { env: runtime(profile) });
   await applySalesSchema(db, { maxMigrationNumber: 90 });
   if (profile === "preview") await db.admin.query("grant novalure_tenant_app to novalure_app");
@@ -159,21 +164,79 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   await install("202_website_sales_ireland.sql");
   await db.admin.query("insert into workspaces(id,name,operating_model,customer_type) values($1,'Synthetic A1','novalure_internal','novalure_internal') on conflict(id) do nothing", [workspaceId]);
   await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic Sales actor','a1@example.invalid','agent','novalure_operator','active')", [ids.actor, workspaceId]);
+  if (profile === "production") {
+    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic Studio intake actor','studio-a1@example.invalid','agent','novalure_operator','active')", [websiteSalesActorId, workspaceId]);
+    await db.admin.query("grant select,insert,update on forms,form_submissions,tasks,consent_records,contact_timeline_items,analytics_events,speed_to_lead_events to novalure_app; grant select on funnels to novalure_app");
+    for (const filename of ["094_website_sales_ingestion.sql", "095_form_tenant_isolation.sql", "096_public_integration_gateway.sql", "100_studio_enquiry_production.sql"]) {
+      await db.admin.query(await readFile(new URL(`../migrations/${filename}`, import.meta.url), "utf8"));
+      await db.admin.query("insert into novalure_schema_migrations(version,name,checksum) values($1,$2,'synthetic-a1-production-shaped')", [filename.slice(0, -4), filename]);
+    }
+  }
   assert.deepEqual((await db.admin.query("select division from projects where id=$1 and workspace_id=$2", [projectId, workspaceId])).rows,
     [{ division: "REAL_ESTATE_GROWTH" }]);
   await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)", [workspaceId, projectId, ids.actor]);
   await db.admin.query("insert into organizations(id,workspace_id,project_id,name,type,division) values($1,$2,$3,'Synthetic company','Unternehmen','REAL_ESTATE_GROWTH')", [ids.company, workspaceId, projectId]);
-  await db.admin.query("insert into contacts(id,workspace_id,project_id,organization_id,name,role,consent_label) values($1,$2,$3,$4,'Synthetic contact','Ansprechpartner','Nur CRM')", [ids.contact, workspaceId, projectId, ids.company]);
-  await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,source,type,status) values($1,$2,$3,$4,'Novalure Studio Form','Website Sales','Neu')", [ids.lead, workspaceId, projectId, ids.contact]);
-  await db.admin.query("insert into deals(id,workspace_id,project_id,contact_id,lead_id,name,stage,source) values($1,$2,$3,$4,$5,'Synthetic existing deal','Qualifiziert','Novalure Studio Form')", [ids.deal, workspaceId, projectId, ids.contact, ids.lead]);
-  await db.admin.query("insert into tasks(id,workspace_id,project_id,contact_id,lead_id,title,status) values($1,$2,$3,$4,$5,'Original intake task','open')",
-    [ids.intakeTask, workspaceId, projectId, ids.contact, ids.lead]);
-  await db.admin.query("insert into forms(id,workspace_id,project_id,name,slug,status) values($1,$2,$3,'Synthetic Studio intake','synthetic-a1','aktiv')", [websiteSalesFormId, workspaceId, projectId]);
-  await db.admin.query("insert into form_submissions(id,workspace_id,project_id,form_id,lead_id,deal_id,contact_id,task_id,mode) values($1,$2,$3,$4,$5,$6,$7,$8,'live')",
-    [ids.submission, workspaceId, projectId, websiteSalesFormId, ids.lead, ids.deal, ids.contact, ids.intakeTask]);
+  const contactEmail = "studio-a1-known-contact@example.invalid";
+  await db.admin.query("insert into contacts(id,workspace_id,project_id,organization_id,name,email,role,consent_label) values($1,$2,$3,$4,'Synthetic contact',$5,'Ansprechpartner','Nur CRM')", [ids.contact, workspaceId, projectId, ids.company, contactEmail]);
+  if (profile === "production") {
+    // Real local server-function intake through the standalone 100/Form path.
+    // This does not exercise or relax hosted Preview ingress or its synthetic marker policy.
+    const snapshot: StudioEnquirySnapshot = { schemaVersion: "studio-enquiry-snapshot-v1", conversationId: randomUUID(),
+      confirmedAt: new Date().toISOString(), consent: { privacy: true, policyVersion: "studio-enquiry-2026-10-18" },
+      brief: { values: { goals: "Synthetic internal website review", email: contactEmail, contactMethod: "email",
+        company: "Untrusted customer company text" }, summary: "Synthetic website enquiry", openQuestions: [] },
+      files: [], websites: [], syntheticTest: false };
+    const request = parseStudioEnquiryRequest({ version: "studio-enquiry-v1", action: "reserve", operationId: randomUUID(),
+      revision: 1, snapshot, payloadHash: studioEnquiryHash(JSON.stringify(snapshot)) });
+    const before = (await db.admin.query(`select (select count(*)::int from leads) as leads,
+      (select count(*)::int from deals) as deals,(select count(*)::int from tasks) as tasks,
+      (select count(*)::int from contacts) as contacts,(select count(*)::int from form_submissions) as submissions`)).rows[0];
+    const savedEnvironment = { ...process.env };
+    try {
+      Object.assign(process.env, { NODE_ENV: "test", CRM_LOCAL_TEST_DATABASE: "1",
+        DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, NOVALURE_ABUSE_SECRET: "synthetic-a1-only-abuse-secret" });
+      delete process.env.VERCEL; delete process.env.VERCEL_ENV; delete process.env.VERCEL_URL;
+      assert.equal((await executeStudioEnquiry(request)).status, "reserved");
+      const finalized = await executeStudioEnquiry({ ...request, action: "finalize" });
+      assert.equal(finalized.status, "transmitted");
+      if (finalized.status !== "transmitted") throw new Error("Expected the actual durable Studio receipt");
+      const { receipt } = finalized;
+      chain = { operationId: receipt.operationId, revision: receipt.revision, payloadHash: receipt.payloadHash,
+        leadId: receipt.crmLeadId, submissionId: receipt.formSubmissionId };
+      assert.deepEqual(await executeStudioEnquiry({ ...request, action: "finalize" }), finalized,
+        "same-key intake replay preserves the original receipt and creates no deal or task");
+    } finally {
+      await closeLocalTestPool();
+      for (const name of Object.keys(process.env)) if (!(name in savedEnvironment)) delete process.env[name];
+      Object.assign(process.env, savedEnvironment);
+    }
+    const after = (await db.admin.query(`select (select count(*)::int from leads) as leads,
+      (select count(*)::int from deals) as deals,(select count(*)::int from tasks) as tasks,
+      (select count(*)::int from contacts) as contacts,(select count(*)::int from form_submissions) as submissions`)).rows[0];
+    assert.deepEqual(after, { ...before, leads: before.leads + 1, submissions: before.submissions + 1 });
+    assert.deepEqual((await db.admin.query("select contact_id,deal_id,task_id,mode from form_submissions where id=$1", [chain.submissionId])).rows,
+      [{ contact_id: ids.contact, deal_id: null, task_id: null, mode: "live" }]);
+    assert.deepEqual((await db.admin.query("select organization_id from contacts where id=$1", [ids.contact])).rows,
+      [{ organization_id: ids.company }], "intake reused the known canonical contact without trusting company text");
+    assert.deepEqual((await db.admin.query("select state,lead_id,submission_id from studio_enquiry_transfers where operation_id=$1", [chain.operationId])).rows,
+      [{ state: "accepted", lead_id: chain.leadId, submission_id: chain.submissionId }]);
+  } else {
+    // Retain the existing exact original-Deal/IntakeTask preservation branch.
+    await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,source,type,status) values($1,$2,$3,$4,'Novalure Studio Form','Website Sales','Neu')", [ids.lead, workspaceId, projectId, ids.contact]);
+    await db.admin.query("insert into deals(id,workspace_id,project_id,contact_id,lead_id,name,stage,source) values($1,$2,$3,$4,$5,'Synthetic existing deal','Qualifiziert','Novalure Studio Form')", [ids.deal, workspaceId, projectId, ids.contact, ids.lead]);
+    await db.admin.query("insert into tasks(id,workspace_id,project_id,contact_id,lead_id,title,status) values($1,$2,$3,$4,$5,'Original intake task','open')",
+      [ids.intakeTask, workspaceId, projectId, ids.contact, ids.lead]);
+    await db.admin.query("insert into forms(id,workspace_id,project_id,name,slug,status) values($1,$2,$3,'Synthetic Studio intake','synthetic-a1','aktiv')", [websiteSalesFormId, workspaceId, projectId]);
+    await db.admin.query("insert into form_submissions(id,workspace_id,project_id,form_id,lead_id,deal_id,contact_id,task_id,mode) values($1,$2,$3,$4,$5,$6,$7,$8,'live')",
+      [ids.submission, workspaceId, projectId, websiteSalesFormId, ids.lead, ids.deal, ids.contact, ids.intakeTask]);
+  }
+  const originalSubmission = (await db.admin.query("select to_jsonb(s) as original from form_submissions s where id=$1", [chain.submissionId])).rows[0].original;
+  const originalLead = (await db.admin.query("select source,status,metadata->'studioEnquiry' as confirmation from leads where id=$1", [chain.leadId])).rows[0];
+  const originalDeal = profile === "preview"
+    ? (await db.admin.query("select name,stage,source from deals where id=$1", [ids.deal])).rows[0] : null;
 
   // Reader-side PostgreSQL and OIDC boundaries have their own exact tests.
-  // This local stand-in checks the originating workload and full transfer tuple on every Sales invocation.
+  // Production authority remains a local stand-in; it checks the full tuple against the real accepted intake.
   await db.admin.query(`create table a1_source_fixture (
     workload_id uuid, grant_id uuid, workspace_id uuid, project_id uuid, operation_id uuid, revision integer,
     payload_hash text, lead_id uuid, submission_id uuid, enabled boolean not null default true
@@ -186,8 +249,11 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   if (profile === "production") {
     await db.admin.query(`create function public.crm_studio_source_transfer_matches(uuid,uuid,uuid,uuid,uuid,integer,text,uuid,uuid)
       returns boolean language sql volatile security definer set search_path=pg_catalog,public as $$
-      select exists(select 1 from a1_source_fixture where enabled
-        and (workload_id,grant_id,workspace_id,project_id,operation_id,revision,payload_hash,lead_id,submission_id)=($1,$2,$3,$4,$5,$6,$7,$8,$9))
+      select exists(select 1 from a1_source_fixture f join studio_enquiry_transfers t
+        on (t.operation_id,t.workspace_id,t.revision,t.payload_hash,t.lead_id,t.submission_id)=
+          (f.operation_id,f.workspace_id,f.revision,f.payload_hash,f.lead_id,f.submission_id)
+        where f.enabled and t.state='accepted' and t.snapshot_text::jsonb->'syntheticTest'='false'::jsonb
+        and (f.workload_id,f.grant_id,f.workspace_id,f.project_id,f.operation_id,f.revision,f.payload_hash,f.lead_id,f.submission_id)=($1,$2,$3,$4,$5,$6,$7,$8,$9))
       $$`);
   } else {
     // Install the actual Preview SOURCE check with isolated predecessor rows.
@@ -215,7 +281,7 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
     await db.admin.query("update studio_enquiry_transfers set state='accepted',accepted_at=clock_timestamp() where operation_id=$1", [ids.transfer]);
   }
   await db.admin.query("insert into a1_source_fixture values($1,$2,$3,$4,$5,1,$6,$7,$8)",
-    [ids.sourceWorkload, ids.sourceGrant, workspaceId, projectId, ids.transfer, payloadHash, ids.lead, ids.submission]);
+    [ids.sourceWorkload, ids.sourceGrant, workspaceId, projectId, chain.operationId, chain.payloadHash, chain.leadId, chain.submissionId]);
   await db.admin.query("create role sales_machine_installer nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
   await db.admin.query("grant usage,create on schema public to sales_machine_installer; grant references,select on workspaces,workspace_users,projects,organizations,crm_company_locations to sales_machine_installer; grant select,update on workspaces,workspace_users,project_pipeline_permissions to sales_machine_installer; grant execute on function crm_reject_immutable_mutation() to sales_machine_installer");
   for (const table of ["workspaces", "workspace_users", "project_pipeline_permissions", "projects", "organizations", "crm_company_locations"])
@@ -261,7 +327,7 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   const qualify = (observed: typeof workflow) => command("qualify", { contactId: ids.contact,
     opportunitySummary: "Synthetic opportunity", nextAction: "Review internally",
     expectedEvidenceDigest: observed.evidenceDigest, studioTransfer: {
-      sourceGrantId: ids.sourceGrant, operationId: ids.transfer, revision: 1, payloadHash, leadId: ids.lead, submissionId: ids.submission,
+      sourceGrantId: ids.sourceGrant, ...chain,
     } }, { locationId, expectedVersion: observed.version });
 
   const totals = async () => (await db.admin.query(`select
@@ -285,14 +351,14 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
           (select count(*)::int from audit_logs where after->>'correlationId'=$4) as audit,
           (select count(*)::int from crm_domain_events where correlation_id=$4::text::uuid) as events,
           (select count(*)::int from crm_website_sales_machine_events where grant_id=$5) as machine_events`,
-        [expiring.id, ids.lead, ids.deal, request.correlationId, activeGrantId])).rows[0],
+        [expiring.id, chain.leadId, ids.deal, request.correlationId, activeGrantId])).rows[0],
       });
       const before = await snapshot();
       const blocker = await db.admin.connect();
       let pending: ReturnType<typeof invoke> | undefined;
       try {
         await blocker.query("begin");
-        await blocker.query("select id from leads where id=$1 for update", [ids.lead]);
+        await blocker.query("select id from leads where id=$1 for update", [chain.leadId]);
         const blockerPid = (await blocker.query("select pg_backend_pid() as pid")).rows[0].pid;
         pending = invoke(envelope(request));
         let waitingAfterReady = false;
@@ -318,7 +384,10 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
       workflow = (await observe(Date.now() + 120_000, expiring.version)).data.workflow!;
     });
   }
-  const original = qualify(workflow);
+  let original = qualify(workflow);
+  const conflictingDeal = profile === "production" ? randomUUID() : null;
+  if (conflictingDeal) await db.admin.query("insert into deals(id,workspace_id,project_id,contact_id,name,stage,source) values($1,$2,$3,$4,'Unclaimed conflicting deal','Qualifiziert','Novalure Studio Form')",
+    [conflictingDeal, workspaceId, projectId, ids.contact]);
   const baseline = await totals();
   if (profile === "preview") {
     const read = { contractVersion: websiteSalesMachineContract, operation: "read",
@@ -347,7 +416,7 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   }
   assert.equal((await invoke(envelope({ ...original, projectId: randomUUID() }))).body.code, "SALES_RESOURCE_DENIED");
   const transfer = original.payload.studioTransfer as Record<string, unknown>;
-  const changed = { ...original, payload: { ...original.payload, studioTransfer: { ...transfer, revision: 2 } } };
+  let changed = { ...original, payload: { ...original.payload, studioTransfer: { ...transfer, revision: 2 } } };
   assert.equal((await invoke(envelope(changed))).body.code, "STUDIO_SOURCE_TRANSFER_UNCONFIRMED");
   assert.equal((await invoke(envelope({ ...original, payload: { ...original.payload, contactId: randomUUID() } }))).body.code, "STUDIO_INBOUND_CONTACT_CONFLICT");
   const stale = { ...original, payload: { ...original.payload, expectedEvidenceDigest: payloadHash } };
@@ -358,6 +427,14 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   assert.equal((await invoke(envelope(original))).body.code, "OPT_OUT");
   await db.admin.query("update contacts set consent_label='Nur CRM' where id=$1", [ids.contact]);
   assert.deepEqual(await totals(), baseline);
+  if (conflictingDeal) {
+    await db.admin.query("update deals set lead_id=$2 where id=$1", [conflictingDeal, chain.leadId]);
+    assert.equal((await invoke(envelope(original))).body.code, "STUDIO_INBOUND_DEAL_CONFLICT",
+      "a NULL intake Deal never authorizes silently adopting an existing Deal");
+    assert.deepEqual(await totals(), baseline);
+    await db.admin.query("update deals set lead_id=null where id=$1", [conflictingDeal]);
+    assert.deepEqual(await totals(), baseline);
+  }
 
   // Simulate late failure after the exact internal task insertion. No partial commit.
   await db.admin.query(`create function a1_test_abort_qualify() returns trigger language plpgsql as $$ begin
@@ -368,18 +445,48 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   assert.deepEqual(await totals(), baseline);
   await db.admin.query("drop trigger a1_test_abort on crm_website_sales_workflows");
 
-  const signed = credential(envelope(original), activeGrantId);
-  const first = await invoke(envelope(original), signed);
+  let signed = credential(envelope(original), activeGrantId);
+  let first: Awaited<ReturnType<typeof invoke>>;
+  if (profile === "production") {
+    const competing = { ...original, idempotencyKey: randomUUID(), correlationId: randomUUID() };
+    const competingSigned = credential(envelope(competing), activeGrantId);
+    const outcomes = await Promise.all([invoke(envelope(original), signed), invoke(envelope(competing), competingSigned)]);
+    assert.deepEqual(outcomes.map(result => result.status).sort(), [200, 409],
+      "two simultaneous commands for the same accepted Lead commit one qualification");
+    const winner = outcomes.findIndex(result => result.status === 200);
+    assert.equal(outcomes[1 - winner].body.code, "VERSION_CONFLICT");
+    first = outcomes[winner];
+    if (winner === 1) { original = competing; signed = competingSigned; }
+    changed = { ...original, payload: { ...original.payload, studioTransfer: { ...transfer, revision: 2 } } };
+  } else first = await invoke(envelope(original), signed);
   assert.equal(first.status, 200, JSON.stringify(first.body));
-  assert.equal(first.body.data.workflow.leadId, ids.lead);
-  assert.equal(first.body.data.workflow.dealId, ids.deal);
+  assert.equal(first.body.data.workflow.leadId, chain.leadId);
+  const qualifiedDealId = first.body.data.workflow.dealId;
+  assert.ok(qualifiedDealId);
+  if (profile === "preview") assert.equal(qualifiedDealId, ids.deal);
+  else {
+    assert.deepEqual((await db.admin.query("select id,contact_id,lead_id,organization_id from deals where workspace_id=$1 and project_id=$2 and lead_id=$3",
+      [workspaceId, projectId, chain.leadId])).rows,
+    [{ id: qualifiedDealId, contact_id: ids.contact, lead_id: chain.leadId, organization_id: ids.company }]);
+    assert.deepEqual((await db.admin.query("select contact_id,deal_id,task_id,mode from form_submissions where id=$1", [chain.submissionId])).rows,
+      [{ contact_id: ids.contact, deal_id: null, task_id: null, mode: "live" }], "qualification preserves the original lead-only intake receipt");
+  }
   assert.equal(first.body.data.workflow.canContact, false);
   assert.ok(first.body.data.workflow.nextTaskId);
   assert.equal((await invoke(envelope(original), signed)).body.code, "NONCE_REPLAY");
   const replay = await invoke(envelope(original));
   assert.equal(replay.body.replayed, true);
   assert.equal(replay.body.data.workflow.nextTaskId, first.body.data.workflow.nextTaskId);
-  assert.deepEqual(await totals(), { ...baseline, tasks: baseline.tasks + 1, receipts: baseline.receipts + 1 });
+  assert.equal(replay.body.data.workflow.dealId, qualifiedDealId);
+  const committedTotals = { ...baseline, tasks: baseline.tasks + 1, deals: baseline.deals + (profile === "production" ? 1 : 0), receipts: baseline.receipts + 1 };
+  assert.deepEqual(await totals(), committedTotals);
+  assert.deepEqual((await db.admin.query("select contact_id,lead_id,status from tasks where id=$1", [first.body.data.workflow.nextTaskId])).rows,
+    [{ contact_id: ids.contact, lead_id: chain.leadId, status: "open" }]);
+  assert.deepEqual((await db.admin.query("select to_jsonb(s) as original from form_submissions s where id=$1", [chain.submissionId])).rows[0].original,
+    originalSubmission, "qualification and replay preserve every original submission field");
+  assert.deepEqual((await db.admin.query("select source,status,metadata->'studioEnquiry' as confirmation from leads where id=$1", [chain.leadId])).rows[0],
+    originalLead, "original Studio source, state and immutable confirmation survive qualification");
+  if (profile === "preview") assert.deepEqual((await db.admin.query("select name,stage,source from deals where id=$1", [ids.deal])).rows[0], originalDeal);
 
   if (profile === "preview") {
     const audit = (await db.admin.query("select after->'actor' as actor from audit_logs where id=$1", [first.body.auditReference])).rows[0].actor;
@@ -397,8 +504,8 @@ test(`A1 ${profile} qualify persists one atomic task and the exact receipt using
   assert.equal(receipt.body.auditReference, first.body.auditReference);
   assert.deepEqual(receipt.body.data, first.body.data);
   assert.equal((await invoke(envelope(changed, "reconcile"))).body.code, "IDEMPOTENCY_CONFLICT");
-  assert.deepEqual(await totals(), { ...baseline, tasks: baseline.tasks + 1, receipts: baseline.receipts + 1 });
-  assert.deepEqual((await db.admin.query("select title,status from tasks where id=$1", [ids.intakeTask])).rows,
+  assert.deepEqual(await totals(), committedTotals);
+  if (profile === "preview") assert.deepEqual((await db.admin.query("select title,status from tasks where id=$1", [ids.intakeTask])).rows,
     [{ title: "Original intake task", status: "open" }]);
 });
 }

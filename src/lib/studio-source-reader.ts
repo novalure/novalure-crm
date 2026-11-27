@@ -140,7 +140,10 @@ export async function assertStudioAcceptedTransfer(
       from public.form_submissions s where s.workspace_id = $3::uuid and s.project_id = $4::uuid
         and s.lead_id = $8::uuid and s.id = $9::uuid and s.form_id = $10::uuid and s.mode = 'live'`,
       [authority.workloadId, authority.sourceGrantId, ...binding]);
-  if (result?.matched !== true || !result.dealId || !uuid.test(result.dealId) || !result.contactId || !uuid.test(result.contactId)) return fail();
+  // A confirmed Lead-only intake deliberately has no Deal. Only that exact NULL
+  // shape is eligible for creation by the separately authorized READY qualify.
+  if (result?.matched !== true || (result.dealId !== null && !uuid.test(result.dealId)) ||
+    !result.contactId || !uuid.test(result.contactId)) return fail();
   return { dealId: result.dealId, contactId: result.contactId };
 }
 

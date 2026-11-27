@@ -34,9 +34,13 @@ Use the authenticated SOURCE response's `sourceGrantId` and event values
 in the signed execution request.
 CRM independently authenticates the associated current workload and SOURCE
 grant, checks the accepted live transfer against its activation boundary,
-and validates the exact original contact, lead and deal from the submission.
-A missing or conflicting link is a manual-review outcome. The accepted
-lead and deal retain their original commercial state and source metadata.
+and validates the exact original contact and lead from the submission. A
+confirmed Lead-only intake retains its original NULL Deal and Task links.
+Only the authorized, current READY qualification may create its missing Deal,
+atomically with the workflow, follow-up and receipt. An existing Deal must be
+the exact submission Deal; another claim or a conflicting link requires manual
+review. The accepted lead and any original deal retain their commercial state
+and source metadata. Qualification never rewrites the original submission.
 CRM adds one separate internal qualification follow-up and stores its
 `data.workflow.nextTaskId` in the command receipt atomically. Any existing
 Studio intake task stays in place. Evelyn uses this ID and receipt directly.
@@ -78,7 +82,10 @@ node --conditions=react-server --import tsx --test scripts/website-sales-a1-qual
 ```
 
 Both profiles exercise the actual 202/203 DDL, Sales route and receipt
-transaction in disposable local PostgreSQL. The production test uses a
-synthetic SOURCE tuple. The Preview test also installs the guarded SOURCE
-stage and uses locally signed OIDC fixtures and simulated native target
+transaction in disposable local PostgreSQL. The production-shaped local test
+finalizes a real text-only Studio request through the standard 100 form
+persistence path and verifies its original Lead-only intake before qualification.
+Its SOURCE authority is the explicit local fixture boundary, not native production
+evidence. The Preview test retains the existing original Deal and intake Task,
+installs the guarded SOURCE stage and uses locally signed OIDC fixtures and simulated native target
 metadata. A protected Vercel run provides the separate native acceptance.
