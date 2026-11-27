@@ -277,4 +277,4 @@ test("signed receipt-only recovery never creates a missing effect and cannot bec
  const intent=body("Create",{title:"SYNTHETIC not yet created"});assert.equal((await reconcile(create.grantId,intent)).status,404);assert.equal((await db.admin.query("select count(*) from tasks where id=$1",[id])).rows[0].count,"0");
 });
 
-export function autonomousPairedFixture(){return {db,registration,provision,body,ids:{actor,workload,project,mission,task,workspace:CRM_MACHINE_WORKSPACE_ID}};}
+export function autonomousPairedFixture(){return {db,registration,provision,body,auth,signature,call,reconcile,owner,ids:{actor,workload,project,mission,task,contact,company,lead,unit,workspace:CRM_MACHINE_WORKSPACE_ID}};}

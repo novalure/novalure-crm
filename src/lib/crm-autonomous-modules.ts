@@ -105,6 +105,10 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
     if(expiresAt<=seconds)denied();data={operations:operations(grant),expiresAt,readFields,writeFields:grant.write_fields.filter(f=>rules(grant).some(r=>r.operation!=="Read"&&r.fields.includes(f))),contractVersion:autonomousModuleContract,parentGrantId:grant.parent_grant_id,delegationKind:grant.delegation_kind};
    }else if(body.operation==="Read")data=await readAutonomousModule(tx,grant,readFields);
    else{
+    if(!reconcileOnly&&(options.machineAuth?.env??process.env).CRM_AUTONOMOUS_NONEXECUTION_ENABLED==="1"){
+     try{await tx.query("select public.crm_assert_autonomous_command_open($1::uuid,$2)",[grant.workspace_id,body.idempotencyKey]);}
+     catch(error){if(error&&typeof error==="object"&&"message" in error&&error.message==="COMMAND_CLOSED_WITHOUT_EFFECT")denied("COMMAND_CLOSED_WITHOUT_EFFECT",409);throw error;}
+    }
     await assertAutonomousModuleRelations(tx,grant,body.patch);await revalidate();
     let result:{data:Record<string,unknown>;auditReference:string;replayed:boolean};
     if(reconcileOnly){

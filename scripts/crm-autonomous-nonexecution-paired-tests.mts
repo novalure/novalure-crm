@@ -1,0 +1,23 @@
+import assert from "node:assert/strict";
+import {createHash,randomUUID} from "node:crypto";
+import {execFileSync} from "node:child_process";
+import {readFile} from "node:fs/promises";
+import path from "node:path";
+import {pathToFileURL} from "node:url";
+import {test} from "node:test";
+import {autonomousNonexecutionFixture} from "./crm-autonomous-nonexecution-tests";
+import {handleAutonomousCrmNonexecution} from "../src/lib/crm-autonomous-nonexecution";
+import type {TenantPool} from "../src/lib/db/tenant-client";
+const modulePath=process.env.CRM_PAIRED_NONEXECUTION_MODULE,revision=process.env.CRM_PAIRED_NONEXECUTION_REVISION;
+if(!modulePath||!revision||!/^[a-f0-9]{40}$/.test(revision))throw new Error("EXACT_NONEXECUTION_COUNTERPART_REQUIRED");
+const absolute=path.resolve(modulePath),checkout=path.resolve(path.dirname(absolute),"../../..");
+assert.equal(execFileSync("git",["-C",checkout,"rev-parse","HEAD"],{encoding:"utf8",windowsHide:true}).trim(),revision);
+const actual=await import(pathToFileURL(absolute).href),compiledSha256=createHash("sha256").update(await readFile(absolute)).digest("hex");
+test("actual immutable recovery client and real CRM receiver distinguish lost close acknowledgement from missing delivery",async()=>{
+ const {f,recovery,auth,token,authority,binding,invoke}=autonomousNonexecutionFixture();let attempts=0,serverCalls=0,dropBefore=false,dropAfter=false,serverReceipt:Record<string,unknown>|undefined;
+ const fetcher:typeof fetch=async(input,init)=>{attempts++;if(dropBefore){dropBefore=false;throw new Error("SYNTHETIC undelivered recovery");}serverCalls++;const response=await handleAutonomousCrmNonexecution(new Request(String(input),init),{pool:f.db.pool as unknown as TenantPool,machineAuth:auth()});if(response.status===200)serverReceipt=await response.clone().json();if(dropAfter){dropAfter=false;await response.arrayBuffer();throw new Error("SYNTHETIC committed close response lost");}return response;};
+ const make=async()=>{const r=f.registration("Task",randomUUID(),{scopes:["crm.tasks.read","crm.tasks.create"],module:{contractVersion:"crm-autonomous-access-v2",readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode:"CREATE"}});await f.provision(r);const body=f.body("Create",{title:"SYNTHETIC paired nonexecution"}),b=binding(r,body),id=await authority(r.grantId),client=actual.createCrmNonexecutionClient(b,{recoveryAuthorityId:id,resolveRecoverySigningKey:async()=>recovery.privateKey,getToken:token,fetch:fetcher});return {r,body,b,client};};
+ const fenced=await make();dropAfter=true;assert.equal((await fenced.client.close(fenced.body)).outcome,"UNKNOWN");const reference=serverReceipt?.closureReference,recovered=await fenced.client.close(fenced.body);assert.equal(recovered.outcome,"CONFIRMED");assert.equal(recovered.receipt.outcome,"NO_EFFECT");assert.equal(recovered.receipt.closureReference,reference);assert.equal(recovered.receipt.replayed,true);assert.notEqual((await invoke(fenced.r,fenced.body)).status,200);assert.equal((await f.db.admin.query("select count(*) from tasks where id=$1",[fenced.r.sourceId])).rows[0].count,"0");
+ const undelivered=await make();dropBefore=true;assert.equal((await undelivered.client.close(undelivered.body)).outcome,"UNKNOWN");assert.equal((await f.db.admin.query("select count(*) from crm_autonomous_nonexecution_closures where grant_id=$1",[undelivered.r.grantId])).rows[0].count,"0");const applied=await invoke(undelivered.r,undelivered.body);assert.equal(applied.status,200);const observed=await undelivered.client.close(undelivered.body);assert.equal(observed.outcome,"CONFIRMED");assert.equal(observed.receipt.outcome,"APPLIED");assert.equal(observed.receipt.replayed,true);assert.equal(observed.receipt.auditReference,applied.body.auditReference);assert.equal("data" in observed.receipt,false);
+ console.log("NONEXECUTION_PAIRED_EVIDENCE "+JSON.stringify({evelynRevision:revision,compiledSha256,attempts,serverCalls,actualReceiver:true,actualPostgreSQL:true,rsaAndEd25519:true,scope:"SYNTHETIC_LOCAL_ONLY",lostCloseAck:"STABLE_NO_EFFECT_NO_LATE_MUTATION",undeliveredClose:"UNKNOWN_NO_TOMBSTONE_THEN_ORIGINAL_APPLIED"}));
+});

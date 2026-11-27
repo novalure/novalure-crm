@@ -19,7 +19,8 @@
       "codex/shared-behavior-package2-20261026": false,
       "codex/shared-behavior-foundation-20261026": false,
       "codex/expose-release-20261125-heic-7e9f2c": false,
-      "codex/crm-agent-main-integration-20261127": false
+      "codex/crm-agent-main-integration-20261127": false,
+      "codex/crm-no-effect-20261127": false
     }
   },
   "crons": [
