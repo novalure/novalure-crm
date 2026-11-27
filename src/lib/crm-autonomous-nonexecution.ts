@@ -22,7 +22,7 @@ function parseProof(request:Request,now:number){
  let p:Record<string,unknown>;
  try{p=JSON.parse(Buffer.from(parts[2]!,"base64url").toString("utf8"));}catch{deny("RECOVERY_SIGNATURE_INVALID",401);}
  if(!p||typeof p!=="object"||Array.isArray(p)||!sameKeys(p,[...bindingFields,"issuedAt","expiresAt","nonce"]))deny();
- if(!Number.isSafeInteger(p.issuedAt)||!Number.isSafeInteger(p.expiresAt)||Number(p.issuedAt)>now+30||Number(p.expiresAt)<=now||Number(p.expiresAt)<=Number(p.issuedAt)||Number(p.expiresAt)-Number(p.issuedAt)>300||typeof p.nonce!=="string"||!uuid.test(p.nonce))deny("RECOVERY_SIGNATURE_INVALID",401);
+ if(!Number.isSafeInteger(p.issuedAt)||!Number.isSafeInteger(p.expiresAt)||Number(p.issuedAt)>now+30||Number(p.expiresAt)<=now||Number(p.expiresAt)<=Number(p.issuedAt)||Number(p.expiresAt)-Number(p.issuedAt)>60||typeof p.nonce!=="string"||!uuid.test(p.nonce))deny("RECOVERY_SIGNATURE_INVALID",401);
  const binding=Object.fromEntries(bindingFields.map(f=>[f,p[f]])) as Binding;
  for(const f of ["grantId","workspaceId","sourceId","taskId","crmProjectId","controlProjectId","missionId","attemptId","effectId"] as const)if(typeof binding[f]!=="string"||!uuid.test(binding[f]))deny();
  if(!digest.test(binding.targetDigest)||!digest.test(binding.artifactDigest)||!digest.test(binding.requestDigest)||!/^[1-9][0-9]{0,17}$/.test(binding.registryVersion)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(binding.agentId)||typeof binding.departmentId!=="string"||typeof binding.entity!=="string")deny();
