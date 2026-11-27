@@ -149,7 +149,9 @@ test("Sales exact receipt uses the already authenticated workload and active SOU
 
 test("native staged SOURCE preserves activation and sealed progress through ordered commits and grant rotation", async t => {
   const cluster = await startLocalSalesDb();
-  let adminConnection: LocalSalesPool | undefined, runtimeConnection: LocalSalesPool | undefined;
+  const local = { host: "127.0.0.1", port: cluster.port, database: "neondb" };
+  const runtimeConnection = new LocalSalesPool({ ...local, user: "novalure_app" });
+  let adminConnection: LocalSalesPool | undefined;
   const previous = process.env.DATABASE_URL;
   t.after(async () => {
     if (previous === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previous;
@@ -157,7 +159,6 @@ test("native staged SOURCE preserves activation and sealed progress through orde
     finally { await cluster.stop(); }
   });
   process.env.DATABASE_URL = `postgresql://novalure_app@127.0.0.1:${cluster.port}/neondb`;
-  const local = { host: "127.0.0.1", port: cluster.port, database: "neondb" };
   await cluster.admin.query("create database neondb");
   await cluster.admin.query(`
     alter database neondb set neon.project_id = 'misty-cloud-70835427';
@@ -168,7 +169,6 @@ test("native staged SOURCE preserves activation and sealed progress through orde
     create role studio_source_fixture_owner nologin noinherit;
   `);
   const admin = adminConnection = new LocalSalesPool({ ...local, user: "qa_admin" });
-  runtimeConnection = new LocalSalesPool({ ...local, user: "novalure_app" });
   const pool = runtimeConnection as unknown as ReaderPool;
   const workload = randomUUID();
   // A disposable PostgreSQL schema for the actual staged SQL and handler
