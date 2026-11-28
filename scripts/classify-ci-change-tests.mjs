@@ -80,7 +80,7 @@ test("Git scope reads immutable blobs and a renamed Markdown file remains HIGH",
 });
 
 test("workflow retains required job names, trusted-base adoption and manual QA coverage", () => {
-  const workflow = readFileSync(new URL("../.github/workflows/livegang-e2e.yml", import.meta.url), "utf8");
+  const workflow = readFileSync(new URL("../.github/workflows/livegang-e2e.yml", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
   assert.match(workflow, /name: Lockfile, lint, typecheck, tests and build/u);
   assert.match(workflow, /name: Production dependency audit and SBOM/u);
   assert.match(workflow, /name: Manual trusted-candidate QA regression and tenant diagnostics/u);

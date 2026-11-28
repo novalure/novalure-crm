@@ -95,7 +95,9 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     if(selectedUnit.status==='sold'||selectedUnit.status==='blocked')conflict('Desired unit is not available for qualification');
     const contact=required(await tx.queryOne<Row>('select * from contacts where workspace_id=$1 and id=$2 and project_id=$3',[w,row.contact_id,projectId]),'Project buyer contact');
     if(!contact.email&&!contact.phone)throw new PropertySalesValidationError('A buyer contact channel is required');
-    const profile={...object(row.buyer_profile),budgetFrom:q.budgetFrom,budgetTo:q.budgetTo,financingStatus:q.financingStatus,purchaseTimeline:q.purchaseTimeline,useCase:q.useCase};
+    const profile={...object(row.buyer_profile),budgetFrom:q.budgetFrom,budgetTo:q.budgetTo,financingStatus:q.financingStatus,purchaseTimeline:q.purchaseTimeline,useCase:q.useCase,
+      ...(q.desiredLocation!==undefined?{desiredLocation:q.desiredLocation}:{}),...(q.mustHaveCriteria!==undefined?{mustHaveCriteria:q.mustHaveCriteria}:{}),
+      ...(q.niceToHaveCriteria!==undefined?{niceToHaveCriteria:q.niceToHaveCriteria}:{}),...(q.propertyType!==undefined?{propertyType:q.propertyType}:{})};
     const qualification={complete:true,priority:q.priority,desiredUnitId:q.desiredUnitId,sourceReference:q.sourceReference,qualifiedBy:session.userId,qualifiedAt:new Date().toISOString(),version:Number(row.version)+1};
     const saved=await tx.queryOne<Row>("update leads set buyer_profile=$4::jsonb,sales_qualification=$5::jsonb,status='Qualifiziert',version=version+1,updated_at=now() where workspace_id=$1 and project_id=$2 and id=$3 returning *",[w,projectId,row.id,JSON.stringify(profile),JSON.stringify(qualification)]);
     await syncBuyerSearchProfileInTransaction(tx,{session,profile:{...profile,financingStatus:q.financingStatus as 'offen',projectId,buyerLeadId:String(row.id),contactId:String(row.contact_id),title:String(row.intent||'Käufer-Suchprofil'),matchingStatus:'open',metadata:{source:'sales_qualification',qualificationVersion:qualification.version}}});
@@ -145,7 +147,8 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     if(duplicates)conflict('Unit already has an open reservation');
     const expiresAt=salesText(p.expiresAt,'expiresAt');
     if(!Number.isFinite(Date.parse(expiresAt))||Date.parse(expiresAt)<=Date.now())throw new PropertySalesValidationError('Future expiry required');
-    const row=await tx.queryOne<Row>("insert into property_reservations(workspace_id,project_id,unit_id,contact_id,buyer_lead_id,status,expires_at,metadata) values($1,$2,$3,$4,$5,'requested',$6,jsonb_build_object('requestedBy',$7::text)) returning *",[w,projectId,selected.id,buyer.contact_id,buyer.id,expiresAt,session.userId]);
+    const reservationId=p.reservationId===undefined?null:salesUuid(p.reservationId,'reservationId');
+    const row=await tx.queryOne<Row>("insert into property_reservations(id,workspace_id,project_id,unit_id,contact_id,buyer_lead_id,status,expires_at,metadata) values(coalesce($8::uuid,gen_random_uuid()),$1,$2,$3,$4,$5,'requested',$6,jsonb_build_object('requestedBy',$7::text)) returning *",[w,projectId,selected.id,buyer.contact_id,buyer.id,expiresAt,session.userId,reservationId]);
     return {entity:'reservation',record:row,unitVersion:Number(selected.version)};
    }
    if(!reservation)throw new CrmCommandError('NOT_FOUND','Reservation not found',404);
@@ -174,7 +177,8 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
     return {entity:'reservation',record:row,unitVersion:Number(selected.version)+1};
    }
    if(!reservation.confirmation||!reservation.buyer_lead_id)conflict('Authorized reservation confirmation is required');
-   const sale=await tx.queryOne<Row>('insert into property_sales(workspace_id,project_id,unit_id,reservation_id,buyer_lead_id,contact_id,authority_id,confirmed_by,source_reference,unit_version) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',[w,projectId,selected.id,reservation.id,reservation.buyer_lead_id,reservation.contact_id,auth.id,session.userId,evidence.sourceReference,evidence.unitVersion]);
+   const saleId=p.saleId===undefined?null:salesUuid(p.saleId,'saleId');
+   const sale=await tx.queryOne<Row>('insert into property_sales(id,workspace_id,project_id,unit_id,reservation_id,buyer_lead_id,contact_id,authority_id,confirmed_by,source_reference,unit_version) values(coalesce($11::uuid,gen_random_uuid()),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',[w,projectId,selected.id,reservation.id,reservation.buyer_lead_id,reservation.contact_id,auth.id,session.userId,evidence.sourceReference,evidence.unitVersion,saleId]);
    await tx.execute("update property_reservations set status='converted',version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,reservation.id]);
    await tx.execute("update property_units set status='sold',buyer_contact_id=$3,version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,selected.id,reservation.contact_id]);
    if(reservation.deal_id)await tx.execute("update deals set stage='Gewonnen',probability=100,closed_at=now(),updated_at=now() where workspace_id=$1 and project_id=$2 and id=$3",[w,projectId,reservation.deal_id]);

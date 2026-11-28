@@ -12,6 +12,7 @@ import {
   validateCsrfToken,
 } from "../src/lib/security/csrf-core.ts";
 import { verifyMetaWebhookSignature } from "../src/lib/bots/webhook-security.ts";
+import { csrfFetch } from "../src/lib/security/csrf-client.ts";
 
 const secret = "csrf-test-secret-with-more-than-thirty-two-characters";
 const sessionCookie = "signed-session-cookie-a";
@@ -190,7 +191,46 @@ test("one-time ledger and explicit signed exceptions fail closed in source", asy
   assert.match(webhook, /verifyMetaWebhookSignature/);
   assert.match(cronRuntime, /timingSafeEqual/);
   assert.match(cronRuntime, /CRON_SECRET/);
-  assert.match(client, /requestCsrfToken\(method, url\.pathname\)/);
+  assert.match(client, /requestCsrfToken\(method, url\.pathname, signal\)/);
   assert.match(client, /headers\.set\(csrfHeaderName, token\)/);
   assert.doesNotMatch(client, /csrfTokenCache|cachedCsrf/);
+});
+
+test("aborting a mutation also aborts its pending CSRF fetch without starting a write", async (t) => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: new URL(trustedOrigin) } });
+  t.after(() => previousWindow ? Object.defineProperty(globalThis, "window", previousWindow) : delete globalThis.window);
+  const controller = new AbortController(), calls = [];
+  t.mock.method(globalThis, "fetch", (input, init) => {
+    calls.push({ input: String(input), method: init?.method });
+    assert.match(String(input), /^\/api\/auth\/csrf\?/);
+    assert.equal(init.signal, controller.signal);
+    return new Promise((resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+    });
+  });
+  const pending = csrfFetch("/api/workspaces", { method: "PATCH", signal: controller.signal });
+  controller.abort(new DOMException("The operation was aborted", "AbortError"));
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "GET");
+});
+
+test("an aborted Request cannot start a mutation after its CSRF token arrives", async (t) => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: new URL(trustedOrigin) } });
+  t.after(() => previousWindow ? Object.defineProperty(globalThis, "window", previousWindow) : delete globalThis.window);
+  const controller = new AbortController(), calls = [];
+  const request = new Request(trustedOrigin + "/api/workspaces", { method: "PATCH", signal: controller.signal });
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    calls.push(String(input));
+    assert.match(String(input), /^\/api\/auth\/csrf\?/);
+    assert.equal(init.signal, request.signal);
+    return { ok: true, json: async () => {
+      controller.abort(new DOMException("The operation was aborted", "AbortError"));
+      return { csrfToken: "synthetic-method-and-path-bound-token" };
+    } };
+  });
+  await assert.rejects(csrfFetch(request), { name: "AbortError" });
+  assert.equal(calls.length, 1);
 });

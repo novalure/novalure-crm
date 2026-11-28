@@ -924,10 +924,10 @@ test("the dedicated QA 057 cutover is explicit, isolated, and checksummed", () =
 test("QA secrets are step-scoped behind install and all third-party actions are SHA pinned", () => {
   const qaJob = workflow.slice(workflow.indexOf("  qa-e2e:"));
   const jobEnv = qaJob.match(/\n    env:\n([\s\S]*?)\n    steps:/)?.[1] ?? "";
-  assert.doesNotMatch(jobEnv, /secrets\./);
+  assert.doesNotMatch(jobEnv, /secrets(?:\.|\[)/);
   assert.match(qaJob, /environment: \$\{\{ inputs\.qa_profile == 'isolated-candidate' && 'novalure-qa-candidate' \|\| 'novalure-qa' \}\}/);
   assert.ok(
-    qaJob.indexOf("Install dependencies from lockfile") < qaJob.indexOf("secrets.NOVALURE_QA_DATABASE_URL"),
+    qaJob.indexOf("Install dependencies from lockfile") < qaJob.search(/secrets(?:\.|\[)/),
     "QA secrets must not be exposed to checkout, setup, or npm lifecycle scripts",
   );
 

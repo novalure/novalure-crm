@@ -1,5 +1,6 @@
 import type { CoreCrmDataKey, CoreCrmDataResult } from "@/lib/db/crm-loaders";
 import type { CrmSnapshot } from "@/lib/crm-source";
+import type { Project } from "@/lib/crm-types";
 
 const sectionCollections: Record<string, CoreCrmDataKey[]> = {
   contacts: ["contacts"], leadInbox: ["leads"], projects: ["projects"], tasks: ["tasks"],
@@ -14,6 +15,10 @@ const sectionCollections: Record<string, CoreCrmDataKey[]> = {
 /** Unknown module data is an unavailable view, never a verified empty collection. */
 export function unavailableCrmSectionCollections(data: CoreCrmDataResult, section: string) {
   return (sectionCollections[section] ?? []).filter(key => data.moduleSources[key] !== "database" || Boolean(data.moduleErrors?.[key]));
+}
+
+export function countActiveWorkspaceProjects(projects: readonly Project[], workspaceId: string) {
+  return projects.filter(project => project.workspaceId === workspaceId && project.status !== "Archiviert").length;
 }
 
 /** View projection only: preserves source/error metadata and server DTO contracts. */

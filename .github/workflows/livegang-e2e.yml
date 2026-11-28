@@ -15,6 +15,14 @@ on:
         options:
           - standard
           - isolated-candidate
+      qa_target_ref:
+        description: Existing standard QA target reference family (isolated-candidate is unchanged)
+        type: choice
+        required: true
+        default: legacy
+        options:
+          - legacy
+          - longfog
 
 permissions:
   contents: read
@@ -165,6 +173,14 @@ jobs:
       - name: Final sales contract, approval, route and recovery regression
         if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:sales:final
+
+      - name: Registered department, subagent and owner-bound CRM access
+        if: steps.scope.outputs.profile != 'LOW'
+        run: npm run test:crm-autonomous-access
+
+      - name: Accepted Studio source and single internal qualification follow-up
+        if: steps.scope.outputs.profile != 'LOW'
+        run: npm run test:crm-a1-studio
 
       - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
         if: steps.scope.outputs.profile != 'LOW'
@@ -346,6 +362,7 @@ jobs:
       NOVALURE_QA_BASE_URL: http://127.0.0.1:3000
       NOVALURE_TRUSTED_CLIENT_IP_HEADER: x-forwarded-for
       NOVALURE_QA_PROFILE: ${{ inputs.qa_profile }}
+      NOVALURE_QA_REFERENCE_PREFIX: ${{ inputs.qa_profile == 'standard' && inputs.qa_target_ref == 'longfog' && 'NOVALURE_QA_LONGFOG_' || 'NOVALURE_QA_' }}
       STUDIO_ENQUIRY_CANDIDATE_ENABLED: ${{ inputs.qa_profile == 'isolated-candidate' && '1' || '0' }}
       STUDIO_ENQUIRY_QA_EMAILS_JSON: '["studio-candidate-${{ github.run_id }}-${{ github.run_attempt }}@example.invalid"]'
       STUDIO_ENQUIRY_QA_PHONES_JSON: '[]'
@@ -367,15 +384,15 @@ jobs:
       - name: Require all QA secrets and variables
         shell: bash
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           NOVALURE_QA_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
@@ -413,164 +430,164 @@ jobs:
 
       - name: Reject production or ambiguous database targets
         env:
-          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: npm run ci:qa-target
 
       - name: Read-only candidate runtime and migration authentication preflight
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
         run: node --use-system-ca scripts/qa-auth-preflight.mjs
 
       - name: Preview checksummed QA migration plan without writes
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-migration-plan-${{ github.run_id }}-${{ github.run_attempt }}
           MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/db-migrate.mjs dry-run --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Apply checksummed QA migrations
         # The default plan excludes 095/096; isolated-candidate applies both explicitly below.
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-migration-plan-${{ github.run_id }}-${{ github.run_attempt }}
           MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/db-migrate.mjs up --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Preview explicit form isolation QA cutover
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-form-isolation-plan-${{ github.run_id }}-${{ github.run_attempt }}
           MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/db-migrate.mjs dry-run --only=095_form_tenant_isolation --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Apply explicit form isolation QA cutover
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-form-isolation-plan-${{ github.run_id }}-${{ github.run_attempt }}
           MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/db-migrate.mjs up --only=095_form_tenant_isolation --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Preview explicit external integration gateway QA cutover
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-integration-gateway-plan-${{ github.run_id }}-${{ github.run_attempt }}
           MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/db-migrate.mjs dry-run --only=096_public_integration_gateway --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Apply explicit external integration gateway QA cutover
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-integration-gateway-plan-${{ github.run_id }}-${{ github.run_attempt }}
           MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/db-migrate.mjs up --only=096_public_integration_gateway --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Verify gateway runtime binding and retired lookup identity
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: node --use-system-ca scripts/qa-bind-public-form-lookup.mjs
 
       - name: Bind existing QA runtime role to tenant group
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/qa-bind-runtime-role.mjs
 
       - name: Capture canonical Growth seed baseline
         shell: bash
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: |
           set -euo pipefail
           fingerprint="$(npm run --silent qa:tenant-isolation -- --operator-only | sed -n 's/^GROWTH_CANONICAL_SEED_FINGERPRINT=//p')"
@@ -579,39 +596,39 @@ jobs:
 
       - name: Quarantine stale active Growth RLS probes
         env:
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/qa-growth-rls-probe.mjs quarantine-stale
 
       - name: Reset synthetic QA run
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: npm run qa:livegang:reset -- --cleanup-only
 
       - name: Verify cleanup preserves canonical Growth seeds
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Seed two or more isolated QA workspaces
@@ -619,15 +636,15 @@ jobs:
         # through the separate owner connection. Application fixtures still use
         # novalure_app with a transaction-local tenant/actor context.
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           NOVALURE_QA_SEED_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
@@ -635,17 +652,17 @@ jobs:
 
       - name: Verify synthetic QA seeding preserves canonical Growth seeds
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Build the production artifact
@@ -654,15 +671,15 @@ jobs:
       - name: Start production server
         shell: bash
         env:
-          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
           STUDIO_ENQUIRY_SIGNING_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
@@ -692,12 +709,12 @@ jobs:
 
       - name: Run CRM API regression and role-negative tests
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_QA_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
         run: npm run test:e2e
@@ -705,14 +722,14 @@ jobs:
       - name: Run isolated public Form and Website Sales candidate matrix
         if: inputs.qa_profile == 'isolated-candidate'
         env:
-          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           STUDIO_ENQUIRY_SIGNING_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
@@ -728,82 +745,82 @@ jobs:
 
       - name: Provision run-scoped Growth RLS probe
         env:
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: |
           node scripts/qa-growth-rls-probe.mjs seed
           echo "NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED=1" >> "$GITHUB_ENV"
 
       - name: Run tenant-isolation diagnostics
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: npm run qa:tenant-isolation
 
       - name: Remove run-scoped Growth RLS probe
         if: always()
         env:
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: node scripts/qa-growth-rls-probe.mjs cleanup
 
       - name: Cleanup synthetic QA run
         if: always()
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: npm run qa:livegang:reset -- --cleanup-only
 
       - name: Verify final cleanup preserves canonical Growth seeds
         if: always()
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets[format('{0}MIGRATION_DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets[format('{0}MIGRATION_DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
         run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Revoke and verify retired lookup identity after Candidate cleanup
         if: always() && inputs.qa_profile == 'isolated-candidate'
         env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          MIGRATION_DATABASE_URL: ${{ secrets[format('{0}MIGRATION_DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets[format('{0}DATABASE_URL', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets[format('{0}DATABASE_HOST', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets[format('{0}DATABASE_ROLE', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars[format('{0}DATABASE_NAME', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars[format('{0}PROJECT_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars[format('{0}BRANCH_ID', env.NOVALURE_QA_REFERENCE_PREFIX)] }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: node --use-system-ca scripts/qa-revoke-public-form-lookup.mjs
 

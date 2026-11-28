@@ -27,6 +27,8 @@ const eslintConfig = defineConfig([
     "docs/**",
     "*.docx",
     "next-env.d.ts",
+    // Generated third-party decoder; keep authored application code linted.
+    "public/heic-decoder/primary.js",
     ".novalure-*.cjs",
   ]),
 ]);

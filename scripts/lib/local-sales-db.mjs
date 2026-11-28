@@ -53,7 +53,8 @@ async function freePort() {
   });
 }
 /** Entirely local, disposable synthetic cluster. No environment connection string is consumed. */
-export async function startLocalSalesDb() {
+export async function startLocalSalesDb({ database = "postgres" } = {}) {
+  if (!["postgres", "neondb"].includes(database)) throw new Error("Unsupported isolated local sales database");
   await mkdir(qaRoot, { recursive: true });
   const directory = await mkdtemp(path.join(qaRoot, "sales-pg-"));
   if (!directory.startsWith(qaRoot + path.sep)) throw new Error("Unsafe QA directory");
@@ -70,10 +71,15 @@ export async function startLocalSalesDb() {
   try {
     await run(bin.pg_ctl, ["-D", directory, "-l", logfile, "-o", options, "-t", "30", "-w", "start"], workRoot);
     admin = new LocalSalesPool({ host: "127.0.0.1", port, user: "qa_admin", database: "postgres", max: 5, connectionTimeoutMillis: 5_000, query_timeout: 15_000 });
+    if (database === "neondb") {
+      await admin.query("create database neondb");
+      await admin.end();
+      admin = new LocalSalesPool({ host: "127.0.0.1", port, user: "qa_admin", database, max: 5, connectionTimeoutMillis: 5_000, query_timeout: 15_000 });
+    }
     await admin.query(`create role ${role} login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls`);
     await admin.query("create role novalure_app nologin inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
     await admin.query(`grant novalure_app to ${role}`);
-    pool = new LocalSalesPool({ host: "127.0.0.1", port, user: role, database: "postgres", max: 8, connectionTimeoutMillis: 5_000 });
+    pool = new LocalSalesPool({ host: "127.0.0.1", port, user: role, database, max: 8, connectionTimeoutMillis: 5_000 });
     return {
       admin, pool, port, role, directory,
       stop() {

@@ -18,6 +18,9 @@ export function createCrmCoreRequestGuard(initialWorkspaceId: string) {
       latestRefresh = null;
       pendingSwitch = null;
     },
+    isActiveWorkspace(workspaceId: string) {
+      return mounted && activeWorkspaceId === workspaceId;
+    },
     beginRefresh(workspaceId: string): CoreRequestTicket | null {
       if (!mounted || pendingSwitch || workspaceId !== activeWorkspaceId) return null;
       latestRefresh = { id: ++sequence, workspaceId };
@@ -31,6 +34,10 @@ export function createCrmCoreRequestGuard(initialWorkspaceId: string) {
       latestRefresh = null;
       pendingSwitch = { id: ++sequence, workspaceId };
       return pendingSwitch;
+    },
+    cancelSwitch() {
+      latestRefresh = null;
+      pendingSwitch = null;
     },
     completeSwitch(ticket: CoreRequestTicket) {
       if (!isCurrentSwitch(ticket)) return false;

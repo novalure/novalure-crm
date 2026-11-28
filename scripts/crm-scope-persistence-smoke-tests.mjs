@@ -5,6 +5,7 @@ import {
   CRM_SCOPE_ALL_PROJECTS,
   createSelectedCrmScope,
   getCrmScopePreferenceKey,
+  getCrmWorkspaceRestoreTarget,
   parseCrmScopeUrl,
   resolveCrmScope,
   serializeCrmScopeUrl,
@@ -168,6 +169,50 @@ test("scope serialization preserves module hash and unrelated query state", () =
     workspaceId: workspaceA,
   });
   assert.match(serializeCrmScopeUrl("https://crm.example/#calendar", allScope), /projectId=all#calendar$/);
+});
+
+test("reload restores a listed URL workspace before resolving its project", () => {
+  const requested = getCrmWorkspaceRestoreTarget({
+    availableWorkspaces: [{ id: workspaceA }, { id: workspaceB }],
+    currentWorkspaceId: workspaceA,
+    search: `?workspaceId=${workspaceB}&projectId=${foreignProject.id}`,
+  });
+  assert.deepEqual(requested, { workspaceId: workspaceB, projectId: foreignProject.id });
+  const restoredScope = resolveCrmScope({
+    workspaceId: requested.workspaceId,
+    projects: [foreignProject],
+    search: `?workspaceId=${workspaceB}&projectId=${foreignProject.id}`,
+    userId: userA,
+  });
+  assert.equal(restoredScope.status, "valid");
+  assert.equal(restoredScope.projectId, foreignProject.id);
+});
+
+test("reload preserves explicit All instead of applying a stored project", () => {
+  const requested = getCrmWorkspaceRestoreTarget({
+    availableWorkspaces: [{ id: workspaceB }],
+    currentWorkspaceId: workspaceA,
+    search: `?workspaceId=${workspaceB}&projectId=all`,
+  });
+  assert.deepEqual(requested, { workspaceId: workspaceB, projectId: null });
+  assert.equal(createSelectedCrmScope({ ...requested, projects: [foreignProject] }).projectId, null);
+});
+
+test("reload never restores absent duplicate malformed or unlisted workspace URLs", () => {
+  for (const search of [
+    "", `?workspaceId=${workspaceB}`, `?workspaceId=${workspaceB}&workspaceId=${workspaceA}&projectId=all`,
+    `?workspaceId=${encodeURIComponent("../other")}&projectId=all`,
+    `?workspaceId=workspace_unlisted&projectId=all`, `?workspaceId=${workspaceA}&projectId=all`,
+  ]) {
+    assert.equal(getCrmWorkspaceRestoreTarget({
+      availableWorkspaces: [{ id: workspaceA }, { id: workspaceB }], currentWorkspaceId: workspaceA, search,
+    }), null, search);
+  }
+  const unavailableProject = createSelectedCrmScope({
+    workspaceId: workspaceB, projects: [foreignProject], projectId: projectA.id,
+  });
+  assert.equal(unavailableProject.status, "invalid");
+  assert.equal(unavailableProject.invalidReason, "project_not_available");
 });
 
 test("shell persists history and all five audited drafts have no first-project fallback", async () => {

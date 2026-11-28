@@ -9,6 +9,9 @@ export async function GET(request: Request, context: { params: Promise<{ provide
   if (!provider) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
   const target = new URL("/#communication", mailboxOrigin(request.url));
   try {
+    // OAuth callbacks belong to the signed-state and human-session flow. A bearer
+    // credential must follow the same safe denial redirect without exchanging tokens.
+    if (request.headers.has("authorization")) throw new Error("MAIL_OAUTH_DENIED");
     const url = new URL(request.url), state = url.searchParams.get("state"), parsed = parseSignedOAuthState(state, provider);
     if (!state || !parsed || url.searchParams.has("error") || !url.searchParams.get("code")) throw new Error("MAIL_OAUTH_DENIED");
     // The signed state selects the intended workspace; the normal session resolver
