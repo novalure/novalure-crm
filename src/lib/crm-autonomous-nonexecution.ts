@@ -6,6 +6,7 @@ import {CrmCommandError,crmPayloadDigest} from "./crm-command";
 import {autonomousModuleContract,autonomousModuleMaximumBytes,parseAutonomousModuleRequest} from "./crm-autonomous-module-contract";
 import {readKnowledgeJson} from "./knowledge-center/http";
 import {assertAutonomousReceiver,parseAutonomousReceiverPins,autonomousReceiverProofFields} from "./crm-autonomous-receiver";
+import {resolveAutonomousPreview,verifyAutonomousPreviewToken,assertAutonomousPreviewReceiver,autonomousPreviewIdentity} from "./crm-autonomous-preview-auth";
 
 export const autonomousNonexecutionDomain=`${autonomousModuleContract}-close.POST./api/integrations/evelyn/access`;
 export const autonomousNonexecutionReceiverDomain=`${autonomousModuleContract}-close-receiver.POST./api/integrations/evelyn/access`;
@@ -50,11 +51,13 @@ export async function handleAutonomousCrmNonexecution(request:Request,options:Op
   try{body=parseAutonomousModuleRequest(await readKnowledgeJson(request,["contractVersion","operation","correlationId","idempotencyKey","expectedVersion","patch"],autonomousModuleMaximumBytes));}
   catch{deny("INVALID_REQUEST",400);}
   if(body.operation==="Read"||body.operation==="DescribeAssignment")deny("INVALID_REQUEST",400);
+  const preview=resolveAutonomousPreview(request,env),now=Math.floor((options.machineAuth?.now??new Date()).valueOf()/1000),previewProof=preview?parseProof(request,now):null;
   const token=getCrmMachineBearer(request.headers);if(!token)deny("ACCESS_DENIED",401);
-  const claims=await verifyCrmMachineToken(token,options.machineAuth).catch(()=>deny("ACCESS_DENIED",401));
-  const principal=(await queryAuthenticationRows<{id:string;workspace_id:string;identity_id:string}>("select * from public.crm_authenticate_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7)",[claims.issuer,claims.audience,claims.projectId,claims.ownerId,claims.subject,claims.workspaceId,claims.environment],options))[0];
-  if(!principal||principal.workspace_id!==claims.workspaceId||principal.identity_id!=="EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY")deny("ACCESS_DENIED",401);
-  const now=Math.floor((options.machineAuth?.now??new Date()).valueOf()/1000),proof=parseProof(request,now),b=proof.binding;
+  const claims=preview?await verifyAutonomousPreviewToken(token,options.machineAuth):await verifyCrmMachineToken(token,options.machineAuth).catch(()=>deny("ACCESS_DENIED",401));
+  const params=[claims.issuer,claims.audience,claims.projectId,claims.ownerId,claims.subject,claims.workspaceId,claims.environment];
+  const principal=(await queryAuthenticationRows<{id:string;workspace_id:string;identity_id:string}>(preview?"select * from public.crm_authenticate_autonomous_preview_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11::uuid)":"select * from public.crm_authenticate_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7)",preview?[...params,preview.deploymentId,preview.revision,preview.origin,previewProof!.binding.grantId]:params,options))[0];
+  if(!principal||principal.workspace_id!==claims.workspaceId||principal.identity_id!==(preview?autonomousPreviewIdentity:"EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY"))deny("ACCESS_DENIED",401);
+  const proof=previewProof??parseProof(request,now),b=proof.binding;
   if(b.workspaceId!==claims.workspaceId||b.requestDigest!==crmPayloadDigest(body))deny();
   const authority=assertAuthority((await queryAuthenticationRows<Authority>("select * from public.crm_lookup_autonomous_recovery($1::uuid,$2::uuid,$3::uuid,$4::uuid)",[principal.id,proof.authorityId,b.grantId,b.controlProjectId],options))[0],b);
   try{
@@ -62,7 +65,8 @@ export async function handleAutonomousCrmNonexecution(request:Request,options:Op
    const domain=proof.receiver?autonomousNonexecutionReceiverDomain:autonomousNonexecutionDomain;
    if(key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(`${domain}.${proof.authorityId}.${proof.encoded}`),key,Buffer.from(proof.signature,"base64url")))deny("RECOVERY_SIGNATURE_INVALID",401);
   }catch{deny("RECOVERY_SIGNATURE_INVALID",401);}
-  assertAutonomousReceiver(proof.receiver,env);
+  const assertReceiver=()=>preview?assertAutonomousPreviewReceiver(proof.receiver,preview,request,env):assertAutonomousReceiver(proof.receiver,env);
+  assertReceiver();
   const data=await withTenantTransaction({workspaceId:b.workspaceId,actorId:authority.actor_user_id},async tx=>{
    const current=await tx.queryOne<{permitted:boolean}>("select public.crm_lock_autonomous_recovery($1::uuid,$2::uuid,$3::uuid,$4::uuid) as permitted",[principal.id,proof.authorityId,b.grantId,b.controlProjectId]);
    if(!current?.permitted)deny("RECOVERY_AUTHORITY_DENIED");
@@ -70,7 +74,7 @@ export async function handleAutonomousCrmNonexecution(request:Request,options:Op
    const lockedNow=Math.floor((options.machineAuth?.now??new Date()).valueOf()/1000);
    if(proof.expiresAt<=lockedNow)deny("RECOVERY_SIGNATURE_INVALID",401);
    if(claims.expiresAt<=lockedNow)deny("ACCESS_DENIED",401);
-   assertAutonomousReceiver(proof.receiver,env);
+   assertReceiver();
    const row=await tx.queryOne<{receipt:Record<string,unknown>}>("select public.crm_close_autonomous_nonexecution($1::uuid,$2::uuid,$3::jsonb,$4::jsonb,$5,$6::uuid,$7) as receipt",[principal.id,proof.authorityId,JSON.stringify(b),JSON.stringify(body),b.requestDigest,proof.nonce,claims.jtiHash]);
    if(!row?.receipt)deny("RECOVERY_AUTHORITY_DENIED");return row.receipt;
   },options);

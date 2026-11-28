@@ -18,6 +18,7 @@ import { autonomousModuleContract,autonomousModuleMaximumBytes,autonomousModuleO
 import { readAutonomousModule,writeAutonomousModule,autonomousModuleExists,assertAutonomousModuleRelations,type AutonomousModuleGrant } from "./crm-autonomous-module-storage";
 import { assertAndConsumeAutonomousBusinessAuthority } from "./crm-autonomous-business-authority";
 import { assertAutonomousReceiver,parseAutonomousReceiverPins,autonomousReceiverProofFields } from "./crm-autonomous-receiver";
+import {resolveAutonomousPreview,verifyAutonomousPreviewToken,assertAutonomousPreviewReceiver,autonomousPreviewIdentity,type AutonomousPreviewReceiver} from "./crm-autonomous-preview-auth";
 
 export const autonomousModuleDelegationDomain=`${autonomousModuleContract}.POST.${autonomousAccessPath}`;
 export const autonomousModuleReconciliationDomain=`${autonomousModuleContract}-reconcile.POST.${autonomousAccessPath}`;
@@ -33,7 +34,7 @@ function delegation(value:string|null){
  const p=value?.split(".");if(!p||p.length!==4||p[0]!=="v1"||!uuid.test(p[1]!)||!/^[a-z0-9_-]+$/i.test(p[2]!)||p[2]!.length>1400||!/^[a-z0-9_-]{86}$/i.test(p[3]!))denied("DELEGATION_INVALID",401);
  return {grantId:p[1]!,payload:p[2]!,signature:p[3]!};
 }
-function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModuleGrant,body:AutonomousModuleRequest,now:Date,env:NodeJS.ProcessEnv,reconcileOnly=false){
+function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModuleGrant,body:AutonomousModuleRequest,now:Date,env:NodeJS.ProcessEnv,reconcileOnly=false,preview?:{receiver:AutonomousPreviewReceiver;request:Request}){
  let p:Record<string,unknown>;
  try{p=JSON.parse(Buffer.from(d.payload,"base64url").toString("utf8")) as Record<string,unknown>;}catch{denied("DELEGATION_INVALID",401);}
  if(!p||typeof p!=="object"||Array.isArray(p))denied("DELEGATION_INVALID",401);
@@ -46,7 +47,8 @@ function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModule
  }catch{denied("DELEGATION_INVALID",401);}
  const t=Math.floor(now.valueOf()/1000);
  if(!Number.isSafeInteger(p.issuedAt)||!Number.isSafeInteger(p.expiresAt)||Number(p.issuedAt)>t+30||Number(p.expiresAt)<=t||Number(p.expiresAt)<=Number(p.issuedAt)||Number(p.expiresAt)-Number(p.issuedAt)>300||!uuid.test(String(p.nonce))||p.requestHash!==crmPayloadDigest(body))denied("DELEGATION_INVALID",401);
- assertAutonomousReceiver(receiver,env);return {nonce:String(p.nonce),receiver};
+ if(preview)assertAutonomousPreviewReceiver(receiver,preview.receiver,preview.request,env);else assertAutonomousReceiver(receiver,env);
+ return {nonce:String(p.nonce),receiver};
 }
 type Rule={entity:string;operation:string;fields:string[];purpose:string;approval:string|null;evidence:string|null};
 function rules(grant:AutonomousModuleGrant){return (policy.departments as Record<string,Rule[]>)[grant.department_id]?.filter(r=>r.entity===grant.entity)??[];}
@@ -80,29 +82,35 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
   const reconciliationHeader=request.headers.get("x-evelyn-reconcile-only");
   if(reconciliationHeader!==null&&reconciliationHeader!=="1")denied("INVALID_REQUEST",400);
   const reconcileOnly=reconciliationHeader==="1";
+  const env=options.machineAuth?.env??process.env,previewReceiver=resolveAutonomousPreview(request,env);
+  const preview=previewReceiver?{receiver:previewReceiver,request}:undefined,previewDelegation=preview?delegation(request.headers.get("x-evelyn-delegation")):null;
   const token=getCrmMachineBearer(request.headers);if(!token)denied("ACCESS_DENIED",401);
-  const claims=await verifyCrmMachineToken(token,options.machineAuth).catch(error=>{const env=options.machineAuth?.env??process.env;
+  const claims=preview?await verifyAutonomousPreviewToken(token,options.machineAuth):await verifyCrmMachineToken(token,options.machineAuth).catch(error=>{const env=options.machineAuth?.env??process.env;
    if(env.CRM_MACHINE_AUTH_ENABLED!=="1"||env.CRM_AUTONOMOUS_PERSONAL_SOURCE_ENABLED!=="1")throw error;return verifyPersonalAutonomousCrmToken(token,options.machineAuth);});
   const personal=claims.identityId===CRM_PERSONAL_SOURCE.identityId;
   const params=[claims.issuer,claims.audience,claims.projectId,claims.ownerId,claims.subject,claims.workspaceId,claims.environment];
-  const principal=(await queryAuthenticationRows<{id:string;workspace_id:string;identity_id:string}>(personal?"select * from public.crm_authenticate_personal_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8)":"select * from public.crm_authenticate_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7)",personal?[...params,claims.customEnvironmentId]:params,options))[0];
-  if(!principal||principal.workspace_id!==claims.workspaceId||principal.identity_id!==(personal?CRM_PERSONAL_SOURCE.identityId:"EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY"))denied();
-  const d=delegation(request.headers.get("x-evelyn-delegation"));
+  const principal=(await queryAuthenticationRows<{id:string;workspace_id:string;identity_id:string;qa_run_id?:string}>(preview?"select * from public.crm_authenticate_autonomous_preview_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11::uuid)":personal?"select * from public.crm_authenticate_personal_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7,$8)":"select * from public.crm_authenticate_autonomous_workload($1,$2,$3,$4,$5,$6::uuid,$7)",preview?[...params,preview.receiver.deploymentId,preview.receiver.revision,preview.receiver.origin,previewDelegation!.grantId]:personal?[...params,claims.customEnvironmentId]:params,options))[0];
+  if(!principal||principal.workspace_id!==claims.workspaceId||principal.identity_id!==(preview?autonomousPreviewIdentity:personal?CRM_PERSONAL_SOURCE.identityId:"EVELYN_CRM_AUTONOMOUS_INTERNAL_IDENTITY")||preview&&!uuid.test(principal.qa_run_id??""))denied();
+  const d=previewDelegation??delegation(request.headers.get("x-evelyn-delegation"));
   const body=parseAutonomousModuleRequest(await readKnowledgeJson(request,["contractVersion","operation","correlationId","idempotencyKey","expectedVersion","patch"],autonomousModuleMaximumBytes));
   if(reconcileOnly&&readOnly(body.operation))denied("INVALID_REQUEST",400);
   const grant=(await queryAuthenticationRows<AutonomousModuleGrant>(grantSql,[principal.id,d.grantId],options))[0];validateGrant(grant,claims.workspaceId);
-  const env=options.machineAuth?.env??process.env,now=()=>options.machineAuth?.now??new Date();
-  const {nonce,receiver}=verifyDelegation(d,grant,body,now(),env,reconcileOnly);assertPolicy(grant,body);
-  const assertReceiver=()=>assertAutonomousReceiver(receiver,env);
+  const now=()=>options.machineAuth?.now??new Date();
+  const {nonce,receiver}=verifyDelegation(d,grant,body,now(),env,reconcileOnly,preview);assertPolicy(grant,body);
+  const assertReceiver=()=>preview?assertAutonomousPreviewReceiver(receiver,preview.receiver,request,env):assertAutonomousReceiver(receiver,env);
   const session:AppSession={authenticated:true,source:"database",workspaceId:grant.workspace_id,userId:grant.actor_user_id,workspaceName:"Registered internal operations",name:"Registered CRM department agent",email:"delegated-agent@service.invalid",role:"agent",productRole:"novalure_operator",permissions:getRolePermissions("agent"),productPermissions:getProductRoleCapabilities("novalure_operator"),
-   serviceIdentity:claims.environment==="franz-personal"
+   serviceIdentity:claims.environment==="preview"
+    ?{identityId:autonomousPreviewIdentity,role:"Evelyn.QA",consumer:"EVELYN",environment:"preview",jtiHash:claims.jtiHash}
+    :claims.environment==="franz-personal"
     ?{identityId:CRM_PERSONAL_SOURCE.identityId,role:claims.role,consumer:claims.consumer,environment:claims.environment,jtiHash:claims.jtiHash}
     :{identityId:principal.identity_id,role:claims.role,consumer:claims.consumer,environment:claims.environment,jtiHash:claims.jtiHash}};
   const attribution={grantId:grant.id,departmentId:grant.department_id,agentId:grant.agent_id,taskId:grant.task_id};
   const command:CrmCommandInput={operation:`autonomous.module.${grant.entity.toLowerCase()}.${body.operation.toLowerCase()}`,resourceId:grant.source_id,projectId:grant.project_id,expectedVersion:body.expectedVersion??undefined,idempotencyKey:body.idempotencyKey,correlationId:body.correlationId,capability:["Unit","Viewing","Reservation","Sale"].includes(grant.entity)?"reservations:write":"workspace:operate",payload:{...attribution,policyVersion:policy.policyVersion,request:body}};
   const access=async(tx:TenantTransaction,fresh:AppSession)=>{
    const revalidate=async()=>{const current=await tx.queryOne<AutonomousModuleGrant>(grantSql,[principal.id,grant.id]);validateGrant(current,claims.workspaceId);
-    if(grantDigest(current)!==grantDigest(grant))denied();verifyDelegation(d,current,body,now(),env,reconcileOnly);if(claims.expiresAt<=Math.floor(now().valueOf()/1000))denied("ACCESS_DENIED",401);assertPolicy(current,body);return current;};
+    if(grantDigest(current)!==grantDigest(grant))denied();verifyDelegation(d,current,body,now(),env,reconcileOnly,preview);if(claims.expiresAt<=Math.floor(now().valueOf()/1000))denied("ACCESS_DENIED",401);assertPolicy(current,body);
+    if(preview){if(current.entity!=="Task"||current.lifecycle_mode!=="EXISTING")denied();const row=await tx.queryOne("select id from tasks where id=$1::uuid and workspace_id=$2::uuid and project_id=$3::uuid and owner_user_id=$4::uuid and title like 'SYNTHETIC:%' and data_classification='NOVALURE_INTERNAL' and data_purpose='crm_sales' and metadata @> $5::jsonb",[current.source_id,current.workspace_id,current.project_id,current.actor_user_id,JSON.stringify({syntheticTest:true,qaRunId:principal.qa_run_id,scope:"autonomous-v2-preview-task"})]);if(!row)denied("AUTONOMOUS_PREVIEW_SCOPE_DENIED");}
+    return current;};
    await revalidate();await assertProjectGrant(tx,fresh,grant.project_id,!readOnly(body.operation));
    await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`autonomous-access:${grant.id}:${nonce}`]);await revalidate();
    if(await tx.queryOne("select nonce from crm_autonomous_access_events where grant_id=$1 and nonce=$2",[grant.id,nonce]))denied("NONCE_REPLAY",409);
