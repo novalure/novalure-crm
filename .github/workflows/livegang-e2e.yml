@@ -54,97 +54,156 @@ jobs:
           node-version-file: .node-version
           package-manager-cache: false
 
+      - name: Select coverage from the trusted base
+        id: scope
+        shell: bash
+        env:
+          CI_SCOPE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_SCOPE_HEAD: ${{ github.sha }}
+          CI_SCOPE_EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$CI_SCOPE_HEAD" ]]
+          if [[ "$CI_SCOPE_EVENT" == workflow_dispatch ]]; then
+            echo "profile=HIGH" >> "$GITHUB_OUTPUT"
+            echo "Manual QA retains the complete existing acceptance."
+          elif [[ ! "$CI_SCOPE_BASE" =~ ^[0-9a-f]{40}$ || "$CI_SCOPE_BASE" =~ ^0{40}$ ]]; then
+            echo "profile=HIGH" >> "$GITHUB_OUTPUT"
+            echo "No immutable trusted base: retain complete coverage."
+          elif git cat-file -e "$CI_SCOPE_BASE:scripts/classify-ci-change.mjs" 2>/dev/null; then
+            git show "$CI_SCOPE_BASE:scripts/classify-ci-change.mjs" > "$RUNNER_TEMP/trusted-crm-ci-classifier.mjs"
+            node "$RUNNER_TEMP/trusted-crm-ci-classifier.mjs"
+          else
+            # Initial classifier/CI adoption cannot classify itself as low risk.
+            echo "profile=HIGH" >> "$GITHUB_OUTPUT"
+            echo "Classifier absent from trusted base: retain complete coverage."
+          fi
+
+      - name: Verify coverage boundaries and workflow contract
+        run: node --test scripts/classify-ci-change-tests.mjs
+
       - name: Install dependencies from lockfile
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm ci
 
       - name: Verify toolchain
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run ci:toolchain
 
       - name: Lint without warnings
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run lint
 
       - name: Typecheck
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run typecheck
 
       - name: Unit and component smoke tests
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:unit
 
       - name: Microsoft mailbox boundaries and synthetic regressions
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:microsoft-federated
 
       - name: Design C data provenance and customer self-service regression
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:design-c-integration
 
       - name: Design C operational reader permissions and source availability
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:crm-operational-readers
 
       - name: Universal booking two-tenant concurrency, provider contracts and reconciliation
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:booking
 
       - name: Booking setup, travel and tenant isolation
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:booking:setup
 
       - name: Booking email rendering, durable reminders and delivery reconciliation
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:booking:messages
 
       - name: Shared personal language preference and forced RLS
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:booking:language
 
       - name: Published booking channel authority, adapters and embedding contracts
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:booking:channels
 
       - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:knowledge-center
 
       - name: Knowledge publication, monitoring, scheduler and two-tenant acceptance
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:knowledge-package3
 
       - name: Combined package 4 migration ledger, runtime roles and rollback
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:package4-migrations
 
       - name: Security and scope integration tests
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:integration
 
       - name: Isolated database and private-file backup boundaries
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:crm-full-backup
 
       - name: Install local QA browser
+        if: steps.scope.outputs.profile != 'LOW'
         run: npx playwright install chromium --with-deps
 
       - name: Booking setup DE and EN, login, MFA, CSRF and two-tenant request flow
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run qa:booking:browser
 
       - name: Public booking form and exact-origin inline and popup interaction
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run qa:booking:public-ui
 
       - name: Sales transactions against isolated local PostgreSQL
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:sales
 
       - name: Final sales contract, approval, route and recovery regression
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:sales:final
 
       - name: Registered department, subagent and owner-bound CRM access
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:crm-autonomous-access
 
       - name: Accepted Studio source and single internal qualification follow-up
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:crm-a1-studio
 
       - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:g08
 
       - name: D11 staged Expand, Backfill, Contract and rollback
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:d11:migrations
 
       - name: Reproducible build metadata endpoint
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:build-metadata
 
       - name: U1-C03 reconciliation and environment manifests
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:u1-c03:manifests
 
       - name: Protected preview access contract regression
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:protected-preview-access
 
       - name: Install PostgreSQL 18 restore clients
+        if: steps.scope.outputs.profile != 'LOW'
         shell: bash
         run: |
           set -euo pipefail
@@ -156,50 +215,63 @@ jobs:
           sudo apt-get install --yes postgresql-client-18
 
       - name: Neon 061 compatibility and role isolation regression
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:neon:061
 
       - name: Sales schema upgrade, rollback and native restore
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:sales:migrations
 
       - name: Form tenant isolation and published lookup
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:form-isolation
 
       - name: Signed and anonymous website form ingestion
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:website-sales-ingestion
 
       - name: Confirmed Studio enquiry and private attachment handoff
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:studio-enquiry
 
       - name: Tenant scoped Studio enquiry detail display
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:studio-enquiry-view
 
       - name: External integration gateway, public forms and training chat
+        if: steps.scope.outputs.profile != 'LOW'
         # This test owns only disposable local PostgreSQL and starts no server.
         # The later sales E2E process owns and closes its children in finally.
         run: npm run test:external-integration-gateway
 
       - name: Website assistant self-service, tenant isolation and grounded answer boundaries
+        if: steps.scope.outputs.profile != 'LOW'
         # Disposable PostgreSQL and a synthetic model; no live tenants or model spend.
         run: npm run test:website-self-service
 
       - name: Separate customer provisioning, retry safety and tenant isolation
+        if: steps.scope.outputs.profile != 'LOW'
         # Exercises the real authenticated command against disposable PostgreSQL.
         run: npm run test:customer-onboarding
 
       - name: Isolated sales browser flows
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run qa:sales:e2e
 
       - name: Website knowledge import UI regression
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run test:knowledge-import-ui
 
       - name: Production build
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run build
 
       - name: Integrated Design C and Knowledge customer acceptance on isolated PostgreSQL
+        if: steps.scope.outputs.profile != 'LOW'
         run: npm run qa:package4:e2e
 
       - name: Retain bounded synthetic integration results
-        if: always()
+        if: always() && steps.scope.outputs.profile != 'LOW'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: crm-package4-synthetic-results
