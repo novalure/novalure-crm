@@ -17,9 +17,12 @@ import { autonomousModuleContract,autonomousModuleMaximumBytes,autonomousModuleO
  type AutonomousModuleOperation,type AutonomousModuleRequest } from "./crm-autonomous-module-contract";
 import { readAutonomousModule,writeAutonomousModule,autonomousModuleExists,assertAutonomousModuleRelations,type AutonomousModuleGrant } from "./crm-autonomous-module-storage";
 import { assertAndConsumeAutonomousBusinessAuthority } from "./crm-autonomous-business-authority";
+import { assertAutonomousReceiver,parseAutonomousReceiverPins,autonomousReceiverProofFields } from "./crm-autonomous-receiver";
 
 export const autonomousModuleDelegationDomain=`${autonomousModuleContract}.POST.${autonomousAccessPath}`;
 export const autonomousModuleReconciliationDomain=`${autonomousModuleContract}-reconcile.POST.${autonomousAccessPath}`;
+export const autonomousModuleReceiverDomain=`${autonomousModuleContract}-receiver.POST.${autonomousAccessPath}`;
+export const autonomousModuleReceiverReconciliationDomain=`${autonomousModuleContract}-reconcile-receiver.POST.${autonomousAccessPath}`;
 type Options=TenantTransactionOptions&{machineAuth?:CrmMachineAuthOptions};
 const grantSql="select * from public.crm_lock_autonomous_access_grant($1::uuid,$2::uuid)";
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -30,16 +33,20 @@ function delegation(value:string|null){
  const p=value?.split(".");if(!p||p.length!==4||p[0]!=="v1"||!uuid.test(p[1]!)||!/^[a-z0-9_-]+$/i.test(p[2]!)||p[2]!.length>1400||!/^[a-z0-9_-]{86}$/i.test(p[3]!))denied("DELEGATION_INVALID",401);
  return {grantId:p[1]!,payload:p[2]!,signature:p[3]!};
 }
-function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModuleGrant,body:AutonomousModuleRequest,now:Date,reconcileOnly=false){
+function verifyDelegation(d:ReturnType<typeof delegation>,grant:AutonomousModuleGrant,body:AutonomousModuleRequest,now:Date,env:NodeJS.ProcessEnv,reconcileOnly=false){
  let p:Record<string,unknown>;
+ try{p=JSON.parse(Buffer.from(d.payload,"base64url").toString("utf8")) as Record<string,unknown>;}catch{denied("DELEGATION_INVALID",401);}
+ if(!p||typeof p!=="object"||Array.isArray(p))denied("DELEGATION_INVALID",401);
+ const receiver=parseAutonomousReceiverPins(p);
+ const keys=["expiresAt","issuedAt","nonce","requestHash",...(receiver?autonomousReceiverProofFields:[])].sort().join(",");
+ if(Object.keys(p).sort().join(",")!==keys)denied("DELEGATION_INVALID",401);
  try{const key=createPublicKey({key:Buffer.from(grant.delegation_public_key,"base64url"),format:"der",type:"spki"});
-  const domain=reconcileOnly?autonomousModuleReconciliationDomain:autonomousModuleDelegationDomain;
+  const domain=receiver?(reconcileOnly?autonomousModuleReceiverReconciliationDomain:autonomousModuleReceiverDomain):(reconcileOnly?autonomousModuleReconciliationDomain:autonomousModuleDelegationDomain);
   if(key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(`${domain}.${d.grantId}.${d.payload}`),key,Buffer.from(d.signature,"base64url")))denied("DELEGATION_INVALID",401);
-  p=JSON.parse(Buffer.from(d.payload,"base64url").toString("utf8")) as Record<string,unknown>;
  }catch{denied("DELEGATION_INVALID",401);}
  const t=Math.floor(now.valueOf()/1000);
- if(!p||typeof p!=="object"||Array.isArray(p)||Object.keys(p).sort().join(",")!=="expiresAt,issuedAt,nonce,requestHash"||!Number.isSafeInteger(p.issuedAt)||!Number.isSafeInteger(p.expiresAt)||Number(p.issuedAt)>t+30||Number(p.expiresAt)<=t||Number(p.expiresAt)<=Number(p.issuedAt)||Number(p.expiresAt)-Number(p.issuedAt)>300||!uuid.test(String(p.nonce))||p.requestHash!==crmPayloadDigest(body))denied("DELEGATION_INVALID",401);
- return String(p.nonce);
+ if(!Number.isSafeInteger(p.issuedAt)||!Number.isSafeInteger(p.expiresAt)||Number(p.issuedAt)>t+30||Number(p.expiresAt)<=t||Number(p.expiresAt)<=Number(p.issuedAt)||Number(p.expiresAt)-Number(p.issuedAt)>300||!uuid.test(String(p.nonce))||p.requestHash!==crmPayloadDigest(body))denied("DELEGATION_INVALID",401);
+ assertAutonomousReceiver(receiver,env);return {nonce:String(p.nonce),receiver};
 }
 type Rule={entity:string;operation:string;fields:string[];purpose:string;approval:string|null;evidence:string|null};
 function rules(grant:AutonomousModuleGrant){return (policy.departments as Record<string,Rule[]>)[grant.department_id]?.filter(r=>r.entity===grant.entity)??[];}
@@ -84,7 +91,9 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
   const body=parseAutonomousModuleRequest(await readKnowledgeJson(request,["contractVersion","operation","correlationId","idempotencyKey","expectedVersion","patch"],autonomousModuleMaximumBytes));
   if(reconcileOnly&&readOnly(body.operation))denied("INVALID_REQUEST",400);
   const grant=(await queryAuthenticationRows<AutonomousModuleGrant>(grantSql,[principal.id,d.grantId],options))[0];validateGrant(grant,claims.workspaceId);
-  const now=()=>options.machineAuth?.now??new Date();const nonce=verifyDelegation(d,grant,body,now(),reconcileOnly);assertPolicy(grant,body);
+  const env=options.machineAuth?.env??process.env,now=()=>options.machineAuth?.now??new Date();
+  const {nonce,receiver}=verifyDelegation(d,grant,body,now(),env,reconcileOnly);assertPolicy(grant,body);
+  const assertReceiver=()=>assertAutonomousReceiver(receiver,env);
   const session:AppSession={authenticated:true,source:"database",workspaceId:grant.workspace_id,userId:grant.actor_user_id,workspaceName:"Registered internal operations",name:"Registered CRM department agent",email:"delegated-agent@service.invalid",role:"agent",productRole:"novalure_operator",permissions:getRolePermissions("agent"),productPermissions:getProductRoleCapabilities("novalure_operator"),
    serviceIdentity:claims.environment==="franz-personal"
     ?{identityId:CRM_PERSONAL_SOURCE.identityId,role:claims.role,consumer:claims.consumer,environment:claims.environment,jtiHash:claims.jtiHash}
@@ -93,14 +102,15 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
   const command:CrmCommandInput={operation:`autonomous.module.${grant.entity.toLowerCase()}.${body.operation.toLowerCase()}`,resourceId:grant.source_id,projectId:grant.project_id,expectedVersion:body.expectedVersion??undefined,idempotencyKey:body.idempotencyKey,correlationId:body.correlationId,capability:["Unit","Viewing","Reservation","Sale"].includes(grant.entity)?"reservations:write":"workspace:operate",payload:{...attribution,policyVersion:policy.policyVersion,request:body}};
   const access=async(tx:TenantTransaction,fresh:AppSession)=>{
    const revalidate=async()=>{const current=await tx.queryOne<AutonomousModuleGrant>(grantSql,[principal.id,grant.id]);validateGrant(current,claims.workspaceId);
-    if(grantDigest(current)!==grantDigest(grant))denied();verifyDelegation(d,current,body,now(),reconcileOnly);if(claims.expiresAt<=Math.floor(now().valueOf()/1000))denied("ACCESS_DENIED",401);assertPolicy(current,body);return current;};
+    if(grantDigest(current)!==grantDigest(grant))denied();verifyDelegation(d,current,body,now(),env,reconcileOnly);if(claims.expiresAt<=Math.floor(now().valueOf()/1000))denied("ACCESS_DENIED",401);assertPolicy(current,body);return current;};
    await revalidate();await assertProjectGrant(tx,fresh,grant.project_id,!readOnly(body.operation));
    await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",[`autonomous-access:${grant.id}:${nonce}`]);await revalidate();
    if(await tx.queryOne("select nonce from crm_autonomous_access_events where grant_id=$1 and nonce=$2",[grant.id,nonce]))denied("NONCE_REPLAY",409);
    let data:Record<string,unknown>,auditReference:string=randomUUID(),replayed=false;
    const readFields=fields(grant,"Read");
+   assertReceiver();
    if(body.operation==="DescribeAssignment"){
-    if(grant.lifecycle_mode!=="CREATE"||await autonomousModuleExists(tx,grant))await readAutonomousModule(tx,grant,[]);
+    if(grant.lifecycle_mode!=="CREATE"||await autonomousModuleExists(tx,grant)){assertReceiver();await readAutonomousModule(tx,grant,[]);}
     const current=await revalidate(),seconds=Math.floor(now().valueOf()/1000),expiresAt=Math.min(seconds+60,claims.expiresAt,current.expires_at===null?seconds+60:Math.floor(new Date(current.expires_at).valueOf()/1000));
     if(expiresAt<=seconds)denied();data={operations:operations(grant),expiresAt,readFields,writeFields:grant.write_fields.filter(f=>rules(grant).some(r=>r.operation!=="Read"&&r.fields.includes(f))),contractVersion:autonomousModuleContract,parentGrantId:grant.parent_grant_id,delegationKind:grant.delegation_kind};
    }else if(body.operation==="Read")data=await readAutonomousModule(tx,grant,readFields);
@@ -112,19 +122,21 @@ export async function handleAutonomousCrmModules(request:Request,options:Options
     await assertAutonomousModuleRelations(tx,grant,body.patch);await revalidate();
     let result:{data:Record<string,unknown>;auditReference:string;replayed:boolean};
     if(reconcileOnly){
+     assertReceiver();
      const stored=await reconcileCrmCommand<Record<string,unknown>>(fresh,command,options);
      if(stored.status==="NOT_FOUND")denied("RECEIPT_NOT_FOUND",404);
      result=stored;
-    }else result=await executeCrmCommand(fresh,command,async commandTx=>{await revalidate();if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(commandTx,fresh,grant,body);await writeAutonomousModule(commandTx,fresh,grant,body);await revalidate();return readAutonomousModule(commandTx,grant,readFields);},options);
-    if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(tx,fresh,grant,body);
+    }else result=await executeCrmCommand(fresh,command,async commandTx=>{await revalidate();if(guarded.has(body.operation))await assertAndConsumeAutonomousBusinessAuthority(commandTx,fresh,grant,body);assertReceiver();await writeAutonomousModule(commandTx,fresh,grant,body);await revalidate();return readAutonomousModule(commandTx,grant,readFields);},options);
+    if(guarded.has(body.operation)){assertReceiver();await assertAndConsumeAutonomousBusinessAuthority(tx,fresh,grant,body);}
     // A stored receipt never bypasses current source scope or field policy.
-    await readAutonomousModule(tx,grant,readFields);
+    assertReceiver();await readAutonomousModule(tx,grant,readFields);
     if(!result.data||typeof result.data!=="object"||Array.isArray(result.data))denied("INVALID_CRM_RESPONSE",502);
     data=Object.fromEntries(Object.entries(result.data).filter(([field])=>field==="version"||field==="updatedAt"||readFields.includes(field)));
     auditReference=result.auditReference;replayed=result.replayed;
    }
    if(!readOnly(body.operation))await assertAutonomousModuleRelations(tx,grant,body.patch,true);
    await revalidate();
+   assertReceiver();
    await tx.execute(`insert into crm_autonomous_access_events(grant_id,nonce,workspace_id,actor_user_id,department_id,agent_id,task_id,project_id,source_id,action,request_hash,oidc_jti_hash,audit_reference,outcome) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'SUCCESS')`,[grant.id,nonce,grant.workspace_id,grant.actor_user_id,grant.department_id,grant.agent_id,grant.task_id,grant.project_id,grant.source_id,autonomousModuleScope(grant.entity,body.operation),crmPayloadDigest(body),claims.jtiHash,auditReference]);
    return {...attribution,workspaceId:grant.workspace_id,projectId:grant.project_id,sourceId:grant.source_id,entity:grant.entity,data,auditReference,replayed};
   };

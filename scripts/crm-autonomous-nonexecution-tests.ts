@@ -6,7 +6,8 @@ import {test} from "node:test";
 import {SignJWT,jwtVerify,type JWTVerifyOptions} from "jose";
 import {autonomousPairedFixture} from "./crm-autonomous-modules-tests";
 import {handleAutonomousCrmModules} from "../src/lib/crm-autonomous-modules";
-import {handleAutonomousCrmNonexecution,autonomousNonexecutionDomain} from "../src/lib/crm-autonomous-nonexecution";
+import {handleAutonomousCrmNonexecution,autonomousNonexecutionDomain,autonomousNonexecutionReceiverDomain} from "../src/lib/crm-autonomous-nonexecution";
+import {autonomousModuleReceiverDomain,autonomousModuleReceiverReconciliationDomain} from "../src/lib/crm-autonomous-modules";
 import {autonomousModuleMaximumBytes} from "../src/lib/crm-autonomous-module-contract";
 import {parseOfferContent} from "../src/lib/offer-workflow";
 import {crmPayloadDigest} from "../src/lib/crm-command";
@@ -15,6 +16,9 @@ import {executeOfferCommand,getOfferWorkflow} from "../src/lib/db/offer-reposito
 import {CRM_MACHINE_AUDIENCE,CRM_MACHINE_ISSUER,CRM_MACHINE_OWNER_ID,CRM_MACHINE_PROJECT_ID,CRM_MACHINE_SUBJECT,type CrmMachineAuthOptions} from "../src/lib/crm-machine-auth";
 import type {AutonomousCrmRegistration} from "../src/lib/crm-autonomous-registration";
 import type {TenantPool} from "../src/lib/db/tenant-client";
+import {execFileSync} from "node:child_process";
+import {pathToFileURL} from "node:url";
+import {join} from "node:path";
 type F=ReturnType<typeof autonomousPairedFixture>;
 let f:F;
 const recovery=generateKeyPairSync("ed25519"),rsa=generateKeyPairSync("rsa",{modulusLength:2048}),controlProject=randomUUID();
@@ -25,8 +29,8 @@ async function token(){return tokenWithLifetime();}
 async function authority(grantId:string,key=publicKey){const id=randomUUID();await f.db.admin.query("insert into crm_autonomous_recovery_authorities(id,workload_id,control_project_id,grant_ids,recovery_public_key,authority_reference,expires_at) values($1,$2,$3,array[$4::uuid],$5,'SYNTHETIC fixed recovery authority',clock_timestamp()+interval '1 hour')",[id,f.ids.workload,controlProject,grantId,key]);return id;}
 function binding(r:AutonomousCrmRegistration,b:ReturnType<F["body"]>){return {grantId:r.grantId,workspaceId:f.ids.workspace,sourceId:r.sourceId,taskId:r.taskId,departmentId:r.departmentId,agentId:r.agentId,entity:r.entity,crmProjectId:r.projectId,controlProjectId:controlProject,missionId:randomUUID(),attemptId:randomUUID(),effectId:randomUUID(),registryVersion:"1",targetDigest:"a".repeat(64),artifactDigest:"b".repeat(64),requestDigest:crmPayloadDigest(b)};}
 type B=ReturnType<typeof binding>;
-function envelope(id:string,b:B,extra:Record<string,unknown>={}){const now=Math.floor(Date.now()/1000),p=Buffer.from(JSON.stringify({...b,issuedAt:now,expiresAt:now+60,nonce:randomUUID(),...extra})).toString("base64url");return `v1.${id}.${p}.${sign(null,Buffer.from(`${autonomousNonexecutionDomain}.${id}.${p}`),recovery.privateKey).toString("base64url")}`;}
-async function close(id:string,b:B,body:ReturnType<F["body"]>,headers:Record<string,string>={}){const response=await handleAutonomousCrmNonexecution(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${await token()}`,"content-type":"application/json","x-evelyn-close-without-effect":"1","x-evelyn-recovery":envelope(id,b),...headers},body:JSON.stringify(body)}),{pool:f.db.pool as unknown as TenantPool,machineAuth:auth()});return {status:response.status,body:await response.json()};}
+function envelope(id:string,b:B,extra:Record<string,unknown>={},domain=autonomousNonexecutionDomain){const now=Math.floor(Date.now()/1000),p=Buffer.from(JSON.stringify({...b,issuedAt:now,expiresAt:now+60,nonce:randomUUID(),...extra})).toString("base64url");return `v1.${id}.${p}.${sign(null,Buffer.from(`${domain}.${id}.${p}`),recovery.privateKey).toString("base64url")}`;}
+async function close(id:string,b:B,body:ReturnType<F["body"]>,headers:Record<string,string>={},machineAuth=auth()){const response=await handleAutonomousCrmNonexecution(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${await token()}`,"content-type":"application/json","x-evelyn-close-without-effect":"1","x-evelyn-recovery":envelope(id,b),...headers},body:JSON.stringify(body)}),{pool:f.db.pool as unknown as TenantPool,machineAuth});return {status:response.status,body:await response.json()};}
 function taskRegistration(sourceId:string,lifecycleMode:"CREATE"|"EXISTING"="EXISTING"){return f.registration("Task",sourceId,{scopes:["crm.tasks.read",lifecycleMode==="CREATE"?"crm.tasks.create":"crm.tasks.write"],module:{contractVersion:"crm-autonomous-access-v2",readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode}});}
 async function install(){f=autonomousPairedFixture();await f.db.admin.query("alter table crm_command_receipts owner to autonomous_modules_installer");const sql=await readFile("migrations/staged/evelyn_autonomous_nonexecution.sql","utf8");const c=await f.db.admin.connect();try{await c.query("begin");await c.query("set local role autonomous_modules_installer");await c.query(sql);await c.query("commit");}finally{await c.query("rollback");c.release();}}
 async function invoke(r:AutonomousCrmRegistration,body:ReturnType<F["body"]>,writes:string[]=[]){
@@ -205,3 +209,46 @@ test("the same real command lock serializes close-before-delivery and commit-bef
 });
 /** Test-only bridge for the separately invoked immutable counterpart proof. */
 export function autonomousNonexecutionFixture(){return {f,recovery,auth,token,authority,binding,invoke};}
+
+const receiverPins={receiverDeploymentId:"dpl_SyntheticV2Receiver",receiverRevision:"d".repeat(40)};
+function receiverAuth():CrmMachineAuthOptions{return {...auth(),env:{...auth().env,NODE_ENV:"production",VERCEL:"1",VERCEL_PROJECT_ID:"prj_R32Okl6AHijTohvuKmryuTLjWMsk",VERCEL_DEPLOYMENT_ID:receiverPins.receiverDeploymentId,VERCEL_GIT_COMMIT_SHA:receiverPins.receiverRevision}};}
+test("receiver-bound recovery preserves original request digest and immutable legacy closure receipt",async()=>{
+ const r=taskRegistration(randomUUID(),"CREATE");await f.provision(r);const body=f.body("Create",{title:"SYNTHETIC bound recovery"}),a=await authority(r.grantId),b=binding(r,body);
+ const legacy=await close(a,b,body);assert.equal(legacy.status,200,JSON.stringify(legacy.body));
+ const original=(await f.db.admin.query("select to_jsonb(c) as row from crm_autonomous_nonexecution_closures c where grant_id=$1",[r.grantId])).rows[0].row;
+ const bound=await close(a,b,body,{"x-evelyn-recovery":envelope(a,b,receiverPins,autonomousNonexecutionReceiverDomain)},receiverAuth());
+ assert.equal(bound.status,200,JSON.stringify(bound.body));assert.equal(bound.body.closureReference,legacy.body.closureReference);assert.equal(bound.body.replayed,true);assert.equal(b.requestDigest,crmPayloadDigest(body));
+ assert.deepEqual((await f.db.admin.query("select to_jsonb(c) as row from crm_autonomous_nonexecution_closures c where grant_id=$1",[r.grantId])).rows[0].row,original);
+ const own=taskRegistration(randomUUID(),"CREATE");await f.provision(own);const q=f.body("Create",{title:"SYNTHETIC fresh bound closure"}),id=await authority(own.grantId),bb=binding(own,q);
+ assert.equal((await close(id,bb,q,{"x-evelyn-recovery":envelope(id,bb,receiverPins,autonomousNonexecutionReceiverDomain)},receiverAuth())).status,200);
+ assert.equal((await f.db.admin.query("select count(*) from tasks where id=$1",[own.sourceId])).rows[0].count,"0");
+});
+test("receiver-bound recovery rejects partial pins, drift and every wrong domain with no closure or business effect",async()=>{
+ const r=taskRegistration(randomUUID(),"CREATE");await f.provision(r);const body=f.body("Create",{title:"SYNTHETIC denied receiver close"}),id=await authority(r.grantId),b=binding(r,body),before=await snapshot();
+ for(const pins of [{receiverDeploymentId:receiverPins.receiverDeploymentId},{receiverRevision:receiverPins.receiverRevision},{...receiverPins,receiverDeploymentId:null},{...receiverPins,receiverDeploymentId:"dpl_Other"},{...receiverPins,receiverRevision:"e".repeat(40)}])assert.notEqual((await close(id,b,body,{"x-evelyn-recovery":envelope(id,b,pins,autonomousNonexecutionReceiverDomain)},receiverAuth())).status,200);
+ for(const domain of [autonomousNonexecutionDomain,autonomousModuleReceiverDomain,autonomousModuleReceiverReconciliationDomain])assert.equal((await close(id,b,body,{"x-evelyn-recovery":envelope(id,b,receiverPins,domain)},receiverAuth())).status,401);
+ assert.equal((await close(id,b,body,{"x-evelyn-recovery":envelope(id,b,{},autonomousNonexecutionReceiverDomain)},receiverAuth())).status,401);
+ for(const env of [{VERCEL:undefined},{VERCEL_DEPLOYMENT_ID:undefined},{VERCEL_GIT_COMMIT_SHA:undefined},{VERCEL_PROJECT_ID:"prj_Other"},{VERCEL_TARGET_ENV:"preview"},{VERCEL_DEPLOYMENT_ID:"dpl_Drift"},{VERCEL_GIT_COMMIT_SHA:"e".repeat(40)}]){const a=receiverAuth();assert.equal((await close(id,b,body,{"x-evelyn-recovery":envelope(id,b,receiverPins,autonomousNonexecutionReceiverDomain)},{...a,env:{...a.env,...env,NODE_ENV:"production"}})).status,403);}
+ assert.deepEqual(await snapshot(),before);
+ assert.equal((await f.db.admin.query("select count(*) from crm_autonomous_nonexecution_closures where grant_id=$1",[r.grantId])).rows[0].count,"0");
+ assert.equal((await f.db.admin.query("select count(*) from crm_autonomous_recovery_events where authority_id=$1",[id])).rows[0].count,"0");
+});
+test("receiver-bound recovery verifies original wire bytes and rechecks native identity after awaited lock",async()=>{
+ const r=taskRegistration(randomUUID(),"CREATE");await f.provision(r);const body=f.body("Create",{title:"SYNTHETIC receiver lock drift"}),id=await authority(r.grantId),b=binding(r,body),a=receiverAuth(),now=Math.floor(Date.now()/1000);
+ const p={nonce:randomUUID(),...receiverPins,...b,expiresAt:now+60,issuedAt:now},encoded=Buffer.from(JSON.stringify(p,null,2)).toString("base64url"),sig=(segment:string)=>sign(null,Buffer.from(`${autonomousNonexecutionReceiverDomain}.${id}.${segment}`),recovery.privateKey).toString("base64url");
+ assert.equal((await close(id,b,body,{"x-evelyn-recovery":`v1.${id}.${encoded}.${sig(Buffer.from(JSON.stringify(p)).toString("base64url"))}`},a)).status,401);
+ let drifted=false;const pool={connect:async()=>{const c=await f.db.pool.connect();return {query:async(q:unknown,params?:unknown[])=>{const out=await c.query(q as string,params);if(typeof q==="string"&&q.includes("pg_advisory_xact_lock")){a.env!.VERCEL_GIT_COMMIT_SHA="e".repeat(40);drifted=true;}return out;},release:(destroy?:boolean)=>c.release(destroy)};}} as unknown as TenantPool;
+ const response=await handleAutonomousCrmNonexecution(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${await token()}`,"content-type":"application/json","x-evelyn-close-without-effect":"1","x-evelyn-recovery":`v1.${id}.${encoded}.${sig(encoded)}`},body:JSON.stringify(body)}),{pool,machineAuth:a});
+ assert.equal(drifted,true);assert.equal(response.status,403);assert.equal((await f.db.admin.query("select count(*) from crm_autonomous_nonexecution_closures where grant_id=$1",[r.grantId])).rows[0].count,"0");
+ assert.equal((await close(id,b,body,{"x-evelyn-recovery":`v1.${id}.${encoded}.${sig(encoded)}`},receiverAuth())).status,200,"same original whitespace payload remains valid; failed drift consumed no nonce");
+});
+test("exact old 331a recovery rejects bound domains and pinned proofs signed on its legacy domain",{skip:!process.env.CRM_V2_OLD_RECEIVER_ROOT},async()=>{
+ const root=process.env.CRM_V2_OLD_RECEIVER_ROOT!,git=(...args:string[])=>execFileSync("git",["-C",root,...args],{encoding:"utf8",windowsHide:true,timeout:10000}).trim();
+ assert.equal(git("rev-parse","HEAD"),"331a2459b86598532ae5877f4a2155f076c16fba");assert.equal(git("status","--porcelain","--untracked-files=no"),"");
+ const old=await import(pathToFileURL(join(root,"src/lib/crm-autonomous-nonexecution.ts")).href),r=taskRegistration(randomUUID(),"CREATE");await f.provision(r);
+ const body=f.body("Create",{title:"SYNTHETIC old bound recovery denied"}),id=await authority(r.grantId),b=binding(r,body),before=await snapshot();
+ for(const domain of [autonomousNonexecutionReceiverDomain,autonomousNonexecutionDomain]){
+  const response=await old.handleAutonomousCrmNonexecution(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${await token()}`,"content-type":"application/json","x-evelyn-close-without-effect":"1","x-evelyn-recovery":envelope(id,b,receiverPins,domain)},body:JSON.stringify(body)}),{pool:f.db.pool,machineAuth:receiverAuth()});assert.notEqual(response.status,200);
+ }
+ assert.deepEqual(await snapshot(),before);assert.equal((await f.db.admin.query("select count(*) from crm_autonomous_nonexecution_closures where grant_id=$1",[r.grantId])).rows[0].count,"0");
+});

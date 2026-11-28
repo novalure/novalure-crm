@@ -5,7 +5,7 @@ import {after,before,test} from "node:test";
 import {setTimeout as delay} from "node:timers/promises";
 import pg from "pg";
 import {startLocalSalesDb,applySalesSchema} from "./lib/local-sales-db.mjs";
-import {handleAutonomousCrmModules,autonomousModuleDelegationDomain,autonomousModuleReconciliationDomain} from "../src/lib/crm-autonomous-modules";
+import {handleAutonomousCrmModules,autonomousModuleDelegationDomain,autonomousModuleReconciliationDomain,autonomousModuleReceiverDomain,autonomousModuleReceiverReconciliationDomain} from "../src/lib/crm-autonomous-modules";
 import {autonomousModuleContract,autonomousModuleFields,type AutonomousModuleEntity} from "../src/lib/crm-autonomous-module-contract";
 import {registerAutonomousCrmAccess,registerAutonomousCrmAccessFromOperator,autonomousCrmDepartments,type AutonomousCrmRegistration} from "../src/lib/crm-autonomous-registration";
 import {crmPayloadDigest} from "../src/lib/crm-command";
@@ -19,6 +19,9 @@ import {getRolePermissions} from "../src/lib/auth/permissions";
 import {getProductRoleCapabilities} from "../src/lib/product-model";
 import type {AppSession} from "../src/lib/auth/session";
 import {withTenantTransaction} from "../src/lib/db/tenant-client";
+import {execFileSync} from "node:child_process";
+import {pathToFileURL} from "node:url";
+import {join} from "node:path";
 
 let db:Awaited<ReturnType<typeof startLocalSalesDb>>;
 const actor=randomUUID(),workload=randomUUID(),project=randomUUID(),mission=randomUUID(),task=randomUUID(),contact=randomUUID(),company=randomUUID(),lead=randomUUID(),unit=randomUUID(),appointment=randomUUID(),communication=randomUUID(),foreignProject=randomUUID(),privateTask=randomUUID();
@@ -27,9 +30,9 @@ const bearer=`eyJ${"a".repeat(20)}.${"b".repeat(24)}.${"c".repeat(24)}`;
 const ownerId=randomUUID(),ownerSessionId=randomUUID();let owner:AppSession;
 function auth():CrmMachineAuthOptions{const now=Math.floor(Date.now()/1000);return {env:{CRM_MACHINE_AUTH_ENABLED:"1",VERCEL_ENV:"production",NODE_ENV:"production"},verifier:async()=>({protectedHeader:{alg:"RS256",typ:"JWT",kid:"isolated-local-verifier"},payload:{iss:CRM_MACHINE_ISSUER,aud:CRM_MACHINE_AUDIENCE,sub:CRM_MACHINE_SUBJECT,project_id:CRM_MACHINE_PROJECT_ID,owner_id:CRM_MACHINE_OWNER_ID,environment:"production",iat:now-2,nbf:now-2,exp:now+3600,jti:randomUUID()}})} as CrmMachineAuthOptions;}
 function body(operation="Read",patch:Record<string,unknown>={},expectedVersion:number|null=null){return {contractVersion:autonomousModuleContract,operation,patch,expectedVersion,correlationId:randomUUID(),idempotencyKey:randomUUID()};}
-function signature(id:string,b:Record<string,unknown>,privateKey:KeyObject=key.privateKey,prefix=autonomousModuleDelegationDomain){const now=Math.floor(Date.now()/1000),p=Buffer.from(JSON.stringify({issuedAt:now,expiresAt:now+60,nonce:randomUUID(),requestHash:crmPayloadDigest(b)})).toString("base64url");return `v1.${id}.${p}.${sign(null,Buffer.from(`${prefix}.${id}.${p}`),privateKey).toString("base64url")}`;}
-async function call(id:string,b=body(),credential=signature(id,b),headers:Record<string,string>={}){
- const response=await handleAutonomousCrmModules(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${bearer}`,"content-type":"application/json","x-evelyn-delegation":credential,...headers},body:JSON.stringify(b)}),{pool:db.pool as unknown as TenantPool,machineAuth:auth()});return {status:response.status,body:await response.json()};
+function signature(id:string,b:Record<string,unknown>,privateKey:KeyObject=key.privateKey,prefix=autonomousModuleDelegationDomain,proof:Record<string,unknown>={}){const now=Math.floor(Date.now()/1000),p=Buffer.from(JSON.stringify({issuedAt:now,expiresAt:now+60,nonce:randomUUID(),requestHash:crmPayloadDigest(b),...proof})).toString("base64url");return `v1.${id}.${p}.${sign(null,Buffer.from(`${prefix}.${id}.${p}`),privateKey).toString("base64url")}`;}
+async function call(id:string,b=body(),credential=signature(id,b),headers:Record<string,string>={},machineAuth=auth()){
+ const response=await handleAutonomousCrmModules(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${bearer}`,"content-type":"application/json","x-evelyn-delegation":credential,...headers},body:JSON.stringify(b)}),{pool:db.pool as unknown as TenantPool,machineAuth});return {status:response.status,body:await response.json()};
 }
 function reconcile(id:string,b:ReturnType<typeof body>){return call(id,b,signature(id,b,key.privateKey,autonomousModuleReconciliationDomain),{"x-evelyn-reconcile-only":"1"});}
 function registration(entity:AutonomousModuleEntity,sourceId:string,overrides:Partial<AutonomousCrmRegistration>={}):AutonomousCrmRegistration{
@@ -419,3 +422,58 @@ test("real nonsuper source owner requires the Root self-edge SET lease and resto
 });
 
 export function autonomousPairedFixture(){return {db,registration,provision,body,auth,signature,call,reconcile,owner,ids:{actor,workload,project,mission,task,contact,company,lead,unit,workspace:CRM_MACHINE_WORKSPACE_ID}};}
+
+const receiverPins={receiverDeploymentId:"dpl_SyntheticV2Receiver",receiverRevision:"d".repeat(40)};
+function receiverAuth():CrmMachineAuthOptions{return {...auth(),env:{...auth().env,NODE_ENV:"production",VERCEL:"1",VERCEL_PROJECT_ID:"prj_R32Okl6AHijTohvuKmryuTLjWMsk",VERCEL_DEPLOYMENT_ID:receiverPins.receiverDeploymentId,VERCEL_GIT_COMMIT_SHA:receiverPins.receiverRevision}};}
+async function receiverTask(){const id=randomUUID();await db.admin.query("insert into tasks(id,workspace_id,project_id,owner_user_id,title) values($1,$2,$3,$4,'SYNTHETIC receiver before')",[id,CRM_MACHINE_WORKSPACE_ID,project,actor]);const r=registration("Task",id,{scopes:["crm.tasks.read","crm.tasks.write"],module:{contractVersion:autonomousModuleContract,readFields:["title"],writeFields:["title"],relatedResources:{},lifecycleMode:"EXISTING"}});await provision(r);return r;}
+async function receiverState(r:AutonomousCrmRegistration){return (await db.admin.query("select (select to_jsonb(t) from tasks t where id=$1) as task,(select count(*) from crm_command_receipts where resource_id=$1) as receipts,(select count(*) from audit_logs where entity_id=$1) as audits,(select count(*) from crm_domain_events where resource_id=$1) as events,(select count(*) from crm_autonomous_access_events where grant_id=$2) as access",[r.sourceId,r.grantId])).rows[0];}
+test("receiver-pinned execute and reconciliation keep original body and immutable legacy command receipt",async()=>{
+ const r=await receiverTask(),b=body("Update",{title:"SYNTHETIC receiver after"},1),originalHash=crmPayloadDigest(b);
+ const first=await call(r.grantId,b);assert.equal(first.status,200,JSON.stringify(first.body));
+ const receipt=(await db.admin.query("select to_jsonb(r) as receipt from crm_command_receipts r where resource_id=$1",[r.sourceId])).rows[0].receipt;
+ const reconciled=await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReceiverReconciliationDomain,receiverPins),{"x-evelyn-reconcile-only":"1"},receiverAuth());
+ assert.equal(reconciled.status,200,JSON.stringify(reconciled.body));assert.equal(reconciled.body.auditReference,first.body.auditReference);assert.equal(reconciled.body.replayed,true);
+ const replay=await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReceiverDomain,receiverPins),{},receiverAuth());assert.equal(replay.status,200,JSON.stringify(replay.body));assert.equal(replay.body.auditReference,first.body.auditReference);
+ assert.deepEqual((await db.admin.query("select to_jsonb(r) as receipt from crm_command_receipts r where resource_id=$1",[r.sourceId])).rows[0].receipt,receipt);assert.equal(crmPayloadDigest(b),originalHash);
+ for(const operation of ["DescribeAssignment","Read"]){const q=body(operation),result=await call(r.grantId,q,signature(r.grantId,q,key.privateKey,autonomousModuleReceiverDomain,receiverPins),{},receiverAuth());assert.equal(result.status,200,JSON.stringify(result.body));}
+ const own=await receiverTask(),write=body("Update",{title:"SYNTHETIC receiver new effect"},1);
+ assert.equal((await call(own.grantId,write,signature(own.grantId,write,key.privateKey,autonomousModuleReceiverDomain,receiverPins),{},receiverAuth())).status,200);
+ assert.equal((await receiverState(own)).task.version,2);
+});
+test("receiver proof presence, exact native pins and domain separation reject before any effect",async()=>{
+ const r=await receiverTask(),b=body("Update",{title:"SYNTHETIC must stay absent"},1),before=await receiverState(r);
+ for(const proof of [{receiverDeploymentId:receiverPins.receiverDeploymentId},{receiverRevision:receiverPins.receiverRevision},{...receiverPins,receiverRevision:null},{...receiverPins,receiverDeploymentId:" dpl_SyntheticV2Receiver"},{...receiverPins,receiverRevision:"D".repeat(40)},{...receiverPins,receiverRevision:"e".repeat(40)},{...receiverPins,receiverDeploymentId:"dpl_Other"}])assert.notEqual((await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReceiverDomain,proof),{},receiverAuth())).status,200);
+ for(const domain of [autonomousModuleDelegationDomain,autonomousModuleReconciliationDomain,autonomousModuleReceiverReconciliationDomain])assert.equal((await call(r.grantId,b,signature(r.grantId,b,key.privateKey,domain,receiverPins),{},receiverAuth())).status,401);
+ assert.equal((await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReceiverDomain),{},receiverAuth())).status,401);
+ assert.equal((await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReceiverDomain,receiverPins),{"x-evelyn-reconcile-only":"1"},receiverAuth())).status,401);
+ for(const env of [{VERCEL:undefined},{VERCEL_PROJECT_ID:undefined},{VERCEL_DEPLOYMENT_ID:undefined},{VERCEL_GIT_COMMIT_SHA:undefined},{VERCEL_TARGET_ENV:"preview"},{VERCEL_DEPLOYMENT_ID:"dpl_Drift"},{VERCEL_GIT_COMMIT_SHA:"e".repeat(40)},{VERCEL_GIT_COMMIT_SHA:"e".repeat(40),NOVALURE_BUILD_GIT_SHA:receiverPins.receiverRevision,NOVALURE_BUILD_DEPLOYMENT_ID:receiverPins.receiverDeploymentId}]){
+  const a=receiverAuth();assert.equal((await call(r.grantId,b,signature(r.grantId,b,key.privateKey,autonomousModuleReceiverDomain,receiverPins),{},{...a,env:{...a.env,...env,NODE_ENV:"production"}})).status,403);
+ }
+ assert.equal((await call(r.grantId,{...b,...receiverPins} as typeof b,signature(r.grantId,b),{},receiverAuth())).status,400,"unsigned body pins never replace signed proof pins");
+ assert.deepEqual(await receiverState(r),before);
+});
+test("receiver signatures verify the original received encoding without JSON reserialization",async()=>{
+ const r=await receiverTask(),b=body(),now=Math.floor(Date.now()/1000);
+ const p={nonce:randomUUID(),...receiverPins,requestHash:crmPayloadDigest(b),expiresAt:now+60,issuedAt:now};
+ const encoded=Buffer.from(JSON.stringify(p,null,2)).toString("base64url"),signPayload=(segment:string)=>sign(null,Buffer.from(`${autonomousModuleReceiverDomain}.${r.grantId}.${segment}`),key.privateKey).toString("base64url");
+ assert.equal((await call(r.grantId,b,`v1.${r.grantId}.${encoded}.${signPayload(Buffer.from(JSON.stringify(p)).toString("base64url"))}`,{},receiverAuth())).status,401);
+ assert.equal((await call(r.grantId,b,`v1.${r.grantId}.${encoded}.${signPayload(encoded)}`,{},receiverAuth())).status,200);
+ const changed=Buffer.from(JSON.stringify({...p,receiverRevision:"e".repeat(40)})).toString("base64url");assert.equal((await call(r.grantId,b,`v1.${r.grantId}.${changed}.${signPayload(encoded)}`,{},receiverAuth())).status,401);
+});
+test("late native receiver drift is checked again before Describe, Read, effect and reconciliation",async()=>{
+ for(const operation of ["DescribeAssignment","Read","Update","Reconcile"]){
+  const r=await receiverTask(),b=operation==="Update"||operation==="Reconcile"?body("Update",{title:"SYNTHETIC late receiver denied"},1):body(operation),a=receiverAuth(),before=await receiverState(r);let drifted=false;
+  const pool={connect:async()=>{const c=await db.pool.connect();return {query:async(q:unknown,p?:unknown[])=>{const out=await c.query(q as string,p);if(typeof q==="string"&&q.includes("select nonce from crm_autonomous_access_events")){a.env!.VERCEL_DEPLOYMENT_ID="dpl_Drift";drifted=true;}return out;},release:(destroy?:boolean)=>c.release(destroy)};}} as unknown as TenantPool;
+  const response=await handleAutonomousCrmModules(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${bearer}`,"content-type":"application/json","x-evelyn-delegation":signature(r.grantId,b,key.privateKey,operation==="Reconcile"?autonomousModuleReceiverReconciliationDomain:autonomousModuleReceiverDomain,receiverPins),...(operation==="Reconcile"?{"x-evelyn-reconcile-only":"1"}:{})},body:JSON.stringify(b)}),{pool,machineAuth:a});
+  assert.equal(drifted,true);assert.equal(response.status,403);assert.deepEqual(await receiverState(r),before);
+ }
+});
+test("exact old 331a receiver rejects new signed domains and never treats pinned proof as legacy",{skip:!process.env.CRM_V2_OLD_RECEIVER_ROOT},async()=>{
+ const root=process.env.CRM_V2_OLD_RECEIVER_ROOT!,git=(...args:string[])=>execFileSync("git",["-C",root,...args],{encoding:"utf8",windowsHide:true,timeout:10000}).trim();
+ assert.equal(git("rev-parse","HEAD"),"331a2459b86598532ae5877f4a2155f076c16fba");assert.equal(git("status","--porcelain","--untracked-files=no"),"");
+ const old=await import(pathToFileURL(join(root,"src/lib/crm-autonomous-modules.ts")).href),r=await receiverTask(),b=body("Update",{title:"SYNTHETIC old receiver must deny"},1),before=await receiverState(r);
+ for(const [domain,reconcileOnly] of [[autonomousModuleReceiverDomain,false],[autonomousModuleReceiverReconciliationDomain,true],[autonomousModuleDelegationDomain,false],[autonomousModuleReconciliationDomain,true]] as const){
+  const response=await old.handleAutonomousCrmModules(new Request("https://crm.invalid/api/integrations/evelyn/access",{method:"POST",headers:{authorization:`Bearer ${bearer}`,"content-type":"application/json","x-evelyn-delegation":signature(r.grantId,b,key.privateKey,domain,receiverPins),...(reconcileOnly?{"x-evelyn-reconcile-only":"1"}:{})},body:JSON.stringify(b)}),{pool:db.pool,machineAuth:receiverAuth()});assert.equal(response.status,401);
+ }
+ assert.deepEqual(await receiverState(r),before);
+});
